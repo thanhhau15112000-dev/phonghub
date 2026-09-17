@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Contracts')}"></head>
+<head th:replace="~{fragments/layout :: head('Hợp đồng')}"></head>
 <body>
 <header th:replace="~{fragments/layout :: header}"></header>
 
@@ -9,46 +9,46 @@
 
     <div class="page-title-row">
         <div>
-            <h1>Contracts</h1>
-            <p style="color: var(--text-secondary); font-size: 13px;">Manage lease agreements, activation, occupants, and termination.</p>
+            <h1>Hợp đồng</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">Quản lý hợp đồng thuê, kích hoạt, người ở và chấm dứt hợp đồng.</p>
         </div>
         <div>
             <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}"
-               th:href="@{/contracts/new}" class="btn btn-primary">+ New Contract</a>
+               th:href="@{/contracts/new}" class="btn btn-primary">+ Tạo hợp đồng</a>
         </div>
     </div>
 
     <div class="card">
         <div th:if="${#lists.isEmpty(contracts)}" class="empty-state">
-            <p>No contracts found.</p>
+            <p>Không tìm thấy hợp đồng.</p>
         </div>
 
         <table th:if="${!#lists.isEmpty(contracts)}" class="data-table">
             <thead>
                 <tr>
-                    <th>Contract ID</th>
-                    <th>Dates</th>
-                    <th>Rent</th>
-                    <th>Deposit</th>
-                    <th>Payment Day</th>
-                    <th>Status</th>
-                    <th>Action</th>
+                    <th>Mã hợp đồng</th>
+                    <th>Thời hạn</th>
+                    <th>Tiền thuê</th>
+                    <th>Tiền đặt cọc</th>
+                    <th>Ngày thanh toán</th>
+                    <th>Trạng thái</th>
+                    <th>Thao tác</th>
                 </tr>
             </thead>
             <tbody>
                 <tr th:each="c : ${contracts}">
                     <td>
-                        <a th:href="@{'/contracts/' + ${c.getId()}}" th:text="${#strings.substring(c.getId().toString(), 0, 8) + '...'}" style="font-weight: 600;">ID</a>
+                        <a th:href="@{'/contracts/' + ${c.getId()}}" th:text="${#strings.substring(c.getId().toString(), 0, 8) + '...'}" style="font-weight: 600;">Mã</a>
                     </td>
-                    <td th:text="${c.getStartDate()} + ' to ' + ${c.getEndDate()}">2026-01-01 to 2027-01-01</td>
+                    <td th:text="${c.getStartDate()} + ' đến ' + ${c.getEndDate()}">2026-01-01 đến 2027-01-01</td>
                     <td th:text="${#numbers.formatDecimal(c.getRentAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
                     <td th:text="${#numbers.formatDecimal(c.getDepositAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
-                    <td th:text="'Day ' + ${c.getPaymentDay()}">Day 5</td>
+                    <td th:text="'Ngày ' + ${c.getPaymentDay()}">Ngày 5</td>
                     <td>
-                        <span th:class="'badge badge-' + ${c.getStatus()}" th:text="${c.getStatus()}">DRAFT</span>
+                        <span th:class="'badge badge-' + ${c.getStatus()}" th:text="${uiText.contractStatus(c.getStatus())}">Bản nháp</span>
                     </td>
                     <td>
-                        <a th:href="@{'/contracts/' + ${c.getId()}}" class="btn btn-sm">Manage</a>
+                        <a th:href="@{'/contracts/' + ${c.getId()}}" class="btn btn-sm">Quản lý</a>
                     </td>
                 </tr>
             </tbody>

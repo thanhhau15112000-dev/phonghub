@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Error')}">
-    <title>Error — PhongHub</title>
+<head th:replace="~{fragments/layout :: head('Lỗi')}">
+    <title>Lỗi — PhongHub</title>
 </head>
 <body>
 
@@ -9,27 +9,27 @@
 
 <main class="container">
     <div class="card" style="max-width: 600px; margin: 48px auto; text-align: center; padding: 36px 24px;">
-        <h1 style="font-size: 28px; margin-bottom: 8px;" th:text="${status != null ? status : 'Error'}">Error</h1>
+        <h1 style="font-size: 28px; margin-bottom: 8px;" th:text="${status != null ? status : 'Lỗi'}">Lỗi</h1>
         <p style="font-size: 15px; color: var(--text-secondary); margin-bottom: 20px;"
-           th:text="${message != null and !message.isBlank() ? message : (error != null ? error : 'An unexpected error occurred.')}">
-            An unexpected error occurred.
+           th:text="${message != null and !message.isBlank() ? message : (error != null ? error : 'Đã xảy ra lỗi không mong muốn.')}">
+            Đã xảy ra lỗi không mong muốn.
         </p>
 
         <div th:if="${status == 403}" class="alert alert-error" style="text-align: left; margin-bottom: 24px;">
-            <strong>403 Forbidden:</strong> You do not have permission to perform this action or access this resource under your current role and scope.
+            <strong>403 — Không được phép:</strong> Bạn không có quyền thực hiện thao tác này hoặc truy cập tài nguyên trong vai trò và phạm vi hiện tại.
         </div>
 
         <div th:if="${status == 404}" class="alert alert-error" style="text-align: left; margin-bottom: 24px;">
-            <strong>404 Not Found:</strong> The requested resource could not be found.
+            <strong>404 — Không tìm thấy:</strong> Không tìm thấy tài nguyên được yêu cầu.
         </div>
 
         <div th:if="${status == 409}" class="alert alert-error" style="text-align: left; margin-bottom: 24px;">
-            <strong>409 Conflict:</strong> The requested state transition violates business invariants or conflicts with existing records.
+            <strong>409 — Xung đột:</strong> Chuyển trạng thái được yêu cầu vi phạm invariant nghiệp vụ hoặc xung đột với bản ghi hiện có.
         </div>
 
         <div style="margin-top: 24px; display: flex; justify-content: center; gap: 12px;">
-            <a th:href="@{/dashboard}" class="btn btn-primary">Go to Dashboard</a>
-            <a href="javascript:history.back()" class="btn">Go Back</a>
+            <a th:href="@{/dashboard}" class="btn btn-primary">Về bảng điều khiển</a>
+            <a href="javascript:history.back()" class="btn">Quay lại</a>
         </div>
     </div>
 </main>

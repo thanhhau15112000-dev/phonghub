@@ -59,7 +59,7 @@ public class PropertyUiController {
             Property property = propertyUseCase.createProperty(new PropertyUseCase.CreatePropertyCommand(
                 name, address, description, totalRooms
             ));
-            redirectAttributes.addFlashAttribute("successMessage", "Property '" + property.name() + "' created successfully");
+            redirectAttributes.addFlashAttribute("successMessage", "Đã tạo nhà trọ '" + property.name() + "'.");
             return "redirect:/properties/" + property.id();
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
@@ -98,7 +98,7 @@ public class PropertyUiController {
             Room room = roomUseCase.createRoom(new RoomUseCase.CreateRoomCommand(
                 id, roomNumber, floor, areaSqm, basePrice, maxOccupants
             ));
-            redirectAttributes.addFlashAttribute("successMessage", "Room '" + room.getRoomNumber() + "' created successfully");
+            redirectAttributes.addFlashAttribute("successMessage", "Đã tạo phòng '" + room.getRoomNumber() + "'.");
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }

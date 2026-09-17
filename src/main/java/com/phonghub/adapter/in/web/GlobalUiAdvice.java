@@ -33,4 +33,9 @@ public class GlobalUiAdvice {
     public Map<UUID, CurrentUser> demoUsers() {
         return (demoEnabled && demoActorPort.isPresent()) ? demoActorPort.get().getAllDemoUsers() : Collections.emptyMap();
     }
+
+    @ModelAttribute("uiText")
+    public UiText uiText() {
+        return UiText.INSTANCE;
+    }
 }

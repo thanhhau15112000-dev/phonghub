@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Maintenance Tickets')}"></head>
+<head th:replace="~{fragments/layout :: head('Yêu cầu bảo trì')}"></head>
 <body>
 <header th:replace="~{fragments/layout :: header}"></header>
 
@@ -9,42 +9,42 @@
 
     <div class="page-title-row">
         <div>
-            <h1>Maintenance Tickets</h1>
-            <p style="color: var(--text-secondary); font-size: 13px;">Manage technical incidents, assignments, work progress, and resolution.</p>
+            <h1>Yêu cầu bảo trì</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">Quản lý sự cố kỹ thuật, phân công, tiến độ xử lý và kết quả.</p>
         </div>
         <div>
-            <a th:href="@{/maintenance/new}" class="btn btn-primary">+ Report Ticket</a>
+            <a th:href="@{/maintenance/new}" class="btn btn-primary">+ Báo hỏng</a>
         </div>
     </div>
 
     <div class="card">
         <div th:if="${#lists.isEmpty(tickets)}" class="empty-state">
-            <p>No maintenance tickets found in your current scope.</p>
+            <p>Không tìm thấy yêu cầu bảo trì trong phạm vi hiện tại.</p>
         </div>
 
         <table th:if="${!#lists.isEmpty(tickets)}" class="data-table">
             <thead>
                 <tr>
-                    <th>Title & Description</th>
-                    <th>Priority</th>
-                    <th>Status</th>
-                    <th>Repair Cost</th>
-                    <th>Created</th>
-                    <th>Action</th>
+                    <th>Tiêu đề và mô tả</th>
+                    <th>Mức độ</th>
+                    <th>Trạng thái</th>
+                    <th>Chi phí sửa chữa</th>
+                    <th>Ngày tạo</th>
+                    <th>Thao tác</th>
                 </tr>
             </thead>
             <tbody>
                 <tr th:each="t : ${tickets}">
                     <td>
-                        <a th:href="@{'/maintenance/' + ${t.getId()}}" th:text="${t.getTitle()}" style="font-weight: 600;">Title</a>
-                        <div style="font-size: 12px; color: var(--text-secondary);" th:text="${t.getDescription()}">Description</div>
+                        <a th:href="@{'/maintenance/' + ${t.getId()}}" th:text="${t.getTitle()}" style="font-weight: 600;">Tiêu đề</a>
+                        <div style="font-size: 12px; color: var(--text-secondary);" th:text="${t.getDescription()}">Mô tả</div>
                     </td>
-                    <td><span class="badge" th:text="${t.getPriority()}">MEDIUM</span></td>
-                    <td><span th:class="'badge badge-' + ${t.getStatus()}" th:text="${t.getStatus()}">REPORTED</span></td>
+                    <td><span class="badge" th:text="${uiText.maintenancePriority(t.getPriority())}">Trung bình</span></td>
+                    <td><span th:class="'badge badge-' + ${t.getStatus()}" th:text="${uiText.maintenanceStatus(t.getStatus())}">Đã báo</span></td>
                     <td th:text="${t.getRepairCost() != null and t.getRepairCost().compareTo(T(java.math.BigDecimal).ZERO) > 0 ? #numbers.formatDecimal(t.getRepairCost(), 0, 'COMMA', 0, 'POINT') + ' đ' : '—'}">—</td>
                     <td th:text="${#temporals.format(t.getCreatedAt(), 'yyyy-MM-dd HH:mm')}">2026-09-17</td>
                     <td>
-                        <a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm">Manage</a>
+                        <a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm">Quản lý</a>
                     </td>
                 </tr>
             </tbody>

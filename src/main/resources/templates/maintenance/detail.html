@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Ticket: ' + ${ticket.getTitle()})}"></head>
+<head th:replace="~{fragments/layout :: head('Yêu cầu bảo trì: ' + ${ticket.getTitle()})}"></head>
 <body>
 <header th:replace="~{fragments/layout :: header}"></header>
 
@@ -9,100 +9,100 @@
 
     <div class="page-title-row">
         <div>
-            <h1 th:text="${ticket.getTitle()}">Broken Air Conditioner</h1>
+            <h1 th:text="${ticket.getTitle()}">Điều hòa bị hỏng</h1>
             <p style="color: var(--text-secondary); font-size: 13px;">
-                Property: <strong th:text="${property.name()}">Property</strong> | Room: <strong th:text="${room.getRoomNumber()}">P102</strong>
+                Nhà trọ: <strong th:text="${property.name()}">Nhà trọ</strong> | Phòng: <strong th:text="${room.getRoomNumber()}">P102</strong>
             </p>
         </div>
         <div>
-            <a th:href="@{/maintenance}" class="btn">&larr; Back to Tickets</a>
+            <a th:href="@{/maintenance}" class="btn">&larr; Quay lại danh sách bảo trì</a>
         </div>
     </div>
 
-    <!-- Ticket Summary Card -->
+    <!-- Tóm tắt yêu cầu -->
     <div class="card" style="margin-bottom: 20px;">
         <div class="flex-between" style="margin-bottom: 16px;">
             <div style="display: flex; align-items: center; gap: 12px;">
-                <span style="font-weight: 600;">Status:</span>
-                <span th:class="'badge badge-' + ${ticket.getStatus()}" style="font-size: 13px; padding: 4px 8px;" th:text="${ticket.getStatus()}">REPORTED</span>
-                <span style="font-weight: 600; margin-left: 12px;">Priority:</span>
-                <span class="badge" th:text="${ticket.getPriority()}">HIGH</span>
+                <span style="font-weight: 600;">Trạng thái:</span>
+                <span th:class="'badge badge-' + ${ticket.getStatus()}" style="font-size: 13px; padding: 4px 8px;" th:text="${uiText.maintenanceStatus(ticket.getStatus())}">Đã báo</span>
+                <span style="font-weight: 600; margin-left: 12px;">Mức độ:</span>
+                <span class="badge" th:text="${uiText.maintenancePriority(ticket.getPriority())}">Cao</span>
             </div>
 
-            <!-- Technician Action: Accept Ticket -->
+            <!-- Thao tác của kỹ thuật viên: tiếp nhận yêu cầu -->
             <div th:if="${(currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED')}">
                 <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/accept'}" method="post">
-                    <button type="submit" class="btn btn-primary">Accept & Start Work</button>
+                    <button type="submit" class="btn btn-primary">Tiếp nhận và bắt đầu xử lý</button>
                 </form>
             </div>
         </div>
 
         <div style="font-size: 13px; margin-bottom: 16px;">
-            <div style="color: var(--text-secondary); margin-bottom: 4px;">Description:</div>
+            <div style="color: var(--text-secondary); margin-bottom: 4px;">Mô tả:</div>
             <div style="background: var(--bg-main); padding: 12px; border: 1px solid var(--border-color); border-radius: 2px;" th:text="${ticket.getDescription()}">
-                Detailed description of the issue.
+                Mô tả chi tiết về sự cố.
             </div>
         </div>
 
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; font-size: 13px; border-top: 1px solid var(--border-color); padding-top: 16px;">
             <div>
-                <span style="color: var(--text-secondary);">Room Current Status:</span>
-                <span th:class="'badge badge-' + ${room.getStatus()}" th:text="${room.getStatus()}">MAINTENANCE</span>
+                <span style="color: var(--text-secondary);">Trạng thái phòng hiện tại:</span>
+                <span th:class="'badge badge-' + ${room.getStatus()}" th:text="${uiText.roomStatus(room.getStatus())}">Bảo trì</span>
             </div>
             <div>
-                <span style="color: var(--text-secondary);">Assigned Technician ID:</span>
-                <span th:text="${ticket.getAssignedTechnicianId() != null ? ticket.getAssignedTechnicianId() : 'Unassigned'}" style="font-family: monospace;">UUID</span>
+                <span style="color: var(--text-secondary);">Mã kỹ thuật viên được phân công:</span>
+                <span th:text="${ticket.getAssignedTechnicianId() != null ? ticket.getAssignedTechnicianId() : 'Chưa phân công'}" style="font-family: monospace;">Mã định danh</span>
             </div>
             <div>
-                <span style="color: var(--text-secondary);">Created At:</span>
+                <span style="color: var(--text-secondary);">Tạo lúc:</span>
                 <span th:text="${#temporals.format(ticket.getCreatedAt(), 'yyyy-MM-dd HH:mm')}">2026-09-17</span>
             </div>
         </div>
     </div>
 
-    <!-- Resolution Section if Resolved -->
+    <!-- Báo cáo kết quả xử lý -->
     <div th:if="${ticket.isResolved()}" class="card" style="margin-bottom: 20px;">
-        <h2>Resolution Report</h2>
+        <h2>Báo cáo kết quả xử lý</h2>
         <div style="font-size: 13px;">
             <div style="margin-bottom: 8px;">
-                <span style="color: var(--text-secondary);">Resolution Notes:</span>
-                <strong th:text="${ticket.getResolutionNotes()}">Fixed</strong>
+                <span style="color: var(--text-secondary);">Ghi chú xử lý:</span>
+                <strong th:text="${ticket.getResolutionNotes()}">Đã sửa</strong>
             </div>
             <div>
-                <span style="color: var(--text-secondary);">Total Repair Cost:</span>
+                <span style="color: var(--text-secondary);">Tổng chi phí sửa chữa:</span>
                 <strong th:text="${#numbers.formatDecimal(ticket.getRepairCost(), 0, 'COMMA', 0, 'POINT') + ' đ'}">150,000 đ</strong>
             </div>
         </div>
     </div>
 
-    <!-- Technician Resolution Form if in progress or assigned -->
+    <!-- Biểu mẫu hoàn tất xử lý -->
     <div th:if="${!ticket.isResolved() and (currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" class="card">
-        <h2>Resolve Maintenance Ticket</h2>
+        <h2>Xử lý yêu cầu bảo trì</h2>
         <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 16px;">
-            Submitting this resolution report will complete the ticket and optionally release the room from MAINTENANCE back to AVAILABLE.
+            Gửi báo cáo này sẽ hoàn tất yêu cầu và tùy chọn đưa phòng từ trạng thái BẢO TRÌ về trạng thái TRỐNG.
         </p>
 
         <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/resolve'}" method="post">
             <div class="form-group">
-                <label class="form-label">Resolution Notes *</label>
-                <textarea name="resolutionNotes" class="form-control" rows="3" placeholder="Explain the repair work done, parts replaced, etc." required></textarea>
+                <label class="form-label">Ghi chú xử lý *</label>
+                <textarea name="resolutionNotes" class="form-control" rows="3" placeholder="Mô tả công việc đã thực hiện, linh kiện đã thay thế..." required></textarea>
             </div>
 
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Repair Cost (VND)</label>
+                    <label class="form-label">Chi phí sửa chữa (VND)</label>
                     <input type="number" name="repairCost" class="form-control" value="0" min="0">
                 </div>
                 <div class="form-group" style="flex: 1; display: flex; align-items: center; padding-top: 20px;">
                     <label style="font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
                         <input type="checkbox" name="releaseRoomToAvailable" value="true" checked>
-                        Release room to AVAILABLE (if no other open tickets)
+                        Đưa phòng về trạng thái TRỐNG (nếu không còn yêu cầu đang mở)
                     </label>
                 </div>
             </div>
 
             <div style="margin-top: 12px;">
-                <button type="submit" class="btn btn-primary">Submit Resolution</button>
+                <button type="submit" class="btn btn-primary">Gửi báo cáo xử lý</button>
             </div>
         </form>
     </div>

@@ -3,33 +3,31 @@
 <head th:fragment="head(title)">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title th:text="${title} + ' — PhongHub'">PhongHub Operations</title>
+    <title th:text="${title} + ' — PhongHub'">PhongHub — Quản lý nhà trọ</title>
     <link rel="stylesheet" th:href="@{/css/style.css}">
 </head>
 <body>
 
 <header th:fragment="header" class="header-bar">
     <div style="display: flex; align-items: center; gap: 24px;">
-        <a th:href="@{/}" class="brand">PhongHub Ops</a>
+        <a th:href="@{/}" class="brand">PhongHub</a>
         <nav>
             <ul class="nav-links">
-                <li><a th:href="@{/dashboard}">Dashboard</a></li>
-                <li><a th:href="@{/properties}">Properties</a></li>
-                <li><a th:href="@{/contracts}">Contracts</a></li>
-                <li><a th:href="@{/maintenance}">Maintenance</a></li>
+                <li><a th:href="@{/dashboard}">Bảng điều khiển</a></li>
+                <li><a th:href="@{/properties}">Nhà trọ</a></li>
+                <li><a th:href="@{/contracts}">Hợp đồng</a></li>
+                <li><a th:href="@{/maintenance}">Bảo trì</a></li>
             </ul>
         </nav>
     </div>
 
     <div class="actor-switcher-box" th:if="${demoEnabled}">
-        <span>Actor:</span>
-        <span class="actor-tag" th:text="${currentUser != null ? currentUser.role() : 'ANONYMOUS'}">ADMIN</span>
-        <span th:text="${currentUser != null ? currentUser.fullName() : ''}" style="font-weight: 500;">User</span>
+        <span class="actor-tag" th:text="${currentUser != null ? uiText.role(currentUser.role()) : 'Chưa đăng nhập'}">Quản trị viên</span>
         <form th:action="@{/switch-user}" method="get" style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;">
-            <select name="userId" class="form-control" style="width: auto; padding: 2px 6px; font-size: 12px;" onchange="this.form.submit()">
+            <select name="userId" class="form-control" aria-label="Chọn người dùng demo" style="width: auto; padding: 2px 6px; font-size: 12px;" onchange="this.form.submit()">
                 <option th:each="u : ${demoUsers}"
                         th:value="${u.key}"
-                        th:text="${u.value.role() + ' — ' + u.value.fullName()}"
+                        th:text="${uiText.role(u.value.role()) + ' — ' + u.value.fullName()}"
                         th:selected="${currentUser != null and currentUser.id() == u.key}">
                 </option>
             </select>
@@ -38,12 +36,12 @@
 </header>
 
 <div th:fragment="alerts">
-    <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}">Success message</div>
-    <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}">Error message</div>
+    <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}">Thông báo thành công</div>
+    <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}">Thông báo lỗi</div>
 </div>
 
 <footer th:fragment="footer" style="margin-top: 48px; padding: 24px 0; border-top: 1px solid var(--border-color); text-align: center; font-size: 12px; color: var(--text-secondary);">
-    PhongHub B2B Property Operations — Hexagonal MVP (Spring Boot + Pure Domain)
+    PhongHub B2B — Quản lý nhà trọ (MVP, Spring Boot + Pure Domain)
 </footer>
 
 </body>

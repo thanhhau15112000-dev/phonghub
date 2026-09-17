@@ -106,7 +106,7 @@ public class MaintenanceUiController {
             MaintenanceTicket ticket = maintenanceUseCase.createTicket(new MaintenanceUseCase.CreateMaintenanceTicketCommand(
                 roomId, title, description, priority, setRoomMaintenance
             ));
-            redirectAttributes.addFlashAttribute("successMessage", "Maintenance ticket #" + ticket.getTitle() + " created successfully");
+            redirectAttributes.addFlashAttribute("successMessage", "Đã tạo yêu cầu bảo trì '" + ticket.getTitle() + "'.");
             return "redirect:/maintenance/" + ticket.getId();
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
@@ -138,7 +138,7 @@ public class MaintenanceUiController {
     public String acceptTicket(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
         try {
             maintenanceUseCase.acceptTicket(id);
-            redirectAttributes.addFlashAttribute("successMessage", "Ticket accepted and moved to IN_PROGRESS");
+            redirectAttributes.addFlashAttribute("successMessage", "Đã tiếp nhận yêu cầu và chuyển sang trạng thái đang xử lý.");
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }
@@ -159,7 +159,7 @@ public class MaintenanceUiController {
             ));
             redirectAttributes.addFlashAttribute(
                 "successMessage",
-                "Ticket resolved successfully." + (releaseRoomToAvailable ? " Room returned to AVAILABLE." : "")
+                "Đã hoàn tất xử lý yêu cầu." + (releaseRoomToAvailable ? " Phòng đã được chuyển về trạng thái trống." : "")
             );
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());

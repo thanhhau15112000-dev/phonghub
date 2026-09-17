@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Report Maintenance Issue')}"></head>
+<head th:replace="~{fragments/layout :: head('Báo hỏng')}"></head>
 <body>
 <header th:replace="~{fragments/layout :: header}"></header>
 
@@ -9,45 +9,45 @@
 
     <div class="page-title-row">
         <div>
-            <h1>Report Maintenance Ticket</h1>
-            <p style="color: var(--text-secondary); font-size: 13px;">Create an incident report for an authorized room.</p>
+            <h1>Báo hỏng phòng</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">Tạo yêu cầu sự cố cho phòng được cấp quyền.</p>
         </div>
         <div>
-            <a th:href="@{/maintenance}" class="btn">&larr; Back to Tickets</a>
+            <a th:href="@{/maintenance}" class="btn">&larr; Quay lại danh sách bảo trì</a>
         </div>
     </div>
 
     <div class="card" style="max-width: 700px;">
         <form th:action="@{/maintenance}" method="post">
             <div class="form-group">
-                <label class="form-label">Select Room *</label>
+                <label class="form-label">Chọn phòng *</label>
                 <select name="roomId" class="form-control" required>
-                    <option value="">-- Choose Room --</option>
+                    <option value="">-- Chọn phòng --</option>
                     <option th:each="r : ${rooms}"
                             th:value="${r.getId()}"
-                            th:text="'Room ' + ${r.getRoomNumber()} + ' (' + ${r.getStatus()} + ')'"
+                            th:text="${'Phòng ' + r.getRoomNumber() + ' (' + uiText.roomStatus(r.getStatus()) + ')'}"
                             th:selected="${selectedRoomId != null and selectedRoomId.equals(r.getId())}">
                     </option>
                 </select>
             </div>
 
             <div class="form-group">
-                <label class="form-label">Issue Title *</label>
-                <input type="text" name="title" class="form-control" placeholder="e.g. Broken water tap in bathroom" required>
+                <label class="form-label">Tiêu đề sự cố *</label>
+                <input type="text" name="title" class="form-control" placeholder="Ví dụ: Vòi nước trong nhà tắm bị hỏng" required>
             </div>
 
             <div class="form-group">
-                <label class="form-label">Detailed Description *</label>
-                <textarea name="description" class="form-control" rows="4" placeholder="Describe the problem, location, and urgency..." required></textarea>
+                <label class="form-label">Mô tả chi tiết *</label>
+                <textarea name="description" class="form-control" rows="4" placeholder="Mô tả vấn đề, vị trí và mức độ khẩn cấp..." required></textarea>
             </div>
 
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Priority</label>
+                    <label class="form-label">Mức độ</label>
                     <select name="priority" class="form-control">
                         <option th:each="p : ${priorities}"
                                 th:value="${p}"
-                                th:text="${p}"
+                                th:text="${uiText.maintenancePriority(p)}"
                                 th:selected="${p.name() == 'MEDIUM'}">
                         </option>
                     </select>
@@ -55,14 +55,14 @@
                 <div class="form-group" style="flex: 1; display: flex; align-items: center; padding-top: 20px;">
                     <label style="font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
                         <input type="checkbox" name="setRoomMaintenance" value="true" checked>
-                        Set room status to MAINTENANCE
+                        Chuyển trạng thái phòng sang BẢO TRÌ
                     </label>
                 </div>
             </div>
 
             <div style="margin-top: 16px;">
-                <button type="submit" class="btn btn-primary">Submit Ticket</button>
-                <a th:href="@{/maintenance}" class="btn" style="margin-left: 8px;">Cancel</a>
+                <button type="submit" class="btn btn-primary">Gửi yêu cầu</button>
+                <a th:href="@{/maintenance}" class="btn" style="margin-left: 8px;">Hủy</a>
             </div>
         </form>
     </div>

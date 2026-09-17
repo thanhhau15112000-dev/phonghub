@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Create Contract')}"></head>
+<head th:replace="~{fragments/layout :: head('Tạo hợp đồng')}"></head>
 <body>
 <header th:replace="~{fragments/layout :: header}"></header>
 
@@ -9,22 +9,22 @@
 
     <div class="page-title-row">
         <div>
-            <h1>Create Lease Contract</h1>
-            <p style="color: var(--text-secondary); font-size: 13px;">Attach a new lease agreement to an authorized room.</p>
+            <h1>Tạo hợp đồng thuê</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">Gắn hợp đồng thuê mới vào một phòng được cấp quyền.</p>
         </div>
         <div>
-            <a th:href="@{/contracts}" class="btn">&larr; Back to Contracts</a>
+            <a th:href="@{/contracts}" class="btn">&larr; Quay lại danh sách hợp đồng</a>
         </div>
     </div>
 
     <div class="card" style="max-width: 800px;">
         <form th:action="@{/contracts}" method="post">
-            <h2 style="margin-bottom: 16px;">1. Property & Room Selection</h2>
+            <h2 style="margin-bottom: 16px;">1. Chọn nhà trọ và phòng</h2>
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Property *</label>
+                    <label class="form-label">Nhà trọ *</label>
                     <select name="propertyId" class="form-control" id="propertySelect" onchange="window.location.href='/contracts/new?propertyId=' + this.value" required>
-                        <option value="">-- Select Property --</option>
+                        <option value="">-- Chọn nhà trọ --</option>
                         <option th:each="p : ${properties}"
                                 th:value="${p.id()}"
                                 th:text="${p.name()}"
@@ -33,69 +33,69 @@
                     </select>
                 </div>
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Room *</label>
+                    <label class="form-label">Phòng *</label>
                     <select name="roomId" class="form-control" required>
-                        <option value="">-- Select Room --</option>
+                        <option value="">-- Chọn phòng --</option>
                         <option th:each="r : ${rooms}"
                                 th:value="${r.getId()}"
-                                th:text="${r.getRoomNumber() + ' (' + r.getStatus() + ' - ' + #numbers.formatDecimal(r.getBasePrice(), 0, 'COMMA', 0, 'POINT') + ' đ)'}"
+                                th:text="${r.getRoomNumber() + ' (' + uiText.roomStatus(r.getStatus()) + ' - ' + #numbers.formatDecimal(r.getBasePrice(), 0, 'COMMA', 0, 'POINT') + ' đ)'}"
                                 th:selected="${selectedRoomId != null and selectedRoomId.equals(r.getId())}">
                         </option>
                     </select>
                 </div>
             </div>
 
-            <h2 style="margin-top: 16px; margin-bottom: 16px;">2. Primary Tenant Details</h2>
+            <h2 style="margin-top: 16px; margin-bottom: 16px;">2. Thông tin người thuê chính</h2>
             <div class="form-row">
                 <div class="form-group" style="flex: 2;">
-                    <label class="form-label">Full Name *</label>
-                    <input type="text" name="primaryTenantFullName" class="form-control" placeholder="e.g. Tran Thi B" required>
+                    <label class="form-label">Họ và tên *</label>
+                    <input type="text" name="primaryTenantFullName" class="form-control" placeholder="Ví dụ: Trần Thị B" required>
                 </div>
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">ID Card / CCCD *</label>
-                    <input type="text" name="primaryTenantIdCard" class="form-control" placeholder="e.g. 079201002222" required>
+                    <label class="form-label">CCCD *</label>
+                    <input type="text" name="primaryTenantIdCard" class="form-control" placeholder="Ví dụ: 079201002222" required>
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Phone Number *</label>
-                    <input type="text" name="primaryTenantPhone" class="form-control" placeholder="e.g. 0909876543" required>
+                    <label class="form-label">Số điện thoại *</label>
+                    <input type="text" name="primaryTenantPhone" class="form-control" placeholder="Ví dụ: 0909876543" required>
                 </div>
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label">Email</label>
-                    <input type="email" name="primaryTenantEmail" class="form-control" placeholder="e.g. tenantb@example.com">
+                    <input type="email" name="primaryTenantEmail" class="form-control" placeholder="Ví dụ: tenantb@example.com">
                 </div>
             </div>
 
-            <h2 style="margin-top: 16px; margin-bottom: 16px;">3. Lease Financials & Term</h2>
+            <h2 style="margin-top: 16px; margin-bottom: 16px;">3. Tài chính và thời hạn hợp đồng</h2>
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Monthly Rent (VND) *</label>
+                    <label class="form-label">Tiền thuê hàng tháng (VND) *</label>
                     <input type="number" name="rentAmount" class="form-control" value="3500000" min="1" required>
                 </div>
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Deposit Amount (VND) *</label>
+                    <label class="form-label">Tiền đặt cọc (VND) *</label>
                     <input type="number" name="depositAmount" class="form-control" value="3500000" min="0" required>
                 </div>
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Payment Day of Month</label>
+                    <label class="form-label">Ngày thanh toán trong tháng</label>
                     <input type="number" name="paymentDay" class="form-control" value="5" min="1" max="31" required>
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Start Date *</label>
+                    <label class="form-label">Ngày bắt đầu *</label>
                     <input type="date" name="startDate" class="form-control" th:value="${defaultStartDate}" required>
                 </div>
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">End Date *</label>
+                    <label class="form-label">Ngày kết thúc *</label>
                     <input type="date" name="endDate" class="form-control" th:value="${defaultEndDate}" required>
                 </div>
             </div>
 
             <div style="margin-top: 16px;">
-                <button type="submit" class="btn btn-primary">Create Contract (Draft)</button>
-                <a th:href="@{/contracts}" class="btn" style="margin-left: 8px;">Cancel</a>
+                <button type="submit" class="btn btn-primary">Tạo hợp đồng (bản nháp)</button>
+                <a th:href="@{/contracts}" class="btn" style="margin-left: 8px;">Hủy</a>
             </div>
         </form>
     </div>

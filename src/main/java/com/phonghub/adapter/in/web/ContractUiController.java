@@ -11,6 +11,7 @@ import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.Room;
+import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
@@ -83,7 +84,7 @@ public class ContractUiController {
     ) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         if (currentUser.role() != UserRole.ADMIN && currentUser.role() != UserRole.STAFF) {
-            redirectAttributes.addFlashAttribute("errorMessage", "Only ADMIN or STAFF can create contracts");
+            redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên hoặc nhân viên mới có thể tạo hợp đồng.");
             return "redirect:/contracts";
         }
 
@@ -137,7 +138,7 @@ public class ContractUiController {
                 endDate,
                 paymentDay
             ));
-            redirectAttributes.addFlashAttribute("successMessage", "Contract created in DRAFT. You can now activate it.");
+            redirectAttributes.addFlashAttribute("successMessage", "Đã tạo hợp đồng ở trạng thái bản nháp. Bạn có thể kích hoạt hợp đồng.");
             return "redirect:/contracts/" + contract.getId();
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
@@ -171,7 +172,7 @@ public class ContractUiController {
     public String activateContract(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
         try {
             contractUseCase.activateContract(id);
-            redirectAttributes.addFlashAttribute("successMessage", "Contract activated. Room is now OCCUPIED.");
+            redirectAttributes.addFlashAttribute("successMessage", "Đã kích hoạt hợp đồng. Phòng hiện ở trạng thái đang thuê.");
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }
@@ -188,7 +189,9 @@ public class ContractUiController {
             contractUseCase.terminateContract(id, requiresMaintenance);
             redirectAttributes.addFlashAttribute(
                 "successMessage",
-                "Contract terminated. Room is now " + (requiresMaintenance ? "MAINTENANCE" : "AVAILABLE") + "."
+                "Đã chấm dứt hợp đồng. Phòng hiện ở trạng thái "
+                    + UiText.INSTANCE.roomStatus(requiresMaintenance ? RoomStatus.MAINTENANCE : RoomStatus.AVAILABLE)
+                    + "."
             );
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());

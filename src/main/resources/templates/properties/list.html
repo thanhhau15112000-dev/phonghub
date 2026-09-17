@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Properties')}"></head>
+<head th:replace="~{fragments/layout :: head('Nhà trọ')}"></head>
 <body>
 <header th:replace="~{fragments/layout :: header}"></header>
 
@@ -9,64 +9,64 @@
 
     <div class="page-title-row">
         <div>
-            <h1>Properties</h1>
-            <p style="color: var(--text-secondary); font-size: 13px;">List of properties assigned to or managed by your account.</p>
+            <h1>Nhà trọ</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">Danh sách các nhà trọ được phân công hoặc được phép quản lý theo tài khoản của bạn.</p>
         </div>
     </div>
 
-    <!-- Create Property Form (Admin Only) -->
+    <!-- Biểu mẫu thêm nhà trọ (chỉ quản trị viên) -->
     <div th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" class="card">
-        <h2>Add New Property</h2>
+        <h2>Thêm nhà trọ</h2>
         <form th:action="@{/properties}" method="post">
             <div class="form-row">
                 <div class="form-group" style="flex: 2;">
-                    <label class="form-label">Property Name *</label>
-                    <input type="text" name="name" class="form-control" placeholder="e.g. Nha Tro Xanh Q7" required>
+                    <label class="form-label">Tên nhà trọ *</label>
+                    <input type="text" name="name" class="form-control" placeholder="Ví dụ: Nhà trọ Xanh Quận 7" required>
                 </div>
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Total Rooms</label>
+                    <label class="form-label">Tổng số phòng</label>
                     <input type="number" name="totalRooms" class="form-control" value="10" min="0">
                 </div>
             </div>
             <div class="form-group">
-                <label class="form-label">Address *</label>
-                <input type="text" name="address" class="form-control" placeholder="e.g. 123 Nguyen Thi Thap, Q7" required>
+                <label class="form-label">Địa chỉ *</label>
+                <input type="text" name="address" class="form-control" placeholder="Ví dụ: 123 Nguyễn Thị Thập, Quận 7" required>
             </div>
             <div class="form-group">
-                <label class="form-label">Description</label>
-                <input type="text" name="description" class="form-control" placeholder="Optional notes">
+                <label class="form-label">Mô tả</label>
+                <input type="text" name="description" class="form-control" placeholder="Ghi chú (không bắt buộc)">
             </div>
-            <button type="submit" class="btn btn-primary">Create Property</button>
+            <button type="submit" class="btn btn-primary">Tạo nhà trọ</button>
         </form>
     </div>
 
-    <!-- Properties Table -->
+    <!-- Bảng nhà trọ -->
     <div class="card">
-        <h2>Accessible Properties</h2>
+        <h2>Nhà trọ được phép truy cập</h2>
         <div th:if="${#lists.isEmpty(properties)}" class="empty-state">
-            <p>No properties found in your scope.</p>
+            <p>Không tìm thấy nhà trọ trong phạm vi hiện tại.</p>
         </div>
 
         <table th:if="${!#lists.isEmpty(properties)}" class="data-table">
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Address</th>
-                    <th>Description</th>
-                    <th>Rooms</th>
-                    <th>Action</th>
+                    <th>Tên</th>
+                    <th>Địa chỉ</th>
+                    <th>Mô tả</th>
+                    <th>Số phòng</th>
+                    <th>Thao tác</th>
                 </tr>
             </thead>
             <tbody>
                 <tr th:each="p : ${properties}">
                     <td>
-                        <a th:href="@{'/properties/' + ${p.id()}}" th:text="${p.name()}" style="font-weight: 600;">Name</a>
+                        <a th:href="@{'/properties/' + ${p.id()}}" th:text="${p.name()}" style="font-weight: 600;">Tên nhà trọ</a>
                     </td>
-                    <td th:text="${p.address()}">Address</td>
-                    <td th:text="${p.description()}">Description</td>
+                    <td th:text="${p.address()}">Địa chỉ</td>
+                    <td th:text="${p.description()}">Mô tả</td>
                     <td th:text="${p.totalRooms()}">0</td>
                     <td>
-                        <a th:href="@{'/properties/' + ${p.id()}}" class="btn btn-sm">View Details</a>
+                        <a th:href="@{'/properties/' + ${p.id()}}" class="btn btn-sm">Xem chi tiết</a>
                     </td>
                 </tr>
             </tbody>

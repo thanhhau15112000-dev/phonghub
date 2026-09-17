@@ -30,7 +30,7 @@ public class UserSwitchUiController {
     @GetMapping("/switch-user")
     public String switchUser(@RequestParam UUID userId, HttpServletRequest request) {
         if (!demoEnabled) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Demo user switching is disabled.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chức năng chuyển người dùng demo đang bị tắt.");
         }
         HttpSession session = request.getSession(true);
         session.setAttribute("currentUserId", userId);

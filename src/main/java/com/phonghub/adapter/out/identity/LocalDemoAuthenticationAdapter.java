@@ -18,19 +18,19 @@ import java.util.UUID;
 public class LocalDemoAuthenticationAdapter implements CurrentUserPort, DemoActorPort, DemoFixturePort {
 
     public static final CurrentUser DEMO_ADMIN = new CurrentUser(
-        ADMIN_ID, "admin@phonghub.local", "Quan Tri Vien (Admin)", UserRole.ADMIN, false
+        ADMIN_ID, "admin@phonghub.local", "Quản trị viên", UserRole.ADMIN, false
     );
     public static final CurrentUser DEMO_STAFF_1 = new CurrentUser(
-        STAFF_1_ID, "staff1@phonghub.local", "Nhan Vien Q7 (Staff 1)", UserRole.STAFF, false
+        STAFF_1_ID, "staff1@phonghub.local", "Nhân viên Quận 7", UserRole.STAFF, false
     );
     public static final CurrentUser DEMO_STAFF_2 = new CurrentUser(
-        STAFF_2_ID, "staff2@phonghub.local", "Nhan Vien TB (Staff 2)", UserRole.STAFF, false
+        STAFF_2_ID, "staff2@phonghub.local", "Nhân viên Tân Bình", UserRole.STAFF, false
     );
     public static final CurrentUser DEMO_TECH_1 = new CurrentUser(
-        TECH_1_ID, "tech1@phonghub.local", "Ky Thuat Vien (Tech 1)", UserRole.TECHNICIAN, false
+        TECH_1_ID, "tech1@phonghub.local", "Kỹ thuật viên", UserRole.TECHNICIAN, false
     );
     public static final CurrentUser DEMO_TENANT_1 = new CurrentUser(
-        TENANT_1_ID, "tenant1@phonghub.local", "Nguyen Van A (Tenant)", UserRole.TENANT, true
+        TENANT_1_ID, "tenant1@phonghub.local", "Nguyễn Văn A", UserRole.TENANT, true
     );
 
     private static final Map<UUID, CurrentUser> DEMO_USERS = new LinkedHashMap<>();

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Room ' + ${room.getRoomNumber()})}"></head>
+<head th:replace="~{fragments/layout :: head('Phòng ' + ${room.getRoomNumber()})}"></head>
 <body>
 <header th:replace="~{fragments/layout :: header}"></header>
 
@@ -9,99 +9,99 @@
 
     <div class="page-title-row">
         <div>
-            <h1>Room <span th:text="${room.getRoomNumber()}">P101</span> — <span th:text="${property.name()}">Property</span></h1>
-            <p style="color: var(--text-secondary); font-size: 13px;">Manage room status transitions, active lease, and maintenance tickets.</p>
+            <h1>Phòng <span th:text="${room.getRoomNumber()}">P101</span> — <span th:text="${property.name()}">Nhà trọ</span></h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">Quản lý trạng thái phòng, hợp đồng đang hiệu lực và yêu cầu bảo trì.</p>
         </div>
         <div>
-            <a th:href="@{'/properties/' + ${property.id()}}" class="btn">&larr; Back to Property</a>
+            <a th:href="@{'/properties/' + ${property.id()}}" class="btn">&larr; Quay lại nhà trọ</a>
         </div>
     </div>
 
-    <!-- Room Status & Metadata Card -->
+    <!-- Trạng thái và thông tin phòng -->
     <div class="card">
         <div class="flex-between" style="margin-bottom: 16px;">
             <div>
-                <h2>Room Information</h2>
+                <h2>Thông tin phòng</h2>
             </div>
             <div>
-                Current Status:
-                <span th:class="'badge badge-' + ${room.getStatus()}" style="font-size: 13px;" th:text="${room.getStatus()}">AVAILABLE</span>
+                Trạng thái hiện tại:
+                <span th:class="'badge badge-' + ${room.getStatus()}" style="font-size: 13px;" th:text="${uiText.roomStatus(room.getStatus())}">Trống</span>
             </div>
         </div>
 
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; font-size: 13px;">
             <div>
-                <span style="color: var(--text-secondary);">Floor:</span>
+                <span style="color: var(--text-secondary);">Tầng:</span>
                 <strong th:text="${room.getFloor()}">1</strong>
             </div>
             <div>
-                <span style="color: var(--text-secondary);">Area:</span>
+                <span style="color: var(--text-secondary);">Diện tích:</span>
                 <strong th:text="${room.getAreaSqm() != null ? room.getAreaSqm() + ' m²' : '—'}">25 m²</strong>
             </div>
             <div>
-                <span style="color: var(--text-secondary);">Base Rent:</span>
+                <span style="color: var(--text-secondary);">Giá thuê cơ bản:</span>
                 <strong th:text="${#numbers.formatDecimal(room.getBasePrice(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</strong>
             </div>
             <div>
-                <span style="color: var(--text-secondary);">Max Occupants:</span>
-                <strong th:text="${room.getMaxOccupants()}">2</strong> persons
+                <span style="color: var(--text-secondary);">Số người tối đa:</span>
+                <strong th:text="${room.getMaxOccupants()}">2</strong> người
             </div>
         </div>
 
-        <!-- Status Transition Form (Admin or Staff) -->
+        <!-- Biểu mẫu đổi trạng thái (quản trị viên hoặc nhân viên) -->
         <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-            <h3 style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Change Room Status</h3>
+            <h3 style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Thay đổi trạng thái phòng</h3>
             <form th:action="@{'/rooms/' + ${room.getId()} + '/status'}" method="post" style="display: flex; gap: 8px; align-items: center;">
-                <label class="form-label" style="margin: 0;">Transition to:</label>
+                <label class="form-label" style="margin: 0;">Chuyển sang:</label>
                 <select name="status" class="form-control" style="width: auto;">
                     <option th:each="s : ${allStatuses}"
                             th:value="${s}"
-                            th:text="${s}"
+                            th:text="${uiText.roomStatus(s)}"
                             th:selected="${s == room.getStatus()}">
                     </option>
                 </select>
-                <button type="submit" class="btn btn-sm btn-primary">Apply Transition</button>
+                <button type="submit" class="btn btn-sm btn-primary">Áp dụng thay đổi</button>
             </form>
             <p style="color: var(--text-secondary); font-size: 11px; margin-top: 4px;">
-                Note: Invalid transitions will be rejected according to domain invariants. Releasing from MAINTENANCE requires that all tickets be resolved.
+                Lưu ý: Các chuyển trạng thái không hợp lệ sẽ bị từ chối theo invariant của domain. Chuyển phòng khỏi trạng thái BẢO TRÌ chỉ được thực hiện khi tất cả yêu cầu đã hoàn tất.
             </p>
         </div>
     </div>
 
-    <!-- Active Contract Section -->
+    <!-- Hợp đồng đang hiệu lực -->
     <div class="card">
         <div class="flex-between" style="margin-bottom: 12px;">
-            <h2>Lease Contract</h2>
+            <h2>Hợp đồng thuê</h2>
             <a th:if="${activeContract == null and (room.getStatus().name() == 'AVAILABLE' or room.getStatus().name() == 'RESERVED') and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}"
                th:href="@{'/contracts/new?propertyId=' + ${property.id()} + '&roomId=' + ${room.getId()}}"
-               class="btn btn-primary btn-sm">+ Create Contract</a>
+               class="btn btn-primary btn-sm">+ Tạo hợp đồng</a>
         </div>
 
         <div th:if="${activeContract == null}" class="empty-state">
-            <p>No active contract linked to this room.</p>
+            <p>Phòng này chưa có hợp đồng đang hiệu lực.</p>
         </div>
 
         <div th:if="${activeContract != null}" style="font-size: 13px;">
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>Contract ID</th>
-                        <th>Start Date</th>
-                        <th>End Date</th>
-                        <th>Rent Amount</th>
-                        <th>Status</th>
-                        <th>Action</th>
+                        <th>Mã hợp đồng</th>
+                        <th>Ngày bắt đầu</th>
+                        <th>Ngày kết thúc</th>
+                        <th>Tiền thuê</th>
+                        <th>Trạng thái</th>
+                        <th>Thao tác</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td th:text="${activeContract.getId()}">UUID</td>
+                        <td th:text="${activeContract.getId()}">Mã định danh</td>
                         <td th:text="${activeContract.getStartDate()}">2026-01-01</td>
                         <td th:text="${activeContract.getEndDate()}">2027-01-01</td>
                         <td th:text="${#numbers.formatDecimal(activeContract.getRentAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
-                        <td><span class="badge badge-ACTIVE">ACTIVE</span></td>
+                        <td><span class="badge badge-ACTIVE" th:text="${uiText.contractStatus(activeContract.getStatus())}">Đang hiệu lực</span></td>
                         <td>
-                            <a th:href="@{'/contracts/' + ${activeContract.getId()}}" class="btn btn-sm">View Contract</a>
+                            <a th:href="@{'/contracts/' + ${activeContract.getId()}}" class="btn btn-sm">Xem hợp đồng</a>
                         </td>
                     </tr>
                 </tbody>
@@ -109,34 +109,34 @@
         </div>
     </div>
 
-    <!-- Maintenance Tickets for Room -->
+    <!-- Yêu cầu bảo trì của phòng -->
     <div class="card">
         <div class="flex-between" style="margin-bottom: 12px;">
-            <h2>Maintenance Tickets for This Room</h2>
-            <a th:href="@{'/maintenance/new?roomId=' + ${room.getId()}}" class="btn btn-sm btn-primary">+ Report Ticket</a>
+            <h2>Các yêu cầu bảo trì của phòng này</h2>
+            <a th:href="@{'/maintenance/new?roomId=' + ${room.getId()}}" class="btn btn-sm btn-primary">+ Báo hỏng</a>
         </div>
 
         <div th:if="${#lists.isEmpty(tickets)}" class="empty-state">
-            <p>No maintenance tickets recorded for this room.</p>
+            <p>Chưa có yêu cầu bảo trì nào được ghi nhận cho phòng này.</p>
         </div>
 
         <table th:if="${!#lists.isEmpty(tickets)}" class="data-table">
             <thead>
                 <tr>
-                    <th>Title</th>
-                    <th>Priority</th>
-                    <th>Status</th>
-                    <th>Action</th>
+                    <th>Tiêu đề</th>
+                    <th>Mức độ</th>
+                    <th>Trạng thái</th>
+                    <th>Thao tác</th>
                 </tr>
             </thead>
             <tbody>
                 <tr th:each="t : ${tickets}">
                     <td>
-                        <a th:href="@{'/maintenance/' + ${t.getId()}}" th:text="${t.getTitle()}" style="font-weight: 600;">Title</a>
+                        <a th:href="@{'/maintenance/' + ${t.getId()}}" th:text="${t.getTitle()}" style="font-weight: 600;">Tiêu đề</a>
                     </td>
-                    <td><span class="badge" th:text="${t.getPriority()}">MEDIUM</span></td>
-                    <td><span th:class="'badge badge-' + ${t.getStatus()}" th:text="${t.getStatus()}">REPORTED</span></td>
-                    <td><a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm">View</a></td>
+                    <td><span class="badge" th:text="${uiText.maintenancePriority(t.getPriority())}">Trung bình</span></td>
+                    <td><span th:class="'badge badge-' + ${t.getStatus()}" th:text="${uiText.maintenanceStatus(t.getStatus())}">Đã báo</span></td>
+                    <td><a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm">Xem</a></td>
                 </tr>
             </tbody>
         </table>

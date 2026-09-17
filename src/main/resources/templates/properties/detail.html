@@ -9,84 +9,84 @@
 
     <div class="page-title-row">
         <div>
-            <h1 th:text="${property.name()}">Property Name</h1>
-            <p style="color: var(--text-secondary); font-size: 13px;" th:text="${property.address()}">Address</p>
+            <h1 th:text="${property.name()}">Tên nhà trọ</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;" th:text="${property.address()}">Địa chỉ</p>
         </div>
         <div>
-            <a th:href="@{/properties}" class="btn">&larr; Back to Properties</a>
+            <a th:href="@{/properties}" class="btn">&larr; Quay lại danh sách nhà trọ</a>
         </div>
     </div>
 
-    <!-- Property Details Card -->
+    <!-- Thông tin nhà trọ -->
     <div class="card" style="margin-bottom: 20px;">
         <div style="display: flex; gap: 32px; font-size: 13px;">
             <div>
-                <span style="color: var(--text-secondary);">Address: </span>
-                <strong th:text="${property.address()}">Address</strong>
+                <span style="color: var(--text-secondary);">Địa chỉ: </span>
+                <strong th:text="${property.address()}">Địa chỉ</strong>
             </div>
             <div>
-                <span style="color: var(--text-secondary);">Total Capacity: </span>
-                <strong th:text="${property.totalRooms()}">10</strong> rooms
+                <span style="color: var(--text-secondary);">Tổng số phòng: </span>
+                <strong th:text="${property.totalRooms()}">10</strong> phòng
             </div>
             <div>
-                <span style="color: var(--text-secondary);">Description: </span>
-                <span th:text="${property.description() != null ? property.description() : 'None'}">Notes</span>
+                <span style="color: var(--text-secondary);">Mô tả: </span>
+                <span th:text="${property.description() != null ? property.description() : 'Chưa có'}">Ghi chú</span>
             </div>
         </div>
     </div>
 
-    <!-- Add Room Form (ADMIN or STAFF) -->
+    <!-- Biểu mẫu thêm phòng (quản trị viên hoặc nhân viên) -->
     <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" class="card">
-        <h2>Add Room to Property</h2>
+        <h2>Thêm phòng vào nhà trọ</h2>
         <form th:action="@{'/properties/' + ${property.id()} + '/rooms'}" method="post">
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Room Number *</label>
-                    <input type="text" name="roomNumber" class="form-control" placeholder="e.g. P105" required>
+                    <label class="form-label">Số phòng *</label>
+                    <input type="text" name="roomNumber" class="form-control" placeholder="Ví dụ: P105" required>
                 </div>
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Floor</label>
+                    <label class="form-label">Tầng</label>
                     <input type="number" name="floor" class="form-control" value="1" min="1">
                 </div>
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Area (sqm)</label>
+                    <label class="form-label">Diện tích (m²)</label>
                     <input type="number" step="0.1" name="areaSqm" class="form-control" value="25.0">
                 </div>
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Base Price (VND) *</label>
+                    <label class="form-label">Giá thuê cơ bản (VND) *</label>
                     <input type="number" name="basePrice" class="form-control" value="3500000" min="0" required>
                 </div>
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Max Occupants</label>
+                    <label class="form-label">Số người tối đa</label>
                     <input type="number" name="maxOccupants" class="form-control" value="2" min="1">
                 </div>
                 <div class="form-group" style="display: flex; align-items: flex-end;">
-                    <button type="submit" class="btn btn-primary" style="margin-bottom: 0;">Add Room</button>
+                    <button type="submit" class="btn btn-primary" style="margin-bottom: 0;">Thêm phòng</button>
                 </div>
             </div>
         </form>
     </div>
 
-    <!-- Rooms Table -->
+    <!-- Bảng phòng -->
     <div class="card">
         <div class="flex-between" style="margin-bottom: 12px;">
-            <h2>Rooms in Property (<span th:text="${#lists.size(rooms)}">0</span>)</h2>
+            <h2>Các phòng trong nhà trọ (<span th:text="${#lists.size(rooms)}">0</span>)</h2>
         </div>
 
         <div th:if="${#lists.isEmpty(rooms)}" class="empty-state">
-            <p>No rooms added to this property yet.</p>
+            <p>Chưa có phòng nào trong nhà trọ này.</p>
         </div>
 
         <table th:if="${!#lists.isEmpty(rooms)}" class="data-table">
             <thead>
                 <tr>
-                    <th>Room #</th>
-                    <th>Floor</th>
-                    <th>Area</th>
-                    <th>Base Price</th>
-                    <th>Capacity</th>
-                    <th>Status</th>
-                    <th>Actions</th>
+                    <th>Phòng số</th>
+                    <th>Tầng</th>
+                    <th>Diện tích</th>
+                    <th>Giá thuê cơ bản</th>
+                    <th>Sức chứa</th>
+                    <th>Trạng thái</th>
+                    <th>Thao tác</th>
                 </tr>
             </thead>
             <tbody>
@@ -97,17 +97,17 @@
                     <td th:text="${r.getFloor()}">1</td>
                     <td th:text="${r.getAreaSqm() != null ? r.getAreaSqm() + ' m²' : '—'}">25 m²</td>
                     <td th:text="${#numbers.formatDecimal(r.getBasePrice(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
-                    <td th:text="${r.getMaxOccupants()} + ' persons'">2 persons</td>
+                    <td th:text="${r.getMaxOccupants()} + ' người'">2 người</td>
                     <td>
-                        <span th:class="'badge badge-' + ${r.getStatus()}" th:text="${r.getStatus()}">AVAILABLE</span>
+                        <span th:class="'badge badge-' + ${r.getStatus()}" th:text="${uiText.roomStatus(r.getStatus())}">Trống</span>
                     </td>
                     <td>
                         <div class="inline-actions">
-                            <a th:href="@{'/rooms/' + ${r.getId()}}" class="btn btn-sm">Details</a>
+                            <a th:href="@{'/rooms/' + ${r.getId()}}" class="btn btn-sm">Chi tiết</a>
                             <a th:if="${r.getStatus().name() == 'AVAILABLE' or r.getStatus().name() == 'RESERVED'}"
                                th:href="@{'/contracts/new?propertyId=' + ${property.id()} + '&roomId=' + ${r.getId()}}"
-                               class="btn btn-sm btn-primary">+ Contract</a>
-                            <a th:href="@{'/maintenance/new?roomId=' + ${r.getId()}}" class="btn btn-sm">Report Issue</a>
+                               class="btn btn-sm btn-primary">+ Hợp đồng</a>
+                            <a th:href="@{'/maintenance/new?roomId=' + ${r.getId()}}" class="btn btn-sm">Báo hỏng</a>
                         </div>
                     </td>
                 </tr>

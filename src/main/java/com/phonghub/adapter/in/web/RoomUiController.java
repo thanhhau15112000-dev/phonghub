@@ -80,7 +80,7 @@ public class RoomUiController {
     ) {
         try {
             Room room = roomUseCase.changeRoomStatus(id, status);
-            redirectAttributes.addFlashAttribute("successMessage", "Room status changed to " + room.getStatus());
+            redirectAttributes.addFlashAttribute("successMessage", "Đã chuyển trạng thái phòng sang " + UiText.INSTANCE.roomStatus(room.getStatus()) + ".");
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }

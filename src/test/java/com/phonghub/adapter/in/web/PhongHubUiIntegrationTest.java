@@ -11,6 +11,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -29,8 +30,13 @@ class PhongHubUiIntegrationTest {
         mockMvc.perform(get("/dashboard")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Property Operations Dashboard")))
-            .andExpect(content().string(containsString("Accessible Properties")));
+            .andExpect(content().string(containsString("Bảng điều khiển quản lý nhà trọ")))
+            .andExpect(content().string(containsString("Nhà trọ được truy cập")))
+            .andExpect(content().string(containsString("PhongHub")))
+            .andExpect(content().string(not(containsString("PhongHub Ops"))))
+            .andExpect(content().string(containsString("aria-label=\"Chọn người dùng demo\"")))
+            .andExpect(content().string(not(containsString("Người dùng hiện tại"))))
+            .andExpect(content().string(not(containsString("style=\"font-weight: 500;\""))));
     }
 
     @Test
@@ -39,7 +45,7 @@ class PhongHubUiIntegrationTest {
         mockMvc.perform(get("/properties")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Nha Tro Xanh - Quan 7")));
+            .andExpect(content().string(containsString("Nhà trọ Xanh - Quận 7")));
     }
 
     @Test
@@ -49,8 +55,8 @@ class PhongHubUiIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("P101")))
-            .andExpect(content().string(containsString("OCCUPIED")))
-            .andExpect(content().string(containsString("MAINTENANCE")));
+            .andExpect(content().string(containsString("Đang thuê")))
+            .andExpect(content().string(containsString("Bảo trì")));
     }
 
     @Test
@@ -59,7 +65,7 @@ class PhongHubUiIntegrationTest {
         mockMvc.perform(get("/rooms/" + DataSeeder.ROOM_101_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Room Information")))
+            .andExpect(content().string(containsString("Thông tin phòng")))
             .andExpect(content().string(containsString("P101")));
     }
 
@@ -69,13 +75,19 @@ class PhongHubUiIntegrationTest {
         mockMvc.perform(get("/contracts")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Contracts")));
+            .andExpect(content().string(containsString("Hợp đồng")));
 
         mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Nguyen Van A")))
-            .andExpect(content().string(containsString("ACTIVE")));
+            .andExpect(content().string(containsString("Nguyễn Văn A")))
+            .andExpect(content().string(containsString("Đang hiệu lực")));
+
+        mockMvc.perform(get("/contracts/new")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Chọn nhà trọ")))
+            .andExpect(content().string(containsString("Chọn phòng")));
     }
 
     @Test
@@ -84,13 +96,19 @@ class PhongHubUiIntegrationTest {
         mockMvc.perform(get("/maintenance")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Maintenance Tickets")));
+            .andExpect(content().string(containsString("Yêu cầu bảo trì")));
 
         mockMvc.perform(get("/maintenance/" + DataSeeder.TICKET_1_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Sua voi nuoc va kiem tra may lanh")))
-            .andExpect(content().string(containsString("IN_PROGRESS")));
+            .andExpect(content().string(containsString("Sửa vòi nước và kiểm tra máy lạnh")))
+            .andExpect(content().string(containsString("Đang xử lý")));
+
+        mockMvc.perform(get("/maintenance/new")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Báo hỏng phòng")))
+            .andExpect(content().string(containsString("Mức độ")));
     }
 
     @Test

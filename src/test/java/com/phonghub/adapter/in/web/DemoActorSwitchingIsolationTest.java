@@ -46,7 +46,7 @@ class DemoActorSwitchingIsolationTest {
         mockMvc.perform(get("/properties")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Nha Tro Xanh - Quan 7")))
-            .andExpect(content().string(containsString("Khu Tro Tan Binh")));
+            .andExpect(content().string(containsString("Nhà trọ Xanh - Quận 7")))
+            .andExpect(content().string(containsString("Khu trọ Tân Bình")));
     }
 }

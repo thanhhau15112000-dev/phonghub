@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Contract Details')}"></head>
+<head th:replace="~{fragments/layout :: head('Chi tiết hợp đồng')}"></head>
 <body>
 <header th:replace="~{fragments/layout :: header}"></header>
 
@@ -9,116 +9,116 @@
 
     <div class="page-title-row">
         <div>
-            <h1>Contract <span th:text="${#strings.substring(contract.getId().toString(), 0, 8)}">ID</span></h1>
+            <h1>Hợp đồng <span th:text="${#strings.substring(contract.getId().toString(), 0, 8)}">Mã</span></h1>
             <p style="color: var(--text-secondary); font-size: 13px;">
-                Property: <strong th:text="${property.name()}">Property</strong> | Room: <strong th:text="${room.getRoomNumber()}">P101</strong>
+                Nhà trọ: <strong th:text="${property.name()}">Nhà trọ</strong> | Phòng: <strong th:text="${room.getRoomNumber()}">P101</strong>
             </p>
         </div>
         <div>
-            <a th:href="@{/contracts}" class="btn">&larr; Back to Contracts</a>
+            <a th:href="@{/contracts}" class="btn">&larr; Quay lại danh sách hợp đồng</a>
         </div>
     </div>
 
-    <!-- Contract Status & Action Bar -->
+    <!-- Trạng thái và thao tác hợp đồng -->
     <div class="card" style="margin-bottom: 20px;">
         <div class="flex-between">
             <div style="display: flex; align-items: center; gap: 12px;">
-                <span style="font-size: 14px; font-weight: 600;">Status:</span>
-                <span th:class="'badge badge-' + ${contract.getStatus()}" style="font-size: 14px; padding: 4px 10px;" th:text="${contract.getStatus()}">DRAFT</span>
+                <span style="font-size: 14px; font-weight: 600;">Trạng thái:</span>
+                <span th:class="'badge badge-' + ${contract.getStatus()}" style="font-size: 14px; padding: 4px 10px;" th:text="${uiText.contractStatus(contract.getStatus())}">Bản nháp</span>
             </div>
 
-            <!-- Action buttons -->
+            <!-- Các nút thao tác -->
             <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" class="inline-actions">
-                <!-- Activate button if DRAFT -->
+                <!-- Nút kích hoạt khi ở trạng thái bản nháp -->
                 <form th:if="${contract.getStatus().name() == 'DRAFT'}" th:action="@{'/contracts/' + ${contract.getId()} + '/activate'}" method="post">
-                    <button type="submit" class="btn btn-primary">Activate Contract (Occupy Room)</button>
+                    <button type="submit" class="btn btn-primary">Kích hoạt hợp đồng (chuyển phòng sang đang thuê)</button>
                 </form>
 
-                <!-- Terminate button if ACTIVE -->
+                <!-- Nút chấm dứt khi đang có hiệu lực -->
                 <form th:if="${contract.getStatus().name() == 'ACTIVE'}" th:action="@{'/contracts/' + ${contract.getId()} + '/terminate'}" method="post" style="display: flex; align-items: center; gap: 8px;">
                     <label style="font-size: 12px; display: flex; align-items: center; gap: 4px;">
                         <input type="checkbox" name="requiresMaintenance" value="true">
-                        Requires Maintenance Inspection
+                        Cần kiểm tra bảo trì
                     </label>
-                    <button type="submit" class="btn btn-danger">Terminate Contract</button>
+                    <button type="submit" class="btn btn-danger">Chấm dứt hợp đồng</button>
                 </form>
             </div>
         </div>
     </div>
 
-    <!-- Contract Information Grid -->
+    <!-- Thông tin hợp đồng -->
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-        <!-- Left: Lease Details -->
+        <!-- Bên trái: Điều khoản thuê -->
         <div class="card">
-            <h2>Lease Terms</h2>
+            <h2>Điều khoản thuê</h2>
             <table class="data-table">
                 <tbody>
                     <tr>
-                        <td style="color: var(--text-secondary); width: 140px;">Contract ID:</td>
-                        <td th:text="${contract.getId()}" style="font-family: monospace;">UUID</td>
+                        <td style="color: var(--text-secondary); width: 140px;">Mã hợp đồng:</td>
+                        <td th:text="${contract.getId()}" style="font-family: monospace;">Mã định danh</td>
                     </tr>
                     <tr>
-                        <td style="color: var(--text-secondary);">Start Date:</td>
+                        <td style="color: var(--text-secondary);">Ngày bắt đầu:</td>
                         <td th:text="${contract.getStartDate()}">2026-01-01</td>
                     </tr>
                     <tr>
-                        <td style="color: var(--text-secondary);">End Date:</td>
+                        <td style="color: var(--text-secondary);">Ngày kết thúc:</td>
                         <td th:text="${contract.getEndDate()}">2027-01-01</td>
                     </tr>
                     <tr>
-                        <td style="color: var(--text-secondary);">Monthly Rent:</td>
+                        <td style="color: var(--text-secondary);">Tiền thuê hàng tháng:</td>
                         <td th:text="${#numbers.formatDecimal(contract.getRentAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
                     </tr>
                     <tr>
-                        <td style="color: var(--text-secondary);">Deposit Amount:</td>
+                        <td style="color: var(--text-secondary);">Tiền đặt cọc:</td>
                         <td th:text="${#numbers.formatDecimal(contract.getDepositAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
                     </tr>
                     <tr>
-                        <td style="color: var(--text-secondary);">Monthly Due Day:</td>
-                        <td th:text="'Day ' + ${contract.getPaymentDay()} + ' of each month'">Day 5</td>
+                        <td style="color: var(--text-secondary);">Ngày thanh toán hàng tháng:</td>
+                        <td th:text="'Ngày ' + ${contract.getPaymentDay()} + ' hằng tháng'">Ngày 5 hằng tháng</td>
                     </tr>
                 </tbody>
             </table>
         </div>
 
-        <!-- Right: Primary Occupant Details -->
+        <!-- Bên phải: Thông tin người thuê chính -->
         <div class="card">
-            <h2>Primary Occupant</h2>
+            <h2>Thông tin người thuê chính</h2>
             <div th:if="${primaryTenant == null}" class="empty-state">
-                <p>Tenant record not found.</p>
+                <p>Không tìm thấy hồ sơ người thuê.</p>
             </div>
             <table th:if="${primaryTenant != null}" class="data-table">
                 <tbody>
                     <tr>
-                        <td style="color: var(--text-secondary); width: 140px;">Full Name:</td>
-                        <td th:text="${primaryTenant.fullName()}" style="font-weight: 600;">Nguyen Van A</td>
+                        <td style="color: var(--text-secondary); width: 140px;">Họ và tên:</td>
+                        <td th:text="${primaryTenant.fullName()}" style="font-weight: 600;">Nguyễn Văn A</td>
                     </tr>
                     <tr>
-                        <td style="color: var(--text-secondary);">ID Card (CCCD):</td>
+                        <td style="color: var(--text-secondary);">CCCD:</td>
                         <td th:text="${primaryTenant.identityCardNumber()}">079201001111</td>
                     </tr>
                     <tr>
-                        <td style="color: var(--text-secondary);">Phone:</td>
+                        <td style="color: var(--text-secondary);">Số điện thoại:</td>
                         <td th:text="${primaryTenant.phone()}">0901234567</td>
                     </tr>
                     <tr>
                         <td style="color: var(--text-secondary);">Email:</td>
-                        <td th:text="${primaryTenant.email() != null ? primaryTenant.email() : '—'}">tenant@example.com</td>
+                        <td th:text="${primaryTenant.email() != null ? primaryTenant.email() : '—'}">tenant@phonghub.local</td>
                     </tr>
                     <tr>
-                        <td style="color: var(--text-secondary);">Address:</td>
-                        <td th:text="${primaryTenant.permanentAddress() != null ? primaryTenant.permanentAddress() : '—'}">Ben Tre</td>
+                        <td style="color: var(--text-secondary);">Địa chỉ thường trú:</td>
+                        <td th:text="${primaryTenant.permanentAddress() != null ? primaryTenant.permanentAddress() : '—'}">Bến Tre</td>
                     </tr>
                 </tbody>
             </table>
 
-            <h3 style="font-size: 13px; font-weight: 600; margin-top: 16px; margin-bottom: 8px;">Additional Occupants</h3>
+            <h3 style="font-size: 13px; font-weight: 600; margin-top: 16px; margin-bottom: 8px;">Người ở bổ sung</h3>
             <div th:if="${#lists.isEmpty(contract.getOccupants()) or #lists.size(contract.getOccupants()) <= 1}" style="font-size: 12px; color: var(--text-secondary);">
-                No additional occupants registered.
+                Chưa đăng ký người ở bổ sung.
             </div>
             <ul th:if="${#lists.size(contract.getOccupants()) > 1}" style="padding-left: 20px; font-size: 13px;">
                 <li th:each="occ : ${contract.getOccupants()}" th:if="${!occ.isPrimary()}">
-                    Occupant ID: <span th:text="${occ.tenantId()}"></span> (Check-in: <span th:text="${occ.checkInDate()}"></span>)
+                    Mã người ở: <span th:text="${occ.tenantId()}"></span> (Ngày nhận phòng: <span th:text="${occ.checkInDate()}"></span>)
                 </li>
             </ul>
         </div>

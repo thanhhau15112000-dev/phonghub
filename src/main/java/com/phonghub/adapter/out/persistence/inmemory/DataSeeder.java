@@ -47,11 +47,11 @@ public class DataSeeder {
         Instant now = Instant.now();
 
         // 1. Users
-        User admin = new User(DemoFixturePort.ADMIN_ID, "admin", "admin@phonghub.local", "Quan Tri Vien", "0900000001", UserRole.ADMIN, User.UserStatus.ACTIVE, false, now);
-        User staff1 = new User(DemoFixturePort.STAFF_1_ID, "staff1", "staff1@phonghub.local", "Nhan Vien Q7", "0900000002", UserRole.STAFF, User.UserStatus.ACTIVE, false, now);
-        User staff2 = new User(DemoFixturePort.STAFF_2_ID, "staff2", "staff2@phonghub.local", "Nhan Vien Tan Binh", "0900000003", UserRole.STAFF, User.UserStatus.ACTIVE, false, now);
-        User tech1 = new User(DemoFixturePort.TECH_1_ID, "tech1", "tech1@phonghub.local", "Ky Thuat Vien", "0900000004", UserRole.TECHNICIAN, User.UserStatus.ACTIVE, false, now);
-        User tenantUser1 = new User(DemoFixturePort.TENANT_1_ID, "tenant1", "tenant1@phonghub.local", "Nguyen Van A", "0901234567", UserRole.TENANT, User.UserStatus.ACTIVE, true, now);
+        User admin = new User(DemoFixturePort.ADMIN_ID, "admin", "admin@phonghub.local", "Quản trị viên", "0900000001", UserRole.ADMIN, User.UserStatus.ACTIVE, false, now);
+        User staff1 = new User(DemoFixturePort.STAFF_1_ID, "staff1", "staff1@phonghub.local", "Nhân viên Quận 7", "0900000002", UserRole.STAFF, User.UserStatus.ACTIVE, false, now);
+        User staff2 = new User(DemoFixturePort.STAFF_2_ID, "staff2", "staff2@phonghub.local", "Nhân viên Tân Bình", "0900000003", UserRole.STAFF, User.UserStatus.ACTIVE, false, now);
+        User tech1 = new User(DemoFixturePort.TECH_1_ID, "tech1", "tech1@phonghub.local", "Kỹ thuật viên", "0900000004", UserRole.TECHNICIAN, User.UserStatus.ACTIVE, false, now);
+        User tenantUser1 = new User(DemoFixturePort.TENANT_1_ID, "tenant1", "tenant1@phonghub.local", "Nguyễn Văn A", "0901234567", UserRole.TENANT, User.UserStatus.ACTIVE, true, now);
 
         userRepository.save(admin);
         userRepository.save(staff1);
@@ -60,8 +60,8 @@ public class DataSeeder {
         userRepository.save(tenantUser1);
 
         // 2. Properties
-        Property prop1 = new Property(PROP_1_ID, "Nha Tro Xanh - Quan 7", "123 Nguyen Thi Thap, Phuong Tan Quy, Quan 7, TP.HCM", "Khu tro sinh vien va nguoi di lam", 10, now);
-        Property prop2 = new Property(PROP_2_ID, "Khu Tro Tan Binh", "45 Cong Hoa, Phuong 13, Quan Tan Binh, TP.HCM", "Nha tro gan san bay, yen tinh", 5, now);
+        Property prop1 = new Property(PROP_1_ID, "Nhà trọ Xanh - Quận 7", "123 Nguyễn Thị Thập, Phường Tân Quy, Quận 7, TP.HCM", "Khu trọ dành cho sinh viên và người đi làm", 10, now);
+        Property prop2 = new Property(PROP_2_ID, "Khu trọ Tân Bình", "45 Cộng Hòa, Phường 13, Quận Tân Bình, TP.HCM", "Nhà trọ gần sân bay, yên tĩnh", 5, now);
 
         propertyRepository.save(prop1);
         propertyRepository.save(prop2);
@@ -93,11 +93,11 @@ public class DataSeeder {
         Tenant tenant1 = new Tenant(
             TENANT_RECORD_ID,
             DemoFixturePort.TENANT_1_ID,
-            "Nguyen Van A",
+            "Nguyễn Văn A",
             "079201001111",
             "0901234567",
             "tenant1@phonghub.local",
-            "Ben Tre",
+            "Bến Tre",
             now
         );
         tenantRepository.save(tenant1);
@@ -137,8 +137,8 @@ public class DataSeeder {
             PROP_1_ID,
             null,
             DemoFixturePort.TECH_1_ID,
-            "Sua voi nuoc va kiem tra may lanh",
-            "Voi nuoc bon rua bi ri, may lanh chay yeu",
+            "Sửa vòi nước và kiểm tra máy lạnh",
+            "Vòi nước bồn rửa bị rỉ, máy lạnh chạy yếu",
             MaintenancePriority.HIGH,
             MaintenanceStatus.IN_PROGRESS,
             BigDecimal.ZERO,
