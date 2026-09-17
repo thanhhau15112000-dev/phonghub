@@ -12,6 +12,7 @@ import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Room;
+import com.phonghub.application.port.in.DemoActorPort;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.UserRole;
 import java.time.Instant;
@@ -39,7 +40,7 @@ class AdditionalOccupantAccessTest {
     private TenantRepositoryPort tenantRepository;
 
     @Autowired
-    private CurrentUserPort currentUserPort;
+    private DemoActorPort demoActorPort;
 
     @Test
     void additionalOccupantCanAccessContractAndAssignedRoom() {
@@ -70,7 +71,7 @@ class AdditionalOccupantAccessTest {
             "Nguyen Thi B",
             UserRole.TENANT
         );
-        currentUserPort.setCurrentUser(occupantUser);
+        demoActorPort.setCurrentUser(occupantUser);
 
         // 1. Co-tenant must see Contract 1 in accessible contracts list
         List<Contract> accessibleContracts = contractUseCase.listContractsForTenant(occupantUserId);

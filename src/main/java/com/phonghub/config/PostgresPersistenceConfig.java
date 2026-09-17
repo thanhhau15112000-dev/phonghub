@@ -1,5 +1,7 @@
 package com.phonghub.config;
 
+import com.phonghub.adapter.in.security.SecurityCurrentUserAdapter;
+import com.phonghub.adapter.out.audit.PostgresAuditAdapter;
 import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyRepository;
@@ -7,7 +9,11 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresUserRepository;
+import com.phonghub.adapter.out.supabase.auth.SupabaseIdentityProviderAdapter;
+import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
+import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
@@ -23,6 +29,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.web.client.RestClient;
+import tools.jackson.databind.ObjectMapper;
 
 @Configuration
 @Profile("prod")
@@ -89,5 +99,39 @@ public class PostgresPersistenceConfig {
     @Bean
     public StaffPropertyAssignmentPort staffPropertyAssignmentRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         return new PostgresStaffPropertyAssignmentRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public AuditPort auditPort(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresAuditAdapter(jdbcTemplate, new ObjectMapper());
+    }
+
+    @Bean
+    public CurrentUserPort currentUserPort() {
+        return new SecurityCurrentUserAdapter();
+    }
+
+    @Bean
+    public RestClient restClient() {
+        return RestClient.create();
+    }
+
+    @Bean
+    public IdentityProviderPort identityProviderPort(
+        RestClient restClient,
+        SupabaseProperties supabaseProperties
+    ) {
+        return new SupabaseIdentityProviderAdapter(
+            restClient,
+            supabaseProperties.getUrl(),
+            supabaseProperties.getAnonKey(),
+            supabaseProperties.getServiceRoleKey(),
+            new ObjectMapper()
+        );
+    }
+
+    @Bean
+    public PlatformTransactionManager transactionManager(DataSource dataSource) {
+        return new DataSourceTransactionManager(dataSource);
     }
 }

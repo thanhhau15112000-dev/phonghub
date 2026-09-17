@@ -1,5 +1,6 @@
 package com.phonghub.adapter.in.web.api;
 
+import com.phonghub.adapter.in.web.api.dto.MaintenanceTicketResponse;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceTicket;
@@ -30,12 +31,15 @@ public class MaintenanceApiController {
     }
 
     @GetMapping("/properties/{propertyId}/maintenance")
-    public ResponseEntity<List<MaintenanceTicket>> listTickets(@PathVariable UUID propertyId) {
-        return ResponseEntity.ok(maintenanceUseCase.listTicketsForProperty(propertyId));
+    public ResponseEntity<List<MaintenanceTicketResponse>> listTickets(@PathVariable UUID propertyId) {
+        List<MaintenanceTicketResponse> list = maintenanceUseCase.listTicketsForProperty(propertyId).stream()
+            .map(MaintenanceTicketResponse::from)
+            .toList();
+        return ResponseEntity.ok(list);
     }
 
     @PostMapping("/maintenance")
-    public ResponseEntity<MaintenanceTicket> createTicket(@Valid @RequestBody CreateTicketRequest request) {
+    public ResponseEntity<MaintenanceTicketResponse> createTicket(@Valid @RequestBody CreateTicketRequest request) {
         MaintenanceTicket ticket = maintenanceUseCase.createTicket(new MaintenanceUseCase.CreateMaintenanceTicketCommand(
             request.roomId(),
             request.title(),
@@ -43,30 +47,34 @@ public class MaintenanceApiController {
             request.priority() != null ? request.priority() : MaintenancePriority.MEDIUM,
             request.setRoomMaintenance()
         ));
-        return ResponseEntity.created(URI.create("/api/maintenance/" + ticket.getId())).body(ticket);
+        MaintenanceTicketResponse response = MaintenanceTicketResponse.from(ticket);
+        return ResponseEntity.created(URI.create("/api/maintenance/" + response.id())).body(response);
     }
 
     @PostMapping("/maintenance/{id}/accept")
-    public ResponseEntity<MaintenanceTicket> acceptTicket(@PathVariable UUID id) {
-        return ResponseEntity.ok(maintenanceUseCase.acceptTicket(id));
+    public ResponseEntity<MaintenanceTicketResponse> acceptTicket(@PathVariable UUID id) {
+        MaintenanceTicket ticket = maintenanceUseCase.acceptTicket(id);
+        return ResponseEntity.ok(MaintenanceTicketResponse.from(ticket));
     }
 
     @PostMapping("/maintenance/{id}/resolve")
-    public ResponseEntity<MaintenanceTicket> resolveTicket(
+    public ResponseEntity<MaintenanceTicketResponse> resolveTicket(
         @PathVariable UUID id,
         @Valid @RequestBody ResolveTicketRequest request
     ) {
-        return ResponseEntity.ok(maintenanceUseCase.resolveTicket(new MaintenanceUseCase.ResolveMaintenanceTicketCommand(
+        MaintenanceTicket ticket = maintenanceUseCase.resolveTicket(new MaintenanceUseCase.ResolveMaintenanceTicketCommand(
             id,
             request.resolutionNotes(),
             request.repairCost(),
             request.releaseRoomToAvailable()
-        )));
+        ));
+        return ResponseEntity.ok(MaintenanceTicketResponse.from(ticket));
     }
 
     @GetMapping("/maintenance/{id}")
-    public ResponseEntity<MaintenanceTicket> getTicket(@PathVariable UUID id) {
-        return ResponseEntity.ok(maintenanceUseCase.getTicket(id));
+    public ResponseEntity<MaintenanceTicketResponse> getTicket(@PathVariable UUID id) {
+        MaintenanceTicket ticket = maintenanceUseCase.getTicket(id);
+        return ResponseEntity.ok(MaintenanceTicketResponse.from(ticket));
     }
 
     public record CreateTicketRequest(

@@ -1,0 +1,13 @@
+.env
+.env.*
+*.env
+target/
+.git/
+.gitignore
+.dockerignore
+node_modules/
+.wrangler/
+dist/
+*.log
+.idea/
+.vscode/

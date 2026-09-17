@@ -1,0 +1,101 @@
+# PhongHub backend MVP staging snapshot allowlist
+
+This is the explicit dirty-worktree delta allowlist for the backend snapshot
+commit on feat/content. Existing tracked backend files at the starting HEAD
+remain inherited; this file lists only paths permitted to be staged from the
+current worktree.
+
+## Allowed paths
+
+pom.xml
+.gitignore
+.dockerignore
+docs/staging-backend-allowlist.txt
+
+src/main/java/com/phonghub/PhongHubApplication.java
+src/main/java/com/phonghub/adapter/in/security/DomainAuthenticationToken.java
+src/main/java/com/phonghub/adapter/in/security/PasswordChangeGate.java
+src/main/java/com/phonghub/adapter/in/security/SecurityCurrentUserAdapter.java
+src/main/java/com/phonghub/adapter/in/security/SupabaseJwtAuthenticationConverter.java
+src/main/java/com/phonghub/adapter/in/web/CurrentUserInterceptor.java
+src/main/java/com/phonghub/adapter/in/web/GlobalUiAdvice.java
+src/main/java/com/phonghub/adapter/in/web/RestExceptionHandler.java
+src/main/java/com/phonghub/adapter/in/web/UserSwitchUiController.java
+src/main/java/com/phonghub/adapter/in/web/api/AuthApiController.java
+src/main/java/com/phonghub/adapter/in/web/api/ContractApiController.java
+src/main/java/com/phonghub/adapter/in/web/api/MaintenanceApiController.java
+src/main/java/com/phonghub/adapter/in/web/api/PropertyApiController.java
+src/main/java/com/phonghub/adapter/in/web/api/RoomApiController.java
+src/main/java/com/phonghub/adapter/in/web/api/dto/AdminCreatedUserResponse.java
+src/main/java/com/phonghub/adapter/in/web/api/dto/AdminPasswordResetResponse.java
+src/main/java/com/phonghub/adapter/in/web/api/dto/ContractResponse.java
+src/main/java/com/phonghub/adapter/in/web/api/dto/MaintenanceTicketResponse.java
+src/main/java/com/phonghub/adapter/in/web/api/dto/PropertyResponse.java
+src/main/java/com/phonghub/adapter/in/web/api/dto/RoomResponse.java
+src/main/java/com/phonghub/adapter/out/audit/InMemoryAuditAdapter.java
+src/main/java/com/phonghub/adapter/out/audit/PostgresAuditAdapter.java
+src/main/java/com/phonghub/adapter/out/identity/LocalDemoAuthenticationAdapter.java
+src/main/java/com/phonghub/adapter/out/identity/LocalDemoIdentityProviderAdapter.java
+src/main/java/com/phonghub/adapter/out/identity/SupabaseAuthenticationAdapter.java
+src/main/java/com/phonghub/adapter/out/persistence/inmemory/DataSeeder.java
+src/main/java/com/phonghub/adapter/out/persistence/inmemory/InMemoryContractRepository.java
+src/main/java/com/phonghub/adapter/out/persistence/inmemory/InMemoryMaintenanceTicketRepository.java
+src/main/java/com/phonghub/adapter/out/persistence/inmemory/InMemoryRoomRepository.java
+src/main/java/com/phonghub/adapter/out/persistence/inmemory/InMemoryTenantRepository.java
+src/main/java/com/phonghub/adapter/out/persistence/inmemory/InMemoryUserRepository.java
+src/main/java/com/phonghub/adapter/out/persistence/postgres/PostgresUserRepository.java
+src/main/java/com/phonghub/adapter/out/supabase/auth/SupabaseIdentityProviderAdapter.java
+
+src/main/java/com/phonghub/application/port/in/AuthTokenResponse.java
+src/main/java/com/phonghub/application/port/in/AuthUseCase.java
+src/main/java/com/phonghub/application/port/in/DemoActorPort.java
+src/main/java/com/phonghub/application/port/out/AuditPort.java
+src/main/java/com/phonghub/application/port/out/CurrentUser.java
+src/main/java/com/phonghub/application/port/out/CurrentUserPort.java
+src/main/java/com/phonghub/application/port/out/DemoFixturePort.java
+src/main/java/com/phonghub/application/port/out/IdentityProviderPort.java
+src/main/java/com/phonghub/application/port/out/UserRepositoryPort.java
+src/main/java/com/phonghub/application/service/AuthService.java
+
+src/main/java/com/phonghub/config/AudienceValidator.java
+src/main/java/com/phonghub/config/DemoSecurityConfig.java
+src/main/java/com/phonghub/config/InMemoryPersistenceConfig.java
+src/main/java/com/phonghub/config/PhongHubConfiguration.java
+src/main/java/com/phonghub/config/PostgresPersistenceConfig.java
+src/main/java/com/phonghub/config/ProductionConfigValidator.java
+src/main/java/com/phonghub/config/ProductionSecurityConfig.java
+src/main/java/com/phonghub/config/SnapshottingTransactionManager.java
+src/main/java/com/phonghub/config/SupabaseProperties.java
+src/main/java/com/phonghub/config/TransactionalContractUseCase.java
+src/main/java/com/phonghub/config/TransactionalMaintenanceUseCase.java
+src/main/java/com/phonghub/config/WebMvcConfig.java
+
+src/main/java/com/phonghub/domain/exception/AccountDisabledException.java
+src/main/java/com/phonghub/domain/exception/IdentityProviderUnavailableException.java
+src/main/java/com/phonghub/domain/exception/InvalidCredentialsException.java
+src/main/java/com/phonghub/domain/exception/PasswordChangeRequiredException.java
+src/main/java/com/phonghub/domain/model/User.java
+
+src/main/resources/application-prod.yml
+src/main/resources/db/migration/V3__align_phone_and_add_audit_log.sql
+src/main/resources/templates/error.html
+
+src/test/java/com/phonghub/adapter/in/web/ProductionAuthSecurityTest.java
+src/test/java/com/phonghub/application/AdditionalOccupantAccessTest.java
+src/test/java/com/phonghub/application/AuthServiceUnitTest.java
+src/test/java/com/phonghub/application/MaintenanceNoPartialWriteTest.java
+src/test/java/com/phonghub/application/RoomContractInvariantTest.java
+src/test/java/com/phonghub/config/ProductionConfigValidatorTest.java
+src/test/java/com/phonghub/config/TransactionRollbackFaultInjectionTest.java
+
+## Explicitly excluded from this snapshot
+
+- .env and any secret-bearing file or value
+- target/**, node_modules/**, and .wrangler/**
+- package.json and package-lock.json (Worker/Cloudflare dependency scope)
+- src/worker.ts, tsconfig.json, and wrangler.jsonc (known Worker typecheck blocker)
+- log1.md (reserved for the separate documentation commit after the first push)
+- README.md, context.md, and docs/api-spec.yaml (not part of this verified delta)
+- Any path not listed above, including a frontend React tree if later created
+
+This snapshot is a staging baseline only and is not release-ready.

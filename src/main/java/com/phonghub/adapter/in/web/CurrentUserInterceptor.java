@@ -1,7 +1,8 @@
 package com.phonghub.adapter.in.web;
 
-import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
+import com.phonghub.application.port.in.DemoActorPort;
 import com.phonghub.application.port.out.CurrentUser;
+import com.phonghub.application.port.out.CurrentUserPort;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -11,23 +12,25 @@ import org.springframework.web.servlet.HandlerInterceptor;
 
 public class CurrentUserInterceptor implements HandlerInterceptor {
 
-    private final LocalDemoAuthenticationAdapter authAdapter;
+    private final CurrentUserPort currentUserPort;
+    private final DemoActorPort demoActorPort;
     private final boolean demoEnabled;
 
-    public CurrentUserInterceptor(LocalDemoAuthenticationAdapter authAdapter, boolean demoEnabled) {
-        this.authAdapter = authAdapter;
+    public CurrentUserInterceptor(CurrentUserPort currentUserPort, DemoActorPort demoActorPort, boolean demoEnabled) {
+        this.currentUserPort = currentUserPort;
+        this.demoActorPort = demoActorPort;
         this.demoEnabled = demoEnabled;
     }
 
-    public CurrentUserInterceptor(LocalDemoAuthenticationAdapter authAdapter) {
-        this(authAdapter, true);
+    public CurrentUserInterceptor(CurrentUserPort currentUserPort, DemoActorPort demoActorPort) {
+        this(currentUserPort, demoActorPort, true);
     }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         UUID requestedUserId = null;
 
-        if (demoEnabled) {
+        if (demoEnabled && demoActorPort != null) {
             // 1. Check HTTP header X-User-Id (highest priority, used by API & tests)
             String headerVal = request.getHeader("X-User-Id");
             if (headerVal != null && !headerVal.isBlank()) {
@@ -42,7 +45,6 @@ public class CurrentUserInterceptor implements HandlerInterceptor {
                 if (paramVal != null && !paramVal.isBlank()) {
                     try {
                         requestedUserId = UUID.fromString(paramVal.trim());
-                        // Persist to session for UI browsing
                         HttpSession session = request.getSession(true);
                         session.setAttribute("currentUserId", requestedUserId);
                     } catch (IllegalArgumentException ignored) {}
@@ -62,24 +64,34 @@ public class CurrentUserInterceptor implements HandlerInterceptor {
 
             // Resolve user
             if (requestedUserId != null) {
-                Optional<CurrentUser> userOpt = authAdapter.findDemoUser(requestedUserId);
+                Optional<CurrentUser> userOpt = demoActorPort.findDemoUser(requestedUserId);
                 if (userOpt.isPresent()) {
-                    authAdapter.setCurrentUser(userOpt.get());
+                    demoActorPort.setCurrentUser(userOpt.get());
                     request.setAttribute("currentUser", userOpt.get());
                     return true;
                 }
             }
         }
 
-        // Default to current fallback
-        CurrentUser current = authAdapter.getCurrentUser();
-        authAdapter.setCurrentUser(current);
-        request.setAttribute("currentUser", current);
+        // Default to current fallback from read-only port
+        if (currentUserPort != null) {
+            try {
+                CurrentUser current = currentUserPort.getCurrentUser();
+                if (demoActorPort != null) {
+                    demoActorPort.setCurrentUser(current);
+                }
+                request.setAttribute("currentUser", current);
+            } catch (Exception ignored) {
+                // In production without authentication, interceptor does not enforce fallback
+            }
+        }
         return true;
     }
 
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
-        authAdapter.clear();
+        if (demoActorPort != null) {
+            demoActorPort.clear();
+        }
     }
 }

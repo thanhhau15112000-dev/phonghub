@@ -5,9 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
+import com.phonghub.application.port.in.DemoActorPort;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.out.ContractRepositoryPort;
-import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.model.Contract;
@@ -32,12 +32,12 @@ class RoomContractInvariantTest {
     private ContractRepositoryPort contractRepository;
 
     @Autowired
-    private CurrentUserPort currentUserPort;
+    private DemoActorPort demoActorPort;
 
     @BeforeEach
     void setUp() {
         // Run as Admin
-        currentUserPort.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_ADMIN);
+        demoActorPort.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_ADMIN);
     }
 
     @Test

@@ -1,6 +1,6 @@
 package com.phonghub.adapter.out.persistence.inmemory;
 
-import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
+import com.phonghub.application.port.out.DemoFixturePort;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
 import com.phonghub.domain.model.ContractStatus;
@@ -47,11 +47,11 @@ public class DataSeeder {
         Instant now = Instant.now();
 
         // 1. Users
-        User admin = new User(LocalDemoAuthenticationAdapter.ADMIN_ID, "admin@phonghub.local", "Quan Tri Vien", "0900000001", UserRole.ADMIN, User.UserStatus.ACTIVE, now);
-        User staff1 = new User(LocalDemoAuthenticationAdapter.STAFF_1_ID, "staff1@phonghub.local", "Nhan Vien Q7", "0900000002", UserRole.STAFF, User.UserStatus.ACTIVE, now);
-        User staff2 = new User(LocalDemoAuthenticationAdapter.STAFF_2_ID, "staff2@phonghub.local", "Nhan Vien Tan Binh", "0900000003", UserRole.STAFF, User.UserStatus.ACTIVE, now);
-        User tech1 = new User(LocalDemoAuthenticationAdapter.TECH_1_ID, "tech1@phonghub.local", "Ky Thuat Vien", "0900000004", UserRole.TECHNICIAN, User.UserStatus.ACTIVE, now);
-        User tenantUser1 = new User(LocalDemoAuthenticationAdapter.TENANT_1_ID, "tenant1@phonghub.local", "Nguyen Van A", "0901234567", UserRole.TENANT, User.UserStatus.ACTIVE, now);
+        User admin = new User(DemoFixturePort.ADMIN_ID, "admin", "admin@phonghub.local", "Quan Tri Vien", "0900000001", UserRole.ADMIN, User.UserStatus.ACTIVE, false, now);
+        User staff1 = new User(DemoFixturePort.STAFF_1_ID, "staff1", "staff1@phonghub.local", "Nhan Vien Q7", "0900000002", UserRole.STAFF, User.UserStatus.ACTIVE, false, now);
+        User staff2 = new User(DemoFixturePort.STAFF_2_ID, "staff2", "staff2@phonghub.local", "Nhan Vien Tan Binh", "0900000003", UserRole.STAFF, User.UserStatus.ACTIVE, false, now);
+        User tech1 = new User(DemoFixturePort.TECH_1_ID, "tech1", "tech1@phonghub.local", "Ky Thuat Vien", "0900000004", UserRole.TECHNICIAN, User.UserStatus.ACTIVE, false, now);
+        User tenantUser1 = new User(DemoFixturePort.TENANT_1_ID, "tenant1", "tenant1@phonghub.local", "Nguyen Van A", "0901234567", UserRole.TENANT, User.UserStatus.ACTIVE, true, now);
 
         userRepository.save(admin);
         userRepository.save(staff1);
@@ -68,11 +68,11 @@ public class DataSeeder {
 
         // 3. Staff & Tech Assignments
         // Staff 1 assigned to Property 1
-        assignmentRepository.save(new StaffPropertyAssignment(UUID.randomUUID(), LocalDemoAuthenticationAdapter.STAFF_1_ID, PROP_1_ID, true, true, now));
+        assignmentRepository.save(new StaffPropertyAssignment(UUID.randomUUID(), DemoFixturePort.STAFF_1_ID, PROP_1_ID, true, true, now));
         // Staff 2 assigned to Property 2
-        assignmentRepository.save(new StaffPropertyAssignment(UUID.randomUUID(), LocalDemoAuthenticationAdapter.STAFF_2_ID, PROP_2_ID, true, true, now));
+        assignmentRepository.save(new StaffPropertyAssignment(UUID.randomUUID(), DemoFixturePort.STAFF_2_ID, PROP_2_ID, true, true, now));
         // Tech 1 assigned to Property 1
-        assignmentRepository.save(new StaffPropertyAssignment(UUID.randomUUID(), LocalDemoAuthenticationAdapter.TECH_1_ID, PROP_1_ID, false, false, now));
+        assignmentRepository.save(new StaffPropertyAssignment(UUID.randomUUID(), DemoFixturePort.TECH_1_ID, PROP_1_ID, false, false, now));
 
         // 4. Rooms in Property 1
         Room room101 = new Room(ROOM_101_ID, PROP_1_ID, "P101", 1, new BigDecimal("25.0"), new BigDecimal("3500000"), 2, RoomStatus.OCCUPIED, now, now);
@@ -92,7 +92,7 @@ public class DataSeeder {
         // 5. Tenant profile
         Tenant tenant1 = new Tenant(
             TENANT_RECORD_ID,
-            LocalDemoAuthenticationAdapter.TENANT_1_ID,
+            DemoFixturePort.TENANT_1_ID,
             "Nguyen Van A",
             "079201001111",
             "0901234567",
@@ -136,7 +136,7 @@ public class DataSeeder {
             ROOM_102_ID,
             PROP_1_ID,
             null,
-            LocalDemoAuthenticationAdapter.TECH_1_ID,
+            DemoFixturePort.TECH_1_ID,
             "Sua voi nuoc va kiem tra may lanh",
             "Voi nuoc bon rua bi ri, may lanh chay yeu",
             MaintenancePriority.HIGH,

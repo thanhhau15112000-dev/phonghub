@@ -1,5 +1,6 @@
 package com.phonghub.adapter.in.web.api;
 
+import com.phonghub.adapter.in.web.api.dto.RoomResponse;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
@@ -32,12 +33,15 @@ public class RoomApiController {
     }
 
     @GetMapping("/properties/{propertyId}/rooms")
-    public ResponseEntity<List<Room>> listRoomsForProperty(@PathVariable UUID propertyId) {
-        return ResponseEntity.ok(roomUseCase.listRoomsForProperty(propertyId));
+    public ResponseEntity<List<RoomResponse>> listRoomsForProperty(@PathVariable UUID propertyId) {
+        List<RoomResponse> list = roomUseCase.listRoomsForProperty(propertyId).stream()
+            .map(RoomResponse::from)
+            .toList();
+        return ResponseEntity.ok(list);
     }
 
     @PostMapping("/properties/{propertyId}/rooms")
-    public ResponseEntity<Room> createRoom(
+    public ResponseEntity<RoomResponse> createRoom(
         @PathVariable UUID propertyId,
         @Valid @RequestBody CreateRoomRequest request
     ) {
@@ -49,21 +53,23 @@ public class RoomApiController {
             request.basePrice(),
             request.maxOccupants()
         ));
-        return ResponseEntity.created(URI.create("/api/rooms/" + room.getId())).body(room);
+        RoomResponse response = RoomResponse.from(room);
+        return ResponseEntity.created(URI.create("/api/rooms/" + response.id())).body(response);
     }
 
     @GetMapping("/rooms/{id}")
-    public ResponseEntity<Room> getRoom(@PathVariable UUID id) {
-        return ResponseEntity.ok(roomUseCase.getRoom(id));
+    public ResponseEntity<RoomResponse> getRoom(@PathVariable UUID id) {
+        Room room = roomUseCase.getRoom(id);
+        return ResponseEntity.ok(RoomResponse.from(room));
     }
 
     @PutMapping("/rooms/{id}/status")
-    public ResponseEntity<Room> updateRoomStatus(
+    public ResponseEntity<RoomResponse> updateRoomStatus(
         @PathVariable UUID id,
         @Valid @RequestBody UpdateRoomStatusRequest request
     ) {
         Room room = roomUseCase.changeRoomStatus(id, request.status());
-        return ResponseEntity.ok(room);
+        return ResponseEntity.ok(RoomResponse.from(room));
     }
 
     public record CreateRoomRequest(

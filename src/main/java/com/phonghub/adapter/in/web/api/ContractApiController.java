@@ -1,5 +1,6 @@
 package com.phonghub.adapter.in.web.api;
 
+import com.phonghub.adapter.in.web.api.dto.ContractResponse;
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
@@ -37,12 +38,15 @@ public class ContractApiController {
     }
 
     @GetMapping("/properties/{propertyId}/contracts")
-    public ResponseEntity<List<Contract>> listContracts(@PathVariable UUID propertyId) {
-        return ResponseEntity.ok(contractUseCase.listContractsForProperty(propertyId));
+    public ResponseEntity<List<ContractResponse>> listContracts(@PathVariable UUID propertyId) {
+        List<ContractResponse> list = contractUseCase.listContractsForProperty(propertyId).stream()
+            .map(ContractResponse::from)
+            .toList();
+        return ResponseEntity.ok(list);
     }
 
     @PostMapping("/contracts")
-    public ResponseEntity<Contract> createContract(@Valid @RequestBody CreateContractRequest request) {
+    public ResponseEntity<ContractResponse> createContract(@Valid @RequestBody CreateContractRequest request) {
         Contract contract = contractUseCase.createContract(new ContractUseCase.CreateContractCommand(
             request.propertyId(),
             request.roomId(),
@@ -57,31 +61,36 @@ public class ContractApiController {
             request.endDate(),
             request.paymentDay()
         ));
-        return ResponseEntity.created(URI.create("/api/contracts/" + contract.getId())).body(contract);
+        ContractResponse response = ContractResponse.from(contract);
+        return ResponseEntity.created(URI.create("/api/contracts/" + response.id())).body(response);
     }
 
     @PostMapping("/contracts/{id}/activate")
-    public ResponseEntity<Contract> activateContract(@PathVariable UUID id) {
-        return ResponseEntity.ok(contractUseCase.activateContract(id));
+    public ResponseEntity<ContractResponse> activateContract(@PathVariable UUID id) {
+        Contract contract = contractUseCase.activateContract(id);
+        return ResponseEntity.ok(ContractResponse.from(contract));
     }
 
     @PostMapping("/contracts/{id}/terminate")
-    public ResponseEntity<Contract> terminateContract(
+    public ResponseEntity<ContractResponse> terminateContract(
         @PathVariable UUID id,
         @RequestParam(name = "requiresMaintenance", defaultValue = "false") boolean requiresMaintenance
     ) {
-        return ResponseEntity.ok(contractUseCase.terminateContract(id, requiresMaintenance));
+        Contract contract = contractUseCase.terminateContract(id, requiresMaintenance);
+        return ResponseEntity.ok(ContractResponse.from(contract));
     }
 
     @GetMapping("/contracts/{id}")
-    public ResponseEntity<Contract> getContract(@PathVariable UUID id) {
-        return ResponseEntity.ok(contractUseCase.getContract(id));
+    public ResponseEntity<ContractResponse> getContract(@PathVariable UUID id) {
+        Contract contract = contractUseCase.getContract(id);
+        return ResponseEntity.ok(ContractResponse.from(contract));
     }
 
     @GetMapping("/contracts/my-active")
-    public ResponseEntity<Contract> getMyActiveContract() {
+    public ResponseEntity<ContractResponse> getMyActiveContract() {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         return contractUseCase.getActiveContractForTenant(currentUser.id())
+            .map(ContractResponse::from)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }

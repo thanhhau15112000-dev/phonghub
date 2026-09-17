@@ -9,6 +9,10 @@ import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.RoomNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.exception.UserNotFoundException;
+import com.phonghub.domain.exception.AccountDisabledException;
+import com.phonghub.domain.exception.IdentityProviderUnavailableException;
+import com.phonghub.domain.exception.InvalidCredentialsException;
+import com.phonghub.domain.exception.PasswordChangeRequiredException;
 import java.net.URI;
 import java.time.Instant;
 import org.springframework.http.HttpStatus;
@@ -20,6 +24,42 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice(basePackages = "com.phonghub.adapter.in.web.api")
 public class RestExceptionHandler {
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ProblemDetail handleInvalidCredentials(InvalidCredentialsException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problem.setTitle("Unauthorized");
+        problem.setType(URI.create("https://phonghub.local/errors/unauthorized"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(IdentityProviderUnavailableException.class)
+    public ProblemDetail handleIdentityProviderUnavailable(IdentityProviderUnavailableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        problem.setTitle("Identity Provider Unavailable");
+        problem.setType(URI.create("https://phonghub.local/errors/identity-provider-unavailable"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(AccountDisabledException.class)
+    public ProblemDetail handleAccountDisabled(AccountDisabledException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        problem.setTitle("Account Disabled");
+        problem.setType(URI.create("https://phonghub.local/errors/account-disabled"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(PasswordChangeRequiredException.class)
+    public ProblemDetail handlePasswordChangeRequired(PasswordChangeRequiredException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        problem.setTitle("Password Change Required");
+        problem.setType(URI.create("https://phonghub.local/errors/password-change-required"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
 
     @ExceptionHandler(UnauthorizedPropertyAccessException.class)
     public ProblemDetail handleUnauthorizedAccess(UnauthorizedPropertyAccessException ex) {

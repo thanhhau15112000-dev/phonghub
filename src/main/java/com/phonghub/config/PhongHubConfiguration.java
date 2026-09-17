@@ -1,19 +1,22 @@
 package com.phonghub.config;
 
-import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
+import com.phonghub.application.port.in.AuthUseCase;
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.in.UserUseCase;
+import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
+import com.phonghub.application.service.AuthService;
 import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.application.service.ContractService;
 import com.phonghub.application.service.MaintenanceService;
@@ -25,11 +28,6 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class PhongHubConfiguration {
-
-    @Bean
-    public LocalDemoAuthenticationAdapter currentUserPort() {
-        return new LocalDemoAuthenticationAdapter();
-    }
 
     @Bean
     public AuthorizationService authorizationService(
@@ -74,9 +72,10 @@ public class PhongHubConfiguration {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService
     ) {
-        return new ContractService(
+        ContractService service = new ContractService(
             contractRepo, roomRepo, propertyRepo, tenantRepo, currentUserPort, authorizationService
         );
+        return new TransactionalContractUseCase(service);
     }
 
     @Bean
@@ -87,9 +86,10 @@ public class PhongHubConfiguration {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService
     ) {
-        return new MaintenanceService(
+        MaintenanceService service = new MaintenanceService(
             ticketRepo, roomRepo, tenantRepo, currentUserPort, authorizationService
         );
+        return new TransactionalMaintenanceUseCase(service);
     }
 
     @Bean
@@ -102,5 +102,16 @@ public class PhongHubConfiguration {
         return new UserService(
             userRepo, assignmentRepo, currentUserPort, authorizationService
         );
+    }
+
+    @Bean
+    public AuthUseCase authUseCase(
+        UserRepositoryPort userRepo,
+        IdentityProviderPort identityProviderPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort
+    ) {
+        return new AuthService(userRepo, identityProviderPort, currentUserPort, authorizationService, auditPort);
     }
 }

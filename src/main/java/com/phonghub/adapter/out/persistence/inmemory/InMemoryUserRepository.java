@@ -26,6 +26,14 @@ public class InMemoryUserRepository implements UserRepositoryPort {
     }
 
     @Override
+    public Optional<User> findByUsername(String username) {
+        if (username == null) return Optional.empty();
+        return store.values().stream()
+            .filter(u -> u.username() != null && username.trim().equalsIgnoreCase(u.username().trim()))
+            .findFirst();
+    }
+
+    @Override
     public Optional<User> findByEmail(String email) {
         if (email == null) return Optional.empty();
         return store.values().stream()

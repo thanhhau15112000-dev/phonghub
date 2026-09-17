@@ -21,8 +21,13 @@ public class ProductionConfigValidator {
         List<String> requiredProperties = List.of(
             "spring.datasource.url",
             "spring.datasource.username",
+            "spring.datasource.password",
             "supabase.url",
-            "supabase.anon-key"
+            "supabase.anon-key",
+            "supabase.service-role-key",
+            "supabase.jwks-uri",
+            "supabase.jwt-issuer",
+            "supabase.jwt-audience"
         );
 
         for (String prop : requiredProperties) {

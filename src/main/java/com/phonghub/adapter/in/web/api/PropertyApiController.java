@@ -1,5 +1,6 @@
 package com.phonghub.adapter.in.web.api;
 
+import com.phonghub.adapter.in.web.api.dto.PropertyResponse;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.domain.model.Property;
 import jakarta.validation.Valid;
@@ -27,24 +28,29 @@ public class PropertyApiController {
     }
 
     @GetMapping
-    public ResponseEntity<List<Property>> listProperties() {
-        return ResponseEntity.ok(propertyUseCase.listAccessibleProperties());
+    public ResponseEntity<List<PropertyResponse>> listProperties() {
+        List<PropertyResponse> list = propertyUseCase.listAccessibleProperties().stream()
+            .map(PropertyResponse::from)
+            .toList();
+        return ResponseEntity.ok(list);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Property> getProperty(@PathVariable UUID id) {
-        return ResponseEntity.ok(propertyUseCase.getProperty(id));
+    public ResponseEntity<PropertyResponse> getProperty(@PathVariable UUID id) {
+        Property property = propertyUseCase.getProperty(id);
+        return ResponseEntity.ok(PropertyResponse.from(property));
     }
 
     @PostMapping
-    public ResponseEntity<Property> createProperty(@Valid @RequestBody CreatePropertyRequest request) {
+    public ResponseEntity<PropertyResponse> createProperty(@Valid @RequestBody CreatePropertyRequest request) {
         Property property = propertyUseCase.createProperty(new PropertyUseCase.CreatePropertyCommand(
             request.name(),
             request.address(),
             request.description(),
             request.totalRooms()
         ));
-        return ResponseEntity.created(URI.create("/api/properties/" + property.id())).body(property);
+        PropertyResponse response = PropertyResponse.from(property);
+        return ResponseEntity.created(URI.create("/api/properties/" + response.id())).body(response);
     }
 
     public record CreatePropertyRequest(

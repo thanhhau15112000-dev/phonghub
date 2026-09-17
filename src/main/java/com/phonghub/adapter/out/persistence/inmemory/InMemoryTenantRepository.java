@@ -45,6 +45,17 @@ public class InMemoryTenantRepository implements TenantRepositoryPort {
         return new ArrayList<>(store.values());
     }
 
+    public Map<UUID, Tenant> snapshot() {
+        return new java.util.HashMap<>(store);
+    }
+
+    public void restore(Map<UUID, Tenant> snapshot) {
+        store.clear();
+        if (snapshot != null) {
+            store.putAll(snapshot);
+        }
+    }
+
     public void clear() {
         store.clear();
     }

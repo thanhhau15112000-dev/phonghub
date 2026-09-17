@@ -5,17 +5,31 @@ import java.util.UUID;
 
 public record User(
     UUID id,
+    String username,
     String email,
     String fullName,
     String phone,
     UserRole role,
     UserStatus status,
+    boolean mustChangePassword,
     Instant createdAt
 ) {
     public enum UserStatus {
         ACTIVE,
         INACTIVE,
         SUSPENDED
+    }
+
+    public User(
+        UUID id,
+        String email,
+        String fullName,
+        String phone,
+        UserRole role,
+        UserStatus status,
+        Instant createdAt
+    ) {
+        this(id, null, email, fullName, phone, role, status, false, createdAt);
     }
 
     public User {

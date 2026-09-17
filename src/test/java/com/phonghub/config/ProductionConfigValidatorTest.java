@@ -46,8 +46,13 @@ class ProductionConfigValidatorTest {
         MockEnvironment env = new MockEnvironment();
         env.setProperty("spring.datasource.url", "jdbc:postgresql://localhost:5432/phonghub");
         env.setProperty("spring.datasource.username", "postgres");
+        env.setProperty("spring.datasource.password", "secret-db-pass");
         env.setProperty("supabase.url", "https://example.supabase.co");
         env.setProperty("supabase.anon-key", "secret-anon-key");
+        env.setProperty("supabase.service-role-key", "secret-service-role-key");
+        env.setProperty("supabase.jwks-uri", "https://example.supabase.co/auth/v1/.well-known/jwks.json");
+        env.setProperty("supabase.jwt-issuer", "https://example.supabase.co/auth/v1");
+        env.setProperty("supabase.jwt-audience", "authenticated");
 
         ProductionConfigValidator validator = new ProductionConfigValidator(env);
 

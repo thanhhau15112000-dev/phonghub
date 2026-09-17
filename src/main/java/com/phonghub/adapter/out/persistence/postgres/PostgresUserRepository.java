@@ -25,11 +25,13 @@ public class PostgresUserRepository implements UserRepositoryPort {
 
     private static final RowMapper<User> ROW_MAPPER = (rs, rowNum) -> new User(
         UUID.fromString(rs.getString("id")),
+        rs.getString("username"),
         rs.getString("email"),
         rs.getString("full_name"),
         rs.getString("phone"),
         UserRole.valueOf(rs.getString("role")),
         User.UserStatus.valueOf(rs.getString("status")),
+        rs.getBoolean("must_change_password"),
         toInstant(rs.getTimestamp("created_at"))
     );
 
@@ -40,24 +42,28 @@ public class PostgresUserRepository implements UserRepositoryPort {
     @Override
     public User save(User user) {
         String sql = """
-            INSERT INTO users (id, email, full_name, phone, role, status, created_at, updated_at)
-            VALUES (:id, :email, :fullName, :phone, :role, :status, :createdAt, :updatedAt)
+            INSERT INTO users (id, username, email, full_name, phone, role, status, must_change_password, created_at, updated_at)
+            VALUES (:id, :username, :email, :fullName, :phone, :role, :status, :mustChangePassword, :createdAt, :updatedAt)
             ON CONFLICT (id) DO UPDATE SET
+                username = EXCLUDED.username,
                 email = EXCLUDED.email,
                 full_name = EXCLUDED.full_name,
                 phone = EXCLUDED.phone,
                 role = EXCLUDED.role,
                 status = EXCLUDED.status,
+                must_change_password = EXCLUDED.must_change_password,
                 updated_at = EXCLUDED.updated_at
             """;
 
         MapSqlParameterSource params = new MapSqlParameterSource()
             .addValue("id", user.id())
+            .addValue("username", user.username())
             .addValue("email", user.email())
             .addValue("fullName", user.fullName())
             .addValue("phone", user.phone())
             .addValue("role", user.role().name())
             .addValue("status", user.status().name())
+            .addValue("mustChangePassword", user.mustChangePassword())
             .addValue("createdAt", Timestamp.from(user.createdAt()))
             .addValue("updatedAt", Timestamp.from(Instant.now()));
 
@@ -69,6 +75,14 @@ public class PostgresUserRepository implements UserRepositoryPort {
     public Optional<User> findById(UUID id) {
         String sql = "SELECT * FROM users WHERE id = :id";
         List<User> list = jdbcTemplate.query(sql, Map.of("id", id), ROW_MAPPER);
+        return list.isEmpty() ? Optional.empty() : Optional.of(list.getFirst());
+    }
+
+    @Override
+    public Optional<User> findByUsername(String username) {
+        if (username == null) return Optional.empty();
+        String sql = "SELECT * FROM users WHERE LOWER(username) = LOWER(:username)";
+        List<User> list = jdbcTemplate.query(sql, Map.of("username", username.trim()), ROW_MAPPER);
         return list.isEmpty() ? Optional.empty() : Optional.of(list.getFirst());
     }
 

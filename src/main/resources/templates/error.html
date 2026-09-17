@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Error')}">
+    <title>Error — PhongHub</title>
+</head>
+<body>
+
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div class="card" style="max-width: 600px; margin: 48px auto; text-align: center; padding: 36px 24px;">
+        <h1 style="font-size: 28px; margin-bottom: 8px;" th:text="${status != null ? status : 'Error'}">Error</h1>
+        <p style="font-size: 15px; color: var(--text-secondary); margin-bottom: 20px;"
+           th:text="${message != null and !message.isBlank() ? message : (error != null ? error : 'An unexpected error occurred.')}">
+            An unexpected error occurred.
+        </p>
+
+        <div th:if="${status == 403}" class="alert alert-error" style="text-align: left; margin-bottom: 24px;">
+            <strong>403 Forbidden:</strong> You do not have permission to perform this action or access this resource under your current role and scope.
+        </div>
+
+        <div th:if="${status == 404}" class="alert alert-error" style="text-align: left; margin-bottom: 24px;">
+            <strong>404 Not Found:</strong> The requested resource could not be found.
+        </div>
+
+        <div th:if="${status == 409}" class="alert alert-error" style="text-align: left; margin-bottom: 24px;">
+            <strong>409 Conflict:</strong> The requested state transition violates business invariants or conflicts with existing records.
+        </div>
+
+        <div style="margin-top: 24px; display: flex; justify-content: center; gap: 12px;">
+            <a th:href="@{/dashboard}" class="btn btn-primary">Go to Dashboard</a>
+            <a href="javascript:history.back()" class="btn">Go Back</a>
+        </div>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+
+</body>
+</html>
