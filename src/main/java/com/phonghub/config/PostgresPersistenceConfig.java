@@ -22,6 +22,7 @@ import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import java.util.Arrays;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,7 +36,7 @@ import org.springframework.web.client.RestClient;
 import tools.jackson.databind.ObjectMapper;
 
 @Configuration
-@Profile("prod")
+@Profile({"prod", "docker"})
 public class PostgresPersistenceConfig {
 
     @Bean
@@ -53,10 +54,16 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean(initMethod = "migrate")
-    public Flyway flyway(DataSource dataSource) {
+    public Flyway flyway(
+        DataSource dataSource,
+        @Value("${spring.flyway.locations:classpath:db/migration}") String flywayLocations
+    ) {
         return Flyway.configure()
             .dataSource(dataSource)
-            .locations("classpath:db/migration")
+            .locations(Arrays.stream(flywayLocations.split(","))
+                .map(String::trim)
+                .filter(location -> !location.isEmpty())
+                .toArray(String[]::new))
             .baselineOnMigrate(true)
             .load();
     }
@@ -107,16 +114,19 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
+    @Profile("prod")
     public CurrentUserPort currentUserPort() {
         return new SecurityCurrentUserAdapter();
     }
 
     @Bean
+    @Profile("prod")
     public RestClient restClient() {
         return RestClient.create();
     }
 
     @Bean
+    @Profile("prod")
     public IdentityProviderPort identityProviderPort(
         RestClient restClient,
         SupabaseProperties supabaseProperties

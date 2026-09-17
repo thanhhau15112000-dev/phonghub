@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.server.ResponseStatusException;
 
 @Controller
-@Profile("!prod")
+@Profile({"test", "docker & !prod"})
 public class UserSwitchUiController {
 
     private final DemoActorPort demoActorPort;

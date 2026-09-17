@@ -9,8 +9,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
+import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest
+@ActiveProfiles("test")
 class ProfileSeparationTest {
 
     @Autowired
@@ -20,15 +22,15 @@ class ProfileSeparationTest {
     private PropertyRepositoryPort propertyRepositoryPort;
 
     @Test
-    void inMemoryRepositoriesAndSeederAreActiveInDefaultProfile() {
-        // Assert that the InMemoryPropertyRepository bean is active
+    void inMemoryRepositoriesAndSeederAreActiveInTestProfile() {
+        // Repository in-memory chỉ dùng cho profile test.
         assertTrue(propertyRepositoryPort instanceof InMemoryPropertyRepository);
 
-        // Assert that seedInitialData bean was executed
+        // Xác nhận fixture Java của test đã được nạp.
         assertTrue(applicationContext.containsBean("seedInitialData"));
         assertNotNull(applicationContext.getBean("seedInitialData"));
 
-        // Assert that property repository contains seeded properties
+        // Xác nhận repository test có dữ liệu fixture.
         assertTrue(propertyRepositoryPort.findAll().size() >= 2);
     }
 }

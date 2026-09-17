@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${PHONGHUB_DB_HOST:localhost}:${PHONGHUB_DB_PORT:55432}/${PHONGHUB_DB_NAME:phonghub}
+    username: ${PHONGHUB_DB_USER:phonghub}
+    password: ${PHONGHUB_DB_PASSWORD:phonghub_local_only}
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed/docker
+    baseline-on-migrate: true
+
+phonghub:
+  demo:
+    enabled: true

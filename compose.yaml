@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: phonghub-db
+    environment:
+      POSTGRES_DB: ${PHONGHUB_DB_NAME:-phonghub}
+      POSTGRES_USER: ${PHONGHUB_DB_USER:-phonghub}
+      POSTGRES_PASSWORD: ${PHONGHUB_DB_PASSWORD:-phonghub_local_only}
+    ports:
+      - "${PHONGHUB_DB_PORT:-55432}:5432"
+    volumes:
+      - phonghub_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: phonghub-app
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      PHONGHUB_DB_HOST: db
+      PHONGHUB_DB_PORT: 5432
+      PHONGHUB_DB_NAME: ${PHONGHUB_DB_NAME:-phonghub}
+      PHONGHUB_DB_USER: ${PHONGHUB_DB_USER:-phonghub}
+      PHONGHUB_DB_PASSWORD: ${PHONGHUB_DB_PASSWORD:-phonghub_local_only}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  phonghub_pgdata:
