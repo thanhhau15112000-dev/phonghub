@@ -1,0 +1,163 @@
+package com.phonghub.application.service;
+
+import com.phonghub.application.port.out.ContractRepositoryPort;
+import com.phonghub.application.port.out.CurrentUser;
+import com.phonghub.application.port.out.PropertyRepositoryPort;
+import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
+import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
+import com.phonghub.domain.model.Contract;
+import com.phonghub.domain.model.Property;
+import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.UserRole;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+public class AuthorizationService {
+
+    private final StaffPropertyAssignmentPort assignmentPort;
+    private final PropertyRepositoryPort propertyRepositoryPort;
+    private final TenantRepositoryPort tenantRepositoryPort;
+    private final ContractRepositoryPort contractRepositoryPort;
+
+    public AuthorizationService(
+        StaffPropertyAssignmentPort assignmentPort,
+        PropertyRepositoryPort propertyRepositoryPort,
+        TenantRepositoryPort tenantRepositoryPort,
+        ContractRepositoryPort contractRepositoryPort
+    ) {
+        this.assignmentPort = assignmentPort;
+        this.propertyRepositoryPort = propertyRepositoryPort;
+        this.tenantRepositoryPort = tenantRepositoryPort;
+        this.contractRepositoryPort = contractRepositoryPort;
+    }
+
+    public void assertAdmin(CurrentUser user) {
+        if (user == null || user.role() != UserRole.ADMIN) {
+            throw new UnauthorizedPropertyAccessException("Action requires ADMIN role");
+        }
+    }
+
+    public void assertCanAccessProperty(CurrentUser user, UUID propertyId) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (user.role() == UserRole.ADMIN) {
+            return;
+        }
+        if (user.role() == UserRole.STAFF || user.role() == UserRole.TECHNICIAN) {
+            if (!assignmentPort.isUserAssignedToProperty(user.id(), propertyId)) {
+                throw new UnauthorizedPropertyAccessException(String.format(
+                    "User %s (%s) is not assigned to property %s",
+                    user.fullName(), user.role(), propertyId
+                ));
+            }
+            return;
+        }
+        if (user.role() == UserRole.TENANT) {
+            // Tenant can only access the property of their contract
+            Set<UUID> tenantPropertyIds = getTenantPropertyIds(user.id());
+            if (!tenantPropertyIds.contains(propertyId)) {
+                throw new UnauthorizedPropertyAccessException(String.format(
+                    "Tenant %s does not have an active occupancy in property %s",
+                    user.fullName(), propertyId
+                ));
+            }
+            return;
+        }
+        throw new UnauthorizedPropertyAccessException("Access denied for role " + user.role());
+    }
+
+    public void assertCanManageProperty(CurrentUser user, UUID propertyId) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (user.role() == UserRole.ADMIN) {
+            return;
+        }
+        if (user.role() == UserRole.STAFF) {
+            if (!assignmentPort.isUserAssignedToProperty(user.id(), propertyId)) {
+                throw new UnauthorizedPropertyAccessException(String.format(
+                    "Staff %s is not assigned to manage property %s",
+                    user.fullName(), propertyId
+                ));
+            }
+            return;
+        }
+        throw new UnauthorizedPropertyAccessException(String.format(
+            "User %s with role %s cannot manage property %s",
+            user.fullName(), user.role(), propertyId
+        ));
+    }
+
+    public void assertCanManageContracts(CurrentUser user, UUID propertyId) {
+        assertCanManageProperty(user, propertyId);
+    }
+
+    public void assertTechnicianCanWorkOnProperty(CurrentUser user, UUID propertyId) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (user.role() == UserRole.ADMIN) {
+            return;
+        }
+        if (user.role() == UserRole.TECHNICIAN) {
+            if (!assignmentPort.isUserAssignedToProperty(user.id(), propertyId)) {
+                throw new UnauthorizedPropertyAccessException(String.format(
+                    "Technician %s is not assigned to property %s",
+                    user.fullName(), propertyId
+                ));
+            }
+            return;
+        }
+        throw new UnauthorizedPropertyAccessException(String.format(
+            "User %s with role %s cannot perform technician actions",
+            user.fullName(), user.role()
+        ));
+    }
+
+    public Set<UUID> getAccessiblePropertyIds(CurrentUser user) {
+        if (user == null) {
+            return Collections.emptySet();
+        }
+        if (user.role() == UserRole.ADMIN) {
+            return propertyRepositoryPort.findAll().stream()
+                .map(Property::id)
+                .collect(Collectors.toSet());
+        }
+        if (user.role() == UserRole.STAFF || user.role() == UserRole.TECHNICIAN) {
+            return assignmentPort.findPropertyIdsByUserId(user.id());
+        }
+        if (user.role() == UserRole.TENANT) {
+            return getTenantPropertyIds(user.id());
+        }
+        return Collections.emptySet();
+    }
+
+    private Set<UUID> getTenantPropertyIds(UUID tenantUserId) {
+        Optional<Tenant> tenantOpt = tenantRepositoryPort.findByUserId(tenantUserId);
+        if (tenantOpt.isEmpty()) {
+            return Collections.emptySet();
+        }
+        Tenant tenant = tenantOpt.get();
+        List<Contract> contracts = contractRepositoryPort.findByPrimaryTenantId(tenant.id());
+        Set<UUID> propertyIds = new HashSet<>();
+        for (Contract c : contracts) {
+            if (c.isActive()) {
+                propertyIds.add(c.getPropertyId());
+            }
+        }
+        List<Contract> occupantContracts = contractRepositoryPort.findByOccupantTenantId(tenant.id());
+        for (Contract c : occupantContracts) {
+            if (c.isActive()) {
+                propertyIds.add(c.getPropertyId());
+            }
+        }
+        return propertyIds;
+    }
+}

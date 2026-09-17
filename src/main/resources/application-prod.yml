@@ -1,0 +1,18 @@
+phonghub:
+  demo:
+    enabled: false
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+supabase:
+  url: ${SUPABASE_URL}
+  anon-key: ${SUPABASE_ANON_KEY}
+  jwks-uri: ${SUPABASE_JWKS_URI:https://example.supabase.co/auth/v1/.well-known/jwks.json}

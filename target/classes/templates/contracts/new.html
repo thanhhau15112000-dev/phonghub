@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Create Contract')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Create Lease Contract</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">Attach a new lease agreement to an authorized room.</p>
+        </div>
+        <div>
+            <a th:href="@{/contracts}" class="btn">&larr; Back to Contracts</a>
+        </div>
+    </div>
+
+    <div class="card" style="max-width: 800px;">
+        <form th:action="@{/contracts}" method="post">
+            <h2 style="margin-bottom: 16px;">1. Property & Room Selection</h2>
+            <div class="form-row">
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Property *</label>
+                    <select name="propertyId" class="form-control" id="propertySelect" onchange="window.location.href='/contracts/new?propertyId=' + this.value" required>
+                        <option value="">-- Select Property --</option>
+                        <option th:each="p : ${properties}"
+                                th:value="${p.id()}"
+                                th:text="${p.name()}"
+                                th:selected="${selectedPropertyId != null and selectedPropertyId.equals(p.id())}">
+                        </option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Room *</label>
+                    <select name="roomId" class="form-control" required>
+                        <option value="">-- Select Room --</option>
+                        <option th:each="r : ${rooms}"
+                                th:value="${r.getId()}"
+                                th:text="${r.getRoomNumber() + ' (' + r.getStatus() + ' - ' + #numbers.formatDecimal(r.getBasePrice(), 0, 'COMMA', 0, 'POINT') + ' đ)'}"
+                                th:selected="${selectedRoomId != null and selectedRoomId.equals(r.getId())}">
+                        </option>
+                    </select>
+                </div>
+            </div>
+
+            <h2 style="margin-top: 16px; margin-bottom: 16px;">2. Primary Tenant Details</h2>
+            <div class="form-row">
+                <div class="form-group" style="flex: 2;">
+                    <label class="form-label">Full Name *</label>
+                    <input type="text" name="primaryTenantFullName" class="form-control" placeholder="e.g. Tran Thi B" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">ID Card / CCCD *</label>
+                    <input type="text" name="primaryTenantIdCard" class="form-control" placeholder="e.g. 079201002222" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Phone Number *</label>
+                    <input type="text" name="primaryTenantPhone" class="form-control" placeholder="e.g. 0909876543" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Email</label>
+                    <input type="email" name="primaryTenantEmail" class="form-control" placeholder="e.g. tenantb@example.com">
+                </div>
+            </div>
+
+            <h2 style="margin-top: 16px; margin-bottom: 16px;">3. Lease Financials & Term</h2>
+            <div class="form-row">
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Monthly Rent (VND) *</label>
+                    <input type="number" name="rentAmount" class="form-control" value="3500000" min="1" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Deposit Amount (VND) *</label>
+                    <input type="number" name="depositAmount" class="form-control" value="3500000" min="0" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Payment Day of Month</label>
+                    <input type="number" name="paymentDay" class="form-control" value="5" min="1" max="31" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Start Date *</label>
+                    <input type="date" name="startDate" class="form-control" th:value="${defaultStartDate}" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">End Date *</label>
+                    <input type="date" name="endDate" class="form-control" th:value="${defaultEndDate}" required>
+                </div>
+            </div>
+
+            <div style="margin-top: 16px;">
+                <button type="submit" class="btn btn-primary">Create Contract (Draft)</button>
+                <a th:href="@{/contracts}" class="btn" style="margin-left: 8px;">Cancel</a>
+            </div>
+        </form>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

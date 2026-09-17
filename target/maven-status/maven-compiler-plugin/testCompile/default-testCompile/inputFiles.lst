@@ -1,0 +1,14 @@
+G:\phonghub\src\test\java\com\phonghub\adapter\in\web\DemoActorSwitchingIsolationTest.java
+G:\phonghub\src\test\java\com\phonghub\adapter\in\web\HealthControllerTest.java
+G:\phonghub\src\test\java\com\phonghub\adapter\in\web\PhongHubApiIntegrationTest.java
+G:\phonghub\src\test\java\com\phonghub\adapter\in\web\PhongHubUiIntegrationTest.java
+G:\phonghub\src\test\java\com\phonghub\application\AdditionalOccupantAccessTest.java
+G:\phonghub\src\test\java\com\phonghub\application\AuthorizationAndPropertyScopeUnitTest.java
+G:\phonghub\src\test\java\com\phonghub\application\ContractServiceInvariantsUnitTest.java
+G:\phonghub\src\test\java\com\phonghub\application\MaintenanceNoPartialWriteTest.java
+G:\phonghub\src\test\java\com\phonghub\application\RoomContractInvariantTest.java
+G:\phonghub\src\test\java\com\phonghub\config\ProductionConfigValidatorTest.java
+G:\phonghub\src\test\java\com\phonghub\config\ProfileSeparationTest.java
+G:\phonghub\src\test\java\com\phonghub\domain\ContractLifecycleUnitTest.java
+G:\phonghub\src\test\java\com\phonghub\domain\MaintenanceTicketTransitionsUnitTest.java
+G:\phonghub\src\test\java\com\phonghub\domain\RoomTransitionsUnitTest.java

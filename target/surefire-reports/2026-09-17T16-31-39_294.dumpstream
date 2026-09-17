@@ -1,0 +1,4 @@
+# Created at 2026-09-17T16:31:39.468
+Boot Manifest-JAR contains absolute paths in classpath 'G:\phonghub\target\test-classes'
+Hint: <argLine>-Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
+'other' has different root

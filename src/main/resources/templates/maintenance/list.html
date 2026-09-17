@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Maintenance Tickets')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Maintenance Tickets</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">Manage technical incidents, assignments, work progress, and resolution.</p>
+        </div>
+        <div>
+            <a th:href="@{/maintenance/new}" class="btn btn-primary">+ Report Ticket</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div th:if="${#lists.isEmpty(tickets)}" class="empty-state">
+            <p>No maintenance tickets found in your current scope.</p>
+        </div>
+
+        <table th:if="${!#lists.isEmpty(tickets)}" class="data-table">
+            <thead>
+                <tr>
+                    <th>Title & Description</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Repair Cost</th>
+                    <th>Created</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="t : ${tickets}">
+                    <td>
+                        <a th:href="@{'/maintenance/' + ${t.getId()}}" th:text="${t.getTitle()}" style="font-weight: 600;">Title</a>
+                        <div style="font-size: 12px; color: var(--text-secondary);" th:text="${t.getDescription()}">Description</div>
+                    </td>
+                    <td><span class="badge" th:text="${t.getPriority()}">MEDIUM</span></td>
+                    <td><span th:class="'badge badge-' + ${t.getStatus()}" th:text="${t.getStatus()}">REPORTED</span></td>
+                    <td th:text="${t.getRepairCost() != null and t.getRepairCost().compareTo(T(java.math.BigDecimal).ZERO) > 0 ? #numbers.formatDecimal(t.getRepairCost(), 0, 'COMMA', 0, 'POINT') + ' đ' : '—'}">—</td>
+                    <td th:text="${#temporals.format(t.getCreatedAt(), 'yyyy-MM-dd HH:mm')}">2026-09-17</td>
+                    <td>
+                        <a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm">Manage</a>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

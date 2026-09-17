@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(${property.name()})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1 th:text="${property.name()}">Property Name</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;" th:text="${property.address()}">Address</p>
+        </div>
+        <div>
+            <a th:href="@{/properties}" class="btn">&larr; Back to Properties</a>
+        </div>
+    </div>
+
+    <!-- Property Details Card -->
+    <div class="card" style="margin-bottom: 20px;">
+        <div style="display: flex; gap: 32px; font-size: 13px;">
+            <div>
+                <span style="color: var(--text-secondary);">Address: </span>
+                <strong th:text="${property.address()}">Address</strong>
+            </div>
+            <div>
+                <span style="color: var(--text-secondary);">Total Capacity: </span>
+                <strong th:text="${property.totalRooms()}">10</strong> rooms
+            </div>
+            <div>
+                <span style="color: var(--text-secondary);">Description: </span>
+                <span th:text="${property.description() != null ? property.description() : 'None'}">Notes</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Room Form (ADMIN or STAFF) -->
+    <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" class="card">
+        <h2>Add Room to Property</h2>
+        <form th:action="@{'/properties/' + ${property.id()} + '/rooms'}" method="post">
+            <div class="form-row">
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Room Number *</label>
+                    <input type="text" name="roomNumber" class="form-control" placeholder="e.g. P105" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Floor</label>
+                    <input type="number" name="floor" class="form-control" value="1" min="1">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Area (sqm)</label>
+                    <input type="number" step="0.1" name="areaSqm" class="form-control" value="25.0">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Base Price (VND) *</label>
+                    <input type="number" name="basePrice" class="form-control" value="3500000" min="0" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Max Occupants</label>
+                    <input type="number" name="maxOccupants" class="form-control" value="2" min="1">
+                </div>
+                <div class="form-group" style="display: flex; align-items: flex-end;">
+                    <button type="submit" class="btn btn-primary" style="margin-bottom: 0;">Add Room</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Rooms Table -->
+    <div class="card">
+        <div class="flex-between" style="margin-bottom: 12px;">
+            <h2>Rooms in Property (<span th:text="${#lists.size(rooms)}">0</span>)</h2>
+        </div>
+
+        <div th:if="${#lists.isEmpty(rooms)}" class="empty-state">
+            <p>No rooms added to this property yet.</p>
+        </div>
+
+        <table th:if="${!#lists.isEmpty(rooms)}" class="data-table">
+            <thead>
+                <tr>
+                    <th>Room #</th>
+                    <th>Floor</th>
+                    <th>Area</th>
+                    <th>Base Price</th>
+                    <th>Capacity</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="r : ${rooms}">
+                    <td>
+                        <a th:href="@{'/rooms/' + ${r.getId()}}" th:text="${r.getRoomNumber()}" style="font-weight: 600;">P101</a>
+                    </td>
+                    <td th:text="${r.getFloor()}">1</td>
+                    <td th:text="${r.getAreaSqm() != null ? r.getAreaSqm() + ' m²' : '—'}">25 m²</td>
+                    <td th:text="${#numbers.formatDecimal(r.getBasePrice(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                    <td th:text="${r.getMaxOccupants()} + ' persons'">2 persons</td>
+                    <td>
+                        <span th:class="'badge badge-' + ${r.getStatus()}" th:text="${r.getStatus()}">AVAILABLE</span>
+                    </td>
+                    <td>
+                        <div class="inline-actions">
+                            <a th:href="@{'/rooms/' + ${r.getId()}}" class="btn btn-sm">Details</a>
+                            <a th:if="${r.getStatus().name() == 'AVAILABLE' or r.getStatus().name() == 'RESERVED'}"
+                               th:href="@{'/contracts/new?propertyId=' + ${property.id()} + '&roomId=' + ${r.getId()}}"
+                               class="btn btn-sm btn-primary">+ Contract</a>
+                            <a th:href="@{'/maintenance/new?roomId=' + ${r.getId()}}" class="btn btn-sm">Report Issue</a>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

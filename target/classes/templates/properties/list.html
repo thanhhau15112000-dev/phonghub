@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Properties')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Properties</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">List of properties assigned to or managed by your account.</p>
+        </div>
+    </div>
+
+    <!-- Create Property Form (Admin Only) -->
+    <div th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" class="card">
+        <h2>Add New Property</h2>
+        <form th:action="@{/properties}" method="post">
+            <div class="form-row">
+                <div class="form-group" style="flex: 2;">
+                    <label class="form-label">Property Name *</label>
+                    <input type="text" name="name" class="form-control" placeholder="e.g. Nha Tro Xanh Q7" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Total Rooms</label>
+                    <input type="number" name="totalRooms" class="form-control" value="10" min="0">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Address *</label>
+                <input type="text" name="address" class="form-control" placeholder="e.g. 123 Nguyen Thi Thap, Q7" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <input type="text" name="description" class="form-control" placeholder="Optional notes">
+            </div>
+            <button type="submit" class="btn btn-primary">Create Property</button>
+        </form>
+    </div>
+
+    <!-- Properties Table -->
+    <div class="card">
+        <h2>Accessible Properties</h2>
+        <div th:if="${#lists.isEmpty(properties)}" class="empty-state">
+            <p>No properties found in your scope.</p>
+        </div>
+
+        <table th:if="${!#lists.isEmpty(properties)}" class="data-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Address</th>
+                    <th>Description</th>
+                    <th>Rooms</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="p : ${properties}">
+                    <td>
+                        <a th:href="@{'/properties/' + ${p.id()}}" th:text="${p.name()}" style="font-weight: 600;">Name</a>
+                    </td>
+                    <td th:text="${p.address()}">Address</td>
+                    <td th:text="${p.description()}">Description</td>
+                    <td th:text="${p.totalRooms()}">0</td>
+                    <td>
+                        <a th:href="@{'/properties/' + ${p.id()}}" class="btn btn-sm">View Details</a>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
