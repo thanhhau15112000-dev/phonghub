@@ -39,6 +39,7 @@
     <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" class="card">
         <h2>Thêm phòng vào nhà trọ</h2>
         <form th:action="@{'/properties/' + ${property.id()} + '/rooms'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label">Số phòng *</label>

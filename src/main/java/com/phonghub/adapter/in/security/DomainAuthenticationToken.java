@@ -10,6 +10,7 @@ public class DomainAuthenticationToken extends AbstractAuthenticationToken {
 
     private final CurrentUser currentUser;
     private final Jwt jwt;
+    private final String accessToken;
     private final boolean mustChangePassword;
 
     public DomainAuthenticationToken(
@@ -18,9 +19,35 @@ public class DomainAuthenticationToken extends AbstractAuthenticationToken {
         Collection<? extends GrantedAuthority> authorities,
         boolean mustChangePassword
     ) {
+        this(
+            currentUser,
+            jwt,
+            jwt != null ? jwt.getTokenValue() : null,
+            authorities,
+            mustChangePassword
+        );
+    }
+
+    public DomainAuthenticationToken(
+        CurrentUser currentUser,
+        String accessToken,
+        Collection<? extends GrantedAuthority> authorities,
+        boolean mustChangePassword
+    ) {
+        this(currentUser, null, accessToken, authorities, mustChangePassword);
+    }
+
+    private DomainAuthenticationToken(
+        CurrentUser currentUser,
+        Jwt jwt,
+        String accessToken,
+        Collection<? extends GrantedAuthority> authorities,
+        boolean mustChangePassword
+    ) {
         super(authorities);
         this.currentUser = currentUser;
         this.jwt = jwt;
+        this.accessToken = accessToken;
         this.mustChangePassword = mustChangePassword;
         setAuthenticated(true);
     }
@@ -39,7 +66,7 @@ public class DomainAuthenticationToken extends AbstractAuthenticationToken {
 
     @Override
     public Object getCredentials() {
-        return jwt != null ? jwt.getTokenValue() : null;
+        return accessToken;
     }
 
     @Override

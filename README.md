@@ -7,12 +7,14 @@ tập trung vào các nghiệp vụ property, room, contract và maintenance tic
 ## Trạng thái hiện tại
 
 - Backend MVP đã có REST API và giao diện Thymeleaf hiện tại.
+- Giao diện Thymeleaf production đã có đăng nhập bằng session, đổi mật khẩu bắt
+  buộc ở lần đầu và khu vực quản trị tài khoản tại `/admin/users`.
 - Local runtime mặc định dùng PostgreSQL chạy trong Docker.
 - Dữ liệu local được tạo bằng Flyway fixture trong database Docker, không được
   tạo trực tiếp bởi Java `DataSeeder`.
 - Profile `prod` dùng PostgreSQL bên ngoài, phù hợp với database của Supabase.
-- React frontend theo Figma chưa nằm trong repository snapshot này; frontend
-  có thể gọi backend qua API.
+- React SPA không thuộc scope hiện tại; UI chính được server-render bằng
+  Thymeleaf, còn REST API vẫn giữ contract cho client tích hợp.
 - Snapshot này không được gọi là release-ready. Việc deploy thật, CORS, URL
   runtime và dữ liệu Supabase cần được xác minh riêng.
 
@@ -37,7 +39,8 @@ tập trung vào các nghiệp vụ property, room, contract và maintenance tic
 - Docker Desktop có Docker Compose
 - Maven Wrapper có sẵn trong repository
 
-Node.js và `npm` chỉ cần khi frontend React được thêm vào repository.
+Node.js và `npm` chỉ cần khi làm riêng Cloudflare Worker; Worker hiện không nằm
+trong đường deploy Spring production.
 
 ## Chạy local với Docker
 
@@ -114,6 +117,7 @@ staging hoặc production.
 - Kết nối tới PostgreSQL được khai báo qua environment variable.
 - Chỉ chạy migration trong `db/migration`; không chạy fixture Docker.
 - Xác thực dùng JWT từ Supabase.
+- UI Thymeleaf dùng session cookie bảo mật; REST API dùng Bearer JWT.
 - `SUPABASE_SERVICE_ROLE_KEY` chỉ được dùng ở backend và không được đưa vào
   frontend hoặc commit vào Git.
 - Chỉ kích hoạt `prod`; không bật đồng thời với profile `docker`.
@@ -146,6 +150,9 @@ Fixture local:
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout`
 - `POST /api/auth/change-password`
+- `GET /login`, `POST /login`
+- `GET /admin/users`, `POST /admin/users`
+- `POST /admin/users/{userId}/reset-password` (tenant)
 - `GET /api/properties`
 - `GET /api/properties/{propertyId}/rooms`
 - `GET /api/properties/{propertyId}/contracts`
@@ -162,6 +169,8 @@ Chi tiết request/response được định nghĩa trong controller và DTO tư
 Frontend nên dùng API contract đó thay vì phụ thuộc vào fixture local.
 
 ## Cấu hình production
+
+Runbook Render/Supabase/Cloudflare và quy trình tạo Admin đầu tiên: [docs/production-deployment.md](docs/production-deployment.md).
 
 Kích hoạt profile:
 
@@ -230,12 +239,12 @@ docker build -t phonghub:local .
 
 ## Giới hạn và blocker còn lại
 
-- React frontend theo Figma chưa có trong snapshot hiện tại.
 - URL backend staging đang chạy, CORS và kiểm thử tích hợp với frontend chưa
   được xác minh.
 - Kết nối Supabase thật và quyền database cần được kiểm tra tại môi trường
   tương ứng; không dùng fixture Docker để kết luận dữ liệu remote đúng.
 - Worker/Cloudflare container config hiện có lỗi TypeScript và là path riêng,
   không thuộc local PostgreSQL backend flow.
-- Việc map `PORT`, profile `prod` và health check trên platform deploy cần được
-  xác minh riêng trước khi promote lên `main`.
+- Việc map `PORT`, profile `prod`, health check, secret environment và domain
+  Cloudflare trên platform deploy cần được xác minh riêng trước khi promote lên
+  `main`.

@@ -20,8 +20,12 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 
 @Configuration
 @Profile("prod")
@@ -41,16 +45,14 @@ public class ProductionSecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain prodSecurityFilterChain(HttpSecurity http) throws Exception {
+    @Order(1)
+    public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
         http
+            .securityMatcher("/api/**")
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/health").permitAll()
-                .requestMatchers("/api/auth/login").permitAll()
-                .requestMatchers("/static/**", "/css/**", "/favicon.ico").permitAll()
-                .requestMatchers("/api/auth/change-password").authenticated()
-                .requestMatchers("/api/auth/logout").authenticated()
+                .requestMatchers("/api/auth/login", "/api/auth/refresh").permitAll()
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2
@@ -63,6 +65,27 @@ public class ProductionSecurityConfig {
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
                 .accessDeniedHandler((req, res, ex) -> res.sendError(HttpStatus.FORBIDDEN.value(), ex.getMessage()))
+            );
+        return http.build();
+    }
+
+    @Bean
+    @Order(2)
+    public SecurityFilterChain uiSecurityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/health", "/login", "/session/logout").permitAll()
+                .requestMatchers("/static/**", "/css/**", "/favicon.ico").permitAll()
+                .anyRequest().authenticated()
+            )
+            .addFilterBefore(new PasswordChangeGate(), AuthorizationFilter.class)
+            .exceptionHandling(exceptions -> exceptions
+                .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login"))
+            )
+            .securityContext(securityContext -> securityContext
+                .securityContextRepository(new org.springframework.security.web.context.HttpSessionSecurityContextRepository())
             );
         return http.build();
     }

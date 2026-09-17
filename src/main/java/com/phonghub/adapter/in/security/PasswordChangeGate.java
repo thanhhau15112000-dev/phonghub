@@ -34,12 +34,20 @@ public class PasswordChangeGate extends OncePerRequestFilter {
             String uri = request.getRequestURI();
             boolean isAllowed = uri.equals("/api/auth/change-password")
                 || uri.equals("/api/auth/logout")
+                || uri.equals("/account/password")
+                || uri.equals("/session/logout")
+                || uri.equals("/login")
                 || uri.equals("/health")
                 || uri.startsWith("/static/")
                 || uri.startsWith("/css/")
                 || uri.equals("/favicon.ico");
 
             if (!isAllowed) {
+                if (!uri.startsWith("/api/")) {
+                    response.sendRedirect("/account/password");
+                    return;
+                }
+
                 response.setStatus(HttpStatus.FORBIDDEN.value());
                 response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
                 response.setCharacterEncoding("UTF-8");

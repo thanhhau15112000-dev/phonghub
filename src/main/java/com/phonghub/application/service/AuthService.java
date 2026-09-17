@@ -88,12 +88,6 @@ public class AuthService implements AuthUseCase {
             throw new InvalidCredentialsException("Refresh token cannot be blank");
         }
 
-        CurrentUser currentUser = currentUserPort.getCurrentUser();
-        User user = null;
-        if (currentUser != null) {
-            user = userRepository.findById(currentUser.id()).orElse(null);
-        }
-
         IdentityProviderPort.RawTokenResponse rawToken = identityProviderPort.refreshToken(refreshToken);
 
         return new AuthTokenResponse(
@@ -101,13 +95,7 @@ public class AuthService implements AuthUseCase {
             rawToken.refreshToken(),
             rawToken.tokenType(),
             rawToken.expiresIn(),
-            user != null ? new AuthTokenResponse.UserInfo(
-                user.id(),
-                user.username(),
-                user.fullName(),
-                user.role(),
-                user.mustChangePassword()
-            ) : null
+            null
         );
     }
 

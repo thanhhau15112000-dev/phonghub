@@ -31,11 +31,13 @@
             <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" class="inline-actions">
                 <!-- Nút kích hoạt khi ở trạng thái bản nháp -->
                 <form th:if="${contract.getStatus().name() == 'DRAFT'}" th:action="@{'/contracts/' + ${contract.getId()} + '/activate'}" method="post">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <button type="submit" class="btn btn-primary">Kích hoạt hợp đồng (chuyển phòng sang đang thuê)</button>
                 </form>
 
                 <!-- Nút chấm dứt khi đang có hiệu lực -->
                 <form th:if="${contract.getStatus().name() == 'ACTIVE'}" th:action="@{'/contracts/' + ${contract.getId()} + '/terminate'}" method="post" style="display: flex; align-items: center; gap: 8px;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <label style="font-size: 12px; display: flex; align-items: center; gap: 4px;">
                         <input type="checkbox" name="requiresMaintenance" value="true">
                         Cần kiểm tra bảo trì

@@ -19,6 +19,7 @@
 
     <div class="card" style="max-width: 800px;">
         <form th:action="@{/contracts}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <h2 style="margin-bottom: 16px;">1. Chọn nhà trọ và phòng</h2>
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">

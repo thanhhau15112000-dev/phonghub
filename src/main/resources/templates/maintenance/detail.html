@@ -32,6 +32,7 @@
             <!-- Thao tác của kỹ thuật viên: tiếp nhận yêu cầu -->
             <div th:if="${(currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED')}">
                 <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/accept'}" method="post">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <button type="submit" class="btn btn-primary">Tiếp nhận và bắt đầu xử lý</button>
                 </form>
             </div>
@@ -83,6 +84,7 @@
         </p>
 
         <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/resolve'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="form-group">
                 <label class="form-label">Ghi chú xử lý *</label>
                 <textarea name="resolutionNotes" class="form-control" rows="3" placeholder="Mô tả công việc đã thực hiện, linh kiện đã thay thế..." required></textarea>

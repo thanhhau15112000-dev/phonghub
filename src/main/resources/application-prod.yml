@@ -12,6 +12,16 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+server:
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      timeout: 60m
+      cookie:
+        http-only: true
+        secure: true
+        same-site: strict
+
 supabase:
   url: ${SUPABASE_URL}
   anon-key: ${SUPABASE_ANON_KEY}

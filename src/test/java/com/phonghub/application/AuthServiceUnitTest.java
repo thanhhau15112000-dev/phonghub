@@ -3,6 +3,7 @@ package com.phonghub.application;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -113,6 +114,21 @@ class AuthServiceUnitTest {
             InvalidCredentialsException.class,
             () -> authService.login("unknown", "secret123")
         );
+    }
+
+    @Test
+    void refreshTokenDoesNotRequireAnUnexpiredAccessToken() {
+        when(identityProviderPort.refreshToken("refresh-token"))
+            .thenReturn(new IdentityProviderPort.RawTokenResponse(
+                "new-access-token", "new-refresh-token", "Bearer", 3600L
+            ));
+
+        AuthTokenResponse response = authService.refreshToken("refresh-token");
+
+        assertEquals("new-access-token", response.accessToken());
+        assertEquals("new-refresh-token", response.refreshToken());
+        assertNull(response.user());
+        verify(currentUserPort, never()).getCurrentUser();
     }
 
     @Test

@@ -4,12 +4,15 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.phonghub.application.port.in.AuthTokenResponse;
 import com.phonghub.application.port.in.AuthUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
+import com.phonghub.application.port.in.UserUseCase;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
@@ -28,6 +31,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -70,10 +74,140 @@ class ProductionAuthSecurityTest {
     @MockitoBean
     private PropertyUseCase propertyUseCase;
 
+    @MockitoBean
+    private UserUseCase userUseCase;
+
     @Test
     void healthEndpointIsPermittedWithoutAuthenticationInProd() throws Exception {
         mockMvc.perform(get("/health"))
             .andExpect(status().isOk());
+    }
+
+    @Test
+    void browserUiRedirectsUnauthenticatedRequestsToLogin() throws Exception {
+        mockMvc.perform(get("/"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void browserLoginCreatesAnHttpSession() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(authUseCase.login("admin", "secret123")).thenReturn(new AuthTokenResponse(
+            "mock-access-token",
+            "mock-refresh-token",
+            "Bearer",
+            3600L,
+            new AuthTokenResponse.UserInfo(userId, "admin", "Admin User", UserRole.ADMIN, false)
+        ));
+
+        mockMvc.perform(post("/login")
+                .with(csrf())
+                .param("username", "admin")
+                .param("password", "secret123"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/"));
+    }
+
+    @Test
+    void browserLoginRequiresCsrfToken() throws Exception {
+        mockMvc.perform(post("/login")
+                .param("username", "admin")
+                .param("password", "secret123"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void firstLoginBrowserSessionIsRedirectedToPasswordChange() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(authUseCase.login("temporary", "secret123")).thenReturn(new AuthTokenResponse(
+            "temporary-access-token",
+            "temporary-refresh-token",
+            "Bearer",
+            3600L,
+            new AuthTokenResponse.UserInfo(userId, "temporary", "Temporary User", UserRole.TENANT, true)
+        ));
+
+        var loginResult = mockMvc.perform(post("/login")
+                .with(csrf())
+                .param("username", "temporary")
+                .param("password", "secret123"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/account/password"))
+            .andReturn();
+
+        MockHttpSession session = (MockHttpSession) loginResult.getRequest().getSession(false);
+        mockMvc.perform(get("/properties").session(session))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/account/password"));
+    }
+
+    @Test
+    void adminCanOpenAccountManagementPage() throws Exception {
+        UUID tenantId = UUID.randomUUID();
+        when(userUseCase.listUsers()).thenReturn(List.of(
+            new User(
+                UUID.randomUUID(), "admin", "admin@phonghub.local", "Admin User", null,
+                UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+            ),
+            new User(
+                tenantId, "tenant1", "tenant@phonghub.local", "Tenant One", null,
+                UserRole.TENANT, User.UserStatus.ACTIVE, true, Instant.now()
+            )
+        ));
+
+        mockMvc.perform(get("/admin/users").session(loginAsAdmin()))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    void adminCanCreateAccountFromAccountManagementPage() throws Exception {
+        UUID createdId = UUID.randomUUID();
+        when(authUseCase.adminCreateUser(any())).thenReturn(new AuthUseCase.AdminCreateUserResult(
+            createdId,
+            "tenant2",
+            "tenant2@phonghub.local",
+            "Tenant Two",
+            null,
+            UserRole.TENANT,
+            User.UserStatus.ACTIVE,
+            true,
+            "TempPass#2026!",
+            Instant.now()
+        ));
+
+        mockMvc.perform(post("/admin/users")
+                .session(loginAsAdmin())
+                .with(csrf())
+                .param("username", "tenant2")
+                .param("email", "tenant2@phonghub.local")
+                .param("fullName", "Tenant Two")
+                .param("role", "TENANT"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users"));
+    }
+
+    @Test
+    void adminCanResetTenantPasswordFromAccountManagementPage() throws Exception {
+        UUID tenantId = UUID.randomUUID();
+        User tenant = new User(
+            tenantId, "tenant1", "tenant@phonghub.local", "Tenant One", null,
+            UserRole.TENANT, User.UserStatus.ACTIVE, false, Instant.now()
+        );
+        when(userUseCase.getUser(tenantId)).thenReturn(tenant);
+        when(authUseCase.adminResetPassword(tenantId)).thenReturn(new AuthUseCase.PasswordResetResult(
+            tenantId,
+            "tenant1",
+            "TempPass#2026!",
+            true,
+            "Temporary password generated. It will not be displayed again."
+        ));
+
+        mockMvc.perform(post("/admin/users/{userId}/reset-password", tenantId)
+                .session(loginAsAdmin())
+                .with(csrf()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users"));
     }
 
     @Test
@@ -289,6 +423,24 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    @DisplayName("Refresh endpoint is public and only requires a refresh token")
+    void refreshEndpointDoesNotRequireBearerToken() throws Exception {
+        when(authUseCase.refreshToken("mock-refresh-token")).thenReturn(new AuthTokenResponse(
+            "new-access-token",
+            "new-refresh-token",
+            "Bearer",
+            3600L,
+            null
+        ));
+
+        mockMvc.perform(post("/api/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"refreshToken\":\"mock-refresh-token\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").value("new-access-token"));
+    }
+
+    @Test
     @DisplayName("Admin create user returns dedicated AdminCreatedUserResponse with temporary password exactly once")
     void adminCreateUserReturnsTemporaryPasswordOnceInDedicatedResponse() throws Exception {
         UUID adminId = UUID.randomUUID();
@@ -338,5 +490,24 @@ class ProductionAuthSecurityTest {
             .andExpect(jsonPath("$.username").value("newstaff"))
             .andExpect(jsonPath("$.temporaryPassword").value("TempPass#2026!"))
             .andExpect(jsonPath("$.mustChangePassword").value(true));
+    }
+
+    private MockHttpSession loginAsAdmin() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        when(authUseCase.login("admin", "secret123")).thenReturn(new AuthTokenResponse(
+            "admin-access-token-" + adminId,
+            "admin-refresh-token-" + adminId,
+            "Bearer",
+            3600L,
+            new AuthTokenResponse.UserInfo(adminId, "admin", "Admin User", UserRole.ADMIN, false)
+        ));
+
+        var result = mockMvc.perform(post("/login")
+                .with(csrf())
+                .param("username", "admin")
+                .param("password", "secret123"))
+            .andExpect(status().is3xxRedirection())
+            .andReturn();
+        return (MockHttpSession) result.getRequest().getSession(false);
     }
 }

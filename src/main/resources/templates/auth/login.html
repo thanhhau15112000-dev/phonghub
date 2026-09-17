@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Đăng nhập')}"></head>
+<body>
+<main class="container" style="max-width: 460px; padding-top: 72px;">
+    <div class="card">
+        <h1 style="margin-bottom: 8px;">Đăng nhập PhongHub</h1>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 20px;">
+            Sử dụng tên đăng nhập và mật khẩu do quản trị viên cấp.
+        </p>
+
+        <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}">Thông báo thành công</div>
+        <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}">Thông tin đăng nhập không hợp lệ</div>
+
+        <form th:action="@{/login}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group">
+                <label class="form-label" for="username">Tên đăng nhập</label>
+                <input id="username" type="text" name="username" class="form-control" autocomplete="username" required autofocus>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="password">Mật khẩu</label>
+                <input id="password" type="password" name="password" class="form-control" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Đăng nhập</button>
+        </form>
+    </div>
+</main>
+</body>
+</html>

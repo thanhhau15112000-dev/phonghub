@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Quản lý tài khoản')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Quản lý tài khoản</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">
+                Tạo tài khoản cho nhân sự hoặc người thuê và quản lý mật khẩu tạm thời.
+            </p>
+        </div>
+    </div>
+
+    <div th:if="${createdUser != null}" class="alert alert-success" style="margin-bottom: 20px;">
+        <strong>Đã tạo tài khoản <span th:text="${createdUser.username()}">username</span>.</strong>
+        <p style="margin: 8px 0 4px;">Mật khẩu tạm thời chỉ hiển thị một lần. Gửi riêng cho người dùng và yêu cầu đổi ở lần đăng nhập đầu tiên.</p>
+        <code th:text="${createdUser.temporaryPassword()}" style="font-size: 15px;">temporary-password</code>
+    </div>
+
+    <div th:if="${resetResult != null}" class="alert alert-success" style="margin-bottom: 20px;">
+        <strong>Đã đặt lại mật khẩu cho <span th:text="${resetResult.username()}">tenant</span>.</strong>
+        <p style="margin: 8px 0 4px;">Mật khẩu tạm thời chỉ hiển thị một lần. Người thuê phải đổi mật khẩu sau khi đăng nhập.</p>
+        <code th:text="${resetResult.temporaryPassword()}" style="font-size: 15px;">temporary-password</code>
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <h2>Tạo tài khoản</h2>
+        <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 16px;">
+            Hệ thống sẽ tạo identity trong Supabase Auth và lưu hồ sơ tương ứng vào cơ sở dữ liệu ứng dụng.
+        </p>
+        <form th:action="@{/admin/users}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-row">
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label" for="username">Tên đăng nhập *</label>
+                    <input id="username" type="text" name="username" class="form-control" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label" for="email">Email Auth *</label>
+                    <input id="email" type="email" name="email" class="form-control" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group" style="flex: 2;">
+                    <label class="form-label" for="fullName">Họ và tên *</label>
+                    <input id="fullName" type="text" name="fullName" class="form-control" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label" for="phone">Số điện thoại</label>
+                    <input id="phone" type="tel" name="phone" class="form-control">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group" style="flex: 1; max-width: 300px;">
+                    <label class="form-label" for="role">Vai trò *</label>
+                    <select id="role" name="role" class="form-control" required>
+                        <option th:each="role : ${roles}" th:value="${role}" th:text="${uiText.role(role)}">Người thuê</option>
+                    </select>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Tạo tài khoản và sinh mật khẩu tạm thời</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Tài khoản hiện có</h2>
+        <div th:if="${#lists.isEmpty(users)}" class="empty-state">
+            <p>Chưa có tài khoản ứng dụng nào.</p>
+        </div>
+        <table th:if="${!#lists.isEmpty(users)}" class="data-table">
+            <thead>
+                <tr>
+                    <th>Tên đăng nhập</th>
+                    <th>Họ và tên</th>
+                    <th>Email</th>
+                    <th>Vai trò</th>
+                    <th>Trạng thái</th>
+                    <th>Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="user : ${users}">
+                    <td th:text="${user.username() != null ? user.username() : '—'}">username</td>
+                    <td th:text="${user.fullName()}">Người dùng</td>
+                    <td th:text="${user.email()}">user@example.com</td>
+                    <td th:text="${uiText.role(user.role())}">Người thuê</td>
+                    <td th:text="${user.status()}">ACTIVE</td>
+                    <td>
+                        <form th:if="${user.role().name() == 'TENANT'}"
+                              th:action="@{'/admin/users/' + ${user.id()} + '/reset-password'}" method="post">
+                            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                            <button type="submit" class="btn btn-sm">Reset mật khẩu tenant</button>
+                        </form>
+                        <span th:if="${user.role().name() != 'TENANT'}" style="color: var(--text-secondary); font-size: 12px;">—</span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
