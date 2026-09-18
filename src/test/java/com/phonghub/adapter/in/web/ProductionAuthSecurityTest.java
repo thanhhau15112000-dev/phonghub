@@ -8,6 +8,8 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.hamcrest.Matchers.containsString;
 
 import com.phonghub.application.port.in.AuthTokenResponse;
 import com.phonghub.application.port.in.AuthUseCase;
@@ -157,7 +159,9 @@ class ProductionAuthSecurityTest {
         ));
 
         mockMvc.perform(get("/admin/users").session(loginAsAdmin()))
-            .andExpect(status().isOk());
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("data-user-search")))
+            .andExpect(content().string(containsString("userSearchSummary")));
     }
 
     @Test

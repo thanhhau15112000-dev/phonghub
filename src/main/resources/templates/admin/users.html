@@ -30,9 +30,6 @@
 
     <div class="card" style="margin-bottom: 20px;">
         <h2>Tạo tài khoản</h2>
-        <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 16px;">
-            Hệ thống sẽ tạo identity trong Supabase Auth và lưu hồ sơ tương ứng vào cơ sở dữ liệu ứng dụng.
-        </p>
         <form th:action="@{/admin/users}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="form-row">
@@ -72,7 +69,17 @@
         <div th:if="${#lists.isEmpty(users)}" class="empty-state">
             <p>Chưa có tài khoản ứng dụng nào.</p>
         </div>
-        <table th:if="${!#lists.isEmpty(users)}" class="data-table">
+        <div th:if="${!#lists.isEmpty(users)}" class="search-toolbar">
+            <div class="form-group">
+                <label class="form-label" for="userSearch">Tìm tài khoản</label>
+                <input id="userSearch" type="search" class="form-control"
+                       placeholder="Tên đăng nhập, họ tên, email, vai trò hoặc trạng thái"
+                       autocomplete="off" aria-controls="usersTable" aria-describedby="userSearchSummary"
+                       data-user-search>
+            </div>
+            <p id="userSearchSummary" class="search-summary" aria-live="polite"></p>
+        </div>
+        <table id="usersTable" th:if="${!#lists.isEmpty(users)}" class="data-table">
             <thead>
                 <tr>
                     <th>Tên đăng nhập</th>
@@ -84,7 +91,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr th:each="user : ${users}">
+                <tr th:each="user : ${users}" data-user-row>
                     <td th:text="${user.username() != null ? user.username() : '—'}">username</td>
                     <td th:text="${user.fullName()}">Người dùng</td>
                     <td th:text="${user.email()}">user@example.com</td>
@@ -105,5 +112,43 @@
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>
+<script>
+    (() => {
+        const searchInput = document.querySelector('[data-user-search]');
+        const table = document.querySelector('#usersTable');
+        const summary = document.querySelector('#userSearchSummary');
+
+        if (!searchInput || !table || !summary) {
+            return;
+        }
+
+        const rows = Array.from(table.querySelectorAll('[data-user-row]'));
+        const normalize = (value) => value
+            .toLocaleLowerCase('vi-VN')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/đ/g, 'd');
+
+        const updateResults = () => {
+            const query = normalize(searchInput.value.trim());
+            let visibleRows = 0;
+
+            rows.forEach((row) => {
+                const matches = !query || normalize(row.textContent || '').includes(query);
+                row.hidden = !matches;
+                if (matches) {
+                    visibleRows += 1;
+                }
+            });
+
+            summary.textContent = query
+                ? `Hiển thị ${visibleRows}/${rows.length} tài khoản`
+                : `${rows.length} tài khoản`;
+        };
+
+        searchInput.addEventListener('input', updateResults);
+        updateResults();
+    })();
+</script>
 </body>
 </html>
