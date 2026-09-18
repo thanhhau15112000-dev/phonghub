@@ -33,14 +33,61 @@ tập trung vào các nghiệp vụ property, room, contract và maintenance tic
 - `compose.yaml`: PostgreSQL và backend local chạy bằng Docker Compose.
 - `Dockerfile`: image backend cho môi trường deploy.
 
+## Repository và base branch
+
+- Repository: <https://github.com/thanhhau15112000-dev/phonghub>
+- `staging` là base branch để lấy source tích hợp, chạy kiểm thử và mở pull
+  request cho các feature/task.
+- `main` là branch release/production; không dùng `main` làm base cho feature
+  thông thường.
+
+Clone đúng branch cho thành viên mới:
+
+```bash
+git clone --branch staging --single-branch https://github.com/thanhhau15112000-dev/phonghub.git
+cd phonghub
+git status --short --branch
+```
+
+Nếu đã clone repository trước đó:
+
+```bash
+git fetch origin
+git switch staging
+git pull --ff-only origin staging
+```
+
 ## Yêu cầu
 
+- Git
+- Docker Desktop có Docker Compose v2 trở lên
 - JDK 21
-- Docker Desktop có Docker Compose
-- Maven Wrapper có sẵn trong repository
+- Maven Wrapper có sẵn trong repository; không cần cài Maven riêng.
 
-Node.js và `npm` chỉ cần khi làm riêng Cloudflare Worker; Worker hiện không nằm
-trong đường deploy Spring production.
+JDK chỉ bắt buộc khi chạy test hoặc chạy backend bằng Maven/IDE trên máy host.
+Nếu chỉ chạy toàn bộ stack bằng Docker Compose, image builder dùng JDK bên
+trong Docker. Node.js/`npm` chỉ cần khi làm riêng Cloudflare Worker; Worker
+hiện không nằm trong đường deploy Spring production. Tài khoản Supabase không
+cần cho local.
+
+## Setup local cho thành viên mới
+
+### Cấu hình mặc định
+
+Local dùng PostgreSQL trong Docker, không cần tạo `.env`. Các giá trị mặc định
+được khai báo trong `compose.yaml` và `application-docker.yml`:
+
+| Biến | Chạy backend trên host | Chạy app trong Compose |
+| --- | --- | --- |
+| `PHONGHUB_DB_HOST` | `localhost` | `db` |
+| `PHONGHUB_DB_PORT` | `55432` | `5432` |
+| `PHONGHUB_DB_NAME` | `phonghub` | `phonghub` |
+| `PHONGHUB_DB_USER` | `phonghub` | `phonghub` |
+| `PHONGHUB_DB_PASSWORD` | `phonghub_local_only` | `phonghub_local_only` |
+
+Không copy `.env.example` thành `.env` để chạy local. File đó là template cho
+staging/production và chứa cấu hình kết nối Supabase; secret thật không được
+đưa vào Git.
 
 ## Chạy local với Docker
 
@@ -58,6 +105,9 @@ Mở giao diện tại <http://localhost:8080/>. Health check:
 ```http
 GET http://localhost:8080/health
 ```
+
+Khi khởi động profile `docker`, Flyway tự chạy migration schema và fixture
+local. Database được lưu trong Docker volume `phonghub_pgdata`.
 
 ### Chạy database bằng Docker, backend bằng Maven
 
@@ -84,6 +134,32 @@ PHONGHUB_DB_NAME
 PHONGHUB_DB_USER
 PHONGHUB_DB_PASSWORD
 ```
+
+Trên Linux/macOS, cấp quyền thực thi cho Maven Wrapper nếu cần:
+
+```bash
+chmod +x mvnw
+```
+
+Có thể chạy project bằng IntelliJ IDEA/Eclipse/VS Code với profile `docker`;
+entry point là `com.phonghub.PhongHubApplication`.
+
+### Tài khoản và dữ liệu demo local
+
+Profile `docker` có sẵn dữ liệu fixture cho các actor sau:
+
+| Role | Username | Email |
+| --- | --- | --- |
+| `ADMIN` | `admin` | `admin@phonghub.local` |
+| `STAFF` | `staff1` | `staff1@phonghub.local` |
+| `STAFF` | `staff2` | `staff2@phonghub.local` |
+| `TECHNICIAN` | `tech1` | `tech1@phonghub.local` |
+| `TENANT` | `tenant1` | `tenant1@phonghub.local` |
+
+Local bật `LocalDemoAuthenticationAdapter` và cho phép chuyển actor demo. Có
+thể chọn role trực tiếp ở dropdown trên giao diện; endpoint tương ứng là
+`/switch-user?userId=<demo-user-id>`. Đây là cơ chế demo local, không gọi
+Supabase Auth và không được dùng để đánh giá security của production.
 
 Compose lưu database trong volume `phonghub_pgdata`, nên `docker compose down`
 không xóa dữ liệu. Lệnh sau xóa cả volume và toàn bộ dữ liệu local, chỉ dùng
@@ -201,8 +277,9 @@ frontend. Dùng secret/environment management của môi trường deploy.
 chính sách CI của remote:
 
 - `feat/*`: phát triển theo feature hoặc task.
-- `staging`: branch tích hợp và kiểm thử. Mọi thay đổi cần được build và kiểm
-  tra trước khi dùng làm ứng viên tích hợp.
+- `staging`: branch tích hợp và kiểm thử. Pull request của feature/task đặt
+  `staging` làm base; mọi thay đổi cần được build và kiểm tra trước khi dùng
+  làm ứng viên tích hợp.
 - `main`: branch release/production. Chỉ promote từ `staging` sau khi đã review,
   kiểm tra migration, cấu hình và runtime target.
 
@@ -248,3 +325,16 @@ docker build -t phonghub:local .
 - Việc map `PORT`, profile `prod`, health check, secret environment và domain
   Cloudflare trên platform deploy cần được xác minh riêng trước khi promote lên
   `main`.
+
+## Troubleshooting local
+
+- Nếu cổng PostgreSQL `55432` bị chiếm, đặt `PHONGHUB_DB_PORT` sang cổng khác
+  trước khi chạy Compose. Khi chạy backend trên host, dùng cùng giá trị cho
+  profile `docker`.
+- Nếu cổng ứng dụng `8080` bị chiếm khi chạy backend trên host, đổi `PORT`, ví dụ
+  `$env:PORT = "8081"` trên PowerShell, rồi mở cổng mới.
+- `docker compose down` chỉ dừng stack và giữ dữ liệu. Muốn tạo lại database
+  local từ đầu, dùng `docker compose down -v` rồi chạy lại; lệnh này xóa volume
+  `phonghub_pgdata`.
+- Không bật profile `prod` để chạy local. Profile đó yêu cầu đầy đủ biến
+  Supabase/JDBC và dùng authentication production.
