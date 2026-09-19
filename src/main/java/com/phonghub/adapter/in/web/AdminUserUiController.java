@@ -7,8 +7,12 @@ import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
+import java.text.Normalizer;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +31,7 @@ public class AdminUserUiController {
         UserRole.TECHNICIAN,
         UserRole.TENANT
     );
+    private static final Pattern DIACRITICS = Pattern.compile("\\p{InCombiningDiacriticalMarks}+");
 
     private final AuthUseCase authUseCase;
     private final UserUseCase userUseCase;
@@ -43,16 +48,105 @@ public class AdminUserUiController {
     }
 
     @GetMapping
-    public String listUsers(Model model, RedirectAttributes redirectAttributes) {
+    public String listUsers(
+        @RequestParam(name = "role", required = false) String role,
+        @RequestParam(name = "page", defaultValue = "1") int page,
+        @RequestParam(name = "size", defaultValue = "5") int size,
+        @RequestParam(name = "q", required = false) String q,
+        Model model,
+        RedirectAttributes redirectAttributes
+    ) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         if (!isAdmin(currentUser)) {
             redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên mới có thể quản lý tài khoản.");
             return "redirect:/";
         }
 
+        List<User> allUsers = userUseCase.listUsers();
+
+        String keyword = q != null ? q.trim() : "";
+        List<User> matchedUsers = allUsers;
+        if (!keyword.isEmpty()) {
+            matchedUsers = allUsers.stream()
+                .filter(u -> matchesUser(u, keyword))
+                .toList();
+        }
+
+        Map<String, Long> roleCounts = matchedUsers.stream()
+            .collect(Collectors.groupingBy(u -> u.role().name(), Collectors.counting()));
+
+        UserRole filteredRole = null;
+        if (role != null && !role.isBlank() && !role.equalsIgnoreCase("ALL")) {
+            try {
+                filteredRole = UserRole.valueOf(role.trim().toUpperCase());
+            } catch (IllegalArgumentException ignored) {
+                filteredRole = null;
+            }
+        }
+
+        final UserRole roleToFilter = filteredRole;
+        List<User> filteredUsers = roleToFilter == null
+            ? matchedUsers
+            : matchedUsers.stream().filter(u -> u.role() == roleToFilter).toList();
+
+        int pageSize = size > 0 ? size : 5;
+        int totalItems = filteredUsers.size();
+        int totalPages = (int) Math.ceil((double) totalItems / pageSize);
+        if (totalPages < 1) {
+            totalPages = 1;
+        }
+
+        // Nếu người dùng nhập số trang không tồn tại (< 1 hoặc > totalPages), tự động redirect về trang hợp lệ
+        if (page < 1 || page > totalPages) {
+            int validPage = Math.max(1, Math.min(page, totalPages));
+            StringBuilder redirectUrl = new StringBuilder("redirect:/admin/users");
+            boolean hasParam = false;
+            if (role != null && !role.isBlank() && !role.equalsIgnoreCase("ALL")) {
+                redirectUrl.append("?role=").append(role);
+                hasParam = true;
+            }
+            if (!keyword.isEmpty()) {
+                redirectUrl.append(hasParam ? "&" : "?").append("q=").append(keyword);
+                hasParam = true;
+            }
+            if (validPage > 1) {
+                redirectUrl.append(hasParam ? "&" : "?").append("page=").append(validPage);
+                hasParam = true;
+            }
+            if (pageSize != 5) {
+                redirectUrl.append(hasParam ? "&" : "?").append("size=").append(pageSize);
+            }
+            return redirectUrl.toString();
+        }
+
+        int currentPage = page;
+        int fromIndex = (currentPage - 1) * pageSize;
+        int toIndex = Math.min(fromIndex + pageSize, totalItems);
+        List<User> pagedUsers = fromIndex < totalItems
+            ? filteredUsers.subList(fromIndex, toIndex)
+            : List.of();
+
+        String selectedRole = roleToFilter != null ? roleToFilter.name() : "ALL";
+        String selectedRoleTitle = switch (selectedRole) {
+            case "ADMIN" -> "Quản trị viên";
+            case "STAFF" -> "Nhân viên";
+            case "TECHNICIAN" -> "Kỹ thuật viên";
+            case "TENANT" -> "Người thuê";
+            default -> "Chung";
+        };
+
         model.addAttribute("currentUser", currentUser);
-        model.addAttribute("users", userUseCase.listUsers());
+        model.addAttribute("users", pagedUsers);
+        model.addAttribute("totalCount", matchedUsers.size());
+        model.addAttribute("filteredCount", totalItems);
+        model.addAttribute("selectedRole", selectedRole);
+        model.addAttribute("selectedRoleTitle", selectedRoleTitle);
+        model.addAttribute("roleCounts", roleCounts);
         model.addAttribute("roles", CREATABLE_ROLES);
+        model.addAttribute("currentPage", currentPage);
+        model.addAttribute("totalPages", totalPages);
+        model.addAttribute("pageSize", pageSize);
+        model.addAttribute("q", keyword);
         return "admin/users";
     }
 
@@ -119,5 +213,38 @@ public class AdminUserUiController {
             return "Không thể hoàn tất thao tác tài khoản. Vui lòng kiểm tra dữ liệu và thử lại.";
         }
         return exception.getMessage() != null ? exception.getMessage() : "Dữ liệu tài khoản không hợp lệ.";
+    }
+
+    private boolean matchesUser(User u, String keyword) {
+        if (keyword.isBlank()) {
+            return true;
+        }
+        String normalizedKw = removeAccents(keyword);
+        String roleVi = UiText.INSTANCE.role(u.role());
+
+        String combined = String.join(" ",
+            u.fullName() != null ? u.fullName() : "",
+            u.email() != null ? u.email() : "",
+            u.username() != null ? u.username() : "",
+            u.phone() != null ? u.phone() : "",
+            u.role().name(),
+            roleVi
+        );
+
+        return combined.toLowerCase().contains(keyword.toLowerCase())
+            || removeAccents(combined).contains(normalizedKw);
+    }
+
+    private static String removeAccents(String text) {
+        if (text == null) {
+            return "";
+        }
+        String normalized = Normalizer.normalize(text, Normalizer.Form.NFD);
+        return DIACRITICS.matcher(normalized)
+            .replaceAll("")
+            .replace('đ', 'd')
+            .replace('Đ', 'D')
+            .toLowerCase()
+            .trim();
     }
 }
