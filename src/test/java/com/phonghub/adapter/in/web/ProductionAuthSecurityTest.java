@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -157,7 +158,121 @@ class ProductionAuthSecurityTest {
         ));
 
         mockMvc.perform(get("/admin/users").session(loginAsAdmin()))
-            .andExpect(status().isOk());
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("selectedRole", "ALL"))
+            .andExpect(model().attribute("totalCount", 2))
+            .andExpect(model().attribute("filteredCount", 2))
+            .andExpect(model().attribute("currentPage", 1))
+            .andExpect(model().attribute("totalPages", 1));
+    }
+
+    @Test
+    void adminCanPaginateUsers() throws Exception {
+        when(userUseCase.listUsers()).thenReturn(List.of(
+            new User(UUID.randomUUID(), "u1", "u1@phonghub.local", "User 1", null, UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()),
+            new User(UUID.randomUUID(), "u2", "u2@phonghub.local", "User 2", null, UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()),
+            new User(UUID.randomUUID(), "u3", "u3@phonghub.local", "User 3", null, UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()),
+            new User(UUID.randomUUID(), "u4", "u4@phonghub.local", "User 4", null, UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()),
+            new User(UUID.randomUUID(), "u5", "u5@phonghub.local", "User 5", null, UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()),
+            new User(UUID.randomUUID(), "u6", "u6@phonghub.local", "User 6", null, UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now())
+        ));
+
+        // Default size 5 with 6 items -> 2 pages, page 1 has 5 users
+        mockMvc.perform(get("/admin/users").session(loginAsAdmin()))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("currentPage", 1))
+            .andExpect(model().attribute("totalPages", 2))
+            .andExpect(model().attribute("filteredCount", 6));
+
+        // Page 2 has the remaining 1 user
+        mockMvc.perform(get("/admin/users").param("page", "2").session(loginAsAdmin()))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("currentPage", 2))
+            .andExpect(model().attribute("totalPages", 2));
+
+        // Out-of-range page > totalPages redirects to valid page
+        mockMvc.perform(get("/admin/users").param("page", "99").session(loginAsAdmin()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users?page=2"));
+
+        // Out-of-range page < 1 redirects to clean base url
+        mockMvc.perform(get("/admin/users").param("page", "0").session(loginAsAdmin()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users"));
+    }
+
+    @Test
+    void adminCanFilterUsersByRole() throws Exception {
+        UUID tenantId = UUID.randomUUID();
+        when(userUseCase.listUsers()).thenReturn(List.of(
+            new User(
+                UUID.randomUUID(), "admin", "admin@phonghub.local", "Admin User", null,
+                UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+            ),
+            new User(
+                tenantId, "tenant1", "tenant@phonghub.local", "Tenant One", null,
+                UserRole.TENANT, User.UserStatus.ACTIVE, true, Instant.now()
+            )
+        ));
+
+        mockMvc.perform(get("/admin/users").param("role", "TENANT").session(loginAsAdmin()))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("selectedRole", "TENANT"))
+            .andExpect(model().attribute("totalCount", 2))
+            .andExpect(model().attribute("filteredCount", 1));
+
+        mockMvc.perform(get("/admin/users").param("role", "ADMIN").session(loginAsAdmin()))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("selectedRole", "ADMIN"))
+            .andExpect(model().attribute("totalCount", 2))
+            .andExpect(model().attribute("filteredCount", 1));
+    }
+
+    @Test
+    void adminCanSearchUsersByKeyword() throws Exception {
+        when(userUseCase.listUsers()).thenReturn(List.of(
+            new User(
+                UUID.randomUUID(), "admin", "admin@phonghub.local", "Admin User", "0900000001",
+                UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+            ),
+            new User(
+                UUID.randomUUID(), "staff1", "staff1@phonghub.local", "Staff One", "0900000002",
+                UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()
+            ),
+            new User(
+                UUID.randomUUID(), "tenant1", "tenant@phonghub.local", "Nguyen Van A", "0901234567",
+                UserRole.TENANT, User.UserStatus.ACTIVE, true, Instant.now()
+            )
+        ));
+
+        mockMvc.perform(get("/admin/users").param("q", "Nguyen").session(loginAsAdmin()))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("totalCount", 1))
+            .andExpect(model().attribute("filteredCount", 1))
+            .andExpect(model().attribute("q", "Nguyen"));
+
+        mockMvc.perform(get("/admin/users").param("q", "0900000002").session(loginAsAdmin()))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("totalCount", 1))
+            .andExpect(model().attribute("filteredCount", 1));
+
+        // Search by email domain (matches all 3 mock users)
+        mockMvc.perform(get("/admin/users").param("q", "phonghub.local").session(loginAsAdmin()))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("totalCount", 3))
+            .andExpect(model().attribute("filteredCount", 3));
+
+        // Search by Vietnamese role name with accents
+        mockMvc.perform(get("/admin/users").param("q", "Quản trị viên").session(loginAsAdmin()))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("totalCount", 1))
+            .andExpect(model().attribute("filteredCount", 1));
+
+        // Search by unaccented role name
+        mockMvc.perform(get("/admin/users").param("q", "quan tri vien").session(loginAsAdmin()))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("totalCount", 1))
+            .andExpect(model().attribute("filteredCount", 1));
     }
 
     @Test
