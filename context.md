@@ -1,7 +1,7 @@
 # PhongHub — Context Snapshot
 
 > Snapshot date: 2026-09-17
-> Repository: https://github.com/Thanhtan1208/phonghub
+> Repository: https://github.com/thanhhau15112000-dev/phonghub
 > Local branch observed: staging
 > Status: planning and architecture discovery; no backend implementation has started.
 

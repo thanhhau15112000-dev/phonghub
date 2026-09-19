@@ -30,6 +30,9 @@
 
     <div class="card" style="margin-bottom: 20px;">
         <h2>Tạo tài khoản</h2>
+        <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 16px;">
+            Hệ thống sẽ tạo identity trong Supabase Auth và lưu hồ sơ tương ứng vào cơ sở dữ liệu ứng dụng.
+        </p>
         <form th:action="@{/admin/users}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="form-row">
@@ -65,36 +68,89 @@
     </div>
 
     <div class="card">
-        <h2>Tài khoản hiện có</h2>
-        <div th:if="${#lists.isEmpty(users)}" class="empty-state">
-            <p>Chưa có tài khoản ứng dụng nào.</p>
+        <div class="card-header" style="margin-bottom: 16px;">
+            <h2>Tài khoản hiện có</h2>
         </div>
-        <div th:if="${!#lists.isEmpty(users)}" class="search-toolbar">
-            <div class="form-group">
-                <label class="form-label" for="userSearch">Tìm tài khoản</label>
-                <input id="userSearch" type="search" class="form-control"
-                       placeholder="Tên đăng nhập, họ tên, email, vai trò hoặc trạng thái"
-                       autocomplete="off" aria-controls="usersTable" aria-describedby="userSearchSummary"
-                       data-user-search>
+
+        <div class="filter-search-bar">
+            <div class="filter-tabs">
+                <a th:href="@{/admin/users(q=${!#strings.isEmpty(q) ? q : null}, size=${pageSize})}"
+                   th:classappend="${selectedRole == 'ALL' ? 'active' : ''}"
+                   class="filter-tab">
+                    <span>Chung</span>
+                    <span class="badge-count" th:text="${totalCount}">0</span>
+                </a>
+                <a th:href="@{/admin/users(role='ADMIN', q=${!#strings.isEmpty(q) ? q : null}, size=${pageSize})}"
+                   th:classappend="${selectedRole == 'ADMIN' ? 'active' : ''}"
+                   class="filter-tab">
+                    <span>Quản trị viên</span>
+                    <span class="badge-count" th:text="${roleCounts['ADMIN'] != null ? roleCounts['ADMIN'] : 0}">0</span>
+                </a>
+                <a th:href="@{/admin/users(role='STAFF', q=${!#strings.isEmpty(q) ? q : null}, size=${pageSize})}"
+                   th:classappend="${selectedRole == 'STAFF' ? 'active' : ''}"
+                   class="filter-tab">
+                    <span>Nhân viên</span>
+                    <span class="badge-count" th:text="${roleCounts['STAFF'] != null ? roleCounts['STAFF'] : 0}">0</span>
+                </a>
+                <a th:href="@{/admin/users(role='TECHNICIAN', q=${!#strings.isEmpty(q) ? q : null}, size=${pageSize})}"
+                   th:classappend="${selectedRole == 'TECHNICIAN' ? 'active' : ''}"
+                   class="filter-tab">
+                    <span>Kỹ thuật viên</span>
+                    <span class="badge-count" th:text="${roleCounts['TECHNICIAN'] != null ? roleCounts['TECHNICIAN'] : 0}">0</span>
+                </a>
+                <a th:href="@{/admin/users(role='TENANT', q=${!#strings.isEmpty(q) ? q : null}, size=${pageSize})}"
+                   th:classappend="${selectedRole == 'TENANT' ? 'active' : ''}"
+                   class="filter-tab">
+                    <span>Người thuê</span>
+                    <span class="badge-count" th:text="${roleCounts['TENANT'] != null ? roleCounts['TENANT'] : 0}">0</span>
+                </a>
             </div>
-            <p id="userSearchSummary" class="search-summary" aria-live="polite"></p>
+
+            <!-- Search Component -->
+            <form th:action="@{/admin/users}" method="get" class="search-box-form">
+                <input type="hidden" name="role" th:if="${selectedRole != 'ALL'}" th:value="${selectedRole}">
+                <input type="hidden" name="size" th:value="${pageSize}">
+                <div class="search-input-wrapper">
+                    <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input type="text"
+                           name="q"
+                           th:value="${q}"
+                           class="search-input"
+                           placeholder="Tìm theo tên, email, SĐT...">
+                    <a th:if="${!#strings.isEmpty(q)}"
+                       th:href="@{/admin/users(role=${selectedRole != 'ALL' ? selectedRole : null}, size=${pageSize})}"
+                       class="search-clear-btn"
+                       title="Xóa tìm kiếm">&times;</a>
+                </div>
+            </form>
         </div>
-        <table id="usersTable" th:if="${!#lists.isEmpty(users)}" class="data-table">
+
+        <div th:if="${#lists.isEmpty(users)}" class="empty-state">
+            <p th:if="${!#strings.isEmpty(q)}">Không tìm thấy tài khoản nào phù hợp với từ khóa "<strong th:text="${q}">từ khóa</strong>".</p>
+            <p th:if="${#strings.isEmpty(q) and selectedRole == 'ALL'}">Chưa có tài khoản ứng dụng nào.</p>
+            <p th:if="${#strings.isEmpty(q) and selectedRole != 'ALL'}">Không có tài khoản nào thuộc vai trò <strong th:text="${selectedRoleTitle}">vai trò</strong>.</p>
+        </div>
+        <table th:if="${!#lists.isEmpty(users)}" class="data-table">
             <thead>
                 <tr>
                     <th>Tên đăng nhập</th>
                     <th>Họ và tên</th>
                     <th>Email</th>
+                    <th>Số điện thoại</th>
                     <th>Vai trò</th>
                     <th>Trạng thái</th>
                     <th>Thao tác</th>
                 </tr>
             </thead>
             <tbody>
-                <tr th:each="user : ${users}" data-user-row>
+                <tr th:each="user : ${users}">
                     <td th:text="${user.username() != null ? user.username() : '—'}">username</td>
                     <td th:text="${user.fullName()}">Người dùng</td>
                     <td th:text="${user.email()}">user@example.com</td>
+                    <td th:text="${user.phone() != null ? user.phone() : '—'}">—</td>
                     <td th:text="${uiText.role(user.role())}">Người thuê</td>
                     <td th:text="${user.status()}">ACTIVE</td>
                     <td>
@@ -108,47 +164,118 @@
                 </tr>
             </tbody>
         </table>
+
+        <!-- Pagination with Quick Jump Input [...] -->
+        <nav th:if="${!#lists.isEmpty(users)}" class="pagination-container" aria-label="Phân trang">
+            <ul class="pagination">
+                <!-- Về trang đầu << -->
+                <li class="page-item">
+                    <a th:if="${currentPage > 1}"
+                       th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=1, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
+                       class="page-link page-nav-btn"
+                       title="Về trang đầu">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"></polyline><polyline points="18 17 13 12 18 7"></polyline></svg>
+                    </a>
+                    <span th:if="${currentPage <= 1}" class="page-link page-nav-btn disabled" title="Đang ở trang đầu">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"></polyline><polyline points="18 17 13 12 18 7"></polyline></svg>
+                    </span>
+                </li>
+
+                <!-- Lùi 1 trang < -->
+                <li class="page-item">
+                    <a th:if="${currentPage > 1}"
+                       th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=${currentPage - 1}, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
+                       class="page-link page-nav-btn"
+                       title="Trang trước">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    </a>
+                    <span th:if="${currentPage <= 1}" class="page-link page-nav-btn disabled" title="Không có trang trước">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    </span>
+                </li>
+
+                <!-- Trang 1 -->
+                <li class="page-item" th:classappend="${currentPage == 1 ? 'active' : ''}">
+                    <a th:if="${currentPage != 1}"
+                       th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=1, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
+                       class="page-link">1</a>
+                    <span th:if="${currentPage == 1}" class="page-link current">1</span>
+                </li>
+
+                <!-- Trang hiện tại (nếu currentPage > 2 và chưa phải trang cuối) -->
+                <li th:if="${currentPage > 2 and currentPage < totalPages}" class="page-item active">
+                    <span class="page-link current" th:text="${currentPage}">3</span>
+                </li>
+
+                <!-- Ô nhập [...] cho phép gõ trang muốn đến -->
+                <li class="page-item">
+                    <form th:action="@{/admin/users}" method="get" class="page-jump-form">
+                        <input type="hidden" name="role" th:if="${selectedRole != 'ALL'}" th:value="${selectedRole}">
+                        <input type="hidden" name="size" th:value="${pageSize}">
+                        <input type="hidden" name="q" th:if="${!#strings.isEmpty(q)}" th:value="${q}">
+                        <input type="number"
+                               name="page"
+                               min="1"
+                               th:max="${totalPages}"
+                               class="page-jump-input"
+                               placeholder="..."
+                               th:title="${'Nhập số trang từ 1 đến ' + totalPages + ' rồi bấm Enter'}">
+                    </form>
+                </li>
+
+                <!-- Trang kế tiếp (nếu có) -->
+                <li th:if="${currentPage + 1 < totalPages and currentPage > 1}" class="page-item">
+                    <a th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=${currentPage + 1}, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
+                       class="page-link"
+                       th:text="${currentPage + 1}">4</a>
+                </li>
+
+                <!-- Trang 2 (nếu totalPages >= 2 và đang ở trang 1) -->
+                <li th:if="${totalPages >= 2 and currentPage == 1}" class="page-item">
+                    <a th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=2, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
+                       class="page-link">2</a>
+                </li>
+
+                <!-- Trang cuối (nếu totalPages > 2) -->
+                <li th:if="${totalPages > 2 and currentPage != totalPages}" class="page-item">
+                    <a th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=${totalPages}, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
+                       class="page-link"
+                       th:text="${totalPages}">10</a>
+                </li>
+                <li th:if="${totalPages > 1 and currentPage == totalPages}" class="page-item active">
+                    <span class="page-link current" th:text="${totalPages}">10</span>
+                </li>
+
+                <!-- Tiến 1 trang > -->
+                <li class="page-item">
+                    <a th:if="${currentPage < totalPages}"
+                       th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=${currentPage + 1}, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
+                       class="page-link page-nav-btn"
+                       title="Trang tiếp">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </a>
+                    <span th:if="${currentPage >= totalPages}" class="page-link page-nav-btn disabled" title="Không có trang tiếp">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </span>
+                </li>
+
+                <!-- Tới trang cuối >> -->
+                <li class="page-item">
+                    <a th:if="${currentPage < totalPages}"
+                       th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=${totalPages}, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
+                       class="page-link page-nav-btn"
+                       title="Tới trang cuối">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"></polyline><polyline points="6 17 11 12 6 7"></polyline></svg>
+                    </a>
+                    <span th:if="${currentPage >= totalPages}" class="page-link page-nav-btn disabled" title="Đang ở trang cuối">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"></polyline><polyline points="6 17 11 12 6 7"></polyline></svg>
+                    </span>
+                </li>
+            </ul>
+        </nav>
     </div>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>
-<script>
-    (() => {
-        const searchInput = document.querySelector('[data-user-search]');
-        const table = document.querySelector('#usersTable');
-        const summary = document.querySelector('#userSearchSummary');
-
-        if (!searchInput || !table || !summary) {
-            return;
-        }
-
-        const rows = Array.from(table.querySelectorAll('[data-user-row]'));
-        const normalize = (value) => value
-            .toLocaleLowerCase('vi-VN')
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/đ/g, 'd');
-
-        const updateResults = () => {
-            const query = normalize(searchInput.value.trim());
-            let visibleRows = 0;
-
-            rows.forEach((row) => {
-                const matches = !query || normalize(row.textContent || '').includes(query);
-                row.hidden = !matches;
-                if (matches) {
-                    visibleRows += 1;
-                }
-            });
-
-            summary.textContent = query
-                ? `Hiển thị ${visibleRows}/${rows.length} tài khoản`
-                : `${rows.length} tài khoản`;
-        };
-
-        searchInput.addEventListener('input', updateResults);
-        updateResults();
-    })();
-</script>
 </body>
 </html>
