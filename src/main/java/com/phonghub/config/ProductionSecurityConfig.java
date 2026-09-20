@@ -76,7 +76,7 @@ public class ProductionSecurityConfig {
             .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/health", "/login", "/session/logout").permitAll()
+                .requestMatchers("/health", "/login", "/session/logout", "/forgot-password").permitAll()
                 .requestMatchers("/static/**", "/css/**", "/favicon.ico").permitAll()
                 .anyRequest().authenticated()
             )

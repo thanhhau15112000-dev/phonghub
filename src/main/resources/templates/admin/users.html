@@ -154,12 +154,12 @@
                     <td th:text="${uiText.role(user.role())}">Người thuê</td>
                     <td th:text="${user.status()}">ACTIVE</td>
                     <td>
-                        <form th:if="${user.role().name() == 'TENANT'}"
+                        <form th:if="${user.role().name() != 'ADMIN'}"
                               th:action="@{'/admin/users/' + ${user.id()} + '/reset-password'}" method="post">
                             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                            <button type="submit" class="btn btn-sm">Reset mật khẩu tenant</button>
+                            <button type="submit" class="btn btn-sm" th:title="'Sinh mật khẩu tạm thời mới cho ' + ${user.fullName()}">Reset mật khẩu</button>
                         </form>
-                        <span th:if="${user.role().name() != 'TENANT'}" style="color: var(--text-secondary); font-size: 12px;">—</span>
+                        <span th:if="${user.role().name() == 'ADMIN'}" style="color: var(--text-secondary); font-size: 12px;" title="Không thể reset mật khẩu tài khoản quản trị viên">—</span>
                     </td>
                 </tr>
             </tbody>
