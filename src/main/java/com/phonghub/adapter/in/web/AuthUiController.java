@@ -12,7 +12,10 @@ import com.phonghub.domain.model.UserRole;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import com.phonghub.application.port.out.UserRepositoryPort;
+import com.phonghub.domain.model.User;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
@@ -29,10 +32,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 public class AuthUiController {
 
     private final AuthUseCase authUseCase;
+    private final UserRepositoryPort userRepository;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
-    public AuthUiController(AuthUseCase authUseCase) {
+    public AuthUiController(AuthUseCase authUseCase, UserRepositoryPort userRepository) {
         this.authUseCase = authUseCase;
+        this.userRepository = userRepository;
     }
 
     @GetMapping("/login")
@@ -99,6 +104,45 @@ public class AuthUiController {
         } catch (Exception ex) {
             return loginError(model, username, "Đã xảy ra lỗi trong quá trình đăng nhập. Vui lòng thử lại.");
         }
+    }
+
+    @GetMapping("/forgot-password")
+    public String forgotPasswordPage(Model model) {
+        return "auth/forgot-password";
+    }
+
+    @PostMapping("/forgot-password")
+    public String handleForgotPassword(
+        @RequestParam(defaultValue = "") String identifier,
+        Model model
+    ) {
+        String cleanIdentifier = identifier.trim();
+        if (cleanIdentifier.isBlank()) {
+            model.addAttribute("errorMessage", "Vui lòng nhập tên đăng nhập hoặc email.");
+            return "auth/forgot-password";
+        }
+
+        Optional<User> userOpt = cleanIdentifier.contains("@")
+            ? userRepository.findByEmail(cleanIdentifier.toLowerCase())
+            : userRepository.findByUsername(cleanIdentifier.toLowerCase());
+
+        if (userOpt.isEmpty()) {
+            model.addAttribute("errorMessage", "Không tìm thấy tài khoản tương ứng với thông tin đã nhập.");
+            model.addAttribute("identifier", cleanIdentifier);
+            return "auth/forgot-password";
+        }
+
+        User user = userOpt.get();
+        String message;
+        if (user.role() == UserRole.ADMIN) {
+            message = "Tài khoản <strong>" + user.username() + "</strong> có vai trò Quản trị viên (ADMIN). Vui lòng sử dụng tài khoản Supabase Auth / Render Dashboard hoặc liên hệ chủ sở hữu hệ thống để thiết lập lại mật khẩu.";
+        } else {
+            String roleText = UiText.INSTANCE.role(user.role());
+            message = "Đã tìm thấy tài khoản <strong>" + user.username() + "</strong> (" + roleText + "). Đối với vai trò này, vui lòng liên hệ trực tiếp <strong>Quản trị viên (Admin)</strong> để được cấp lại mật khẩu tạm thời mới.";
+        }
+
+        model.addAttribute("successMessage", message);
+        return "auth/forgot-password";
     }
 
     @GetMapping("/account/password")

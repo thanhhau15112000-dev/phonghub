@@ -378,6 +378,62 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void adminCanResetPasswordForStaffAndTechnician() throws Exception {
+        UUID staffId = UUID.randomUUID();
+        User staff = new User(
+            staffId, "staff1", "staff1@phonghub.local", "Staff One", null,
+            UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()
+        );
+        when(userUseCase.getUser(staffId)).thenReturn(staff);
+        when(authUseCase.adminResetPassword(staffId)).thenReturn(new AuthUseCase.PasswordResetResult(
+            staffId,
+            "staff1",
+            "TempPass#2026!",
+            true,
+            "Temporary password generated. It will not be displayed again."
+        ));
+
+        mockMvc.perform(post("/admin/users/{userId}/reset-password", staffId)
+                .session(loginAsAdmin())
+                .with(csrf()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users"));
+    }
+
+    @Test
+    void forgotPasswordPageIsPubliclyAccessible() throws Exception {
+        mockMvc.perform(get("/forgot-password"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    void forgotPasswordWithValidUserReturnsInstruction() throws Exception {
+        when(userRepository.findByUsername("staff1")).thenReturn(Optional.of(new User(
+            UUID.randomUUID(), "staff1", "staff1@phonghub.local", "Staff One", "0900000002",
+            UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
+
+        mockMvc.perform(post("/forgot-password")
+                .with(csrf())
+                .param("identifier", "staff1"))
+            .andExpect(status().isOk())
+            .andExpect(model().attributeExists("successMessage"));
+    }
+
+    @Test
+    void forgotPasswordWithUnknownUserReturnsErrorMessage() throws Exception {
+        when(userRepository.findByUsername("unknown_user")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail("unknown_user")).thenReturn(Optional.empty());
+
+        mockMvc.perform(post("/forgot-password")
+                .with(csrf())
+                .param("identifier", "unknown_user"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("errorMessage", "Không tìm thấy tài khoản tương ứng với thông tin đã nhập."))
+            .andExpect(model().attribute("identifier", "unknown_user"));
+    }
+
+    @Test
     void protectedEndpointRequiresBearerTokenInProd() throws Exception {
         mockMvc.perform(get("/api/properties"))
             .andExpect(status().isUnauthorized());
