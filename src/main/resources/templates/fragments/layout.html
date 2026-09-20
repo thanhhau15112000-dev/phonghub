@@ -33,6 +33,10 @@
                 </option>
             </select>
         </form>
+        <form th:if="${currentUser != null}" th:action="@{/session/logout}" method="post" style="display: inline; margin-left: 8px;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button type="submit" class="btn btn-sm">Đăng xuất</button>
+        </form>
     </div>
 
     <div th:if="${!demoEnabled and currentUser != null}" style="display: flex; align-items: center; gap: 10px;">
@@ -45,8 +49,14 @@
 </header>
 
 <div th:fragment="alerts">
-    <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}">Thông báo thành công</div>
-    <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}">Thông báo lỗi</div>
+    <div th:if="${successMessage}" class="alert alert-success" style="display: flex; align-items: center; gap: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        <span th:text="${successMessage}">Thông báo thành công</span>
+    </div>
+    <div th:if="${errorMessage}" class="alert alert-error" style="display: flex; align-items: center; gap: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+        <span th:text="${errorMessage}">Thông báo lỗi</span>
+    </div>
 </div>
 
 <footer th:fragment="footer" style="margin-top: 48px; padding: 24px 0; border-top: 1px solid var(--border-color); text-align: center; font-size: 12px; color: var(--text-secondary);">
