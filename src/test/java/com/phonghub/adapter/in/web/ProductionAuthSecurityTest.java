@@ -135,6 +135,48 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void multipleFailedLoginAttemptsSuggestsForgotPassword() throws Exception {
+        when(authUseCase.login("user1", "wrongpass"))
+            .thenThrow(new InvalidCredentialsException("Invalid password"));
+
+        MockHttpSession session = new MockHttpSession();
+
+        // 1st attempt
+        mockMvc.perform(post("/login")
+                .session(session)
+                .with(csrf())
+                .param("username", "user1")
+                .param("password", "wrongpass"))
+            .andExpect(status().isOk())
+            .andExpect(model().attributeDoesNotExist("suggestForgotPassword"));
+
+        // 2nd attempt
+        mockMvc.perform(post("/login")
+                .session(session)
+                .with(csrf())
+                .param("username", "user1")
+                .param("password", "wrongpass"))
+            .andExpect(status().isOk())
+            .andExpect(model().attributeDoesNotExist("suggestForgotPassword"));
+
+        // 3rd attempt
+        mockMvc.perform(post("/login")
+                .session(session)
+                .with(csrf())
+                .param("username", "user1")
+                .param("password", "wrongpass"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("suggestForgotPassword", true))
+            .andExpect(model().attribute("failedAttempts", 3));
+
+        // Visiting GET /login with this session also retains the suggestion
+        mockMvc.perform(get("/login").session(session))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("suggestForgotPassword", true))
+            .andExpect(model().attribute("failedAttempts", 3));
+    }
+
+    @Test
     void browserLoginWithDisabledAccountDisplaysSpecificErrorMessage() throws Exception {
         when(authUseCase.login("inactive_user", "secret123"))
             .thenThrow(new AccountDisabledException("Account is inactive"));

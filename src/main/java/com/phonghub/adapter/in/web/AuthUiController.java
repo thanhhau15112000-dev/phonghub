@@ -40,13 +40,21 @@ public class AuthUiController {
         this.userRepository = userRepository;
     }
 
+    private static final String SESSION_LOGIN_FAILED_ATTEMPTS = "LOGIN_FAILED_ATTEMPTS";
+    private static final int FAILED_ATTEMPTS_THRESHOLD_FOR_SUGGESTION = 3;
+
     @GetMapping("/login")
     public String loginPage(
         @RequestParam(defaultValue = "false") boolean error,
         @RequestParam(defaultValue = "false") boolean loggedOut,
         @RequestParam(required = false) String username,
+        HttpServletRequest request,
         Model model
     ) {
+        HttpSession session = request.getSession(false);
+        if (loggedOut && session != null) {
+            session.removeAttribute(SESSION_LOGIN_FAILED_ATTEMPTS);
+        }
         if (error) {
             model.addAttribute("errorMessage", "Tên đăng nhập hoặc mật khẩu không đúng.");
         }
@@ -55,6 +63,13 @@ public class AuthUiController {
         }
         if (username != null && !username.isBlank()) {
             model.addAttribute("username", username.trim());
+        }
+        if (session != null) {
+            Integer attempts = (Integer) session.getAttribute(SESSION_LOGIN_FAILED_ATTEMPTS);
+            if (attempts != null && attempts >= FAILED_ATTEMPTS_THRESHOLD_FOR_SUGGESTION) {
+                model.addAttribute("suggestForgotPassword", true);
+                model.addAttribute("failedAttempts", attempts);
+            }
         }
         return "auth/login";
     }
@@ -75,6 +90,10 @@ public class AuthUiController {
             }
 
             CurrentUser currentUser = toCurrentUser(tokenResponse.user());
+            HttpSession existingSession = request.getSession(false);
+            if (existingSession != null) {
+                existingSession.removeAttribute(SESSION_LOGIN_FAILED_ATTEMPTS);
+            }
             request.getSession(true);
             request.changeSessionId();
 
@@ -92,17 +111,17 @@ public class AuthUiController {
                 ? "redirect:/account/password"
                 : "redirect:/";
         } catch (InvalidCredentialsException ex) {
-            return loginError(model, username, "Tên đăng nhập hoặc mật khẩu không đúng.");
+            return loginError(request, model, username, "Tên đăng nhập hoặc mật khẩu không đúng.");
         } catch (AccountDisabledException ex) {
-            return loginError(model, username, "Tài khoản hiện không hoạt động.");
+            return loginError(request, model, username, "Tài khoản hiện không hoạt động.");
         } catch (IdentityProviderUnavailableException ex) {
-            return loginError(model, username, "Dịch vụ xác thực tạm thời không khả dụng. Vui lòng thử lại sau.");
+            return loginError(request, model, username, "Dịch vụ xác thực tạm thời không khả dụng. Vui lòng thử lại sau.");
         } catch (IllegalStateException ex) {
-            return loginError(model, username, "Không thể hoàn tất đăng nhập. Vui lòng thử lại sau.");
+            return loginError(request, model, username, "Không thể hoàn tất đăng nhập. Vui lòng thử lại sau.");
         } catch (DomainException ex) {
-            return loginError(model, username, ex.getMessage() != null ? ex.getMessage() : "Thông tin đăng nhập không hợp lệ.");
+            return loginError(request, model, username, ex.getMessage() != null ? ex.getMessage() : "Thông tin đăng nhập không hợp lệ.");
         } catch (Exception ex) {
-            return loginError(model, username, "Đã xảy ra lỗi trong quá trình đăng nhập. Vui lòng thử lại.");
+            return loginError(request, model, username, "Đã xảy ra lỗi trong quá trình đăng nhập. Vui lòng thử lại.");
         }
     }
 
@@ -231,10 +250,20 @@ public class AuthUiController {
         return null;
     }
 
-    private String loginError(Model model, String username, String message) {
+    private String loginError(HttpServletRequest request, Model model, String username, String message) {
         model.addAttribute("errorMessage", message);
         if (username != null && !username.isBlank()) {
             model.addAttribute("username", username.trim());
+        }
+
+        HttpSession session = request.getSession(true);
+        Integer attempts = (Integer) session.getAttribute(SESSION_LOGIN_FAILED_ATTEMPTS);
+        int currentAttempts = (attempts == null ? 0 : attempts) + 1;
+        session.setAttribute(SESSION_LOGIN_FAILED_ATTEMPTS, currentAttempts);
+
+        if (currentAttempts >= FAILED_ATTEMPTS_THRESHOLD_FOR_SUGGESTION) {
+            model.addAttribute("suggestForgotPassword", true);
+            model.addAttribute("failedAttempts", currentAttempts);
         }
         return "auth/login";
     }
