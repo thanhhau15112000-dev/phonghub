@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import com.phonghub.domain.exception.AccountDisabledException;
+import com.phonghub.domain.exception.InvalidCredentialsException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -116,6 +118,56 @@ class ProductionAuthSecurityTest {
                 .param("username", "admin")
                 .param("password", "secret123"))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void browserLoginWithInvalidCredentialsDisplaysErrorMessageAndPreservesUsername() throws Exception {
+        when(authUseCase.login("admin", "wrongpassword"))
+            .thenThrow(new InvalidCredentialsException("Invalid username or password"));
+
+        mockMvc.perform(post("/login")
+                .with(csrf())
+                .param("username", "admin")
+                .param("password", "wrongpassword"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("errorMessage", "Tên đăng nhập hoặc mật khẩu không đúng."))
+            .andExpect(model().attribute("username", "admin"));
+    }
+
+    @Test
+    void browserLoginWithDisabledAccountDisplaysSpecificErrorMessage() throws Exception {
+        when(authUseCase.login("inactive_user", "secret123"))
+            .thenThrow(new AccountDisabledException("Account is inactive"));
+
+        mockMvc.perform(post("/login")
+                .with(csrf())
+                .param("username", "inactive_user")
+                .param("password", "secret123"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("errorMessage", "Tài khoản hiện không hoạt động."))
+            .andExpect(model().attribute("username", "inactive_user"));
+    }
+
+    @Test
+    void browserLoginWithUnexpectedExceptionDisplaysSafeErrorMessage() throws Exception {
+        when(authUseCase.login("admin", "secret123"))
+            .thenThrow(new RuntimeException("Database timeout"));
+
+        mockMvc.perform(post("/login")
+                .with(csrf())
+                .param("username", "admin")
+                .param("password", "secret123"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("errorMessage", "Đã xảy ra lỗi trong quá trình đăng nhập. Vui lòng thử lại."))
+            .andExpect(model().attribute("username", "admin"));
+    }
+
+    @Test
+    void browserLoginPagePreservesUsernameQueryParam() throws Exception {
+        mockMvc.perform(get("/login").param("username", "myusername").param("error", "true"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("errorMessage", "Tên đăng nhập hoặc mật khẩu không đúng."))
+            .andExpect(model().attribute("username", "myusername"));
     }
 
     @Test

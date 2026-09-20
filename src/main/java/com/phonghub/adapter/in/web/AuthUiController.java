@@ -39,6 +39,7 @@ public class AuthUiController {
     public String loginPage(
         @RequestParam(defaultValue = "false") boolean error,
         @RequestParam(defaultValue = "false") boolean loggedOut,
+        @RequestParam(required = false) String username,
         Model model
     ) {
         if (error) {
@@ -46,6 +47,9 @@ public class AuthUiController {
         }
         if (loggedOut) {
             model.addAttribute("successMessage", "Đã đăng xuất.");
+        }
+        if (username != null && !username.isBlank()) {
+            model.addAttribute("username", username.trim());
         }
         return "auth/login";
     }
@@ -83,13 +87,17 @@ public class AuthUiController {
                 ? "redirect:/account/password"
                 : "redirect:/";
         } catch (InvalidCredentialsException ex) {
-            return loginError(model, "Tên đăng nhập hoặc mật khẩu không đúng.");
+            return loginError(model, username, "Tên đăng nhập hoặc mật khẩu không đúng.");
         } catch (AccountDisabledException ex) {
-            return loginError(model, "Tài khoản hiện không hoạt động.");
+            return loginError(model, username, "Tài khoản hiện không hoạt động.");
         } catch (IdentityProviderUnavailableException ex) {
-            return loginError(model, "Dịch vụ xác thực tạm thời không khả dụng. Vui lòng thử lại sau.");
+            return loginError(model, username, "Dịch vụ xác thực tạm thời không khả dụng. Vui lòng thử lại sau.");
         } catch (IllegalStateException ex) {
-            return loginError(model, "Không thể hoàn tất đăng nhập. Vui lòng thử lại sau.");
+            return loginError(model, username, "Không thể hoàn tất đăng nhập. Vui lòng thử lại sau.");
+        } catch (DomainException ex) {
+            return loginError(model, username, ex.getMessage() != null ? ex.getMessage() : "Thông tin đăng nhập không hợp lệ.");
+        } catch (Exception ex) {
+            return loginError(model, username, "Đã xảy ra lỗi trong quá trình đăng nhập. Vui lòng thử lại.");
         }
     }
 
@@ -179,8 +187,11 @@ public class AuthUiController {
         return null;
     }
 
-    private String loginError(Model model, String message) {
+    private String loginError(Model model, String username, String message) {
         model.addAttribute("errorMessage", message);
+        if (username != null && !username.isBlank()) {
+            model.addAttribute("username", username.trim());
+        }
         return "auth/login";
     }
 
