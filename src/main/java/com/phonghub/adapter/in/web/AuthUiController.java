@@ -28,16 +28,33 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import com.phonghub.application.port.in.DemoActorPort;
+import com.phonghub.application.port.in.UserUseCase;
+import com.phonghub.application.port.out.CurrentUserPort;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+
 @Controller
 public class AuthUiController {
 
     private final AuthUseCase authUseCase;
     private final UserRepositoryPort userRepository;
+    private final UserUseCase userUseCase;
+    private final CurrentUserPort currentUserPort;
+    private final Optional<DemoActorPort> demoActorPort;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
-    public AuthUiController(AuthUseCase authUseCase, UserRepositoryPort userRepository) {
+    public AuthUiController(
+        AuthUseCase authUseCase,
+        UserRepositoryPort userRepository,
+        UserUseCase userUseCase,
+        CurrentUserPort currentUserPort,
+        Optional<DemoActorPort> demoActorPort
+    ) {
         this.authUseCase = authUseCase;
         this.userRepository = userRepository;
+        this.userUseCase = userUseCase;
+        this.currentUserPort = currentUserPort;
+        this.demoActorPort = demoActorPort;
     }
 
     private static final String SESSION_LOGIN_FAILED_ATTEMPTS = "LOGIN_FAILED_ATTEMPTS";
@@ -211,6 +228,76 @@ public class AuthUiController {
         }
     }
 
+    @GetMapping("/account/profile")
+    public String profilePage(Model model) {
+        CurrentUser current = currentUser();
+        if (current == null) {
+            return "redirect:/login";
+        }
+        User user = userUseCase.getUser(current.id());
+        model.addAttribute("currentUser", current);
+        model.addAttribute("user", user);
+        return "account/profile";
+    }
+
+    @PostMapping("/account/profile")
+    public String updateProfile(
+        @RequestParam(defaultValue = "") String fullName,
+        @RequestParam(required = false) String phone,
+        HttpServletRequest request,
+        HttpServletResponse response,
+        RedirectAttributes redirectAttributes,
+        Model model
+    ) {
+        CurrentUser current = currentUser();
+        if (current == null) {
+            return "redirect:/login";
+        }
+
+        try {
+            User updated = userUseCase.updateProfile(new UserUseCase.UpdateProfileCommand(
+                current.id(),
+                fullName,
+                phone
+            ));
+
+            CurrentUser updatedCurrentUser = new CurrentUser(
+                current.id(),
+                current.email(),
+                updated.fullName(),
+                current.role(),
+                current.mustChangePassword()
+            );
+
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication instanceof DomainAuthenticationToken domainAuthentication) {
+                SecurityContext context = SecurityContextHolder.createEmptyContext();
+                context.setAuthentication(new DomainAuthenticationToken(
+                    updatedCurrentUser,
+                    domainAuthentication.getCredentials() instanceof String token ? token : null,
+                    domainAuthentication.getAuthorities(),
+                    domainAuthentication.isMustChangePassword()
+                ));
+                SecurityContextHolder.setContext(context);
+                securityContextRepository.saveContext(context, request, response);
+            }
+
+            demoActorPort.ifPresent(p -> p.setCurrentUser(updatedCurrentUser));
+
+            redirectAttributes.addFlashAttribute("successMessage", "Cập nhật hồ sơ cá nhân thành công.");
+            return "redirect:/account/profile";
+        } catch (IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+            return "redirect:/account/profile";
+        } catch (DomainException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage() != null ? ex.getMessage() : "Không thể cập nhật hồ sơ cá nhân.");
+            return "redirect:/account/profile";
+        } catch (Exception ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Đã xảy ra lỗi khi cập nhật hồ sơ cá nhân. Vui lòng thử lại.");
+            return "redirect:/account/profile";
+        }
+    }
+
     @PostMapping("/session/logout")
     public String logout(HttpServletRequest request, HttpServletResponse response) {
         try {
@@ -246,6 +333,11 @@ public class AuthUiController {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication instanceof DomainAuthenticationToken domainAuthentication) {
             return domainAuthentication.getCurrentUser();
+        }
+        if (currentUserPort != null) {
+            try {
+                return currentUserPort.getCurrentUser();
+            } catch (Exception ignored) {}
         }
         return null;
     }

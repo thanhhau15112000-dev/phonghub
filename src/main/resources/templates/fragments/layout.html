@@ -33,14 +33,18 @@
                 </option>
             </select>
         </form>
-        <form th:if="${currentUser != null}" th:action="@{/session/logout}" method="post" style="display: inline; margin-left: 8px;">
+        <a th:if="${currentUser != null}" th:href="@{/account/profile}" class="btn btn-sm" style="margin-left: 8px; text-decoration: none;" title="Xem và chỉnh sửa hồ sơ">Hồ sơ</a>
+        <a th:if="${currentUser != null}" th:href="@{/account/password}" class="btn btn-sm" style="margin-left: 4px; text-decoration: none;" title="Đổi mật khẩu tài khoản">Đổi mật khẩu</a>
+        <form th:if="${currentUser != null}" th:action="@{/session/logout}" method="post" style="display: inline; margin-left: 4px;">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <button type="submit" class="btn btn-sm">Đăng xuất</button>
         </form>
     </div>
 
-    <div th:if="${!demoEnabled and currentUser != null}" style="display: flex; align-items: center; gap: 10px;">
+    <div th:if="${!demoEnabled and currentUser != null}" style="display: flex; align-items: center; gap: 8px;">
         <span class="actor-tag" th:text="${uiText.role(currentUser.role())}">Quản trị viên</span>
+        <a th:href="@{/account/profile}" class="btn btn-sm" style="text-decoration: none;" title="Xem và chỉnh sửa hồ sơ">Hồ sơ</a>
+        <a th:href="@{/account/password}" class="btn btn-sm" style="text-decoration: none;" title="Đổi mật khẩu tài khoản">Đổi mật khẩu</a>
         <form th:action="@{/session/logout}" method="post" style="display: inline;">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <button type="submit" class="btn btn-sm">Đăng xuất</button>

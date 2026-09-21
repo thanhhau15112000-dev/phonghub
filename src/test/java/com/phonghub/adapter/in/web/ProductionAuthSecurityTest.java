@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
@@ -473,6 +474,75 @@ class ProductionAuthSecurityTest {
             .andExpect(status().isOk())
             .andExpect(model().attribute("errorMessage", "Không tìm thấy tài khoản tương ứng với thông tin đã nhập."))
             .andExpect(model().attribute("identifier", "unknown_user"));
+    }
+
+    @Test
+    void unauthenticatedUserAccessingProfileRedirectsToLogin() throws Exception {
+        mockMvc.perform(get("/account/profile"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void authenticatedUserCanAccessProfilePage() throws Exception {
+        MockHttpSession session = loginAsAdmin();
+        when(userUseCase.getUser(any())).thenReturn(new User(
+            UUID.randomUUID(),
+            "admin",
+            "admin@phonghub.local",
+            "Admin User",
+            "0901234567",
+            UserRole.ADMIN,
+            User.UserStatus.ACTIVE,
+            false,
+            Instant.now()
+        ));
+
+        mockMvc.perform(get("/account/profile").session(session))
+            .andExpect(status().isOk())
+            .andExpect(model().attributeExists("user"))
+            .andExpect(model().attributeExists("currentUser"));
+    }
+
+    @Test
+    void authenticatedUserCanUpdateProfile() throws Exception {
+        MockHttpSession session = loginAsAdmin();
+        when(userUseCase.updateProfile(any())).thenReturn(new User(
+            UUID.randomUUID(),
+            "admin",
+            "admin@phonghub.local",
+            "Admin New Name",
+            "0987654321",
+            UserRole.ADMIN,
+            User.UserStatus.ACTIVE,
+            false,
+            Instant.now()
+        ));
+
+        mockMvc.perform(post("/account/profile")
+                .session(session)
+                .with(csrf())
+                .param("fullName", "Admin New Name")
+                .param("phone", "0987654321"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/account/profile"))
+            .andExpect(flash().attribute("successMessage", "Cập nhật hồ sơ cá nhân thành công."));
+    }
+
+    @Test
+    void updateProfileWithInvalidPhoneSetsErrorMessage() throws Exception {
+        MockHttpSession session = loginAsAdmin();
+        when(userUseCase.updateProfile(any()))
+            .thenThrow(new IllegalArgumentException("Số điện thoại không hợp lệ (phải gồm 10 chữ số bắt đầu bằng 0)"));
+
+        mockMvc.perform(post("/account/profile")
+                .session(session)
+                .with(csrf())
+                .param("fullName", "Admin User")
+                .param("phone", "123"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/account/profile"))
+            .andExpect(flash().attribute("errorMessage", "Số điện thoại không hợp lệ (phải gồm 10 chữ số bắt đầu bằng 0)"));
     }
 
     @Test

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Hồ sơ cá nhân')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container" style="max-width: 640px; padding-top: 36px; padding-bottom: 48px;">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="card" style="margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+            <div>
+                <h1 style="margin-bottom: 4px;">Hồ sơ cá nhân</h1>
+                <p style="color: var(--text-secondary); font-size: 13px; margin: 0;">
+                    Xem và cập nhật thông tin tài khoản của bạn trên hệ thống PhongHub.
+                </p>
+            </div>
+            <span class="actor-tag" th:text="${uiText.role(user.role())}">Quản trị viên</span>
+        </div>
+
+        <div style="background: var(--bg-surface-subtle, rgba(0,0,0,0.02)); border: 1px solid var(--border-color, #e5e7eb); border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; font-size: 13px;">
+                <div>
+                    <span style="color: var(--text-secondary); display: block; margin-bottom: 2px;">Tên đăng nhập</span>
+                    <strong th:text="${user.username() != null ? user.username() : '—'}">admin</strong>
+                </div>
+                <div>
+                    <span style="color: var(--text-secondary); display: block; margin-bottom: 2px;">Email</span>
+                    <strong th:text="${user.email()}">admin@phonghub.local</strong>
+                </div>
+                <div>
+                    <span style="color: var(--text-secondary); display: block; margin-bottom: 2px;">Vai trò</span>
+                    <strong th:text="${uiText.role(user.role())}">Quản trị viên</strong>
+                </div>
+                <div>
+                    <span style="color: var(--text-secondary); display: block; margin-bottom: 2px;">Trạng thái</span>
+                    <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: rgba(34, 197, 94, 0.1); color: #15803d;"
+                          th:text="${user.status()}">ACTIVE</span>
+                </div>
+            </div>
+        </div>
+
+        <form th:action="@{/account/profile}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+
+            <div class="form-group">
+                <label class="form-label" for="fullName">Họ và tên <span style="color: var(--danger, #ef4444);">*</span></label>
+                <input id="fullName" type="text" name="fullName" class="form-control"
+                       th:value="${user.fullName()}" required autocomplete="name" autofocus>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="phone">Số điện thoại</label>
+                <input id="phone" type="tel" name="phone" class="form-control"
+                       th:value="${user.phone()}" placeholder="Ví dụ: 0912345678" pattern="^0\d{9}$"
+                       title="Số điện thoại gồm 10 chữ số bắt đầu bằng 0" autocomplete="tel">
+                <small style="display: block; margin-top: 4px; color: var(--text-secondary); font-size: 12px;">
+                    Định dạng: 10 chữ số bắt đầu bằng số 0 (ví dụ: 0901234567).
+                </small>
+            </div>
+
+            <div style="display: flex; gap: 10px; align-items: center; margin-top: 24px; flex-wrap: wrap;">
+                <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
+                <a th:href="@{/account/password}" class="btn" style="text-decoration: none;">Đổi mật khẩu</a>
+                <a th:href="@{/}" class="btn" style="text-decoration: none; margin-left: auto;">Quay lại</a>
+            </div>
+        </form>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
