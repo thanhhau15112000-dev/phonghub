@@ -85,4 +85,33 @@ public class UserService implements UserUseCase {
         }
         return assignmentPort.findPropertyIdsByUserId(userId);
     }
+
+    @Override
+    public User updateProfile(UpdateProfileCommand command) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        if (currentUser.role() != UserRole.ADMIN && !currentUser.id().equals(command.userId())) {
+            throw new UnauthorizedPropertyAccessException("Cannot modify other user's profile");
+        }
+
+        User existingUser = userRepository.findById(command.userId())
+            .orElseThrow(() -> new UserNotFoundException("User not found with ID: " + command.userId()));
+
+        String cleanPhone = (command.phone() != null && !command.phone().isBlank())
+            ? command.phone().trim()
+            : null;
+
+        User updatedUser = new User(
+            existingUser.id(),
+            existingUser.username(),
+            existingUser.email(),
+            command.fullName().trim(),
+            cleanPhone,
+            existingUser.role(),
+            existingUser.status(),
+            existingUser.mustChangePassword(),
+            existingUser.createdAt()
+        );
+
+        return userRepository.save(updatedUser);
+    }
 }
