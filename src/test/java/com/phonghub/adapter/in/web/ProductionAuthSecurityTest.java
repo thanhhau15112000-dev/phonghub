@@ -1,7 +1,12 @@
 package com.phonghub.adapter.in.web;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -10,6 +15,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 
 import com.phonghub.application.port.in.AuthTokenResponse;
 import com.phonghub.application.port.in.AuthUseCase;
@@ -223,6 +230,10 @@ class ProductionAuthSecurityTest {
             3600L,
             new AuthTokenResponse.UserInfo(userId, "temporary", "Temporary User", UserRole.TENANT, true)
         ));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(new User(
+            userId, "temporary", "temporary@phonghub.local", "Temporary User", "0900000001",
+            UserRole.TENANT, User.UserStatus.ACTIVE, true, Instant.now()
+        )));
 
         var loginResult = mockMvc.perform(post("/login")
                 .with(csrf())
@@ -827,6 +838,130 @@ class ProductionAuthSecurityTest {
             .andExpect(jsonPath("$.mustChangePassword").value(true));
     }
 
+    @Test
+    void adminCanDeleteUserViaApi() throws Exception {
+        UUID targetUserId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        when(jwtDecoder.decode(eq("admin.jwt.token"))).thenReturn(Jwt.withTokenValue("admin.jwt.token")
+            .header("alg", "HS256")
+            .subject(adminId.toString())
+            .claim("aud", List.of("authenticated"))
+            .claim("iss", "https://mock.supabase.co/auth/v1")
+            .build());
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
+            adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
+
+        mockMvc.perform(delete("/api/admin/users/{userId}", targetUserId)
+                .header("Authorization", "Bearer admin.jwt.token"))
+            .andExpect(status().isNoContent());
+
+        verify(authUseCase).adminDeleteUser(targetUserId);
+    }
+
+    @Test
+    void nonAdminCannotDeleteUserViaApiReturnsForbidden() throws Exception {
+        UUID targetUserId = UUID.randomUUID();
+        UUID staffId = UUID.randomUUID();
+        when(jwtDecoder.decode(eq("staff.jwt.token"))).thenReturn(Jwt.withTokenValue("staff.jwt.token")
+            .header("alg", "HS256")
+            .subject(staffId.toString())
+            .claim("aud", List.of("authenticated"))
+            .claim("iss", "https://mock.supabase.co/auth/v1")
+            .build());
+        when(userRepository.findById(staffId)).thenReturn(Optional.of(new User(
+            staffId, "staff", "staff@phonghub.local", "Staff User", "0900000002",
+            UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
+        doThrow(new UnauthorizedPropertyAccessException("Action requires ADMIN role"))
+            .when(authUseCase).adminDeleteUser(targetUserId);
+
+        mockMvc.perform(delete("/api/admin/users/{userId}", targetUserId)
+                .header("Authorization", "Bearer staff.jwt.token"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminDeleteSelfOrAnotherAdminViaApiReturnsBadRequest() throws Exception {
+        UUID targetAdminId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        when(jwtDecoder.decode(eq("admin.jwt.token"))).thenReturn(Jwt.withTokenValue("admin.jwt.token")
+            .header("alg", "HS256")
+            .subject(adminId.toString())
+            .claim("aud", List.of("authenticated"))
+            .claim("iss", "https://mock.supabase.co/auth/v1")
+            .build());
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
+            adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
+        doThrow(new IllegalArgumentException("Không được phép xoá tài khoản Quản trị viên (ADMIN)"))
+            .when(authUseCase).adminDeleteUser(targetAdminId);
+
+        mockMvc.perform(delete("/api/admin/users/{userId}", targetAdminId)
+                .header("Authorization", "Bearer admin.jwt.token"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title").value("Invalid Argument"));
+    }
+
+    @Test
+    void adminCanDeleteUserViaUiAndRedirectsWithSuccessMessage() throws Exception {
+        UUID targetUserId = UUID.randomUUID();
+
+        mockMvc.perform(post("/admin/users/{userId}/delete", targetUserId)
+                .session(loginAsAdmin())
+                .with(csrf()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users"))
+            .andExpect(flash().attribute("successMessage", "Đã xoá tài khoản người dùng thành công."));
+
+        verify(authUseCase).adminDeleteUser(targetUserId);
+    }
+
+    @Test
+    void adminDeleteSelfViaUiSetsErrorMessage() throws Exception {
+        UUID targetUserId = UUID.randomUUID();
+        doThrow(new IllegalArgumentException("Quản trị viên không thể tự xoá tài khoản của chính mình"))
+            .when(authUseCase).adminDeleteUser(targetUserId);
+
+        mockMvc.perform(post("/admin/users/{userId}/delete", targetUserId)
+                .session(loginAsAdmin())
+                .with(csrf()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users"))
+            .andExpect(flash().attribute("errorMessage", "Quản trị viên không thể tự xoá tài khoản của chính mình"));
+    }
+
+    @Test
+    void deletedUserJwtReturns401OnApiCall() throws Exception {
+        UUID deletedUserId = UUID.randomUUID();
+        when(jwtDecoder.decode(eq("deleted.user.jwt"))).thenReturn(Jwt.withTokenValue("deleted.user.jwt")
+            .header("alg", "HS256")
+            .subject(deletedUserId.toString())
+            .claim("aud", List.of("authenticated"))
+            .claim("iss", "https://mock.supabase.co/auth/v1")
+            .build());
+        when(userRepository.findById(deletedUserId)).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/properties")
+                .header("Authorization", "Bearer deleted.user.jwt"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void deletedUserSessionIsImmediatelyInvalidatedAndRedirectedToLogin() throws Exception {
+        MockHttpSession session = loginAsAdmin();
+        // Simulate user deleted from repository
+        when(userRepository.findById(any())).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/admin/users").session(session))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+
+        assertTrue(session.isInvalid(), "Session must be invalidated immediately when user is deleted");
+    }
+
     private MockHttpSession loginAsAdmin() throws Exception {
         UUID adminId = UUID.randomUUID();
         when(authUseCase.login("admin", "secret123")).thenReturn(new AuthTokenResponse(
@@ -836,6 +971,10 @@ class ProductionAuthSecurityTest {
             3600L,
             new AuthTokenResponse.UserInfo(adminId, "admin", "Admin User", UserRole.ADMIN, false)
         ));
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
+            adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
 
         var result = mockMvc.perform(post("/login")
                 .with(csrf())

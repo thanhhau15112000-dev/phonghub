@@ -212,9 +212,16 @@ public class SupabaseIdentityProviderAdapter implements IdentityProviderPort {
                 .header("apikey", serviceRoleKey)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceRoleKey)
                 .retrieve()
+                .onStatus(HttpStatusCode::isError, (req, resp) -> {
+                    throw new IdentityProviderUnavailableException("Failed to delete user in Supabase Admin: HTTP " + resp.getStatusCode());
+                })
                 .toBodilessEntity();
-        } catch (Exception ignored) {
-            // Compensation failure
+        } catch (IdentityProviderUnavailableException ex) {
+            throw ex;
+        } catch (ResourceAccessException ex) {
+            throw new IdentityProviderUnavailableException("Supabase Admin network timeout: " + ex.getMessage(), ex);
+        } catch (Exception ex) {
+            throw new IdentityProviderUnavailableException("Supabase Admin delete user error: " + ex.getMessage(), ex);
         }
     }
 }
