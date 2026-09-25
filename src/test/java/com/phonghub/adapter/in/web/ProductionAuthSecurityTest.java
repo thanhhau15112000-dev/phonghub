@@ -16,6 +16,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.phonghub.domain.exception.DuplicateEmailException;
+import com.phonghub.domain.exception.DuplicateUsernameException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 
 import com.phonghub.application.port.in.AuthTokenResponse;
@@ -406,6 +408,40 @@ class ProductionAuthSecurityTest {
                 .param("role", "TENANT"))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/admin/users"));
+    }
+
+    @Test
+    void adminCreateUserDuplicateEmailShowsFlashErrorMessageOnUi() throws Exception {
+        when(authUseCase.adminCreateUser(any()))
+            .thenThrow(new DuplicateEmailException("Email đã được sử dụng bởi một tài khoản khác: duplicate@phonghub.local"));
+
+        mockMvc.perform(post("/admin/users")
+                .session(loginAsAdmin())
+                .with(csrf())
+                .param("username", "tenant2")
+                .param("email", "duplicate@phonghub.local")
+                .param("fullName", "Tenant Two")
+                .param("role", "TENANT"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users"))
+            .andExpect(flash().attribute("errorMessage", "Email đã được sử dụng bởi một tài khoản khác: duplicate@phonghub.local"));
+    }
+
+    @Test
+    void adminCreateUserDuplicateUsernameShowsFlashErrorMessageOnUi() throws Exception {
+        when(authUseCase.adminCreateUser(any()))
+            .thenThrow(new DuplicateUsernameException("Tên đăng nhập đã tồn tại trong hệ thống: duplicateuser"));
+
+        mockMvc.perform(post("/admin/users")
+                .session(loginAsAdmin())
+                .with(csrf())
+                .param("username", "duplicateuser")
+                .param("email", "unique@phonghub.local")
+                .param("fullName", "Tenant Two")
+                .param("role", "TENANT"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users"))
+            .andExpect(flash().attribute("errorMessage", "Tên đăng nhập đã tồn tại trong hệ thống: duplicateuser"));
     }
 
     @Test
@@ -836,6 +872,101 @@ class ProductionAuthSecurityTest {
             .andExpect(jsonPath("$.username").value("newstaff"))
             .andExpect(jsonPath("$.temporaryPassword").value("TempPass#2026!"))
             .andExpect(jsonPath("$.mustChangePassword").value(true));
+    }
+
+    @Test
+    @DisplayName("Admin create user with duplicate email returns 409 Conflict")
+    void createUserWithDuplicateEmailReturnsConflict409() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
+            adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
+        when(jwtDecoder.decode("admin.jwt.token")).thenReturn(new Jwt(
+            "admin.jwt.token", Instant.now(), Instant.now().plusSeconds(3600),
+            Map.of("alg", "HS256"),
+            Map.of("sub", adminId.toString(), "aud", List.of("authenticated"), "iss", "https://mock.supabase.co/auth/v1")
+        ));
+        when(authUseCase.adminCreateUser(any())).thenThrow(new DuplicateEmailException("Email already exists: duplicate@phonghub.local"));
+
+        mockMvc.perform(post("/api/admin/users")
+                .header("Authorization", "Bearer admin.jwt.token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "newstaff",
+                      "email": "duplicate@phonghub.local",
+                      "fullName": "New Staff Member",
+                      "phone": "0909999888",
+                      "role": "STAFF"
+                    }
+                    """))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title").value("Conflict"))
+            .andExpect(jsonPath("$.detail").value("Email already exists: duplicate@phonghub.local"));
+    }
+
+    @Test
+    @DisplayName("Admin create user with duplicate username returns 409 Conflict")
+    void createUserWithDuplicateUsernameReturnsConflict409() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
+            adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
+        when(jwtDecoder.decode("admin.jwt.token")).thenReturn(new Jwt(
+            "admin.jwt.token", Instant.now(), Instant.now().plusSeconds(3600),
+            Map.of("alg", "HS256"),
+            Map.of("sub", adminId.toString(), "aud", List.of("authenticated"), "iss", "https://mock.supabase.co/auth/v1")
+        ));
+        when(authUseCase.adminCreateUser(any())).thenThrow(new DuplicateUsernameException("Username already exists: existinguser"));
+
+        mockMvc.perform(post("/api/admin/users")
+                .header("Authorization", "Bearer admin.jwt.token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "existinguser",
+                      "email": "unique@phonghub.local",
+                      "fullName": "Existing Username Member",
+                      "phone": "0909999888",
+                      "role": "STAFF"
+                    }
+                    """))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title").value("Conflict"))
+            .andExpect(jsonPath("$.detail").value("Username already exists: existinguser"));
+    }
+
+    @Test
+    @DisplayName("Admin create user with invalid email returns 400 Bad Request")
+    void createUserWithInvalidEmailReturnsBadRequest400() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
+            adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
+        when(jwtDecoder.decode("admin.jwt.token")).thenReturn(new Jwt(
+            "admin.jwt.token", Instant.now(), Instant.now().plusSeconds(3600),
+            Map.of("alg", "HS256"),
+            Map.of("sub", adminId.toString(), "aud", List.of("authenticated"), "iss", "https://mock.supabase.co/auth/v1")
+        ));
+
+        mockMvc.perform(post("/api/admin/users")
+                .header("Authorization", "Bearer admin.jwt.token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "invalidemailuser",
+                      "email": "not-an-email",
+                      "fullName": "Invalid Email",
+                      "phone": "0909999888",
+                      "role": "STAFF"
+                    }
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title").value("Bad Request"))
+            .andExpect(jsonPath("$.errors").isNotEmpty());
     }
 
     @Test

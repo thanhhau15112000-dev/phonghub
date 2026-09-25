@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -24,6 +25,8 @@ import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.application.service.AuthService;
 import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.domain.exception.AccountDisabledException;
+import com.phonghub.domain.exception.DuplicateEmailException;
+import com.phonghub.domain.exception.DuplicateUsernameException;
 import com.phonghub.domain.exception.IdentityProviderUnavailableException;
 import com.phonghub.domain.exception.InvalidCredentialsException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
@@ -282,5 +285,100 @@ class AuthServiceUnitTest {
 
         verify(identityProviderPort, never()).adminDeleteUser(any());
         verify(userRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void adminCreateUserRejectsDuplicateEmailCaseInsensitive() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        User existing = new User(
+            UUID.randomUUID(), "other", "tenant1@phonghub.local", "Existing", "0900000000",
+            UserRole.TENANT, User.UserStatus.ACTIVE, false, Instant.now()
+        );
+        when(userRepository.findByEmail("tenant1@phonghub.local")).thenReturn(Optional.of(existing));
+
+        AuthUseCase.CreateUserCommand cmd = new AuthUseCase.CreateUserCommand(
+            "newuser", "Tenant1@PhongHub.Local", "New User", "0911223344", UserRole.TENANT
+        );
+
+        assertThrows(
+            DuplicateEmailException.class,
+            () -> authService.adminCreateUser(cmd)
+        );
+
+        verify(identityProviderPort, never()).adminCreateUser(any(), any());
+    }
+
+    @Test
+    void adminCreateUserRejectsDuplicateUsernameCaseInsensitive() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        when(userRepository.findByEmail("new@phonghub.local")).thenReturn(Optional.empty());
+
+        User existing = new User(
+            UUID.randomUUID(), "tenant1", "other@phonghub.local", "Existing", "0900000000",
+            UserRole.TENANT, User.UserStatus.ACTIVE, false, Instant.now()
+        );
+        when(userRepository.findByUsername("tenant1")).thenReturn(Optional.of(existing));
+
+        AuthUseCase.CreateUserCommand cmd = new AuthUseCase.CreateUserCommand(
+            "Tenant1", "new@phonghub.local", "New User", "0911223344", UserRole.TENANT
+        );
+
+        assertThrows(
+            DuplicateUsernameException.class,
+            () -> authService.adminCreateUser(cmd)
+        );
+
+        verify(identityProviderPort, never()).adminCreateUser(any(), any());
+    }
+
+    @Test
+    void adminCreateUserRejectsInvalidEmailFormat() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        AuthUseCase.CreateUserCommand cmd = new AuthUseCase.CreateUserCommand(
+            "validuser", "invalid-email-string", "Valid User", "0911223344", UserRole.TENANT
+        );
+
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> authService.adminCreateUser(cmd)
+        );
+
+        verify(identityProviderPort, never()).adminCreateUser(any(), any());
+    }
+
+    @Test
+    void adminCreateUserNormalizesEmailAndUsernameToLowercase() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        when(userRepository.findByEmail("mixedcase@phonghub.local")).thenReturn(Optional.empty());
+        when(userRepository.findByUsername("mixedcaseuser")).thenReturn(Optional.empty());
+
+        UUID newAuthId = UUID.randomUUID();
+        when(identityProviderPort.adminCreateUser(eq("mixedcase@phonghub.local"), any())).thenReturn(newAuthId);
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AuthUseCase.CreateUserCommand cmd = new AuthUseCase.CreateUserCommand(
+            "  MixedCaseUser  ", "  MixedCase@PhongHub.Local  ", "Mixed Case", "0911223344", UserRole.STAFF
+        );
+
+        AuthUseCase.AdminCreateUserResult result = authService.adminCreateUser(cmd);
+
+        assertEquals("mixedcaseuser", result.username());
+        assertEquals("mixedcase@phonghub.local", result.email());
+        verify(identityProviderPort).adminCreateUser(eq("mixedcase@phonghub.local"), any());
+        verify(userRepository).save(argThat(u ->
+            u.username().equals("mixedcaseuser") && u.email().equals("mixedcase@phonghub.local")
+        ));
     }
 }

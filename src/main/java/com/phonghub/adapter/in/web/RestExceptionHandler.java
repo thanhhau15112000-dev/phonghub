@@ -3,6 +3,8 @@ package com.phonghub.adapter.in.web;
 import com.phonghub.domain.exception.ContractNotFoundException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
+import com.phonghub.domain.exception.DuplicateEmailException;
+import com.phonghub.domain.exception.DuplicateUsernameException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.exception.MaintenanceTicketException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
@@ -75,6 +77,18 @@ public class RestExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Duplicate Active Contract");
         problem.setType(URI.create("https://phonghub.local/errors/duplicate-active-contract"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler({
+        DuplicateEmailException.class,
+        DuplicateUsernameException.class
+    })
+    public ProblemDetail handleDuplicateAccountConflict(DomainException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Conflict");
+        problem.setType(URI.create("https://phonghub.local/errors/conflict"));
         problem.setProperty("timestamp", Instant.now());
         return problem;
     }

@@ -8,6 +8,8 @@ import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.domain.exception.AccountDisabledException;
+import com.phonghub.domain.exception.DuplicateEmailException;
+import com.phonghub.domain.exception.DuplicateUsernameException;
 import com.phonghub.domain.exception.InvalidCredentialsException;
 import com.phonghub.domain.exception.UserNotFoundException;
 import com.phonghub.domain.model.User;
@@ -200,13 +202,28 @@ public class AuthService implements AuthUseCase {
             throw new IllegalArgumentException("Email cannot be blank");
         }
 
+        String normalizedUsername = command.username().trim().toLowerCase();
+        String normalizedEmail = command.email().trim().toLowerCase();
+
+        if (!normalizedEmail.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+            throw new IllegalArgumentException("Định dạng email không hợp lệ: " + command.email());
+        }
+
+        if (userRepository.findByEmail(normalizedEmail).isPresent()) {
+            throw new DuplicateEmailException("Email đã được sử dụng bởi một tài khoản khác: " + normalizedEmail);
+        }
+
+        if (userRepository.findByUsername(normalizedUsername).isPresent()) {
+            throw new DuplicateUsernameException("Tên đăng nhập đã tồn tại trong hệ thống: " + normalizedUsername);
+        }
+
         String temporaryPassword = generateSecureTemporaryPassword(16);
-        UUID authUserId = identityProviderPort.adminCreateUser(command.email().trim(), temporaryPassword);
+        UUID authUserId = identityProviderPort.adminCreateUser(normalizedEmail, temporaryPassword);
 
         User newUser = new User(
             authUserId,
-            command.username().trim().toLowerCase(),
-            command.email().trim(),
+            normalizedUsername,
+            normalizedEmail,
             command.fullName().trim(),
             command.phone() != null && !command.phone().isBlank() ? command.phone().trim() : null,
             command.role(),
