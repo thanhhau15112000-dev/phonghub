@@ -6,6 +6,7 @@ import com.phonghub.application.port.in.AuthTokenResponse;
 import com.phonghub.application.port.in.AuthUseCase;
 import com.phonghub.domain.model.UserRole;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -49,7 +50,9 @@ public class AuthApiController {
 
     public record CreateUserRequest(
         @NotBlank(message = "Username cannot be blank") String username,
-        @NotBlank(message = "Email cannot be blank") String email,
+        @NotBlank(message = "Email cannot be blank")
+        @Email(message = "Email is invalid")
+        String email,
         @NotBlank(message = "Full name cannot be blank") String fullName,
         String phone,
         @NotNull(message = "Role is required") UserRole role

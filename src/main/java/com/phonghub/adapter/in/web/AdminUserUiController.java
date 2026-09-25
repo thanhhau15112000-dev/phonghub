@@ -5,6 +5,8 @@ import com.phonghub.application.port.in.UserUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.exception.DuplicateEmailException;
+import com.phonghub.domain.exception.DuplicateUsernameException;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.text.Normalizer;
@@ -228,6 +230,9 @@ public class AdminUserUiController {
     }
 
     private String userFacingMessage(RuntimeException exception) {
+        if (exception instanceof DuplicateEmailException || exception instanceof DuplicateUsernameException) {
+            return exception.getMessage();
+        }
         if (exception instanceof DomainException) {
             return "Không thể hoàn tất thao tác tài khoản. Vui lòng kiểm tra dữ liệu và thử lại.";
         }
