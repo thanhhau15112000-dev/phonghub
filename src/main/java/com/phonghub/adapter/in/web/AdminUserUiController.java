@@ -204,6 +204,25 @@ public class AdminUserUiController {
         return "redirect:/admin/users";
     }
 
+    @PostMapping("/{userId}/delete")
+    public String deleteUser(@PathVariable("userId") UUID userId, RedirectAttributes redirectAttributes) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        if (!isAdmin(currentUser)) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên mới có thể quản lý tài khoản.");
+            return "redirect:/";
+        }
+
+        try {
+            authUseCase.adminDeleteUser(userId);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã xoá tài khoản người dùng thành công.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", userFacingMessage(ex));
+        } catch (Exception ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Xoá tài khoản thất bại: " + ex.getMessage());
+        }
+        return "redirect:/admin/users";
+    }
+
     private boolean isAdmin(CurrentUser currentUser) {
         return currentUser != null && currentUser.role() == UserRole.ADMIN;
     }

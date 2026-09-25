@@ -2,6 +2,7 @@ package com.phonghub.config;
 
 import com.phonghub.adapter.in.security.PasswordChangeGate;
 import com.phonghub.adapter.in.security.SupabaseJwtAuthenticationConverter;
+import com.phonghub.adapter.in.security.UserActiveValidationFilter;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -80,6 +81,7 @@ public class ProductionSecurityConfig {
                 .requestMatchers("/static/**", "/css/**", "/favicon.ico").permitAll()
                 .anyRequest().authenticated()
             )
+            .addFilterBefore(new UserActiveValidationFilter(userRepository), AuthorizationFilter.class)
             .addFilterBefore(new PasswordChangeGate(), AuthorizationFilter.class)
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login"))

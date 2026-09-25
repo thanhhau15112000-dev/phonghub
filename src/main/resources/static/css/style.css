@@ -272,6 +272,11 @@ h2 {
   color: var(--status-maintenance);
 }
 
+.btn-danger:hover {
+  background: var(--status-maintenance);
+  color: #fff;
+}
+
 .btn-sm {
   padding: 3px 8px;
   font-size: 12px;

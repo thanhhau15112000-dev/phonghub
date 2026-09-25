@@ -248,6 +248,45 @@ public class AuthService implements AuthUseCase {
         );
     }
 
+    @Override
+    public void adminDeleteUser(UUID targetUserId) {
+        CurrentUser caller = currentUserPort.getCurrentUser();
+        authorizationService.assertAdmin(caller);
+
+        if (targetUserId == null) {
+            throw new IllegalArgumentException("Target user ID cannot be null");
+        }
+
+        if (caller != null && caller.id().equals(targetUserId)) {
+            throw new IllegalArgumentException("Quản trị viên không thể tự xoá tài khoản của chính mình");
+        }
+
+        User targetUser = userRepository.findById(targetUserId)
+            .orElseThrow(() -> new UserNotFoundException("Target user not found: " + targetUserId));
+
+        if (targetUser.role() == UserRole.ADMIN) {
+            throw new IllegalArgumentException("Deleting another ADMIN account is prohibited");
+        }
+
+        // Bước 1: Xoá user trong Supabase Auth. Nếu bước này lỗi thì dừng, báo lỗi và không đụng vào DB.
+        identityProviderPort.adminDeleteUser(targetUserId);
+
+        // Bước 2: Xoá dòng trong public.users
+        userRepository.deleteById(targetUserId);
+
+        // Bước 3: Ghi audit ADMIN_DELETE_USER
+        auditPort.recordEvent(AuditPort.AuditEvent.of(
+            "ADMIN_DELETE_USER",
+            caller != null ? caller.id() : null,
+            "USER",
+            targetUserId.toString(),
+            Map.of(
+                "username", targetUser.username() != null ? targetUser.username() : "",
+                "role", targetUser.role().name()
+            )
+        ));
+    }
+
     private String generateSecureTemporaryPassword(int length) {
         StringBuilder sb = new StringBuilder(length);
         for (int i = 0; i < length; i++) {
