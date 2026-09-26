@@ -7,9 +7,12 @@ import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.Room;
+import com.phonghub.domain.model.PropertyApprovalStatus;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,13 +41,44 @@ public class PropertyUiController {
     }
 
     @GetMapping
-    public String listProperties(Model model) {
+    public String listProperties(@RequestParam(required = false) String status, Model model) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
-        List<Property> properties = propertyUseCase.listAccessibleProperties();
+        List<Property> allProperties = propertyUseCase.listAccessibleProperties();
+
+        Map<String, Long> statusCounts = allProperties.stream()
+            .collect(Collectors.groupingBy(p -> p.approvalStatus().name(), Collectors.counting()));
+
+        PropertyApprovalStatus filterStatus = null;
+        if (status != null && !status.isBlank() && !status.equalsIgnoreCase("ALL")) {
+            try {
+                filterStatus = PropertyApprovalStatus.fromString(status);
+            } catch (Exception ignored) {
+                filterStatus = null;
+            }
+        }
+
+        final PropertyApprovalStatus finalFilter = filterStatus;
+        List<Property> filteredProperties = finalFilter == null
+            ? allProperties
+            : allProperties.stream().filter(p -> p.approvalStatus() == finalFilter).toList();
 
         model.addAttribute("currentUser", currentUser);
-        model.addAttribute("properties", properties);
+        model.addAttribute("properties", filteredProperties);
+        model.addAttribute("statusCounts", statusCounts);
+        model.addAttribute("selectedStatus", finalFilter != null ? finalFilter.name() : "ALL");
+        model.addAttribute("totalCount", allProperties.size());
         return "properties/list";
+    }
+
+    @PostMapping("/{id}/verify")
+    public String verifyProperty(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        try {
+            Property property = propertyUseCase.verifyProperty(id);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã duyệt nhà trọ '" + property.name() + "' thành công.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/properties";
     }
 
     @PostMapping

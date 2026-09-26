@@ -13,6 +13,7 @@ import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.application.service.ContractService;
 import com.phonghub.application.service.MaintenanceService;
 import com.phonghub.application.service.RoomService;
+import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.model.Contract;
@@ -20,6 +21,7 @@ import com.phonghub.domain.model.ContractStatus;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.Property;
+import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
 import java.math.BigDecimal;
@@ -171,5 +173,23 @@ class ContractServiceInvariantsUnitTest {
 
         // Now room is back to AVAILABLE
         assertEquals(RoomStatus.AVAILABLE, roomRepo.findById(room.getId()).get().getStatus());
+    }
+
+    @Test
+    @DisplayName("Creating contract on unverified (PENDING or REJECTED) property throws DomainException")
+    void testCreatingContractOnUnverifiedPropertyThrowsDomainException() {
+        Property pendingProp = propertyRepo.save(new Property(
+            UUID.randomUUID(), "Pending Prop", "Addr", "", 5, null, PropertyApprovalStatus.PENDING, null, Instant.now()
+        ));
+        Room pendingRoom = roomRepo.save(Room.create(pendingProp.id(), "P101", 1, new BigDecimal("25.0"), new BigDecimal("3000000"), 2));
+
+        DomainException ex = assertThrows(DomainException.class, () ->
+            contractService.createContract(new ContractUseCase.CreateContractCommand(
+                pendingProp.id(), pendingRoom.getId(), "Tenant Name", "ID999", "0900", "t@example.com", null,
+                new BigDecimal("3000000"), new BigDecimal("3000000"),
+                LocalDate.now(), LocalDate.now().plusMonths(6), 5
+            ))
+        );
+        assertTrue(ex.getMessage().contains("chưa được duyệt"));
     }
 }

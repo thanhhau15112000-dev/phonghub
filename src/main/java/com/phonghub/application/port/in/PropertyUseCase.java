@@ -8,6 +8,7 @@ public interface PropertyUseCase {
     Property createProperty(CreatePropertyCommand command);
     List<Property> listAccessibleProperties();
     Property getProperty(UUID propertyId);
+    Property verifyProperty(UUID propertyId);
 
     record CreatePropertyCommand(
         String name,

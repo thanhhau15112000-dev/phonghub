@@ -28,7 +28,7 @@ public record Property(
             throw new IllegalArgumentException("Total rooms must be non-negative");
         }
         if (approvalStatus == null) {
-            approvalStatus = PropertyApprovalStatus.APPROVED;
+            approvalStatus = PropertyApprovalStatus.VERIFIED;
         }
         if (createdAt == null) {
             createdAt = Instant.now();
@@ -43,6 +43,6 @@ public record Property(
         int totalRooms,
         Instant createdAt
     ) {
-        this(id, name, address, description, totalRooms, null, PropertyApprovalStatus.APPROVED, null, createdAt);
+        this(id, name, address, description, totalRooms, null, PropertyApprovalStatus.VERIFIED, null, createdAt);
     }
 }

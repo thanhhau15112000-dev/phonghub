@@ -66,8 +66,8 @@ class AuthorizationAndPropertyScopeUnitTest {
         techUser = new CurrentUser(UUID.randomUUID(), "tech@local", "Tech", UserRole.TECHNICIAN);
         tenantUser = new CurrentUser(UUID.randomUUID(), "tenant@local", "Tenant", UserRole.TENANT);
 
-        propertyRepo.save(new Property(prop1Id, "Prop 1", "Addr 1", "", 10, owner1Id, PropertyApprovalStatus.APPROVED, null, Instant.now()));
-        propertyRepo.save(new Property(prop2Id, "Prop 2", "Addr 2", "", 5, null, PropertyApprovalStatus.APPROVED, null, Instant.now()));
+        propertyRepo.save(new Property(prop1Id, "Prop 1", "Addr 1", "", 10, owner1Id, PropertyApprovalStatus.VERIFIED, null, Instant.now()));
+        propertyRepo.save(new Property(prop2Id, "Prop 2", "Addr 2", "", 5, null, PropertyApprovalStatus.VERIFIED, null, Instant.now()));
 
         // Staff and Tech assigned only to Prop 1
         assignmentRepo.save(new StaffPropertyAssignment(UUID.randomUUID(), staffUser.id(), prop1Id, true, true, Instant.now()));
