@@ -7,22 +7,9 @@ public class LocalDemoIdentityProviderAdapter implements IdentityProviderPort {
 
     @Override
     public RawTokenResponse login(String email, String password) {
-        if (password == null || password.isBlank() || isInvalidDemoPassword(password)) {
-            throw new com.phonghub.domain.exception.InvalidCredentialsException("Tên đăng nhập hoặc mật khẩu không đúng.");
-        }
         String mockAccessToken = "demo-access-token-" + UUID.randomUUID();
         String mockRefreshToken = "demo-refresh-token-" + UUID.randomUUID();
         return new RawTokenResponse(mockAccessToken, mockRefreshToken, "Bearer", 3600);
-    }
-
-    private boolean isInvalidDemoPassword(String password) {
-        String lower = password.toLowerCase();
-        return lower.contains("wrong")
-            || lower.contains("sai")
-            || lower.contains("invalid")
-            || lower.contains("fail")
-            || lower.contains("error")
-            || password.length() < 6;
     }
 
     @Override

@@ -51,19 +51,6 @@ public class LocalDemoAuthenticationAdapter implements CurrentUserPort, DemoActo
         if (user != null) {
             return user;
         }
-        try {
-            org.springframework.web.context.request.RequestAttributes attrs =
-                org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
-            if (attrs instanceof org.springframework.web.context.request.ServletRequestAttributes servletAttrs) {
-                jakarta.servlet.http.HttpSession session = servletAttrs.getRequest().getSession(false);
-                if (session != null) {
-                    Object sessionUserId = session.getAttribute("currentUserId");
-                    if (sessionUserId instanceof UUID uid && DEMO_USERS.containsKey(uid)) {
-                        return DEMO_USERS.get(uid);
-                    }
-                }
-            }
-        } catch (Exception ignored) {}
         return fallbackUser;
     }
 
@@ -73,8 +60,6 @@ public class LocalDemoAuthenticationAdapter implements CurrentUserPort, DemoActo
             currentUserHolder.remove();
         } else {
             currentUserHolder.set(user);
-            DEMO_USERS.put(user.id(), user);
-            this.fallbackUser = user;
         }
     }
 
@@ -86,7 +71,6 @@ public class LocalDemoAuthenticationAdapter implements CurrentUserPort, DemoActo
     public void switchActor(UUID userId) {
         CurrentUser user = DEMO_USERS.get(userId);
         if (user != null) {
-            this.fallbackUser = user;
             setCurrentUser(user);
         }
     }

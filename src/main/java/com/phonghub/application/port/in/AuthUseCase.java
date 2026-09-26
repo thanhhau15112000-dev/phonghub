@@ -12,7 +12,6 @@ public interface AuthUseCase {
     void changePassword(String newPassword);
     PasswordResetResult adminResetPassword(UUID targetUserId);
     AdminCreateUserResult adminCreateUser(CreateUserCommand command);
-    void adminDeleteUser(UUID targetUserId);
 
     record CreateUserCommand(
         String username,

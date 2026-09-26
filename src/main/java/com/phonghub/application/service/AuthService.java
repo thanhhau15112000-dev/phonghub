@@ -8,9 +8,6 @@ import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.domain.exception.AccountDisabledException;
-import com.phonghub.domain.exception.DomainException;
-import com.phonghub.domain.exception.DuplicateEmailException;
-import com.phonghub.domain.exception.DuplicateUsernameException;
 import com.phonghub.domain.exception.InvalidCredentialsException;
 import com.phonghub.domain.exception.UserNotFoundException;
 import com.phonghub.domain.model.User;
@@ -203,42 +200,15 @@ public class AuthService implements AuthUseCase {
             throw new IllegalArgumentException("Email cannot be blank");
         }
 
-        String normalizedUsername = command.username().trim().toLowerCase();
-        String normalizedEmail = command.email().trim().toLowerCase();
-
-        if (!normalizedEmail.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
-            throw new IllegalArgumentException("Định dạng email không hợp lệ: " + command.email());
-        }
-
-        if (userRepository.findByEmail(normalizedEmail).isPresent()) {
-            throw new DuplicateEmailException("Email đã được sử dụng bởi một tài khoản khác: " + normalizedEmail);
-        }
-
-        if (userRepository.findByUsername(normalizedUsername).isPresent()) {
-            throw new DuplicateUsernameException("Tên đăng nhập đã tồn tại trong hệ thống: " + normalizedUsername);
-        }
-
-        String cleanPhone = null;
-        if (command.phone() != null && !command.phone().isBlank()) {
-            cleanPhone = command.phone().trim();
-            if (!cleanPhone.matches("^0\\d{9}$")) {
-                throw new IllegalArgumentException("Số điện thoại không hợp lệ (phải gồm 10 chữ số bắt đầu bằng 0)");
-            }
-            final String phoneToCheck = cleanPhone;
-            if (userRepository.findAll().stream().anyMatch(u -> phoneToCheck.equals(u.phone()))) {
-                throw new DomainException("Số điện thoại đã được sử dụng bởi một tài khoản khác: " + cleanPhone);
-            }
-        }
-
         String temporaryPassword = generateSecureTemporaryPassword(16);
-        UUID authUserId = identityProviderPort.adminCreateUser(normalizedEmail, temporaryPassword);
+        UUID authUserId = identityProviderPort.adminCreateUser(command.email().trim(), temporaryPassword);
 
         User newUser = new User(
             authUserId,
-            normalizedUsername,
-            normalizedEmail,
+            command.username().trim().toLowerCase(),
+            command.email().trim(),
             command.fullName().trim(),
-            cleanPhone,
+            command.phone() != null && !command.phone().isBlank() ? command.phone().trim() : null,
             command.role(),
             User.UserStatus.ACTIVE,
             true,
@@ -253,10 +223,7 @@ public class AuthService implements AuthUseCase {
             try {
                 identityProviderPort.adminDeleteUser(authUserId);
             } catch (Exception ignored) {}
-            if (ex instanceof DomainException de) {
-                throw de;
-            }
-            throw new DomainException("Không thể lưu tài khoản vào cơ sở dữ liệu: " + (ex.getMessage() != null ? ex.getMessage() : "Lỗi dữ liệu"), ex);
+            throw ex;
         }
 
         auditPort.recordEvent(AuditPort.AuditEvent.of(
@@ -279,45 +246,6 @@ public class AuthService implements AuthUseCase {
             temporaryPassword,
             savedUser.createdAt()
         );
-    }
-
-    @Override
-    public void adminDeleteUser(UUID targetUserId) {
-        CurrentUser caller = currentUserPort.getCurrentUser();
-        authorizationService.assertAdmin(caller);
-
-        if (targetUserId == null) {
-            throw new IllegalArgumentException("Target user ID cannot be null");
-        }
-
-        if (caller != null && caller.id().equals(targetUserId)) {
-            throw new IllegalArgumentException("Quản trị viên không thể tự xoá tài khoản của chính mình");
-        }
-
-        User targetUser = userRepository.findById(targetUserId)
-            .orElseThrow(() -> new UserNotFoundException("Target user not found: " + targetUserId));
-
-        if (targetUser.role() == UserRole.ADMIN) {
-            throw new IllegalArgumentException("Deleting another ADMIN account is prohibited");
-        }
-
-        // Bước 1: Xoá user trong Supabase Auth. Nếu bước này lỗi thì dừng, báo lỗi và không đụng vào DB.
-        identityProviderPort.adminDeleteUser(targetUserId);
-
-        // Bước 2: Xoá dòng trong public.users
-        userRepository.deleteById(targetUserId);
-
-        // Bước 3: Ghi audit ADMIN_DELETE_USER
-        auditPort.recordEvent(AuditPort.AuditEvent.of(
-            "ADMIN_DELETE_USER",
-            caller != null ? caller.id() : null,
-            "USER",
-            targetUserId.toString(),
-            Map.of(
-                "username", targetUser.username() != null ? targetUser.username() : "",
-                "role", targetUser.role().name()
-            )
-        ));
     }
 
     private String generateSecureTemporaryPassword(int length) {

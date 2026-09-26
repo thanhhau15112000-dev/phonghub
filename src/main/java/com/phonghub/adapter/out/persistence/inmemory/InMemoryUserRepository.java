@@ -53,11 +53,6 @@ public class InMemoryUserRepository implements UserRepositoryPort {
         return new ArrayList<>(store.values());
     }
 
-    @Override
-    public void deleteById(UUID id) {
-        store.remove(id);
-    }
-
     public void clear() {
         store.clear();
     }
