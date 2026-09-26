@@ -5,8 +5,6 @@
 <header th:replace="~{fragments/layout :: header}"></header>
 
 <main class="container">
-    <div th:replace="~{fragments/layout :: alerts}"></div>
-
     <div class="page-title-row">
         <div>
             <h1>Quản lý tài khoản</h1>
@@ -14,18 +12,6 @@
                 Tạo tài khoản cho nhân sự hoặc người thuê và quản lý mật khẩu tạm thời.
             </p>
         </div>
-    </div>
-
-    <div th:if="${createdUser != null}" class="alert alert-success" style="margin-bottom: 20px;">
-        <strong>Đã tạo tài khoản <span th:text="${createdUser.username()}">username</span>.</strong>
-        <p style="margin: 8px 0 4px;">Mật khẩu tạm thời chỉ hiển thị một lần. Gửi riêng cho người dùng và yêu cầu đổi ở lần đăng nhập đầu tiên.</p>
-        <code th:text="${createdUser.temporaryPassword()}" style="font-size: 15px;">temporary-password</code>
-    </div>
-
-    <div th:if="${resetResult != null}" class="alert alert-success" style="margin-bottom: 20px;">
-        <strong>Đã đặt lại mật khẩu cho <span th:text="${resetResult.username()}">tenant</span>.</strong>
-        <p style="margin: 8px 0 4px;">Mật khẩu tạm thời chỉ hiển thị một lần. Người thuê phải đổi mật khẩu sau khi đăng nhập.</p>
-        <code th:text="${resetResult.temporaryPassword()}" style="font-size: 15px;">temporary-password</code>
     </div>
 
     <div class="card" style="margin-bottom: 20px;">
@@ -52,7 +38,9 @@
                 </div>
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label" for="phone">Số điện thoại</label>
-                    <input id="phone" type="tel" name="phone" class="form-control">
+                    <input id="phone" type="tel" name="phone" class="form-control"
+                           placeholder="Ví dụ: 0912345678" pattern="^0\d{9}$"
+                           title="Số điện thoại gồm 10 chữ số bắt đầu bằng 0">
                 </div>
             </div>
             <div class="form-row">
@@ -64,12 +52,44 @@
                 </div>
             </div>
             <button type="submit" class="btn btn-primary">Tạo tài khoản và sinh mật khẩu tạm thời</button>
+
+            <!-- Thông báo lỗi khi tạo tài khoản (ngay dưới nút tạo) -->
+            <div th:if="${createErrorMessage != null}" class="inline-alert inline-alert-danger" style="margin-top: 14px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                <span th:text="${createErrorMessage}">Thông báo lỗi</span>
+            </div>
+
+            <!-- Thông báo thành công và mật khẩu tạm thời (ngay trong khối Tạo tài khoản) -->
+            <div th:if="${createdUser != null}" class="alert alert-success" style="margin-top: 16px; margin-bottom: 0;">
+                <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">
+                    Đã tạo tài khoản <span th:text="${createdUser.username()}" style="font-weight: 700;">username</span> thành công!
+                </div>
+                <p style="margin: 0 0 8px; font-size: 13px;">Mật khẩu tạm thời chỉ hiển thị một lần. Gửi riêng cho người dùng và yêu cầu đổi ở lần đăng nhập đầu tiên:</p>
+                <code th:text="${createdUser.temporaryPassword()}" style="font-size: 15px; font-weight: 700; padding: 4px 10px; background: rgba(0,0,0,0.06); border-radius: 4px; display: inline-block;">temporary-password</code>
+            </div>
         </form>
     </div>
 
     <div class="card">
         <div class="card-header" style="margin-bottom: 16px;">
             <h2>Tài khoản hiện có</h2>
+        </div>
+
+        <!-- Thông báo thao tác trên bảng tài khoản (Reset mật khẩu, Xoá...) -->
+        <div th:if="${resetResult != null}" class="alert alert-success" style="margin-bottom: 16px;">
+            <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">
+                Đã đặt lại mật khẩu cho <span th:text="${resetResult.username()}" style="font-weight: 700;">tenant</span> thành công!
+            </div>
+            <p style="margin: 0 0 8px; font-size: 13px;">Mật khẩu tạm thời chỉ hiển thị một lần. Người thuê phải đổi mật khẩu sau khi đăng nhập:</p>
+            <code th:text="${resetResult.temporaryPassword()}" style="font-size: 15px; font-weight: 700; padding: 4px 10px; background: rgba(0,0,0,0.06); border-radius: 4px; display: inline-block;">temporary-password</code>
+        </div>
+        <div th:if="${tableSuccessMessage != null}" class="inline-alert inline-alert-success" style="margin-bottom: 14px; margin-top: 0;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <span th:text="${tableSuccessMessage}">Thao tác thành công.</span>
+        </div>
+        <div th:if="${tableErrorMessage != null}" class="inline-alert inline-alert-danger" style="margin-bottom: 14px; margin-top: 0;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <span th:text="${tableErrorMessage}">Lỗi thao tác tài khoản.</span>
         </div>
 
         <div class="filter-search-bar">
@@ -154,12 +174,21 @@
                     <td th:text="${uiText.role(user.role())}">Người thuê</td>
                     <td th:text="${user.status()}">ACTIVE</td>
                     <td>
-                        <form th:if="${user.role().name() == 'TENANT'}"
-                              th:action="@{'/admin/users/' + ${user.id()} + '/reset-password'}" method="post">
-                            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                            <button type="submit" class="btn btn-sm">Reset mật khẩu tenant</button>
-                        </form>
-                        <span th:if="${user.role().name() != 'TENANT'}" style="color: var(--text-secondary); font-size: 12px;">—</span>
+                        <div th:if="${user.role().name() != 'ADMIN'}" style="display: flex; gap: 6px; align-items: center;">
+                            <form th:action="@{'/admin/users/' + ${user.id()} + '/reset-password'}" method="post" style="margin: 0;">
+                                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                <button type="submit" class="btn btn-sm" th:title="'Sinh mật khẩu tạm thời mới cho ' + ${user.fullName()}">Reset mật khẩu</button>
+                            </form>
+                            <button type="button"
+                                    class="btn btn-sm btn-danger"
+                                    th:title="'Xoá hẳn tài khoản ' + ${user.fullName()}"
+                                    th:data-action="@{'/admin/users/' + ${user.id()} + '/delete'}"
+                                    th:data-name="${user.fullName()}"
+                                    onclick="openDeleteModal(this.getAttribute('data-action'), this.getAttribute('data-name'))">
+                                Xoá
+                            </button>
+                        </div>
+                        <span th:if="${user.role().name() == 'ADMIN'}" style="color: var(--text-secondary); font-size: 12px;" title="Không thể thao tác trên tài khoản quản trị viên">—</span>
                     </td>
                 </tr>
             </tbody>
@@ -274,6 +303,70 @@
             </ul>
         </nav>
     </div>
+
+    <!-- Modal xác nhận xoá tài khoản dạng bảng / hộp thoại tuỳ chỉnh -->
+    <div id="deleteConfirmModal" class="custom-modal-overlay" style="display: none;" onclick="handleOverlayClick(event)">
+        <div class="custom-modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+            <div class="custom-modal-header">
+                <div class="modal-icon-danger">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                </div>
+                <div>
+                    <h3 id="modalTitle" style="margin: 0; font-size: 17px; font-weight: 700; color: var(--text-primary);">Xác nhận xoá tài khoản</h3>
+                    <span style="font-size: 12px; color: var(--text-secondary);">Thao tác này mang tính vĩnh viễn</span>
+                </div>
+            </div>
+            <div class="custom-modal-body">
+                Bạn có chắc chắn muốn xoá vĩnh viễn tài khoản người dùng <strong id="deleteModalUserName" style="color: #dc2626;"></strong> không?
+                <p style="margin: 8px 0 0; color: var(--text-secondary); font-size: 13px;">
+                    Hệ thống sẽ xoá tài khoản và toàn bộ liên kết phân công liên quan. Thao tác này không thể hoàn tác!
+                </p>
+            </div>
+            <div class="custom-modal-footer">
+                <button type="button" class="btn" onclick="closeDeleteModal()">Huỷ</button>
+                <form id="deleteModalForm" method="post" style="margin: 0; display: inline;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <button type="submit" class="btn btn-danger" style="font-weight: 600;">Xoá tài khoản</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openDeleteModal(actionUrl, userName) {
+            var modal = document.getElementById('deleteConfirmModal');
+            var form = document.getElementById('deleteModalForm');
+            var nameSpan = document.getElementById('deleteModalUserName');
+            if (modal && form && nameSpan) {
+                form.action = actionUrl;
+                nameSpan.textContent = userName || 'này';
+                modal.style.display = 'flex';
+            }
+        }
+
+        function closeDeleteModal() {
+            var modal = document.getElementById('deleteConfirmModal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        function handleOverlayClick(event) {
+            if (event.target && event.target.id === 'deleteConfirmModal') {
+                closeDeleteModal();
+            }
+        }
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeDeleteModal();
+            }
+        });
+    </script>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>

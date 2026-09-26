@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -16,6 +17,7 @@ import static org.mockito.Mockito.when;
 
 import com.phonghub.application.port.in.AuthTokenResponse;
 import com.phonghub.application.port.in.AuthUseCase;
+import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
@@ -23,7 +25,12 @@ import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.application.service.AuthService;
 import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.domain.exception.AccountDisabledException;
+import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.exception.DuplicateEmailException;
+import com.phonghub.domain.exception.DuplicateUsernameException;
+import com.phonghub.domain.exception.IdentityProviderUnavailableException;
 import com.phonghub.domain.exception.InvalidCredentialsException;
+import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.time.Instant;
@@ -38,6 +45,7 @@ class AuthServiceUnitTest {
     private IdentityProviderPort identityProviderPort;
     private CurrentUserPort currentUserPort;
     private AuthorizationService authorizationService;
+    private AuditPort auditPort;
     private AuthService authService;
 
     @BeforeEach
@@ -46,7 +54,8 @@ class AuthServiceUnitTest {
         identityProviderPort = mock(IdentityProviderPort.class);
         currentUserPort = mock(CurrentUserPort.class);
         authorizationService = mock(AuthorizationService.class);
-        authService = new AuthService(userRepository, identityProviderPort, currentUserPort, authorizationService);
+        auditPort = mock(AuditPort.class);
+        authService = new AuthService(userRepository, identityProviderPort, currentUserPort, authorizationService, auditPort);
     }
 
     @Test
@@ -175,5 +184,229 @@ class AuthServiceUnitTest {
 
         assertTrue(ex.getMessage().contains("ADMIN accounts"));
         verify(identityProviderPort, never()).adminSetPassword(any(), any());
+    }
+
+    @Test
+    void adminDeleteUserSucceedsForNonAdminUser() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        UUID tenantUserId = UUID.randomUUID();
+        User tenantUser = new User(
+            tenantUserId, "tenant1", "tenant1@phonghub.local", "Nguyen Van A", "0901234567",
+            UserRole.TENANT, User.UserStatus.ACTIVE, false, Instant.now()
+        );
+        when(userRepository.findById(tenantUserId)).thenReturn(Optional.of(tenantUser));
+
+        authService.adminDeleteUser(tenantUserId);
+
+        verify(identityProviderPort).adminDeleteUser(tenantUserId);
+        verify(userRepository).deleteById(tenantUserId);
+        verify(auditPort).recordEvent(any(AuditPort.AuditEvent.class));
+    }
+
+    @Test
+    void adminDeleteUserRefusesSelfDeletion() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        IllegalArgumentException ex = assertThrows(
+            IllegalArgumentException.class,
+            () -> authService.adminDeleteUser(adminId)
+        );
+
+        assertTrue(ex.getMessage().contains("tự xoá tài khoản"));
+        verify(identityProviderPort, never()).adminDeleteUser(any());
+        verify(userRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void adminDeleteUserRefusesToDeleteAnotherAdmin() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        UUID targetAdminId = UUID.randomUUID();
+        User targetAdminUser = new User(
+            targetAdminId, "admin2", "admin2@phonghub.local", "Admin Two", "0987654321",
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+        );
+        when(userRepository.findById(targetAdminId)).thenReturn(Optional.of(targetAdminUser));
+
+        IllegalArgumentException ex = assertThrows(
+            IllegalArgumentException.class,
+            () -> authService.adminDeleteUser(targetAdminId)
+        );
+
+        assertTrue(ex.getMessage().contains("ADMIN"));
+        verify(identityProviderPort, never()).adminDeleteUser(any());
+        verify(userRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void adminDeleteUserAbortsIfSupabaseFails() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        UUID staffUserId = UUID.randomUUID();
+        User staffUser = new User(
+            staffUserId, "staff1", "staff1@phonghub.local", "Staff Member", "0911223344",
+            UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()
+        );
+        when(userRepository.findById(staffUserId)).thenReturn(Optional.of(staffUser));
+        org.mockito.Mockito.doThrow(new IdentityProviderUnavailableException("Supabase service error"))
+            .when(identityProviderPort).adminDeleteUser(staffUserId);
+
+        assertThrows(
+            IdentityProviderUnavailableException.class,
+            () -> authService.adminDeleteUser(staffUserId)
+        );
+
+        verify(identityProviderPort).adminDeleteUser(staffUserId);
+        verify(userRepository, never()).deleteById(any());
+        verify(auditPort, never()).recordEvent(any());
+    }
+
+    @Test
+    void adminDeleteUserThrowsForbiddenForNonAdminCaller() {
+        UUID staffId = UUID.randomUUID();
+        CurrentUser staffActor = new CurrentUser(staffId, "staff@phonghub.local", "Staff", UserRole.STAFF);
+        when(currentUserPort.getCurrentUser()).thenReturn(staffActor);
+        org.mockito.Mockito.doThrow(new UnauthorizedPropertyAccessException("Action requires ADMIN role"))
+            .when(authorizationService).assertAdmin(staffActor);
+
+        UUID targetId = UUID.randomUUID();
+        assertThrows(
+            UnauthorizedPropertyAccessException.class,
+            () -> authService.adminDeleteUser(targetId)
+        );
+
+        verify(identityProviderPort, never()).adminDeleteUser(any());
+        verify(userRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void adminCreateUserRejectsDuplicateEmailCaseInsensitive() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        User existing = new User(
+            UUID.randomUUID(), "other", "tenant1@phonghub.local", "Existing", "0900000000",
+            UserRole.TENANT, User.UserStatus.ACTIVE, false, Instant.now()
+        );
+        when(userRepository.findByEmail("tenant1@phonghub.local")).thenReturn(Optional.of(existing));
+
+        AuthUseCase.CreateUserCommand cmd = new AuthUseCase.CreateUserCommand(
+            "newuser", "Tenant1@PhongHub.Local", "New User", "0911223344", UserRole.TENANT
+        );
+
+        assertThrows(
+            DuplicateEmailException.class,
+            () -> authService.adminCreateUser(cmd)
+        );
+
+        verify(identityProviderPort, never()).adminCreateUser(any(), any());
+    }
+
+    @Test
+    void adminCreateUserRejectsDuplicateUsernameCaseInsensitive() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        when(userRepository.findByEmail("new@phonghub.local")).thenReturn(Optional.empty());
+
+        User existing = new User(
+            UUID.randomUUID(), "tenant1", "other@phonghub.local", "Existing", "0900000000",
+            UserRole.TENANT, User.UserStatus.ACTIVE, false, Instant.now()
+        );
+        when(userRepository.findByUsername("tenant1")).thenReturn(Optional.of(existing));
+
+        AuthUseCase.CreateUserCommand cmd = new AuthUseCase.CreateUserCommand(
+            "Tenant1", "new@phonghub.local", "New User", "0911223344", UserRole.TENANT
+        );
+
+        assertThrows(
+            DuplicateUsernameException.class,
+            () -> authService.adminCreateUser(cmd)
+        );
+
+        verify(identityProviderPort, never()).adminCreateUser(any(), any());
+    }
+
+    @Test
+    void adminCreateUserRejectsInvalidEmailFormat() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        AuthUseCase.CreateUserCommand cmd = new AuthUseCase.CreateUserCommand(
+            "validuser", "invalid-email-string", "Valid User", "0911223344", UserRole.TENANT
+        );
+
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> authService.adminCreateUser(cmd)
+        );
+
+        verify(identityProviderPort, never()).adminCreateUser(any(), any());
+    }
+
+    @Test
+    void adminCreateUserNormalizesEmailAndUsernameToLowercase() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        when(userRepository.findByEmail("mixedcase@phonghub.local")).thenReturn(Optional.empty());
+        when(userRepository.findByUsername("mixedcaseuser")).thenReturn(Optional.empty());
+
+        UUID newAuthId = UUID.randomUUID();
+        when(identityProviderPort.adminCreateUser(eq("mixedcase@phonghub.local"), any())).thenReturn(newAuthId);
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AuthUseCase.CreateUserCommand cmd = new AuthUseCase.CreateUserCommand(
+            "  MixedCaseUser  ", "  MixedCase@PhongHub.Local  ", "Mixed Case", "0911223344", UserRole.STAFF
+        );
+
+        AuthUseCase.AdminCreateUserResult result = authService.adminCreateUser(cmd);
+
+        assertEquals("mixedcaseuser", result.username());
+        assertEquals("mixedcase@phonghub.local", result.email());
+        verify(identityProviderPort).adminCreateUser(eq("mixedcase@phonghub.local"), any());
+        verify(userRepository).save(argThat(u ->
+            u.username().equals("mixedcaseuser") && u.email().equals("mixedcase@phonghub.local")
+        ));
+    }
+
+    @Test
+    void adminCreateUserRejectsDuplicatePhone() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        when(userRepository.findByEmail("new@phonghub.local")).thenReturn(Optional.empty());
+        when(userRepository.findByUsername("newuser")).thenReturn(Optional.empty());
+
+        User existing = new User(
+            UUID.randomUUID(), "other", "other@phonghub.local", "Other", "0911223344",
+            UserRole.TENANT, User.UserStatus.ACTIVE, false, Instant.now()
+        );
+        when(userRepository.findAll()).thenReturn(java.util.List.of(existing));
+
+        AuthUseCase.CreateUserCommand cmd = new AuthUseCase.CreateUserCommand(
+            "newuser", "new@phonghub.local", "New User", "0911223344", UserRole.TENANT
+        );
+
+        assertThrows(
+            DomainException.class,
+            () -> authService.adminCreateUser(cmd)
+        );
+
+        verify(identityProviderPort, never()).adminCreateUser(any(), any());
     }
 }

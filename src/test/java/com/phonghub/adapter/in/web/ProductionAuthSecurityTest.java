@@ -1,14 +1,24 @@
 package com.phonghub.adapter.in.web;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.phonghub.domain.exception.DuplicateEmailException;
+import com.phonghub.domain.exception.DuplicateUsernameException;
+import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 
 import com.phonghub.application.port.in.AuthTokenResponse;
 import com.phonghub.application.port.in.AuthUseCase;
@@ -23,6 +33,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import com.phonghub.domain.exception.AccountDisabledException;
+import com.phonghub.domain.exception.InvalidCredentialsException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -119,6 +131,98 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void browserLoginWithInvalidCredentialsDisplaysErrorMessageAndPreservesUsername() throws Exception {
+        when(authUseCase.login("admin", "wrongpassword"))
+            .thenThrow(new InvalidCredentialsException("Invalid username or password"));
+
+        mockMvc.perform(post("/login")
+                .with(csrf())
+                .param("username", "admin")
+                .param("password", "wrongpassword"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("errorMessage", "Tên đăng nhập hoặc mật khẩu không đúng."))
+            .andExpect(model().attribute("username", "admin"));
+    }
+
+    @Test
+    void multipleFailedLoginAttemptsSuggestsForgotPassword() throws Exception {
+        when(authUseCase.login("user1", "wrongpass"))
+            .thenThrow(new InvalidCredentialsException("Invalid password"));
+
+        MockHttpSession session = new MockHttpSession();
+
+        // 1st attempt
+        mockMvc.perform(post("/login")
+                .session(session)
+                .with(csrf())
+                .param("username", "user1")
+                .param("password", "wrongpass"))
+            .andExpect(status().isOk())
+            .andExpect(model().attributeDoesNotExist("suggestForgotPassword"));
+
+        // 2nd attempt
+        mockMvc.perform(post("/login")
+                .session(session)
+                .with(csrf())
+                .param("username", "user1")
+                .param("password", "wrongpass"))
+            .andExpect(status().isOk())
+            .andExpect(model().attributeDoesNotExist("suggestForgotPassword"));
+
+        // 3rd attempt
+        mockMvc.perform(post("/login")
+                .session(session)
+                .with(csrf())
+                .param("username", "user1")
+                .param("password", "wrongpass"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("suggestForgotPassword", true))
+            .andExpect(model().attribute("failedAttempts", 3));
+
+        // Visiting GET /login with this session also retains the suggestion
+        mockMvc.perform(get("/login").session(session))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("suggestForgotPassword", true))
+            .andExpect(model().attribute("failedAttempts", 3));
+    }
+
+    @Test
+    void browserLoginWithDisabledAccountDisplaysSpecificErrorMessage() throws Exception {
+        when(authUseCase.login("inactive_user", "secret123"))
+            .thenThrow(new AccountDisabledException("Account is inactive"));
+
+        mockMvc.perform(post("/login")
+                .with(csrf())
+                .param("username", "inactive_user")
+                .param("password", "secret123"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("errorMessage", "Tài khoản hiện không hoạt động."))
+            .andExpect(model().attribute("username", "inactive_user"));
+    }
+
+    @Test
+    void browserLoginWithUnexpectedExceptionDisplaysSafeErrorMessage() throws Exception {
+        when(authUseCase.login("admin", "secret123"))
+            .thenThrow(new RuntimeException("Database timeout"));
+
+        mockMvc.perform(post("/login")
+                .with(csrf())
+                .param("username", "admin")
+                .param("password", "secret123"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("errorMessage", "Đã xảy ra lỗi trong quá trình đăng nhập. Vui lòng thử lại."))
+            .andExpect(model().attribute("username", "admin"));
+    }
+
+    @Test
+    void browserLoginPagePreservesUsernameQueryParam() throws Exception {
+        mockMvc.perform(get("/login").param("username", "myusername").param("error", "true"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("errorMessage", "Tên đăng nhập hoặc mật khẩu không đúng."))
+            .andExpect(model().attribute("username", "myusername"));
+    }
+
+    @Test
     void firstLoginBrowserSessionIsRedirectedToPasswordChange() throws Exception {
         UUID userId = UUID.randomUUID();
         when(authUseCase.login("temporary", "secret123")).thenReturn(new AuthTokenResponse(
@@ -128,6 +232,10 @@ class ProductionAuthSecurityTest {
             3600L,
             new AuthTokenResponse.UserInfo(userId, "temporary", "Temporary User", UserRole.TENANT, true)
         ));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(new User(
+            userId, "temporary", "temporary@phonghub.local", "Temporary User", "0900000001",
+            UserRole.TENANT, User.UserStatus.ACTIVE, true, Instant.now()
+        )));
 
         var loginResult = mockMvc.perform(post("/login")
                 .with(csrf())
@@ -303,6 +411,40 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void adminCreateUserDuplicateEmailShowsFlashErrorMessageOnUi() throws Exception {
+        when(authUseCase.adminCreateUser(any()))
+            .thenThrow(new DuplicateEmailException("Email đã được sử dụng bởi một tài khoản khác: duplicate@phonghub.local"));
+
+        mockMvc.perform(post("/admin/users")
+                .session(loginAsAdmin())
+                .with(csrf())
+                .param("username", "tenant2")
+                .param("email", "duplicate@phonghub.local")
+                .param("fullName", "Tenant Two")
+                .param("role", "TENANT"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users"))
+            .andExpect(flash().attribute("errorMessage", "Email đã được sử dụng bởi một tài khoản khác: duplicate@phonghub.local"));
+    }
+
+    @Test
+    void adminCreateUserDuplicateUsernameShowsFlashErrorMessageOnUi() throws Exception {
+        when(authUseCase.adminCreateUser(any()))
+            .thenThrow(new DuplicateUsernameException("Tên đăng nhập đã tồn tại trong hệ thống: duplicateuser"));
+
+        mockMvc.perform(post("/admin/users")
+                .session(loginAsAdmin())
+                .with(csrf())
+                .param("username", "duplicateuser")
+                .param("email", "unique@phonghub.local")
+                .param("fullName", "Tenant Two")
+                .param("role", "TENANT"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users"))
+            .andExpect(flash().attribute("errorMessage", "Tên đăng nhập đã tồn tại trong hệ thống: duplicateuser"));
+    }
+
+    @Test
     void adminCanResetTenantPasswordFromAccountManagementPage() throws Exception {
         UUID tenantId = UUID.randomUUID();
         User tenant = new User(
@@ -323,6 +465,131 @@ class ProductionAuthSecurityTest {
                 .with(csrf()))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/admin/users"));
+    }
+
+    @Test
+    void adminCanResetPasswordForStaffAndTechnician() throws Exception {
+        UUID staffId = UUID.randomUUID();
+        User staff = new User(
+            staffId, "staff1", "staff1@phonghub.local", "Staff One", null,
+            UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()
+        );
+        when(userUseCase.getUser(staffId)).thenReturn(staff);
+        when(authUseCase.adminResetPassword(staffId)).thenReturn(new AuthUseCase.PasswordResetResult(
+            staffId,
+            "staff1",
+            "TempPass#2026!",
+            true,
+            "Temporary password generated. It will not be displayed again."
+        ));
+
+        mockMvc.perform(post("/admin/users/{userId}/reset-password", staffId)
+                .session(loginAsAdmin())
+                .with(csrf()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users"));
+    }
+
+    @Test
+    void forgotPasswordPageIsPubliclyAccessible() throws Exception {
+        mockMvc.perform(get("/forgot-password"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    void forgotPasswordWithValidUserReturnsInstruction() throws Exception {
+        when(userRepository.findByUsername("staff1")).thenReturn(Optional.of(new User(
+            UUID.randomUUID(), "staff1", "staff1@phonghub.local", "Staff One", "0900000002",
+            UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
+
+        mockMvc.perform(post("/forgot-password")
+                .with(csrf())
+                .param("identifier", "staff1"))
+            .andExpect(status().isOk())
+            .andExpect(model().attributeExists("successMessage"));
+    }
+
+    @Test
+    void forgotPasswordWithUnknownUserReturnsErrorMessage() throws Exception {
+        when(userRepository.findByUsername("unknown_user")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail("unknown_user")).thenReturn(Optional.empty());
+
+        mockMvc.perform(post("/forgot-password")
+                .with(csrf())
+                .param("identifier", "unknown_user"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("errorMessage", "Không tìm thấy tài khoản tương ứng với thông tin đã nhập."))
+            .andExpect(model().attribute("identifier", "unknown_user"));
+    }
+
+    @Test
+    void unauthenticatedUserAccessingProfileRedirectsToLogin() throws Exception {
+        mockMvc.perform(get("/account/profile"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void authenticatedUserCanAccessProfilePage() throws Exception {
+        MockHttpSession session = loginAsAdmin();
+        when(userUseCase.getUser(any())).thenReturn(new User(
+            UUID.randomUUID(),
+            "admin",
+            "admin@phonghub.local",
+            "Admin User",
+            "0901234567",
+            UserRole.ADMIN,
+            User.UserStatus.ACTIVE,
+            false,
+            Instant.now()
+        ));
+
+        mockMvc.perform(get("/account/profile").session(session))
+            .andExpect(status().isOk())
+            .andExpect(model().attributeExists("user"))
+            .andExpect(model().attributeExists("currentUser"));
+    }
+
+    @Test
+    void authenticatedUserCanUpdateProfile() throws Exception {
+        MockHttpSession session = loginAsAdmin();
+        when(userUseCase.updateProfile(any())).thenReturn(new User(
+            UUID.randomUUID(),
+            "admin",
+            "admin@phonghub.local",
+            "Admin New Name",
+            "0987654321",
+            UserRole.ADMIN,
+            User.UserStatus.ACTIVE,
+            false,
+            Instant.now()
+        ));
+
+        mockMvc.perform(post("/account/profile")
+                .session(session)
+                .with(csrf())
+                .param("fullName", "Admin New Name")
+                .param("phone", "0987654321"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/account/profile"))
+            .andExpect(flash().attribute("successMessage", "Cập nhật hồ sơ cá nhân thành công."));
+    }
+
+    @Test
+    void updateProfileWithInvalidPhoneSetsErrorMessage() throws Exception {
+        MockHttpSession session = loginAsAdmin();
+        when(userUseCase.updateProfile(any()))
+            .thenThrow(new IllegalArgumentException("Số điện thoại không hợp lệ (phải gồm 10 chữ số bắt đầu bằng 0)"));
+
+        mockMvc.perform(post("/account/profile")
+                .session(session)
+                .with(csrf())
+                .param("fullName", "Admin User")
+                .param("phone", "123"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/account/profile"))
+            .andExpect(flash().attribute("errorMessage", "Số điện thoại không hợp lệ (phải gồm 10 chữ số bắt đầu bằng 0)"));
     }
 
     @Test
@@ -607,6 +874,225 @@ class ProductionAuthSecurityTest {
             .andExpect(jsonPath("$.mustChangePassword").value(true));
     }
 
+    @Test
+    @DisplayName("Admin create user with duplicate email returns 409 Conflict")
+    void createUserWithDuplicateEmailReturnsConflict409() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
+            adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
+        when(jwtDecoder.decode("admin.jwt.token")).thenReturn(new Jwt(
+            "admin.jwt.token", Instant.now(), Instant.now().plusSeconds(3600),
+            Map.of("alg", "HS256"),
+            Map.of("sub", adminId.toString(), "aud", List.of("authenticated"), "iss", "https://mock.supabase.co/auth/v1")
+        ));
+        when(authUseCase.adminCreateUser(any())).thenThrow(new DuplicateEmailException("Email already exists: duplicate@phonghub.local"));
+
+        mockMvc.perform(post("/api/admin/users")
+                .header("Authorization", "Bearer admin.jwt.token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "newstaff",
+                      "email": "duplicate@phonghub.local",
+                      "fullName": "New Staff Member",
+                      "phone": "0909999888",
+                      "role": "STAFF"
+                    }
+                    """))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title").value("Conflict"))
+            .andExpect(jsonPath("$.detail").value("Email already exists: duplicate@phonghub.local"));
+    }
+
+    @Test
+    @DisplayName("Admin create user with duplicate username returns 409 Conflict")
+    void createUserWithDuplicateUsernameReturnsConflict409() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
+            adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
+        when(jwtDecoder.decode("admin.jwt.token")).thenReturn(new Jwt(
+            "admin.jwt.token", Instant.now(), Instant.now().plusSeconds(3600),
+            Map.of("alg", "HS256"),
+            Map.of("sub", adminId.toString(), "aud", List.of("authenticated"), "iss", "https://mock.supabase.co/auth/v1")
+        ));
+        when(authUseCase.adminCreateUser(any())).thenThrow(new DuplicateUsernameException("Username already exists: existinguser"));
+
+        mockMvc.perform(post("/api/admin/users")
+                .header("Authorization", "Bearer admin.jwt.token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "existinguser",
+                      "email": "unique@phonghub.local",
+                      "fullName": "Existing Username Member",
+                      "phone": "0909999888",
+                      "role": "STAFF"
+                    }
+                    """))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title").value("Conflict"))
+            .andExpect(jsonPath("$.detail").value("Username already exists: existinguser"));
+    }
+
+    @Test
+    @DisplayName("Admin create user with invalid email returns 400 Bad Request")
+    void createUserWithInvalidEmailReturnsBadRequest400() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
+            adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
+        when(jwtDecoder.decode("admin.jwt.token")).thenReturn(new Jwt(
+            "admin.jwt.token", Instant.now(), Instant.now().plusSeconds(3600),
+            Map.of("alg", "HS256"),
+            Map.of("sub", adminId.toString(), "aud", List.of("authenticated"), "iss", "https://mock.supabase.co/auth/v1")
+        ));
+
+        mockMvc.perform(post("/api/admin/users")
+                .header("Authorization", "Bearer admin.jwt.token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "invalidemailuser",
+                      "email": "not-an-email",
+                      "fullName": "Invalid Email",
+                      "phone": "0909999888",
+                      "role": "STAFF"
+                    }
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title").value("Bad Request"))
+            .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    void adminCanDeleteUserViaApi() throws Exception {
+        UUID targetUserId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        when(jwtDecoder.decode(eq("admin.jwt.token"))).thenReturn(Jwt.withTokenValue("admin.jwt.token")
+            .header("alg", "HS256")
+            .subject(adminId.toString())
+            .claim("aud", List.of("authenticated"))
+            .claim("iss", "https://mock.supabase.co/auth/v1")
+            .build());
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
+            adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
+
+        mockMvc.perform(delete("/api/admin/users/{userId}", targetUserId)
+                .header("Authorization", "Bearer admin.jwt.token"))
+            .andExpect(status().isNoContent());
+
+        verify(authUseCase).adminDeleteUser(targetUserId);
+    }
+
+    @Test
+    void nonAdminCannotDeleteUserViaApiReturnsForbidden() throws Exception {
+        UUID targetUserId = UUID.randomUUID();
+        UUID staffId = UUID.randomUUID();
+        when(jwtDecoder.decode(eq("staff.jwt.token"))).thenReturn(Jwt.withTokenValue("staff.jwt.token")
+            .header("alg", "HS256")
+            .subject(staffId.toString())
+            .claim("aud", List.of("authenticated"))
+            .claim("iss", "https://mock.supabase.co/auth/v1")
+            .build());
+        when(userRepository.findById(staffId)).thenReturn(Optional.of(new User(
+            staffId, "staff", "staff@phonghub.local", "Staff User", "0900000002",
+            UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
+        doThrow(new UnauthorizedPropertyAccessException("Action requires ADMIN role"))
+            .when(authUseCase).adminDeleteUser(targetUserId);
+
+        mockMvc.perform(delete("/api/admin/users/{userId}", targetUserId)
+                .header("Authorization", "Bearer staff.jwt.token"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminDeleteSelfOrAnotherAdminViaApiReturnsBadRequest() throws Exception {
+        UUID targetAdminId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        when(jwtDecoder.decode(eq("admin.jwt.token"))).thenReturn(Jwt.withTokenValue("admin.jwt.token")
+            .header("alg", "HS256")
+            .subject(adminId.toString())
+            .claim("aud", List.of("authenticated"))
+            .claim("iss", "https://mock.supabase.co/auth/v1")
+            .build());
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
+            adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
+        doThrow(new IllegalArgumentException("Không được phép xoá tài khoản Quản trị viên (ADMIN)"))
+            .when(authUseCase).adminDeleteUser(targetAdminId);
+
+        mockMvc.perform(delete("/api/admin/users/{userId}", targetAdminId)
+                .header("Authorization", "Bearer admin.jwt.token"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title").value("Invalid Argument"));
+    }
+
+    @Test
+    void adminCanDeleteUserViaUiAndRedirectsWithSuccessMessage() throws Exception {
+        UUID targetUserId = UUID.randomUUID();
+
+        mockMvc.perform(post("/admin/users/{userId}/delete", targetUserId)
+                .session(loginAsAdmin())
+                .with(csrf()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users"))
+            .andExpect(flash().attribute("successMessage", "Đã xoá tài khoản người dùng thành công."));
+
+        verify(authUseCase).adminDeleteUser(targetUserId);
+    }
+
+    @Test
+    void adminDeleteSelfViaUiSetsErrorMessage() throws Exception {
+        UUID targetUserId = UUID.randomUUID();
+        doThrow(new IllegalArgumentException("Quản trị viên không thể tự xoá tài khoản của chính mình"))
+            .when(authUseCase).adminDeleteUser(targetUserId);
+
+        mockMvc.perform(post("/admin/users/{userId}/delete", targetUserId)
+                .session(loginAsAdmin())
+                .with(csrf()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users"))
+            .andExpect(flash().attribute("errorMessage", "Quản trị viên không thể tự xoá tài khoản của chính mình"));
+    }
+
+    @Test
+    void deletedUserJwtReturns401OnApiCall() throws Exception {
+        UUID deletedUserId = UUID.randomUUID();
+        when(jwtDecoder.decode(eq("deleted.user.jwt"))).thenReturn(Jwt.withTokenValue("deleted.user.jwt")
+            .header("alg", "HS256")
+            .subject(deletedUserId.toString())
+            .claim("aud", List.of("authenticated"))
+            .claim("iss", "https://mock.supabase.co/auth/v1")
+            .build());
+        when(userRepository.findById(deletedUserId)).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/properties")
+                .header("Authorization", "Bearer deleted.user.jwt"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void deletedUserSessionIsImmediatelyInvalidatedAndRedirectedToLogin() throws Exception {
+        MockHttpSession session = loginAsAdmin();
+        // Simulate user deleted from repository
+        when(userRepository.findById(any())).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/admin/users").session(session))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+
+        assertTrue(session.isInvalid(), "Session must be invalidated immediately when user is deleted");
+    }
+
     private MockHttpSession loginAsAdmin() throws Exception {
         UUID adminId = UUID.randomUUID();
         when(authUseCase.login("admin", "secret123")).thenReturn(new AuthTokenResponse(
@@ -616,6 +1102,10 @@ class ProductionAuthSecurityTest {
             3600L,
             new AuthTokenResponse.UserInfo(adminId, "admin", "Admin User", UserRole.ADMIN, false)
         ));
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
+            adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now()
+        )));
 
         var result = mockMvc.perform(post("/login")
                 .with(csrf())

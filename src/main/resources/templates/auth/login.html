@@ -9,20 +9,36 @@
             Sử dụng tên đăng nhập và mật khẩu do quản trị viên cấp.
         </p>
 
-        <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}">Thông báo thành công</div>
-        <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}">Thông tin đăng nhập không hợp lệ</div>
+        <div th:if="${successMessage}" class="alert alert-success" style="display: flex; align-items: center; gap: 8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <span th:text="${successMessage}">Thông báo thành công</span>
+        </div>
+        <div th:if="${errorMessage}" class="alert alert-error" style="display: flex; align-items: center; gap: 8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <span th:text="${errorMessage}">Thông tin đăng nhập không hợp lệ</span>
+        </div>
+        <div th:if="${suggestForgotPassword}" class="alert" style="display: flex; align-items: flex-start; gap: 10px; background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.35); color: #b45309; padding: 12px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; line-height: 1.5;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <div>
+                <span>Bạn đã nhập sai thông tin </span><strong th:text="${failedAttempts}">3</strong><span> lần liên tiếp. Nếu không nhớ mật khẩu, bạn có thể </span>
+                <a th:href="@{/forgot-password}" style="color: #b45309; font-weight: 700; text-decoration: underline;">bấm vào đây để yêu cầu cấp lại mật khẩu</a>.
+            </div>
+        </div>
 
         <form th:action="@{/login}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="form-group">
                 <label class="form-label" for="username">Tên đăng nhập</label>
-                <input id="username" type="text" name="username" class="form-control" autocomplete="username" required autofocus>
+                <input id="username" type="text" name="username" th:value="${username}" class="form-control" autocomplete="username" required th:autofocus="${errorMessage == null}">
             </div>
             <div class="form-group">
                 <label class="form-label" for="password">Mật khẩu</label>
-                <input id="password" type="password" name="password" class="form-control" autocomplete="current-password" required>
+                <input id="password" type="password" name="password" class="form-control" autocomplete="current-password" required th:autofocus="${errorMessage != null}">
             </div>
             <button type="submit" class="btn btn-primary" style="width: 100%;">Đăng nhập</button>
+            <div style="text-align: center; margin-top: 16px;">
+                <a th:href="@{/forgot-password}" style="font-size: 13px; color: var(--accent); text-decoration: none;">Quên mật khẩu?</a>
+            </div>
         </form>
     </div>
 </main>
