@@ -37,7 +37,6 @@ public class PasswordChangeGate extends OncePerRequestFilter {
                 || uri.equals("/account/password")
                 || uri.equals("/session/logout")
                 || uri.equals("/login")
-                || uri.equals("/forgot-password")
                 || uri.equals("/health")
                 || uri.startsWith("/static/")
                 || uri.startsWith("/css/")

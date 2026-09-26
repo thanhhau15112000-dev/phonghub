@@ -5,8 +5,6 @@ import com.phonghub.application.port.in.UserUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.domain.exception.DomainException;
-import com.phonghub.domain.exception.DuplicateEmailException;
-import com.phonghub.domain.exception.DuplicateUsernameException;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.text.Normalizer;
@@ -177,14 +175,7 @@ public class AdminUserUiController {
             redirectAttributes.addFlashAttribute("createdUser", created);
             return "redirect:/admin/users";
         } catch (DomainException | IllegalArgumentException ex) {
-            String msg = userFacingMessage(ex);
-            redirectAttributes.addFlashAttribute("errorMessage", msg);
-            redirectAttributes.addFlashAttribute("createErrorMessage", msg);
-            return "redirect:/admin/users";
-        } catch (Exception ex) {
-            String msg = "Không thể tạo tài khoản: " + (ex.getMessage() != null ? ex.getMessage() : "Lỗi hệ thống.");
-            redirectAttributes.addFlashAttribute("errorMessage", msg);
-            redirectAttributes.addFlashAttribute("createErrorMessage", msg);
+            redirectAttributes.addFlashAttribute("errorMessage", userFacingMessage(ex));
             return "redirect:/admin/users";
         }
     }
@@ -196,7 +187,6 @@ public class AdminUserUiController {
     ) {
         if (!isAdmin(currentUserPort.getCurrentUser())) {
             redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên mới có thể đặt lại mật khẩu.");
-            redirectAttributes.addFlashAttribute("tableErrorMessage", "Chỉ quản trị viên mới có thể đặt lại mật khẩu.");
             return "redirect:/";
         }
 
@@ -204,44 +194,12 @@ public class AdminUserUiController {
             User target = userUseCase.getUser(userId);
             if (target.role() != UserRole.TENANT) {
                 redirectAttributes.addFlashAttribute("errorMessage", "Chỉ có thể đặt lại mật khẩu cho tài khoản người thuê từ giao diện này.");
-                redirectAttributes.addFlashAttribute("tableErrorMessage", "Chỉ có thể đặt lại mật khẩu cho tài khoản người thuê từ giao diện này.");
                 return "redirect:/admin/users";
             }
 
             redirectAttributes.addFlashAttribute("resetResult", authUseCase.adminResetPassword(userId));
         } catch (DomainException | IllegalArgumentException ex) {
-            String msg = userFacingMessage(ex);
-            redirectAttributes.addFlashAttribute("errorMessage", msg);
-            redirectAttributes.addFlashAttribute("tableErrorMessage", msg);
-        } catch (Exception ex) {
-            String msg = "Đặt lại mật khẩu thất bại: " + (ex.getMessage() != null ? ex.getMessage() : "Lỗi hệ thống.");
-            redirectAttributes.addFlashAttribute("errorMessage", msg);
-            redirectAttributes.addFlashAttribute("tableErrorMessage", msg);
-        }
-        return "redirect:/admin/users";
-    }
-
-    @PostMapping("/{userId}/delete")
-    public String deleteUser(@PathVariable("userId") UUID userId, RedirectAttributes redirectAttributes) {
-        CurrentUser currentUser = currentUserPort.getCurrentUser();
-        if (!isAdmin(currentUser)) {
-            redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên mới có thể quản lý tài khoản.");
-            redirectAttributes.addFlashAttribute("tableErrorMessage", "Chỉ quản trị viên mới có thể quản lý tài khoản.");
-            return "redirect:/";
-        }
-
-        try {
-            authUseCase.adminDeleteUser(userId);
-            redirectAttributes.addFlashAttribute("successMessage", "Đã xoá tài khoản người dùng thành công.");
-            redirectAttributes.addFlashAttribute("tableSuccessMessage", "Đã xoá tài khoản người dùng thành công.");
-        } catch (DomainException | IllegalArgumentException ex) {
-            String msg = userFacingMessage(ex);
-            redirectAttributes.addFlashAttribute("errorMessage", msg);
-            redirectAttributes.addFlashAttribute("tableErrorMessage", msg);
-        } catch (Exception ex) {
-            String msg = "Xoá tài khoản thất bại: " + (ex.getMessage() != null ? ex.getMessage() : "Lỗi hệ thống.");
-            redirectAttributes.addFlashAttribute("errorMessage", msg);
-            redirectAttributes.addFlashAttribute("tableErrorMessage", msg);
+            redirectAttributes.addFlashAttribute("errorMessage", userFacingMessage(ex));
         }
         return "redirect:/admin/users";
     }
@@ -251,16 +209,10 @@ public class AdminUserUiController {
     }
 
     private String userFacingMessage(RuntimeException exception) {
-        if (exception instanceof DuplicateEmailException || exception instanceof DuplicateUsernameException) {
-            return exception.getMessage();
-        }
-        if (exception.getMessage() != null && !exception.getMessage().isBlank()) {
-            return exception.getMessage();
-        }
         if (exception instanceof DomainException) {
             return "Không thể hoàn tất thao tác tài khoản. Vui lòng kiểm tra dữ liệu và thử lại.";
         }
-        return "Dữ liệu tài khoản không hợp lệ.";
+        return exception.getMessage() != null ? exception.getMessage() : "Dữ liệu tài khoản không hợp lệ.";
     }
 
     private boolean matchesUser(User u, String keyword) {

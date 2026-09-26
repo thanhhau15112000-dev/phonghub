@@ -272,11 +272,6 @@ h2 {
   color: var(--status-maintenance);
 }
 
-.btn-danger:hover {
-  background: var(--status-maintenance);
-  color: #fff;
-}
-
 .btn-sm {
   padding: 3px 8px;
   font-size: 12px;
@@ -591,100 +586,6 @@ h2 {
   color: var(--text-secondary);
   font-weight: 700;
 }
-
-/* ==========================================================================
-   Custom Modal Dialog (Xác nhận xoá dạng bảng/hộp thoại)
-   ========================================================================== */
-.custom-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background-color: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  padding: 16px;
-  animation: modalOverlayFadeIn 0.2s ease-out;
-}
-
-.custom-modal-card {
-  background: var(--bg-surface, #ffffff);
-  border: 1px solid var(--border-color, #cbd5e1);
-  border-radius: 12px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  width: 100%;
-  max-width: 480px;
-  padding: 24px;
-  animation: modalPopIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.custom-modal-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 14px;
-}
-
-.modal-icon-danger {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background-color: #fee2e2;
-  color: #dc2626;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.custom-modal-body {
-  font-size: 14px;
-  color: var(--text-primary);
-  line-height: 1.6;
-  margin-bottom: 20px;
-}
-
-.custom-modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-@keyframes modalOverlayFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes modalPopIn {
-  from { opacity: 0; transform: scale(0.95) translateY(8px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-/* Inline Feedback Alerts */
-.inline-alert {
-  padding: 10px 14px;
-  border-radius: 6px;
-  font-size: 13px;
-  line-height: 1.4;
-  margin-top: 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.inline-alert-danger {
-  background-color: var(--error-bg, #fef2f2);
-  color: var(--error-text, #991b1b);
-  border: 1px solid #fecaca;
-}
-
-.inline-alert-success {
-  background-color: var(--success-bg, #f0fdf4);
-  color: var(--success-text, #166534);
-  border: 1px solid #bbf7d0;
-}
-
 
 
 

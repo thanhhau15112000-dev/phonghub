@@ -1,7 +1,6 @@
 package com.phonghub.adapter.out.supabase.auth;
 
 import com.phonghub.application.port.out.IdentityProviderPort;
-import com.phonghub.domain.exception.DuplicateEmailException;
 import com.phonghub.domain.exception.IdentityProviderUnavailableException;
 import com.phonghub.domain.exception.InvalidCredentialsException;
 import java.util.Map;
@@ -188,11 +187,6 @@ public class SupabaseIdentityProviderAdapter implements IdentityProviderPort {
                 .body(payload)
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, (req, resp) -> {
-                    byte[] bodyBytes = resp.getBody().readAllBytes();
-                    String body = new String(bodyBytes, java.nio.charset.StandardCharsets.UTF_8);
-                    if (resp.getStatusCode().value() == 422 || body.contains("email_exists") || body.contains("already been registered")) {
-                        throw new DuplicateEmailException("Email đã tồn tại trong hệ thống xác thực: " + email);
-                    }
                     throw new IdentityProviderUnavailableException("Failed to create user in Supabase Admin: HTTP " + resp.getStatusCode());
                 })
                 .body(String.class);
@@ -200,8 +194,6 @@ public class SupabaseIdentityProviderAdapter implements IdentityProviderPort {
             JsonNode root = objectMapper.readTree(responseBody);
             String idStr = root.path("id").asText();
             return UUID.fromString(idStr);
-        } catch (DuplicateEmailException ex) {
-            throw ex;
         } catch (IdentityProviderUnavailableException ex) {
             throw ex;
         } catch (ResourceAccessException ex) {
@@ -220,16 +212,9 @@ public class SupabaseIdentityProviderAdapter implements IdentityProviderPort {
                 .header("apikey", serviceRoleKey)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceRoleKey)
                 .retrieve()
-                .onStatus(HttpStatusCode::isError, (req, resp) -> {
-                    throw new IdentityProviderUnavailableException("Failed to delete user in Supabase Admin: HTTP " + resp.getStatusCode());
-                })
                 .toBodilessEntity();
-        } catch (IdentityProviderUnavailableException ex) {
-            throw ex;
-        } catch (ResourceAccessException ex) {
-            throw new IdentityProviderUnavailableException("Supabase Admin network timeout: " + ex.getMessage(), ex);
-        } catch (Exception ex) {
-            throw new IdentityProviderUnavailableException("Supabase Admin delete user error: " + ex.getMessage(), ex);
+        } catch (Exception ignored) {
+            // Compensation failure
         }
     }
 }
