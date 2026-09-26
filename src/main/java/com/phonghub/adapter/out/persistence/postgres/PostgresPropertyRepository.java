@@ -29,7 +29,7 @@ public class PostgresPropertyRepository implements PropertyRepositoryPort {
         String ownerIdStr = rs.getString("owner_id");
         UUID ownerId = ownerIdStr != null ? UUID.fromString(ownerIdStr) : null;
         String statusStr = rs.getString("approval_status");
-        PropertyApprovalStatus status = statusStr != null ? PropertyApprovalStatus.valueOf(statusStr) : PropertyApprovalStatus.APPROVED;
+        PropertyApprovalStatus status = PropertyApprovalStatus.fromString(statusStr);
         String rejectionReason = rs.getString("rejection_reason");
 
         return new Property(
@@ -72,7 +72,7 @@ public class PostgresPropertyRepository implements PropertyRepositoryPort {
             .addValue("description", property.description())
             .addValue("totalRooms", property.totalRooms())
             .addValue("ownerId", property.ownerId())
-            .addValue("approvalStatus", property.approvalStatus() != null ? property.approvalStatus().name() : PropertyApprovalStatus.APPROVED.name())
+            .addValue("approvalStatus", property.approvalStatus() != null ? property.approvalStatus().name() : PropertyApprovalStatus.VERIFIED.name())
             .addValue("rejectionReason", property.rejectionReason())
             .addValue("createdAt", Timestamp.from(property.createdAt()))
             .addValue("updatedAt", Timestamp.from(Instant.now()));

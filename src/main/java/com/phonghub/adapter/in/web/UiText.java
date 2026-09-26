@@ -35,7 +35,7 @@ public final class UiText {
         }
         return switch (status) {
             case PENDING -> "Chờ duyệt";
-            case APPROVED -> "Đã duyệt";
+            case VERIFIED -> "Đã duyệt";
             case REJECTED -> "Bị từ chối";
         };
     }

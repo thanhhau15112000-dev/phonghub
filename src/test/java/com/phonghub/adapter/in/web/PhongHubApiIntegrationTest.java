@@ -152,7 +152,7 @@ class PhongHubApiIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.id", is(DataSeeder.PROP_1_ID.toString())))
-            .andExpect(jsonPath("$.approvalStatus", is("APPROVED")));
+            .andExpect(jsonPath("$.approvalStatus", is("VERIFIED")));
     }
 
     @Test
@@ -348,5 +348,55 @@ class PhongHubApiIntegrationTest {
         mockMvc.perform(get("/api/rooms/" + DataSeeder.ROOM_102_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.TENANT_1_ID.toString()))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("ADMIN verifies PENDING property successfully (200 OK)")
+    void testAdminVerifiesPendingPropertySuccess() throws Exception {
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_2_ID + "/verify")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id", is(DataSeeder.PROP_2_ID.toString())))
+            .andExpect(jsonPath("$.approvalStatus", is("VERIFIED")));
+    }
+
+    @Test
+    @DisplayName("ADMIN verifies already VERIFIED property returns 409 Conflict")
+    void testAdminVerifiesAlreadyVerifiedPropertyConflict() throws Exception {
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_1_ID + "/verify")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Property Status")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("ADMIN verifies REJECTED property returns 409 Conflict")
+    void testAdminVerifiesRejectedPropertyConflict() throws Exception {
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_3_ID + "/verify")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Property Status")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Non-ADMIN (STAFF) verifying property returns 403 Forbidden")
+    void testNonAdminVerifyingPropertyForbidden() throws Exception {
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_2_ID + "/verify")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("ADMIN verifies non-existent property returns 404 Not Found")
+    void testAdminVerifiesNonExistentPropertyNotFound() throws Exception {
+        UUID nonExistentId = UUID.randomUUID();
+        mockMvc.perform(post("/api/admin/properties/" + nonExistentId + "/verify")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.title", is("Resource Not Found")))
+            .andExpect(jsonPath("$.status", is(404)));
     }
 }

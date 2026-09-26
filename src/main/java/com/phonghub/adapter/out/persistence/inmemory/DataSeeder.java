@@ -73,7 +73,7 @@ public class DataSeeder {
             "Khu trọ dành cho sinh viên và người đi làm",
             10,
             DemoFixturePort.OWNER_1_ID,
-            PropertyApprovalStatus.APPROVED,
+            PropertyApprovalStatus.VERIFIED,
             null,
             now
         );

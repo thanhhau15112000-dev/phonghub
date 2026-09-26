@@ -15,6 +15,8 @@ import com.phonghub.domain.exception.RoomNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
+import com.phonghub.domain.model.Property;
+import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
@@ -54,8 +56,14 @@ public class ContractService implements ContractUseCase {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         authorizationService.assertCanManageContracts(currentUser, command.propertyId());
 
-        if (!propertyRepository.existsById(command.propertyId())) {
-            throw new PropertyNotFoundException("Property not found with ID: " + command.propertyId());
+        Property property = propertyRepository.findById(command.propertyId())
+            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + command.propertyId()));
+
+        if (property.approvalStatus() != PropertyApprovalStatus.VERIFIED) {
+            throw new DomainException(String.format(
+                "Không thể tạo hợp đồng cho nhà trọ '%s' vì chưa được duyệt (trạng thái: %s).",
+                property.name(), property.approvalStatus()
+            ));
         }
 
         Room room = roomRepository.findById(command.roomId())

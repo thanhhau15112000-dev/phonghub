@@ -43,9 +43,10 @@ public class PhongHubConfiguration {
     public PropertyUseCase propertyUseCase(
         PropertyRepositoryPort propertyRepo,
         CurrentUserPort currentUserPort,
-        AuthorizationService authorizationService
+        AuthorizationService authorizationService,
+        AuditPort auditPort
     ) {
-        return new PropertyService(propertyRepo, currentUserPort, authorizationService);
+        return new PropertyService(propertyRepo, currentUserPort, authorizationService, auditPort);
     }
 
     @Bean
