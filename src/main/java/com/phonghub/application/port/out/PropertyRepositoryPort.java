@@ -11,6 +11,7 @@ public interface PropertyRepositoryPort {
     Optional<Property> findById(UUID id);
     List<Property> findAll();
     List<Property> findAllById(Collection<UUID> ids);
+    List<Property> findByOwnerId(UUID ownerId);
     boolean existsById(UUID id);
     void deleteById(UUID id);
 }

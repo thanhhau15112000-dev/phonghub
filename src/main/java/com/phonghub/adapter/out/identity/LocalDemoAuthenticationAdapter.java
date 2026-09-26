@@ -20,6 +20,12 @@ public class LocalDemoAuthenticationAdapter implements CurrentUserPort, DemoActo
     public static final CurrentUser DEMO_ADMIN = new CurrentUser(
         ADMIN_ID, "admin@phonghub.local", "Quản trị viên", UserRole.ADMIN, false
     );
+    public static final CurrentUser DEMO_OWNER_1 = new CurrentUser(
+        OWNER_1_ID, "owner1@phonghub.local", "Chủ trọ Nguyễn Văn B", UserRole.OWNER, false
+    );
+    public static final CurrentUser DEMO_OWNER_2 = new CurrentUser(
+        OWNER_2_ID, "owner2@phonghub.local", "Chủ trọ Trần Thị C", UserRole.OWNER, false
+    );
     public static final CurrentUser DEMO_STAFF_1 = new CurrentUser(
         STAFF_1_ID, "staff1@phonghub.local", "Nhân viên Quận 7", UserRole.STAFF, false
     );
@@ -36,6 +42,8 @@ public class LocalDemoAuthenticationAdapter implements CurrentUserPort, DemoActo
     private static final Map<UUID, CurrentUser> DEMO_USERS = new LinkedHashMap<>();
     static {
         DEMO_USERS.put(ADMIN_ID, DEMO_ADMIN);
+        DEMO_USERS.put(OWNER_1_ID, DEMO_OWNER_1);
+        DEMO_USERS.put(OWNER_2_ID, DEMO_OWNER_2);
         DEMO_USERS.put(STAFF_1_ID, DEMO_STAFF_1);
         DEMO_USERS.put(STAFF_2_ID, DEMO_STAFF_2);
         DEMO_USERS.put(TECH_1_ID, DEMO_TECH_1);

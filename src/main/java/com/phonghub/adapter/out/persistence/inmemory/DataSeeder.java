@@ -8,6 +8,7 @@ import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.Property;
+import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.StaffPropertyAssignment;
@@ -24,6 +25,7 @@ public class DataSeeder {
 
     public static final UUID PROP_1_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     public static final UUID PROP_2_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    public static final UUID PROP_3_ID = DemoFixturePort.PROP_3_ID;
 
     public static final UUID ROOM_101_ID = UUID.fromString("10101010-1010-1010-1010-101010101010");
     public static final UUID ROOM_102_ID = UUID.fromString("10201020-1020-1020-1020-102010201020");
@@ -48,23 +50,59 @@ public class DataSeeder {
 
         // 1. Users
         User admin = new User(DemoFixturePort.ADMIN_ID, "admin", "admin@phonghub.local", "Quản trị viên", "0900000001", UserRole.ADMIN, User.UserStatus.ACTIVE, false, now);
+        User owner1 = new User(DemoFixturePort.OWNER_1_ID, "owner1", "owner1@phonghub.local", "Chủ trọ Nguyễn Văn B", "0900000005", UserRole.OWNER, User.UserStatus.ACTIVE, false, now);
+        User owner2 = new User(DemoFixturePort.OWNER_2_ID, "owner2", "owner2@phonghub.local", "Chủ trọ Trần Thị C", "0900000006", UserRole.OWNER, User.UserStatus.ACTIVE, false, now);
         User staff1 = new User(DemoFixturePort.STAFF_1_ID, "staff1", "staff1@phonghub.local", "Nhân viên Quận 7", "0900000002", UserRole.STAFF, User.UserStatus.ACTIVE, false, now);
         User staff2 = new User(DemoFixturePort.STAFF_2_ID, "staff2", "staff2@phonghub.local", "Nhân viên Tân Bình", "0900000003", UserRole.STAFF, User.UserStatus.ACTIVE, false, now);
         User tech1 = new User(DemoFixturePort.TECH_1_ID, "tech1", "tech1@phonghub.local", "Kỹ thuật viên", "0900000004", UserRole.TECHNICIAN, User.UserStatus.ACTIVE, false, now);
         User tenantUser1 = new User(DemoFixturePort.TENANT_1_ID, "tenant1", "tenant1@phonghub.local", "Nguyễn Văn A", "0901234567", UserRole.TENANT, User.UserStatus.ACTIVE, true, now);
 
         userRepository.save(admin);
+        userRepository.save(owner1);
+        userRepository.save(owner2);
         userRepository.save(staff1);
         userRepository.save(staff2);
         userRepository.save(tech1);
         userRepository.save(tenantUser1);
 
         // 2. Properties
-        Property prop1 = new Property(PROP_1_ID, "Nhà trọ Xanh - Quận 7", "123 Nguyễn Thị Thập, Phường Tân Quy, Quận 7, TP.HCM", "Khu trọ dành cho sinh viên và người đi làm", 10, now);
-        Property prop2 = new Property(PROP_2_ID, "Khu trọ Tân Bình", "45 Cộng Hòa, Phường 13, Quận Tân Bình, TP.HCM", "Nhà trọ gần sân bay, yên tĩnh", 5, now);
+        Property prop1 = new Property(
+            PROP_1_ID,
+            "Nhà trọ Xanh - Quận 7",
+            "123 Nguyễn Thị Thập, Phường Tân Quy, Quận 7, TP.HCM",
+            "Khu trọ dành cho sinh viên và người đi làm",
+            10,
+            DemoFixturePort.OWNER_1_ID,
+            PropertyApprovalStatus.APPROVED,
+            null,
+            now
+        );
+        Property prop2 = new Property(
+            PROP_2_ID,
+            "Khu trọ Tân Bình",
+            "45 Cộng Hòa, Phường 13, Quận Tân Bình, TP.HCM",
+            "Nhà trọ gần sân bay, yên tĩnh",
+            5,
+            DemoFixturePort.OWNER_1_ID,
+            PropertyApprovalStatus.PENDING,
+            null,
+            now
+        );
+        Property prop3 = new Property(
+            PROP_3_ID,
+            "Nhà trọ Bình Thạnh",
+            "78 Xô Viết Nghệ Tĩnh, Phường 21, Bình Thạnh, TP.HCM",
+            "Nhà trọ ven sông",
+            8,
+            DemoFixturePort.OWNER_1_ID,
+            PropertyApprovalStatus.REJECTED,
+            "Giấy phép kinh doanh chưa hợp lệ hoặc thiếu chứng nhận PCCC",
+            now
+        );
 
         propertyRepository.save(prop1);
         propertyRepository.save(prop2);
+        propertyRepository.save(prop3);
 
         // 3. Staff & Tech Assignments
         // Staff 1 assigned to Property 1

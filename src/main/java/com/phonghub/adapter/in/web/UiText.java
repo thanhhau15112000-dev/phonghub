@@ -22,9 +22,21 @@ public final class UiText {
         }
         return switch (role) {
             case ADMIN -> "Quản trị viên";
+            case OWNER -> "Chủ trọ";
             case STAFF -> "Nhân viên";
             case TECHNICIAN -> "Kỹ thuật viên";
             case TENANT -> "Người thuê";
+        };
+    }
+
+    public String approvalStatus(com.phonghub.domain.model.PropertyApprovalStatus status) {
+        if (status == null) {
+            return "Chưa xác định";
+        }
+        return switch (status) {
+            case PENDING -> "Chờ duyệt";
+            case APPROVED -> "Đã duyệt";
+            case REJECTED -> "Bị từ chối";
         };
     }
 

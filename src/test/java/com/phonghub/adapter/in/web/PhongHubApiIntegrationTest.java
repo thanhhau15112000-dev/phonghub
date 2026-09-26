@@ -92,7 +92,7 @@ class PhongHubApiIntegrationTest {
         mockMvc.perform(get("/api/properties")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$", hasSize(2)))
+            .andExpect(jsonPath("$", hasSize(3)))
             .andExpect(jsonPath("$[0].name", notNullValue()));
     }
 
@@ -114,6 +114,45 @@ class PhongHubApiIntegrationTest {
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
             .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 only sees owned properties with approval status")
+    void testOwner1ListsOwnedProperties() throws Exception {
+        mockMvc.perform(get("/api/properties")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(3)))
+            .andExpect(jsonPath("$[0].ownerId", is(LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())));
+    }
+
+    @Test
+    @DisplayName("OWNER 2 with no properties sees empty list")
+    void testOwner2ListsEmptyProperties() throws Exception {
+        mockMvc.perform(get("/api/properties")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_2_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    @DisplayName("OWNER 2 accessing Property 1 owned by OWNER 1 returns 403 Forbidden")
+    void testOwner2AccessingOtherOwnerPropertyForbidden() throws Exception {
+        mockMvc.perform(get("/api/properties/" + DataSeeder.PROP_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_2_ID.toString()))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 accessing Property 1 returns 200 OK with approval status")
+    void testOwner1AccessingOwnedProperty() throws Exception {
+        mockMvc.perform(get("/api/properties/" + DataSeeder.PROP_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id", is(DataSeeder.PROP_1_ID.toString())))
+            .andExpect(jsonPath("$.approvalStatus", is("APPROVED")));
     }
 
     @Test

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Nhà trọ')}"></head>
+<head th:replace="~{fragments/layout :: head(${currentUser != null and currentUser.role().name() == 'OWNER' ? 'Nhà trọ của tôi' : 'Nhà trọ'})}"></head>
 <body>
 <header th:replace="~{fragments/layout :: header}"></header>
 
@@ -9,8 +9,11 @@
 
     <div class="page-title-row">
         <div>
-            <h1>Nhà trọ</h1>
-            <p style="color: var(--text-secondary); font-size: 13px;">Danh sách các nhà trọ được phân công hoặc được phép quản lý theo tài khoản của bạn.</p>
+            <h1 th:text="${currentUser != null and currentUser.role().name() == 'OWNER' ? 'Nhà trọ của tôi' : 'Nhà trọ'}">Nhà trọ</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;"
+               th:text="${currentUser != null and currentUser.role().name() == 'OWNER' ? 'Danh sách các nhà trọ do bạn sở hữu để theo dõi tình trạng phê duyệt và quản lý.' : 'Danh sách các nhà trọ được phân công hoặc được phép quản lý theo tài khoản của bạn.'}">
+                Danh sách các nhà trọ được phân công hoặc được phép quản lý theo tài khoản của bạn.
+            </p>
         </div>
     </div>
 
@@ -43,9 +46,10 @@
 
     <!-- Bảng nhà trọ -->
     <div class="card">
-        <h2>Nhà trọ được phép truy cập</h2>
+        <h2 th:text="${currentUser != null and currentUser.role().name() == 'OWNER' ? 'Danh sách nhà trọ của tôi' : 'Nhà trọ được phép truy cập'}">Nhà trọ được phép truy cập</h2>
         <div th:if="${#lists.isEmpty(properties)}" class="empty-state">
-            <p>Không tìm thấy nhà trọ trong phạm vi hiện tại.</p>
+            <p th:if="${currentUser != null and currentUser.role().name() == 'OWNER'}">Bạn chưa có nhà trọ nào trên hệ thống.</p>
+            <p th:if="${currentUser == null or currentUser.role().name() != 'OWNER'}">Không tìm thấy nhà trọ trong phạm vi hiện tại.</p>
         </div>
 
         <table th:if="${!#lists.isEmpty(properties)}" class="data-table">
@@ -55,6 +59,7 @@
                     <th>Địa chỉ</th>
                     <th>Mô tả</th>
                     <th>Số phòng</th>
+                    <th>Trạng thái duyệt</th>
                     <th>Thao tác</th>
                 </tr>
             </thead>
@@ -66,6 +71,15 @@
                     <td th:text="${p.address()}">Địa chỉ</td>
                     <td th:text="${p.description()}">Mô tả</td>
                     <td th:text="${p.totalRooms()}">0</td>
+                    <td>
+                        <span class="badge"
+                              th:classappend="${p.approvalStatus() != null ? 'badge-' + p.approvalStatus().name() : 'badge-APPROVED'}"
+                              th:text="${p.approvalStatus() != null ? uiText.approvalStatus(p.approvalStatus()) : 'Đã duyệt'}">Đã duyệt</span>
+                        <div th:if="${p.approvalStatus() != null and p.approvalStatus().name() == 'REJECTED' and p.rejectionReason() != null and !#strings.isEmpty(p.rejectionReason())}"
+                             style="font-size: 11px; color: var(--status-maintenance, #b91c1c); margin-top: 4px; line-height: 1.3;">
+                            <span style="font-weight: 600;">Lý do:</span> <span th:text="${p.rejectionReason()}"></span>
+                        </div>
+                    </td>
                     <td>
                         <a th:href="@{'/properties/' + ${p.id()}}" class="btn btn-sm">Xem chi tiết</a>
                     </td>

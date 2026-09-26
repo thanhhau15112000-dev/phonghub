@@ -29,6 +29,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 public class AdminUserUiController {
 
     private static final List<UserRole> CREATABLE_ROLES = List.of(
+        UserRole.OWNER,
         UserRole.STAFF,
         UserRole.TECHNICIAN,
         UserRole.TENANT
@@ -131,6 +132,7 @@ public class AdminUserUiController {
         String selectedRole = roleToFilter != null ? roleToFilter.name() : "ALL";
         String selectedRoleTitle = switch (selectedRole) {
             case "ADMIN" -> "Quản trị viên";
+            case "OWNER" -> "Chủ trọ";
             case "STAFF" -> "Nhân viên";
             case "TECHNICIAN" -> "Kỹ thuật viên";
             case "TENANT" -> "Người thuê";
