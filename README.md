@@ -151,6 +151,8 @@ Profile `docker` có sẵn dữ liệu fixture cho các actor sau:
 | Role | Username | Email |
 | --- | --- | --- |
 | `ADMIN` | `admin` | `admin@phonghub.local` |
+| `OWNER` | `owner1` | `owner1@phonghub.local` |
+| `OWNER` | `owner2` | `owner2@phonghub.local` |
 | `STAFF` | `staff1` | `staff1@phonghub.local` |
 | `STAFF` | `staff2` | `staff2@phonghub.local` |
 | `TECHNICIAN` | `tech1` | `tech1@phonghub.local` |
