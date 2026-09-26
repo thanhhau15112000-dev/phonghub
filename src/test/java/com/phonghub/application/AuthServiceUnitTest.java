@@ -25,6 +25,7 @@ import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.application.service.AuthService;
 import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.domain.exception.AccountDisabledException;
+import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateEmailException;
 import com.phonghub.domain.exception.DuplicateUsernameException;
 import com.phonghub.domain.exception.IdentityProviderUnavailableException;
@@ -380,5 +381,32 @@ class AuthServiceUnitTest {
         verify(userRepository).save(argThat(u ->
             u.username().equals("mixedcaseuser") && u.email().equals("mixedcase@phonghub.local")
         ));
+    }
+
+    @Test
+    void adminCreateUserRejectsDuplicatePhone() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        when(userRepository.findByEmail("new@phonghub.local")).thenReturn(Optional.empty());
+        when(userRepository.findByUsername("newuser")).thenReturn(Optional.empty());
+
+        User existing = new User(
+            UUID.randomUUID(), "other", "other@phonghub.local", "Other", "0911223344",
+            UserRole.TENANT, User.UserStatus.ACTIVE, false, Instant.now()
+        );
+        when(userRepository.findAll()).thenReturn(java.util.List.of(existing));
+
+        AuthUseCase.CreateUserCommand cmd = new AuthUseCase.CreateUserCommand(
+            "newuser", "new@phonghub.local", "New User", "0911223344", UserRole.TENANT
+        );
+
+        assertThrows(
+            DomainException.class,
+            () -> authService.adminCreateUser(cmd)
+        );
+
+        verify(identityProviderPort, never()).adminCreateUser(any(), any());
     }
 }

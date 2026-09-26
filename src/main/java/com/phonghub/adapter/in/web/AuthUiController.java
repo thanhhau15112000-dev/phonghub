@@ -285,15 +285,22 @@ public class AuthUiController {
             demoActorPort.ifPresent(p -> p.setCurrentUser(updatedCurrentUser));
 
             redirectAttributes.addFlashAttribute("successMessage", "Cập nhật hồ sơ cá nhân thành công.");
+            redirectAttributes.addFlashAttribute("profileSuccessMessage", "Cập nhật hồ sơ cá nhân thành công.");
             return "redirect:/account/profile";
         } catch (IllegalArgumentException ex) {
-            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+            String msg = ex.getMessage() != null ? ex.getMessage() : "Dữ liệu hồ sơ không hợp lệ.";
+            redirectAttributes.addFlashAttribute("errorMessage", msg);
+            redirectAttributes.addFlashAttribute("profileErrorMessage", msg);
             return "redirect:/account/profile";
         } catch (DomainException ex) {
-            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage() != null ? ex.getMessage() : "Không thể cập nhật hồ sơ cá nhân.");
+            String msg = ex.getMessage() != null ? ex.getMessage() : "Không thể cập nhật hồ sơ cá nhân.";
+            redirectAttributes.addFlashAttribute("errorMessage", msg);
+            redirectAttributes.addFlashAttribute("profileErrorMessage", msg);
             return "redirect:/account/profile";
         } catch (Exception ex) {
-            redirectAttributes.addFlashAttribute("errorMessage", "Đã xảy ra lỗi khi cập nhật hồ sơ cá nhân. Vui lòng thử lại.");
+            String msg = "Đã xảy ra lỗi khi cập nhật hồ sơ: " + (ex.getMessage() != null ? ex.getMessage() : "Vui lòng kiểm tra lại dữ liệu.");
+            redirectAttributes.addFlashAttribute("errorMessage", msg);
+            redirectAttributes.addFlashAttribute("profileErrorMessage", msg);
             return "redirect:/account/profile";
         }
     }

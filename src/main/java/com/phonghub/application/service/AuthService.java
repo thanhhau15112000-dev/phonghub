@@ -8,6 +8,7 @@ import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.domain.exception.AccountDisabledException;
+import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateEmailException;
 import com.phonghub.domain.exception.DuplicateUsernameException;
 import com.phonghub.domain.exception.InvalidCredentialsException;
@@ -217,6 +218,18 @@ public class AuthService implements AuthUseCase {
             throw new DuplicateUsernameException("Tên đăng nhập đã tồn tại trong hệ thống: " + normalizedUsername);
         }
 
+        String cleanPhone = null;
+        if (command.phone() != null && !command.phone().isBlank()) {
+            cleanPhone = command.phone().trim();
+            if (!cleanPhone.matches("^0\\d{9}$")) {
+                throw new IllegalArgumentException("Số điện thoại không hợp lệ (phải gồm 10 chữ số bắt đầu bằng 0)");
+            }
+            final String phoneToCheck = cleanPhone;
+            if (userRepository.findAll().stream().anyMatch(u -> phoneToCheck.equals(u.phone()))) {
+                throw new DomainException("Số điện thoại đã được sử dụng bởi một tài khoản khác: " + cleanPhone);
+            }
+        }
+
         String temporaryPassword = generateSecureTemporaryPassword(16);
         UUID authUserId = identityProviderPort.adminCreateUser(normalizedEmail, temporaryPassword);
 
@@ -225,7 +238,7 @@ public class AuthService implements AuthUseCase {
             normalizedUsername,
             normalizedEmail,
             command.fullName().trim(),
-            command.phone() != null && !command.phone().isBlank() ? command.phone().trim() : null,
+            cleanPhone,
             command.role(),
             User.UserStatus.ACTIVE,
             true,
@@ -240,7 +253,10 @@ public class AuthService implements AuthUseCase {
             try {
                 identityProviderPort.adminDeleteUser(authUserId);
             } catch (Exception ignored) {}
-            throw ex;
+            if (ex instanceof DomainException de) {
+                throw de;
+            }
+            throw new DomainException("Không thể lưu tài khoản vào cơ sở dữ liệu: " + (ex.getMessage() != null ? ex.getMessage() : "Lỗi dữ liệu"), ex);
         }
 
         auditPort.recordEvent(AuditPort.AuditEvent.of(

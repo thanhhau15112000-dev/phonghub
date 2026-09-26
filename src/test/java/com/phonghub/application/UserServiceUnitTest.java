@@ -135,4 +135,29 @@ class UserServiceUnitTest {
             new UserUseCase.UpdateProfileCommand(userId, "Valid Name", "12345")
         );
     }
+
+    @Test
+    void updateProfileRejectsDuplicatePhone() {
+        UUID userId = UUID.randomUUID();
+        UUID otherId = UUID.randomUUID();
+        CurrentUser actor = new CurrentUser(userId, "staff@phonghub.local", "Staff", UserRole.STAFF);
+        when(currentUserPort.getCurrentUser()).thenReturn(actor);
+
+        User existingUser = new User(
+            userId, "staff1", "staff@phonghub.local", "Staff", "0900000001",
+            UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()
+        );
+        User otherUser = new User(
+            otherId, "staff2", "staff2@phonghub.local", "Other", "0900000002",
+            UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()
+        );
+        when(userRepository.findById(userId)).thenReturn(Optional.of(existingUser));
+        when(userRepository.findAll()).thenReturn(java.util.List.of(existingUser, otherUser));
+
+        assertThrows(IllegalArgumentException.class, () ->
+            userService.updateProfile(new UserUseCase.UpdateProfileCommand(
+                userId, "New Name", "0900000002"
+            ))
+        );
+    }
 }

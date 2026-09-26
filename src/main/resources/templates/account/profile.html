@@ -5,7 +5,6 @@
 <header th:replace="~{fragments/layout :: header}"></header>
 
 <main class="container" style="max-width: 640px; padding-top: 36px; padding-bottom: 48px;">
-    <div th:replace="~{fragments/layout :: alerts}"></div>
 
     <div class="card" style="margin-bottom: 24px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
@@ -59,7 +58,17 @@
                 </small>
             </div>
 
-            <div style="display: flex; gap: 10px; align-items: center; margin-top: 24px; flex-wrap: wrap;">
+            <!-- Thông báo thành công / lỗi ngay trong form gần nút Lưu thay đổi -->
+            <div th:if="${profileSuccessMessage != null or successMessage != null}" class="inline-alert inline-alert-success" style="margin-top: 20px; margin-bottom: 0;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                <span th:text="${profileSuccessMessage != null ? profileSuccessMessage : successMessage}">Cập nhật hồ sơ cá nhân thành công.</span>
+            </div>
+            <div th:if="${profileErrorMessage != null or errorMessage != null}" class="inline-alert inline-alert-danger" style="margin-top: 20px; margin-bottom: 0;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                <span th:text="${profileErrorMessage != null ? profileErrorMessage : errorMessage}">Đã xảy ra lỗi khi cập nhật hồ sơ cá nhân.</span>
+            </div>
+
+            <div style="display: flex; gap: 10px; align-items: center; margin-top: 20px; flex-wrap: wrap;">
                 <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
                 <a th:href="@{/account/password}" class="btn" style="text-decoration: none;">Đổi mật khẩu</a>
                 <a th:href="@{/}" class="btn" style="text-decoration: none; margin-left: auto;">Quay lại</a>
