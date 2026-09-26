@@ -50,6 +50,17 @@ public class AuthorizationService {
         if (user.role() == UserRole.ADMIN) {
             return;
         }
+        if (user.role() == UserRole.OWNER) {
+            Property prop = propertyRepositoryPort.findById(propertyId)
+                .orElseThrow(() -> new UnauthorizedPropertyAccessException("Property not found: " + propertyId));
+            if (prop.ownerId() == null || !user.id().equals(prop.ownerId())) {
+                throw new UnauthorizedPropertyAccessException(String.format(
+                    "Owner %s does not own property %s",
+                    user.fullName(), propertyId
+                ));
+            }
+            return;
+        }
         if (user.role() == UserRole.STAFF || user.role() == UserRole.TECHNICIAN) {
             if (!assignmentPort.isUserAssignedToProperty(user.id(), propertyId)) {
                 throw new UnauthorizedPropertyAccessException(String.format(
@@ -78,6 +89,17 @@ public class AuthorizationService {
             throw new UnauthorizedPropertyAccessException("Authentication required");
         }
         if (user.role() == UserRole.ADMIN) {
+            return;
+        }
+        if (user.role() == UserRole.OWNER) {
+            Property prop = propertyRepositoryPort.findById(propertyId)
+                .orElseThrow(() -> new UnauthorizedPropertyAccessException("Property not found: " + propertyId));
+            if (prop.ownerId() == null || !user.id().equals(prop.ownerId())) {
+                throw new UnauthorizedPropertyAccessException(String.format(
+                    "Owner %s does not own property %s",
+                    user.fullName(), propertyId
+                ));
+            }
             return;
         }
         if (user.role() == UserRole.STAFF) {
@@ -127,6 +149,11 @@ public class AuthorizationService {
         }
         if (user.role() == UserRole.ADMIN) {
             return propertyRepositoryPort.findAll().stream()
+                .map(Property::id)
+                .collect(Collectors.toSet());
+        }
+        if (user.role() == UserRole.OWNER) {
+            return propertyRepositoryPort.findByOwnerId(user.id()).stream()
                 .map(Property::id)
                 .collect(Collectors.toSet());
         }

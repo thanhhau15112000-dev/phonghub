@@ -106,6 +106,12 @@
                     <span>Quản trị viên</span>
                     <span class="badge-count" th:text="${roleCounts['ADMIN'] != null ? roleCounts['ADMIN'] : 0}">0</span>
                 </a>
+                <a th:href="@{/admin/users(role='OWNER', q=${!#strings.isEmpty(q) ? q : null}, size=${pageSize})}"
+                   th:classappend="${selectedRole == 'OWNER' ? 'active' : ''}"
+                   class="filter-tab">
+                    <span>Chủ trọ</span>
+                    <span class="badge-count" th:text="${roleCounts['OWNER'] != null ? roleCounts['OWNER'] : 0}">0</span>
+                </a>
                 <a th:href="@{/admin/users(role='STAFF', q=${!#strings.isEmpty(q) ? q : null}, size=${pageSize})}"
                    th:classappend="${selectedRole == 'STAFF' ? 'active' : ''}"
                    class="filter-tab">

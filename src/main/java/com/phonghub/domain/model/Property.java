@@ -9,6 +9,9 @@ public record Property(
     String address,
     String description,
     int totalRooms,
+    UUID ownerId,
+    PropertyApprovalStatus approvalStatus,
+    String rejectionReason,
     Instant createdAt
 ) {
     public Property {
@@ -24,8 +27,22 @@ public record Property(
         if (totalRooms < 0) {
             throw new IllegalArgumentException("Total rooms must be non-negative");
         }
+        if (approvalStatus == null) {
+            approvalStatus = PropertyApprovalStatus.APPROVED;
+        }
         if (createdAt == null) {
             createdAt = Instant.now();
         }
+    }
+
+    public Property(
+        UUID id,
+        String name,
+        String address,
+        String description,
+        int totalRooms,
+        Instant createdAt
+    ) {
+        this(id, name, address, description, totalRooms, null, PropertyApprovalStatus.APPROVED, null, createdAt);
     }
 }

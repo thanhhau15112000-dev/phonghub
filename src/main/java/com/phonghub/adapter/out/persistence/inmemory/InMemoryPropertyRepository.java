@@ -39,6 +39,16 @@ public class InMemoryPropertyRepository implements PropertyRepositoryPort {
     }
 
     @Override
+    public List<Property> findByOwnerId(UUID ownerId) {
+        if (ownerId == null) {
+            return List.of();
+        }
+        return store.values().stream()
+            .filter(p -> ownerId.equals(p.ownerId()))
+            .toList();
+    }
+
+    @Override
     public boolean existsById(UUID id) {
         return store.containsKey(id);
     }

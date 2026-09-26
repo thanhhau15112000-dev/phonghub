@@ -49,6 +49,30 @@ class PhongHubUiIntegrationTest {
     }
 
     @Test
+    @DisplayName("Properties list page for OWNER 1 renders custom title and approval status badges")
+    void testPropertiesListForOwner1() throws Exception {
+        mockMvc.perform(get("/properties")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Nhà trọ của tôi")))
+            .andExpect(content().string(containsString("Nhà trọ Xanh - Quận 7")))
+            .andExpect(content().string(containsString("Đã duyệt")))
+            .andExpect(content().string(containsString("Chờ duyệt")))
+            .andExpect(content().string(containsString("Bị từ chối")))
+            .andExpect(content().string(containsString("Giấy phép kinh doanh chưa hợp lệ hoặc thiếu chứng nhận PCCC")));
+    }
+
+    @Test
+    @DisplayName("Properties list page for OWNER 2 with no properties renders owner empty state")
+    void testPropertiesListForOwner2EmptyState() throws Exception {
+        mockMvc.perform(get("/properties")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_2_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Nhà trọ của tôi")))
+            .andExpect(content().string(containsString("Bạn chưa có nhà trọ nào trên hệ thống.")));
+    }
+
+    @Test
     @DisplayName("Property detail page renders room list and status badges")
     void testPropertyDetailRenders() throws Exception {
         mockMvc.perform(get("/properties/" + DataSeeder.PROP_1_ID)
