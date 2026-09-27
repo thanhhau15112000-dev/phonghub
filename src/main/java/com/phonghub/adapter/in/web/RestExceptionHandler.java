@@ -7,6 +7,7 @@ import com.phonghub.domain.exception.DuplicateEmailException;
 import com.phonghub.domain.exception.DuplicateRoomNumberException;
 import com.phonghub.domain.exception.DuplicateUsernameException;
 import com.phonghub.domain.exception.InvalidPropertyStatusException;
+import com.phonghub.domain.exception.InvalidRoomCapacityException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.exception.MaintenanceTicketException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
@@ -118,6 +119,15 @@ public class RestExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Duplicate Room Number");
         problem.setType(URI.create("https://phonghub.local/errors/duplicate-room-number"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(InvalidRoomCapacityException.class)
+    public ProblemDetail handleInvalidRoomCapacity(InvalidRoomCapacityException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Invalid Room Capacity");
+        problem.setType(URI.create("https://phonghub.local/errors/invalid-room-capacity"));
         problem.setProperty("timestamp", Instant.now());
         return problem;
     }

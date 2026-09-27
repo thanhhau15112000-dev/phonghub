@@ -597,4 +597,179 @@ class PhongHubApiIntegrationTest {
             .andExpect(jsonPath("$.title", is("Bad Request")))
             .andExpect(jsonPath("$.status", is(400)));
     }
+
+    @Test
+    @DisplayName("OWNER 1 updates room info in owned property successfully (200 OK)")
+    void testOwner1UpdatesRoomSuccess() throws Exception {
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P104-VIP", 2, new BigDecimal("35.0"), new BigDecimal("4500000"), 4
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id", is(DataSeeder.ROOM_104_ID.toString())))
+            .andExpect(jsonPath("$.roomNumber", is("P104-VIP")))
+            .andExpect(jsonPath("$.floor", is(2)))
+            .andExpect(jsonPath("$.areaSqm", is(35.0)))
+            .andExpect(jsonPath("$.basePrice", is(4500000)))
+            .andExpect(jsonPath("$.maxOccupants", is(4)));
+    }
+
+    @Test
+    @DisplayName("ADMIN updates room info successfully (200 OK)")
+    void testAdminUpdatesRoomSuccess() throws Exception {
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P104-ADM", 1, new BigDecimal("32.0"), new BigDecimal("4200000"), 3
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.roomNumber", is("P104-ADM")));
+    }
+
+    @Test
+    @DisplayName("STAFF attempting to update room returns 403 Forbidden")
+    void testStaffUpdatingRoomForbidden() throws Exception {
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P104-HACK", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 3
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("OWNER 2 attempting to update room in unowned property returns 403 Forbidden")
+    void testOwner2UpdatingRoomInUnownedPropertyForbidden() throws Exception {
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P104-HACK", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 3
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_2_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("Updating room number to existing room in same property returns 409 Conflict")
+    void testUpdatingRoomDuplicateNumberConflict() throws Exception {
+        // P101 already exists in PROP_1_ID
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "p101", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 3
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Duplicate Room Number")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Updating room keeping same room number succeeds (200 OK)")
+    void testUpdatingRoomSameNumberSuccess() throws Exception {
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P104", 1, new BigDecimal("31.0"), new BigDecimal("4100000"), 3
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.roomNumber", is("P104")))
+            .andExpect(jsonPath("$.basePrice", is(4100000)));
+    }
+
+    @Test
+    @DisplayName("Decreasing room maxOccupants below active contract occupants returns 409 Conflict")
+    void testReducingRoomCapacityBelowActiveContractOccupantsConflict() throws Exception {
+        // Contract 1 on Room 101 has primary occupant (tenant1). Add a 2nd occupant.
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(UUID.randomUUID(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        // Active contract now has 2 occupants. Attempt to reduce maxOccupants to 1.
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P101", 1, new BigDecimal("25.0"), new BigDecimal("3500000"), 1
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_101_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Room Capacity")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Updating room with negative basePrice returns 400 Bad Request")
+    void testUpdatingRoomWithNegativePriceBadRequest() throws Exception {
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P104", 1, new BigDecimal("30.0"), new BigDecimal("-500"), 3
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title", is("Bad Request")))
+            .andExpect(jsonPath("$.status", is(400)));
+    }
+
+    @Test
+    @DisplayName("Updating room with maxOccupants = 0 returns 400 Bad Request")
+    void testUpdatingRoomWithZeroOccupantsBadRequest() throws Exception {
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P104", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 0
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title", is("Bad Request")))
+            .andExpect(jsonPath("$.status", is(400)));
+    }
+
+    @Test
+    @DisplayName("Updating room basePrice does not alter active contract rent amount")
+    void testUpdatingRoomPriceDoesNotAlterContractRent() throws Exception {
+        var contractBefore = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        BigDecimal originalRent = contractBefore.getRentAmount();
+
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P101", 1, new BigDecimal("25.0"), new BigDecimal("5500000"), 2
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_101_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.basePrice", is(5500000)));
+
+        var contractAfter = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        org.junit.jupiter.api.Assertions.assertEquals(originalRent, contractAfter.getRentAmount());
+    }
 }

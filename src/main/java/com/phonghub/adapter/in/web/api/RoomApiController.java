@@ -63,6 +63,22 @@ public class RoomApiController {
         return ResponseEntity.ok(RoomResponse.from(room));
     }
 
+    @PutMapping("/rooms/{id}")
+    public ResponseEntity<RoomResponse> updateRoom(
+        @PathVariable UUID id,
+        @Valid @RequestBody UpdateRoomRequest request
+    ) {
+        Room room = roomUseCase.updateRoom(new RoomUseCase.UpdateRoomCommand(
+            id,
+            request.roomNumber(),
+            request.floor(),
+            request.areaSqm(),
+            request.basePrice(),
+            request.maxOccupants()
+        ));
+        return ResponseEntity.ok(RoomResponse.from(room));
+    }
+
     @PutMapping("/rooms/{id}/status")
     public ResponseEntity<RoomResponse> updateRoomStatus(
         @PathVariable UUID id,
@@ -78,6 +94,24 @@ public class RoomApiController {
 
         int floor,
 
+        @DecimalMin(value = "0.0", message = "Area cannot be negative")
+        BigDecimal areaSqm,
+
+        @NotNull(message = "Base price is required")
+        @DecimalMin(value = "0.0", message = "Base price cannot be negative")
+        BigDecimal basePrice,
+
+        @Min(value = 1, message = "Max occupants must be at least 1")
+        int maxOccupants
+    ) {}
+
+    public record UpdateRoomRequest(
+        @NotBlank(message = "Room number is required")
+        String roomNumber,
+
+        int floor,
+
+        @DecimalMin(value = "0.0", message = "Area cannot be negative")
         BigDecimal areaSqm,
 
         @NotNull(message = "Base price is required")
