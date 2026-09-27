@@ -156,6 +156,7 @@
                         <th>CCCD</th>
                         <th>Số điện thoại</th>
                         <th>Ngày vào</th>
+                        <th>Trạng thái</th>
                         <th th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}">Thao tác</th>
                     </tr>
                 </thead>
@@ -167,7 +168,11 @@
                         <td th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).identityCardNumber() : '—'}">CCCD</td>
                         <td th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).phone() : '—'}">SĐT</td>
                         <td th:text="${occ.checkInDate()}">2026-01-01</td>
-                        <td th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}">
+                        <td>
+                            <span th:if="${occ.checkOutDate() == null}" class="badge badge-ACTIVE" style="font-size: 11px; padding: 2px 6px;">Đang ở</span>
+                            <span th:if="${occ.checkOutDate() != null}" class="badge badge-TERMINATED" style="font-size: 11px; padding: 2px 6px;" th:text="'Đã rời ' + ${occ.checkOutDate()}">Đã rời</span>
+                        </td>
+                        <td th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" style="display: flex; gap: 4px; align-items: center;">
                             <button th:if="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId())}"
                                     type="button"
                                     class="btn btn-sm btn-secondary edit-occupant-btn"
@@ -175,6 +180,14 @@
                                     onclick="openEditTenantModalFromElement(this)"
                                     style="padding: 2px 8px; font-size: 11px;">
                                 Sửa
+                            </button>
+                            <button th:if="${contract.getStatus().name() == 'ACTIVE' and occ.checkOutDate() == null and occupantTenants != null and occupantTenants.containsKey(occ.tenantId())}"
+                                    type="button"
+                                    class="btn btn-sm btn-danger checkout-occupant-btn"
+                                    th:attr="data-id=${occ.tenantId()},data-name=${occupantTenants.get(occ.tenantId()).fullName()},data-checkin=${occ.checkInDate()}"
+                                    onclick="openCheckOutModalFromElement(this)"
+                                    style="padding: 2px 8px; font-size: 11px;">
+                                Rời phòng
                             </button>
                         </td>
                     </tr>
@@ -315,6 +328,47 @@
         </form>
     </dialog>
 
+    <!-- Dialog ghi nhận rời phòng cho người ở cùng (Chủ nhà hoặc Quản trị viên) -->
+    <dialog th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            id="checkOutModal"
+            class="modal-dialog"
+            style="max-width: 450px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--danger-light, #fee2e2); color: var(--danger-color, #dc2626); display: flex; align-items: center; justify-content: center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                </div>
+                <div>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Ghi nhận rời phòng</h3>
+                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Xác nhận kết thúc thời gian ở của khách thuê cùng phòng</p>
+                </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('checkOutModal').close()">✕</button>
+        </div>
+
+        <form id="checkOutForm" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+
+            <p style="font-size: 13px; line-height: 1.5; margin-bottom: 16px;">
+                Bạn có chắc chắn muốn ghi nhận người thuê <strong id="checkOutOccupantName"></strong> rời khỏi phòng không?
+            </p>
+
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label" for="checkOutDateInput">Ngày rời phòng <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                <input type="date" id="checkOutDateInput" name="checkOutDate" class="form-control" required th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}">
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('checkOutModal').close()">Hủy</button>
+                <button type="submit" class="btn btn-sm btn-danger">Xác nhận rời phòng</button>
+            </div>
+        </form>
+    </dialog>
+
     <script th:inline="javascript">
         function openEditTenantModalFromElement(el) {
             const contractId = /*[[${contract.getId()}]]*/ '';
@@ -327,6 +381,21 @@
             document.getElementById('editTenantEmail').value = el.getAttribute('data-email') || '';
             document.getElementById('editTenantAddress').value = el.getAttribute('data-addr') || '';
             document.getElementById('editTenantModal').showModal();
+        }
+
+        function openCheckOutModalFromElement(el) {
+            const contractId = /*[[${contract.getId()}]]*/ '';
+            const tenantId = el.getAttribute('data-id');
+            const tenantName = el.getAttribute('data-name');
+            const checkInDate = el.getAttribute('data-checkin');
+            const form = document.getElementById('checkOutForm');
+            form.action = '/contracts/' + contractId + '/occupants/' + tenantId + '/check-out';
+            document.getElementById('checkOutOccupantName').textContent = tenantName || '';
+            const dateInput = document.getElementById('checkOutDateInput');
+            if (checkInDate) {
+                dateInput.min = checkInDate;
+            }
+            document.getElementById('checkOutModal').showModal();
         }
     </script>
 </main>

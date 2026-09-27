@@ -9,6 +9,7 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
+import com.phonghub.domain.model.Tenant;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -562,5 +563,65 @@ class PhongHubUiIntegrationTest {
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/contracts/" + DataSeeder.CONTRACT_1_ID))
             .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 sees check out occupant button and modal dialog on active contract detail page")
+    void testOwner1SeesCheckOutOccupantButtonAndModal() throws Exception {
+        Tenant coTenant = tenantRepository.save(Tenant.create(
+            null, "Nguyễn Văn B", "079200009999", "0909999000", null, null
+        ));
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(coTenant.id(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Rời phòng")))
+            .andExpect(content().string(containsString("checkout-occupant-btn")))
+            .andExpect(content().string(containsString("id=\"checkOutModal\"")))
+            .andExpect(content().string(containsString("id=\"checkOutDateInput\"")));
+    }
+
+    @Test
+    @DisplayName("STAFF does not see check out occupant button on contract detail page")
+    void testStaffDoesNotSeeCheckOutOccupantButton() throws Exception {
+        Tenant coTenant = tenantRepository.save(Tenant.create(
+            null, "Nguyễn Văn B", "079200009999", "0909999000", null, null
+        ));
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(coTenant.id(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("checkout-occupant-btn"))))
+            .andExpect(content().string(not(containsString("id=\"checkOutModal\""))));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 checks out occupant via UI successfully (redirect with success flash message)")
+    void testOwner1ChecksOutOccupantViaUiSuccess() throws Exception {
+        Tenant coTenant = tenantRepository.save(Tenant.create(
+            null, "Nguyễn Văn C", "079200008877", "0908877665", null, null
+        ));
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(coTenant.id(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        mockMvc.perform(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants/" + coTenant.id() + "/check-out")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("checkOutDate", LocalDate.now().toString()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/contracts/" + DataSeeder.CONTRACT_1_ID))
+            .andExpect(flash().attributeExists("successMessage"));
+
+        // Verify occupant status on detail page is now "Đã rời"
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Đã rời " + LocalDate.now())));
     }
 }

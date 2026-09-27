@@ -133,6 +133,26 @@ public class ContractApiController {
         boolean createAccount
     ) {}
 
+    @PostMapping("/contracts/{contractId}/occupants/{tenantId}/check-out")
+    public ResponseEntity<ContractResponse.ContractOccupantResponse> checkOutOccupant(
+        @PathVariable UUID contractId,
+        @PathVariable UUID tenantId,
+        @RequestBody(required = false) CheckOutOccupantRequest request
+    ) {
+        LocalDate checkOutDate = request != null && request.checkOutDate() != null
+            ? request.checkOutDate()
+            : LocalDate.now();
+
+        com.phonghub.domain.model.ContractOccupant occupant = contractUseCase.checkOutOccupant(
+            new ContractUseCase.CheckOutOccupantCommand(contractId, tenantId, checkOutDate)
+        );
+        return ResponseEntity.ok(ContractResponse.ContractOccupantResponse.from(occupant));
+    }
+
+    public record CheckOutOccupantRequest(
+        LocalDate checkOutDate
+    ) {}
+
     public record CreateContractRequest(
         @NotNull(message = "Property ID is required")
         UUID propertyId,
