@@ -168,22 +168,26 @@
                     <th>Số điện thoại</th>
                     <th>Vai trò</th>
                     <th>Trạng thái</th>
-                    <th>Thao tác</th>
+                    <th class="col-actions">Thao tác</th>
                 </tr>
             </thead>
             <tbody>
                 <tr th:each="user : ${users}">
-                    <td th:text="${user.username() != null ? user.username() : '—'}">username</td>
+                    <td th:text="${user.username() != null ? user.username() : '—'}" style="font-weight: 500;">username</td>
                     <td th:text="${user.fullName()}">Người dùng</td>
                     <td th:text="${user.email()}">user@example.com</td>
                     <td th:text="${user.phone() != null ? user.phone() : '—'}">—</td>
                     <td th:text="${uiText.role(user.role())}">Người thuê</td>
-                    <td th:text="${user.status()}">ACTIVE</td>
                     <td>
-                        <div th:if="${user.role().name() != 'ADMIN'}" style="display: flex; gap: 6px; align-items: center;">
+                        <span class="badge"
+                              th:classappend="${user.status() != null and user.status().name() == 'ACTIVE' ? 'badge-ACTIVE' : 'badge-DRAFT'}"
+                              th:text="${user.status()}">ACTIVE</span>
+                    </td>
+                    <td class="col-actions">
+                        <div th:if="${user.role().name() != 'ADMIN'}" class="table-actions">
                             <form th:action="@{'/admin/users/' + ${user.id()} + '/reset-password'}" method="post" style="margin: 0;">
                                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                <button type="submit" class="btn btn-sm" th:title="'Sinh mật khẩu tạm thời mới cho ' + ${user.fullName()}">Reset mật khẩu</button>
+                                <button type="submit" class="btn btn-sm btn-secondary" th:title="'Sinh mật khẩu tạm thời mới cho ' + ${user.fullName()}">Reset mật khẩu</button>
                             </form>
                             <button type="button"
                                     class="btn btn-sm btn-danger"

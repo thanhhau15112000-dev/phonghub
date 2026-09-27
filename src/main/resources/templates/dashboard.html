@@ -48,27 +48,32 @@
         <table th:if="${!#lists.isEmpty(properties)}" class="data-table">
             <thead>
                 <tr>
-                    <th>Tên nhà trọ</th>
-                    <th>Địa chỉ</th>
-                    <th>Tổng số phòng</th>
-                    <th>Trạng thái duyệt</th>
-                    <th>Thao tác</th>
+                    <th style="min-width: 170px;">Tên nhà trọ</th>
+                    <th style="min-width: 200px;">Địa chỉ</th>
+                    <th class="col-number">Tổng số phòng</th>
+                    <th class="col-status">Trạng thái duyệt</th>
+                    <th class="col-actions">Thao tác</th>
                 </tr>
             </thead>
             <tbody>
                 <tr th:each="p : ${properties}">
                     <td>
-                        <a th:href="@{'/properties/' + ${p.id()}}" th:text="${p.name()}" style="font-weight: 600;">Tên nhà trọ</a>
+                        <a th:href="@{'/properties/' + ${p.id()}}" th:text="${p.name()}" style="font-weight: 600; color: var(--accent);">Tên nhà trọ</a>
                     </td>
                     <td th:text="${p.address()}">Địa chỉ</td>
-                    <td th:text="${p.totalRooms()}">0</td>
-                    <td>
+                    <td class="col-number" th:text="${p.totalRooms()}">0</td>
+                    <td class="col-status">
                         <span class="badge"
                               th:classappend="${p.approvalStatus() != null ? 'badge-' + p.approvalStatus().name() : 'badge-VERIFIED'}"
                               th:text="${p.approvalStatus() != null ? uiText.approvalStatus(p.approvalStatus()) : 'Đã duyệt'}">Đã duyệt</span>
                     </td>
-                    <td>
-                        <a th:href="@{'/properties/' + ${p.id()}}" class="btn btn-sm">Chi tiết</a>
+                    <td class="col-actions">
+                        <div class="table-actions">
+                            <a th:href="@{'/properties/' + ${p.id()}}" class="btn btn-sm btn-secondary" title="Xem thông tin chi tiết nhà trọ">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                <span>Chi tiết</span>
+                            </a>
+                        </div>
                     </td>
                 </tr>
             </tbody>
@@ -92,14 +97,14 @@
                     <th>Tiêu đề yêu cầu</th>
                     <th>Mức độ</th>
                     <th>Trạng thái</th>
-                    <th>Thao tác</th>
+                    <th class="col-actions">Thao tác</th>
                 </tr>
             </thead>
             <tbody>
                 <tr th:each="t : ${recentTickets}">
                     <td>
-                        <a th:href="@{'/maintenance/' + ${t.getId()}}" th:text="${t.getTitle()}" style="font-weight: 600;">Tiêu đề yêu cầu</a>
-                        <div style="font-size: 12px; color: var(--text-secondary);" th:text="${t.getDescription()}">Mô tả</div>
+                        <a th:href="@{'/maintenance/' + ${t.getId()}}" th:text="${t.getTitle()}" style="font-weight: 600; color: var(--accent);">Tiêu đề yêu cầu</a>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;" th:text="${t.getDescription()}">Mô tả</div>
                     </td>
                     <td>
                         <span class="badge" th:text="${uiText.maintenancePriority(t.getPriority())}">Trung bình</span>
@@ -107,8 +112,13 @@
                     <td>
                         <span th:class="'badge badge-' + ${t.getStatus()}" th:text="${uiText.maintenanceStatus(t.getStatus())}">Đã báo</span>
                     </td>
-                    <td>
-                        <a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm">Xem</a>
+                    <td class="col-actions">
+                        <div class="table-actions">
+                            <a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm btn-secondary" title="Xem yêu cầu bảo trì">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                <span>Chi tiết</span>
+                            </a>
+                        </div>
                     </td>
                 </tr>
             </tbody>
