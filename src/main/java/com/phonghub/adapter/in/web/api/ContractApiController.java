@@ -95,6 +95,44 @@ public class ContractApiController {
             .orElse(ResponseEntity.notFound().build());
     }
 
+    @PostMapping("/contracts/{id}/occupants")
+    public ResponseEntity<ContractResponse.ContractOccupantResponse> addOccupant(
+        @PathVariable UUID id,
+        @Valid @RequestBody AddOccupantRequest request
+    ) {
+        com.phonghub.domain.model.ContractOccupant occupant = contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
+            id,
+            request.fullName(),
+            request.identityCardNumber(),
+            request.phone(),
+            request.email(),
+            request.permanentAddress(),
+            request.checkInDate() != null ? request.checkInDate() : LocalDate.now(),
+            request.createAccount()
+        ));
+        ContractResponse.ContractOccupantResponse response = ContractResponse.ContractOccupantResponse.from(occupant);
+        return ResponseEntity.created(URI.create("/api/contracts/" + id + "/occupants/" + response.id())).body(response);
+    }
+
+    public record AddOccupantRequest(
+        @NotBlank(message = "Họ và tên không được để trống")
+        String fullName,
+
+        @NotBlank(message = "Số CCCD không được để trống")
+        String identityCardNumber,
+
+        @NotBlank(message = "Số điện thoại không được để trống")
+        String phone,
+
+        String email,
+
+        String permanentAddress,
+
+        LocalDate checkInDate,
+
+        boolean createAccount
+    ) {}
+
     public record CreateContractRequest(
         @NotNull(message = "Property ID is required")
         UUID propertyId,

@@ -772,4 +772,126 @@ class PhongHubApiIntegrationTest {
         var contractAfter = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
         org.junit.jupiter.api.Assertions.assertEquals(originalRent, contractAfter.getRentAmount());
     }
+
+    @Test
+    @DisplayName("OWNER 1 adds occupant to active contract (201 Created)")
+    void testOwner1AddsOccupantSuccess() throws Exception {
+        ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
+            "Trần Thị Lan",
+            "079200008888",
+            "0908888999",
+            "lan@phonghub.local",
+            "Bình Phước",
+            LocalDate.now(),
+            false
+        );
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id", notNullValue()))
+            .andExpect(jsonPath("$.contractId", is(DataSeeder.CONTRACT_1_ID.toString())))
+            .andExpect(jsonPath("$.isPrimary", is(false)))
+            .andExpect(jsonPath("$.checkInDate", is(LocalDate.now().toString())));
+    }
+
+    @Test
+    @DisplayName("STAFF adding occupant to contract returns 403 Forbidden")
+    void testStaffAddsOccupantForbidden() throws Exception {
+        ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
+            "Trần Thị Lan",
+            "079200008888",
+            "0908888999",
+            "lan@phonghub.local",
+            "Bình Phước",
+            LocalDate.now(),
+            false
+        );
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("Adding occupant exceeding room maxOccupants returns 409 Conflict")
+    void testAddOccupantExceedingMaxOccupantsConflict() throws Exception {
+        // Contract 1 on Room 101 has 1 occupant. Room 101 maxOccupants = 2.
+        // Add 2nd occupant:
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(UUID.randomUUID(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        // Attempt to add 3rd occupant:
+        ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
+            "Trần Thị Lan",
+            "079200008888",
+            "0908888999",
+            null,
+            null,
+            LocalDate.now(),
+            false
+        );
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Room Capacity")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Adding occupant who is already in an active contract returns 409 Conflict")
+    void testAddOccupantWithDuplicateActiveContractConflict() throws Exception {
+        // Tenant 1 is primary tenant in active Contract 1
+        var tenant1 = tenantRepository.findById(DataSeeder.TENANT_RECORD_ID).orElseThrow();
+
+        ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
+            tenant1.fullName(),
+            tenant1.identityCardNumber(),
+            tenant1.phone(),
+            tenant1.email(),
+            null,
+            LocalDate.now(),
+            false
+        );
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Duplicate Active Contract")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Adding occupant with blank required fields returns 400 Bad Request")
+    void testAddOccupantBlankFieldsBadRequest() throws Exception {
+        ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
+            "   ",
+            "",
+            "",
+            null,
+            null,
+            LocalDate.now(),
+            false
+        );
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title", is("Bad Request")))
+            .andExpect(jsonPath("$.status", is(400)));
+    }
 }

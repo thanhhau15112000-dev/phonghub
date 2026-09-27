@@ -118,7 +118,7 @@ public class Contract {
         return contract;
     }
 
-    public void addOccupant(UUID tenantId, boolean isPrimary, LocalDate checkInDate) {
+    public ContractOccupant addOccupant(UUID tenantId, boolean isPrimary, LocalDate checkInDate) {
         if (tenantId == null) {
             throw new IllegalArgumentException("Tenant id cannot be null");
         }
@@ -139,6 +139,7 @@ public class Contract {
         );
         this.occupants.add(occupant);
         this.updatedAt = Instant.now();
+        return occupant;
     }
 
     public void activate() {

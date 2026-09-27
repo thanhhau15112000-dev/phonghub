@@ -168,17 +168,55 @@ public class ContractUiController {
             Room room = roomUseCase.getRoom(contract.getRoomId());
             Tenant primaryTenant = tenantRepository.findById(contract.getPrimaryTenantId()).orElse(null);
 
+            java.util.Map<UUID, Tenant> occupantTenants = new java.util.HashMap<>();
+            if (contract.getOccupants() != null) {
+                for (com.phonghub.domain.model.ContractOccupant occ : contract.getOccupants()) {
+                    tenantRepository.findById(occ.tenantId()).ifPresent(t -> occupantTenants.put(occ.tenantId(), t));
+                }
+            }
+
             model.addAttribute("currentUser", currentUser);
             model.addAttribute("contract", contract);
             model.addAttribute("property", property);
             model.addAttribute("room", room);
             model.addAttribute("primaryTenant", primaryTenant);
+            model.addAttribute("occupantTenants", occupantTenants);
 
             return "contracts/detail";
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
             return "redirect:/contracts";
         }
+    }
+
+    @PostMapping("/{id}/occupants")
+    public String addOccupant(
+        @PathVariable UUID id,
+        @RequestParam String fullName,
+        @RequestParam String identityCardNumber,
+        @RequestParam String phone,
+        @RequestParam(required = false) String email,
+        @RequestParam(required = false) String permanentAddress,
+        @RequestParam(required = false) LocalDate checkInDate,
+        @RequestParam(defaultValue = "false") boolean createAccount,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
+                id,
+                fullName,
+                identityCardNumber,
+                phone,
+                email,
+                permanentAddress,
+                checkInDate != null ? checkInDate : LocalDate.now(),
+                createAccount
+            ));
+            redirectAttributes.addFlashAttribute("successMessage", "Thêm người thuê vào phòng thành công.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
     }
 
     @PostMapping("/{id}/activate")
