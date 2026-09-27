@@ -85,7 +85,22 @@
 
         <!-- Bên phải: Thông tin người thuê chính -->
         <div class="card">
-            <h2>Thông tin người thuê chính</h2>
+            <div class="flex-between" style="margin-bottom: 8px;">
+                <h2 style="margin: 0;">Thông tin người thuê chính</h2>
+                <button th:if="${primaryTenant != null and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                        type="button"
+                        id="editPrimaryTenantBtn"
+                        class="btn btn-sm btn-secondary"
+                        th:attr="data-id=${primaryTenant.id()},data-name=${primaryTenant.fullName()},data-idcard=${primaryTenant.identityCardNumber()},data-phone=${primaryTenant.phone()},data-email=${primaryTenant.email() != null ? primaryTenant.email() : ''},data-addr=${primaryTenant.permanentAddress() != null ? primaryTenant.permanentAddress() : ''}"
+                        onclick="openEditTenantModalFromElement(this)"
+                        style="font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20h9"></path>
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                    Sửa thông tin
+                </button>
+            </div>
             <div th:if="${primaryTenant == null}" class="empty-state">
                 <p>Không tìm thấy hồ sơ người thuê.</p>
             </div>
@@ -141,6 +156,7 @@
                         <th>CCCD</th>
                         <th>Số điện thoại</th>
                         <th>Ngày vào</th>
+                        <th th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}">Thao tác</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -151,6 +167,16 @@
                         <td th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).identityCardNumber() : '—'}">CCCD</td>
                         <td th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).phone() : '—'}">SĐT</td>
                         <td th:text="${occ.checkInDate()}">2026-01-01</td>
+                        <td th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}">
+                            <button th:if="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId())}"
+                                    type="button"
+                                    class="btn btn-sm btn-secondary edit-occupant-btn"
+                                    th:attr="data-id=${occupantTenants.get(occ.tenantId()).id()},data-name=${occupantTenants.get(occ.tenantId()).fullName()},data-idcard=${occupantTenants.get(occ.tenantId()).identityCardNumber()},data-phone=${occupantTenants.get(occ.tenantId()).phone()},data-email=${occupantTenants.get(occ.tenantId()).email() != null ? occupantTenants.get(occ.tenantId()).email() : ''},data-addr=${occupantTenants.get(occ.tenantId()).permanentAddress() != null ? occupantTenants.get(occ.tenantId()).permanentAddress() : ''}"
+                                    onclick="openEditTenantModalFromElement(this)"
+                                    style="padding: 2px 8px; font-size: 11px;">
+                                Sửa
+                            </button>
+                        </td>
                     </tr>
                 </tbody>
             </table>
@@ -231,6 +257,78 @@
             </div>
         </form>
     </dialog>
+
+    <!-- Dialog sửa hồ sơ người thuê (Chủ nhà hoặc Quản trị viên) -->
+    <dialog th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            id="editTenantModal"
+            class="modal-dialog"
+            style="max-width: 500px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--primary-light, #eff6ff); color: var(--primary-color, #2563eb); display: flex; align-items: center; justify-content: center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Cập nhật hồ sơ người thuê</h3>
+                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Chỉnh sửa thông tin liên lạc và định danh của khách thuê</p>
+                </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('editTenantModal').close()">✕</button>
+        </div>
+
+        <form id="editTenantForm" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label class="form-label" for="editTenantFullName">Họ và tên <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                <input type="text" id="editTenantFullName" name="fullName" class="form-control" required placeholder="VD: Nguyễn Văn A">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label" for="editTenantIdCard">Số CCCD / Định danh <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                    <input type="text" id="editTenantIdCard" name="identityCardNumber" class="form-control" required placeholder="12 chữ số">
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label" for="editTenantPhone">Số điện thoại <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                    <input type="tel" id="editTenantPhone" name="phone" class="form-control" pattern="0[0-9]{9}" required placeholder="090xxxxxxx (10 số)">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label class="form-label" for="editTenantEmail">Email</label>
+                <input type="email" id="editTenantEmail" name="email" class="form-control" placeholder="tenant@gmail.com">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label" for="editTenantAddress">Địa chỉ thường trú</label>
+                <input type="text" id="editTenantAddress" name="permanentAddress" class="form-control" placeholder="Xã/Phường, Huyện/Quận, Tỉnh/TP">
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('editTenantModal').close()">Hủy</button>
+                <button type="submit" class="btn btn-sm btn-primary">Lưu thay đổi</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script th:inline="javascript">
+        function openEditTenantModalFromElement(el) {
+            const contractId = /*[[${contract.getId()}]]*/ '';
+            const tenantId = el.getAttribute('data-id');
+            const form = document.getElementById('editTenantForm');
+            form.action = '/contracts/' + contractId + '/tenants/' + tenantId + '/edit';
+            document.getElementById('editTenantFullName').value = el.getAttribute('data-name') || '';
+            document.getElementById('editTenantIdCard').value = el.getAttribute('data-idcard') || '';
+            document.getElementById('editTenantPhone').value = el.getAttribute('data-phone') || '';
+            document.getElementById('editTenantEmail').value = el.getAttribute('data-email') || '';
+            document.getElementById('editTenantAddress').value = el.getAttribute('data-addr') || '';
+            document.getElementById('editTenantModal').showModal();
+        }
+    </script>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>

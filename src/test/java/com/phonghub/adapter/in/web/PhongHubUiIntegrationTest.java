@@ -501,4 +501,66 @@ class PhongHubUiIntegrationTest {
             .andExpect(redirectedUrl("/contracts/" + DataSeeder.CONTRACT_1_ID))
             .andExpect(flash().attributeExists("errorMessage"));
     }
+
+    @Test
+    @DisplayName("OWNER 1 sees edit tenant button and modal on contract detail page")
+    void testOwner1SeesEditTenantButtonAndModal() throws Exception {
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("id=\"editPrimaryTenantBtn\"")))
+            .andExpect(content().string(containsString("id=\"editTenantModal\"")))
+            .andExpect(content().string(containsString("editTenantFullName")))
+            .andExpect(content().string(containsString("editTenantIdCard")))
+            .andExpect(content().string(containsString("editTenantPhone")));
+    }
+
+    @Test
+    @DisplayName("STAFF does not see edit tenant button on contract detail page")
+    void testStaffDoesNotSeeEditTenantButton() throws Exception {
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("id=\"editPrimaryTenantBtn\""))));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 updates tenant via UI successfully (redirect with success flash message)")
+    void testOwner1UpdatesTenantViaUiSuccess() throws Exception {
+        mockMvc.perform(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/tenants/" + DataSeeder.TENANT_RECORD_ID + "/edit")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("fullName", "Nguyễn Văn A (Cập nhật UI)")
+                .param("identityCardNumber", "079201001111")
+                .param("phone", "0901234567")
+                .param("email", "an.ui@phonghub.local")
+                .param("permanentAddress", "Hà Nội"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/contracts/" + DataSeeder.CONTRACT_1_ID))
+            .andExpect(flash().attributeExists("successMessage"));
+
+        // Verify updated tenant displayed on page
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Nguyễn Văn A (Cập nhật UI)")))
+            .andExpect(content().string(containsString("an.ui@phonghub.local")));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 updating tenant with duplicate CCCD via UI returns error flash message")
+    void testOwner1UpdatesTenantDuplicateCccdViaUiFails() throws Exception {
+        // Pre-create duplicate tenant
+        tenantRepository.save(com.phonghub.domain.model.Tenant.create(
+            null, "Khách Khác", "079201008888", "0908888777", null, null
+        ));
+
+        mockMvc.perform(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/tenants/" + DataSeeder.TENANT_RECORD_ID + "/edit")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("fullName", "Nguyễn Văn A")
+                .param("identityCardNumber", "079201008888")
+                .param("phone", "0901234567"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/contracts/" + DataSeeder.CONTRACT_1_ID))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
 }

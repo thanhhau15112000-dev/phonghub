@@ -5,7 +5,9 @@ import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
+import com.phonghub.application.port.in.TenantUseCase;
 import com.phonghub.application.port.in.UserUseCase;
+import com.phonghub.application.service.TenantService;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUserPort;
@@ -116,5 +118,16 @@ public class PhongHubConfiguration {
         AuditPort auditPort
     ) {
         return new AuthService(userRepo, identityProviderPort, currentUserPort, authorizationService, auditPort);
+    }
+
+    @Bean
+    public TenantUseCase tenantUseCase(
+        TenantRepositoryPort tenantRepo,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort
+    ) {
+        TenantService service = new TenantService(tenantRepo, currentUserPort, authorizationService, auditPort);
+        return new TransactionalTenantUseCase(service);
     }
 }
