@@ -84,56 +84,95 @@
         <table th:if="${!#lists.isEmpty(properties)}" class="data-table">
             <thead>
                 <tr>
-                    <th>Tên</th>
-                    <th>Địa chỉ</th>
-                    <th>Mô tả</th>
-                    <th>Số phòng</th>
-                    <th>Trạng thái duyệt</th>
-                    <th>Thao tác</th>
+                    <th style="min-width: 170px;">Tên nhà trọ</th>
+                    <th style="min-width: 200px;">Địa chỉ</th>
+                    <th style="min-width: 160px;">Mô tả</th>
+                    <th class="col-number">Số phòng</th>
+                    <th class="col-status">Trạng thái duyệt</th>
+                    <th class="col-actions">Thao tác</th>
                 </tr>
             </thead>
             <tbody>
                 <tr th:each="p : ${properties}">
                     <td>
-                        <a th:href="@{'/properties/' + ${p.id()}}" th:text="${p.name()}" style="font-weight: 600;">Tên nhà trọ</a>
+                        <a th:href="@{'/properties/' + ${p.id()}}" th:text="${p.name()}" style="font-weight: 600; color: var(--accent);">Tên nhà trọ</a>
                     </td>
                     <td th:text="${p.address()}">Địa chỉ</td>
-                    <td th:text="${p.description()}">Mô tả</td>
-                    <td th:text="${p.totalRooms()}">0</td>
-                    <td>
-                        <span class="badge"
-                              th:classappend="${p.approvalStatus() != null ? 'badge-' + p.approvalStatus().name() : 'badge-VERIFIED'}"
-                              th:text="${p.approvalStatus() != null ? uiText.approvalStatus(p.approvalStatus()) : 'Đã duyệt'}">Đã duyệt</span>
-                        <div th:if="${p.approvalStatus() != null and p.approvalStatus().name() == 'REJECTED' and p.rejectionReason() != null and !#strings.isEmpty(p.rejectionReason())}"
-                             style="font-size: 11px; color: var(--status-maintenance, #b91c1c); margin-top: 4px; line-height: 1.3;">
-                            <span style="font-weight: 600;">Lý do:</span> <span th:text="${p.rejectionReason()}"></span>
+                    <td th:text="${p.description() != null ? p.description() : '—'}">Mô tả</td>
+                    <td class="col-number" th:text="${p.totalRooms()}">0</td>
+                    <td class="col-status">
+                        <div class="status-cell-wrapper">
+                            <div class="status-badge-row">
+                                <span class="badge"
+                                      th:classappend="${p.approvalStatus() != null ? 'badge-' + p.approvalStatus().name() : 'badge-VERIFIED'}"
+                                      th:text="${p.approvalStatus() != null ? uiText.approvalStatus(p.approvalStatus()) : 'Đã duyệt'}">Đã duyệt</span>
+                                <button th:if="${p.approvalStatus() != null and p.approvalStatus().name() == 'REJECTED' and p.rejectionReason() != null and !#strings.isEmpty(p.rejectionReason())}"
+                                        type="button"
+                                        class="btn-reason-pill"
+                                        th:title="'Lý do từ chối: ' + ${p.rejectionReason()}"
+                                        th:attr="data-id=${p.id()},data-name=${p.name()},data-reason=${p.rejectionReason()}"
+                                        onclick="openViewReasonModal(this.getAttribute('data-name'), this.getAttribute('data-reason'))">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                                    <span>Xem lý do</span>
+                                </button>
+                            </div>
                         </div>
                     </td>
-                    <td>
-                        <a th:href="@{'/properties/' + ${p.id()}}" class="btn btn-sm">Xem chi tiết</a>
-                        <form th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and p.approvalStatus().name() == 'PENDING'}"
-                              th:action="@{'/properties/' + ${p.id()} + '/verify'}" method="post" style="display: inline; margin-left: 6px;">
-                            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                            <button type="submit" class="btn btn-sm btn-primary"
-                                    style="background-color: var(--status-available, #047857); border-color: var(--status-available, #047857); color: white;"
-                                    onclick="return confirm('Bạn có chắc chắn muốn duyệt nhà trọ này không?');">Duyệt</button>
-                        </form>
-                        <button th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and p.approvalStatus().name() == 'PENDING'}"
-                                type="button" class="btn btn-sm btn-danger" style="margin-left: 4px;"
-                                th:attr="data-id=${p.id()},data-name=${p.name()}"
-                                onclick="openRejectModal(this.getAttribute('data-id'), this.getAttribute('data-name'))">
-                            Từ chối
-                        </button>
+                    <td class="col-actions">
+                        <div class="table-actions">
+                            <a th:href="@{'/properties/' + ${p.id()}}" class="btn btn-sm btn-secondary" title="Xem thông tin chi tiết nhà trọ">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                <span>Chi tiết</span>
+                            </a>
+                            <th:block th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and p.approvalStatus() != null and p.approvalStatus().name() == 'PENDING'}">
+                                <form th:action="@{'/properties/' + ${p.id()} + '/verify'}" method="post">
+                                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                    <button type="submit" class="btn btn-sm btn-success"
+                                            title="Phê duyệt nhà trọ"
+                                            onclick="return confirm('Bạn có chắc chắn muốn duyệt nhà trọ này không?');">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        <span>Duyệt</span>
+                                    </button>
+                                </form>
+                                <button type="button" class="btn btn-sm btn-danger"
+                                        title="Từ chối phê duyệt kèm lý do"
+                                        th:attr="data-id=${p.id()},data-name=${p.name()}"
+                                        onclick="openRejectModal(this.getAttribute('data-id'), this.getAttribute('data-name'))">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                                    <span>Từ chối</span>
+                                </button>
+                            </th:block>
+                        </div>
                     </td>
                 </tr>
             </tbody>
         </table>
     </div>
 
+    <!-- Dialog xem chi tiết lý do từ chối -->
+    <dialog id="viewReasonModal" class="modal-dialog">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="badge badge-REJECTED">Bị từ chối</span>
+                <h3 style="margin: 0; font-size: 15px; font-weight: 600;">Lý do từ chối kiểm duyệt</h3>
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('viewReasonModal').close()">✕</button>
+        </div>
+        <p id="viewReasonPropertyName" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; font-weight: 500;"></p>
+        <div style="padding: 12px 14px; background-color: var(--error-bg); border: 1px solid #fecaca; border-radius: 6px; margin-bottom: 18px;">
+            <p id="viewReasonContent" style="margin: 0; font-size: 13px; line-height: 1.5; color: var(--error-text);"></p>
+        </div>
+        <div style="display: flex; justify-content: flex-end;">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('viewReasonModal').close()">Đóng</button>
+        </div>
+    </dialog>
+
     <!-- Dialog từ chối duyệt nhà trọ (Quản trị viên) -->
-    <dialog th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" id="rejectModal"
-            style="border: 1px solid var(--border-color); border-radius: 4px; padding: 20px; max-width: 480px; width: 90%; background: var(--bg-surface); color: var(--text-primary); box-shadow: 0 4px 16px rgba(0,0,0,0.15); margin: auto;">
-        <h3 style="margin-bottom: 8px; font-size: 16px;">Từ chối duyệt nhà trọ</h3>
+    <dialog th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" id="rejectModal" class="modal-dialog">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Từ chối duyệt nhà trọ</h3>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('rejectModal').close()">✕</button>
+        </div>
         <p id="rejectPropertyName" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; font-weight: 500;"></p>
         <form id="rejectForm" method="post" action="">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -142,13 +181,25 @@
                 <textarea id="rejectionReasonInput" name="reason" class="form-control" rows="3" required
                           placeholder="Ví dụ: Thiếu giấy phép kinh doanh hoặc chưa đạt tiêu chuẩn PCCC..."></textarea>
             </div>
-            <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
-                <button type="button" class="btn btn-sm" onclick="document.getElementById('rejectModal').close()">Hủy</button>
-                <button type="submit" class="btn btn-sm btn-danger" style="background-color: var(--status-maintenance); color: #fff;">Xác nhận từ chối</button>
+            <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px;">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('rejectModal').close()">Hủy</button>
+                <button type="submit" class="btn btn-sm btn-danger-filled">Xác nhận từ chối</button>
             </div>
         </form>
     </dialog>
 
+    <script>
+        function openViewReasonModal(name, reason) {
+            const modal = document.getElementById('viewReasonModal');
+            const nameElem = document.getElementById('viewReasonPropertyName');
+            const contentElem = document.getElementById('viewReasonContent');
+            if (modal && nameElem && contentElem) {
+                nameElem.textContent = 'Nhà trọ: ' + (name || '');
+                contentElem.textContent = reason || 'Không có lý do cụ thể.';
+                modal.showModal();
+            }
+        }
+    </script>
     <script th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}">
         function openRejectModal(id, name) {
             const modal = document.getElementById('rejectModal');

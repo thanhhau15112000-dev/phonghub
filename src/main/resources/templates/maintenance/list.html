@@ -30,21 +30,26 @@
                     <th>Trạng thái</th>
                     <th>Chi phí sửa chữa</th>
                     <th>Ngày tạo</th>
-                    <th>Thao tác</th>
+                    <th class="col-actions">Thao tác</th>
                 </tr>
             </thead>
             <tbody>
                 <tr th:each="t : ${tickets}">
                     <td>
-                        <a th:href="@{'/maintenance/' + ${t.getId()}}" th:text="${t.getTitle()}" style="font-weight: 600;">Tiêu đề</a>
-                        <div style="font-size: 12px; color: var(--text-secondary);" th:text="${t.getDescription()}">Mô tả</div>
+                        <a th:href="@{'/maintenance/' + ${t.getId()}}" th:text="${t.getTitle()}" style="font-weight: 600; color: var(--accent);">Tiêu đề</a>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;" th:text="${t.getDescription()}">Mô tả</div>
                     </td>
                     <td><span class="badge" th:text="${uiText.maintenancePriority(t.getPriority())}">Trung bình</span></td>
                     <td><span th:class="'badge badge-' + ${t.getStatus()}" th:text="${uiText.maintenanceStatus(t.getStatus())}">Đã báo</span></td>
                     <td th:text="${t.getRepairCost() != null and t.getRepairCost().compareTo(T(java.math.BigDecimal).ZERO) > 0 ? #numbers.formatDecimal(t.getRepairCost(), 0, 'COMMA', 0, 'POINT') + ' đ' : '—'}">—</td>
                     <td th:text="${#temporals.format(t.getCreatedAt(), 'yyyy-MM-dd HH:mm')}">2026-09-17</td>
-                    <td>
-                        <a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm">Quản lý</a>
+                    <td class="col-actions">
+                        <div class="table-actions">
+                            <a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm btn-secondary" title="Xem và cập nhật sự cố">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                <span>Quản lý</span>
+                            </a>
+                        </div>
                     </td>
                 </tr>
             </tbody>
