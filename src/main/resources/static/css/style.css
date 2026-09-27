@@ -296,40 +296,47 @@ h2 {
   background-color: #94a3b8;
 }
 
-/* Status cell with reason snippet */
+/* Status cell with reason badge */
 .status-cell-wrapper {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: flex-start;
+  align-items: center;
 }
 
-.status-rejection-chip {
+.status-badge-row {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.btn-reason-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 2px 8px;
   font-size: 11px;
+  font-weight: 500;
   color: #b91c1c;
   background-color: #fef2f2;
   border: 1px solid #fecaca;
-  border-radius: 4px;
-  max-width: 220px;
+  border-radius: 9999px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  white-space: nowrap;
+  transition: all 0.15s ease-in-out;
   line-height: 1.3;
+  height: 22px;
 }
 
-.status-rejection-chip:hover {
+.btn-reason-pill:hover {
   background-color: #fee2e2;
   border-color: #f87171;
   color: #991b1b;
+  transform: translateY(-1px);
+  box-shadow: 0 1px 3px rgba(185, 28, 28, 0.1);
 }
 
-.status-rejection-chip .rejection-snippet {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.btn-reason-pill svg {
+  flex-shrink: 0;
 }
 
 /* Standard Buttons System */

@@ -102,17 +102,19 @@
                     <td class="col-number" th:text="${p.totalRooms()}">0</td>
                     <td class="col-status">
                         <div class="status-cell-wrapper">
-                            <span class="badge"
-                                  th:classappend="${p.approvalStatus() != null ? 'badge-' + p.approvalStatus().name() : 'badge-VERIFIED'}"
-                                  th:text="${p.approvalStatus() != null ? uiText.approvalStatus(p.approvalStatus()) : 'Đã duyệt'}">Đã duyệt</span>
-                            <div th:if="${p.approvalStatus() != null and p.approvalStatus().name() == 'REJECTED' and p.rejectionReason() != null and !#strings.isEmpty(p.rejectionReason())}"
-                                 class="status-rejection-chip"
-                                 th:title="'Nhấp để xem chi tiết: ' + ${p.rejectionReason()}"
-                                 th:attr="data-id=${p.id()},data-name=${p.name()},data-reason=${p.rejectionReason()}"
-                                 onclick="openViewReasonModal(this.getAttribute('data-name'), this.getAttribute('data-reason'))">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                                <span>Lý do:</span>
-                                <span class="rejection-snippet" th:text="${p.rejectionReason()}"></span>
+                            <div class="status-badge-row">
+                                <span class="badge"
+                                      th:classappend="${p.approvalStatus() != null ? 'badge-' + p.approvalStatus().name() : 'badge-VERIFIED'}"
+                                      th:text="${p.approvalStatus() != null ? uiText.approvalStatus(p.approvalStatus()) : 'Đã duyệt'}">Đã duyệt</span>
+                                <button th:if="${p.approvalStatus() != null and p.approvalStatus().name() == 'REJECTED' and p.rejectionReason() != null and !#strings.isEmpty(p.rejectionReason())}"
+                                        type="button"
+                                        class="btn-reason-pill"
+                                        th:title="'Lý do từ chối: ' + ${p.rejectionReason()}"
+                                        th:attr="data-id=${p.id()},data-name=${p.name()},data-reason=${p.rejectionReason()}"
+                                        onclick="openViewReasonModal(this.getAttribute('data-name'), this.getAttribute('data-reason'))">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                                    <span>Xem lý do</span>
+                                </button>
                             </div>
                         </div>
                     </td>
