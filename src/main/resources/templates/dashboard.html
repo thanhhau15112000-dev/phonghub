@@ -51,6 +51,7 @@
                     <th>Tên nhà trọ</th>
                     <th>Địa chỉ</th>
                     <th>Tổng số phòng</th>
+                    <th>Trạng thái duyệt</th>
                     <th>Thao tác</th>
                 </tr>
             </thead>
@@ -62,7 +63,12 @@
                     <td th:text="${p.address()}">Địa chỉ</td>
                     <td th:text="${p.totalRooms()}">0</td>
                     <td>
-                        <a th:href="@{'/properties/' + ${p.id()}}" class="btn btn-sm">Quản lý phòng</a>
+                        <span class="badge"
+                              th:classappend="${p.approvalStatus() != null ? 'badge-' + p.approvalStatus().name() : 'badge-VERIFIED'}"
+                              th:text="${p.approvalStatus() != null ? uiText.approvalStatus(p.approvalStatus()) : 'Đã duyệt'}">Đã duyệt</span>
+                    </td>
+                    <td>
+                        <a th:href="@{'/properties/' + ${p.id()}}" class="btn btn-sm">Chi tiết</a>
                     </td>
                 </tr>
             </tbody>

@@ -75,7 +75,7 @@ class PhongHubUiIntegrationTest {
     }
 
     @Test
-    @DisplayName("Dashboard page renders successfully")
+    @DisplayName("Dashboard page renders successfully with approval status")
     void testDashboardRenders() throws Exception {
         mockMvc.perform(get("/dashboard")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
@@ -83,6 +83,7 @@ class PhongHubUiIntegrationTest {
             .andExpect(content().string(containsString("Bảng điều khiển quản lý nhà trọ")))
             .andExpect(content().string(containsString("Nhà trọ được truy cập")))
             .andExpect(content().string(containsString("PhongHub")))
+            .andExpect(content().string(containsString("Trạng thái duyệt")))
             .andExpect(content().string(not(containsString("PhongHub Ops"))))
             .andExpect(content().string(containsString("aria-label=\"Chọn người dùng demo\"")))
             .andExpect(content().string(not(containsString("Người dùng hiện tại"))))
@@ -123,14 +124,31 @@ class PhongHubUiIntegrationTest {
     }
 
     @Test
-    @DisplayName("Property detail page renders room list and status badges")
+    @DisplayName("Property detail page renders room list, status badges, and action buttons for admin")
     void testPropertyDetailRenders() throws Exception {
+        // Verified property (PROP_1_ID)
         mockMvc.perform(get("/properties/" + DataSeeder.PROP_1_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("P101")))
             .andExpect(content().string(containsString("Đang thuê")))
-            .andExpect(content().string(containsString("Bảo trì")));
+            .andExpect(content().string(containsString("Bảo trì")))
+            .andExpect(content().string(containsString("Đã duyệt")));
+
+        // Pending property (PROP_2_ID) renders verify and reject buttons for Admin
+        mockMvc.perform(get("/properties/" + DataSeeder.PROP_2_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Chờ duyệt")))
+            .andExpect(content().string(containsString("Duyệt nhà trọ")))
+            .andExpect(content().string(containsString("Từ chối")));
+
+        // Rejected property (PROP_3_ID) renders rejection reason
+        mockMvc.perform(get("/properties/" + DataSeeder.PROP_3_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Bị từ chối")))
+            .andExpect(content().string(containsString("Giấy phép kinh doanh chưa hợp lệ hoặc thiếu chứng nhận PCCC")));
     }
 
     @Test
@@ -161,7 +179,9 @@ class PhongHubUiIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Chọn nhà trọ")))
-            .andExpect(content().string(containsString("Chọn phòng")));
+            .andExpect(content().string(containsString("Chọn phòng")))
+            .andExpect(content().string(containsString("Nhà trọ Xanh - Quận 7")))
+            .andExpect(content().string(not(containsString("Khu trọ Tân Bình"))));
     }
 
     @Test
