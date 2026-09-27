@@ -14,7 +14,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- 2. Gán các nhà trọ hiện có cho owner1 với các trạng thái duyệt khác nhau
 UPDATE properties
 SET owner_id = '55555555-0000-0000-0000-000000000001',
-    approval_status = 'VERIFIED'
+    approval_status = 'APPROVED'
 WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 UPDATE properties
