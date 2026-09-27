@@ -9,6 +9,8 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
+import java.time.LocalDate;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -430,6 +432,73 @@ class PhongHubUiIntegrationTest {
                 .param("maxOccupants", "1"))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/rooms/" + DataSeeder.ROOM_101_ID))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 sees add occupant button and modal dialog on active contract detail page")
+    void testOwner1SeesAddOccupantButtonAndModal() throws Exception {
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Thêm người ở")))
+            .andExpect(content().string(containsString("id=\"addOccupantBtn\"")))
+            .andExpect(content().string(containsString("id=\"addOccupantModal\"")))
+            .andExpect(content().string(containsString("addOccupantFullName")))
+            .andExpect(content().string(containsString("addOccupantIdCard")))
+            .andExpect(content().string(containsString("addOccupantPhone")));
+    }
+
+    @Test
+    @DisplayName("STAFF does not see add occupant button or modal on contract detail page")
+    void testStaffDoesNotSeeAddOccupantButtonOrModal() throws Exception {
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("id=\"addOccupantBtn\""))))
+            .andExpect(content().string(not(containsString("id=\"addOccupantModal\""))));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 adds occupant via UI successfully (redirect with success flash message)")
+    void testOwner1AddsOccupantViaUiSuccess() throws Exception {
+        mockMvc.perform(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("fullName", "Trần Thị Cẩm")
+                .param("identityCardNumber", "079200007777")
+                .param("phone", "0907777888")
+                .param("email", "cam@phonghub.local")
+                .param("permanentAddress", "Cần Thơ")
+                .param("checkInDate", LocalDate.now().toString()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/contracts/" + DataSeeder.CONTRACT_1_ID))
+            .andExpect(flash().attributeExists("successMessage"));
+
+        // Verify occupant appears on detail page
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Trần Thị Cẩm")))
+            .andExpect(content().string(containsString("079200007777")));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 adding occupant exceeding capacity via UI returns error flash message")
+    void testOwner1AddsOccupantExceedingCapacityViaUiFails() throws Exception {
+        // Contract 1 on Room 101 has 1 occupant. Room 101 maxOccupants = 2.
+        // Add 1st additional occupant
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(UUID.randomUUID(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        // Try to add another occupant exceeding capacity
+        mockMvc.perform(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("fullName", "Lê Văn Tèo")
+                .param("identityCardNumber", "079200006666")
+                .param("phone", "0906666777"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/contracts/" + DataSeeder.CONTRACT_1_ID))
             .andExpect(flash().attributeExists("errorMessage"));
     }
 }
