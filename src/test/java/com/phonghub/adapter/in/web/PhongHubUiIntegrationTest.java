@@ -294,4 +294,66 @@ class PhongHubUiIntegrationTest {
             .andExpect(content().string(containsString("id=\"rejectModal\"")))
             .andExpect(content().string(containsString("Lý do từ chối")));
     }
+
+    @Test
+    @DisplayName("OWNER 1 creates room via UI in verified property successfully")
+    void testOwnerCreatesRoomViaUiSuccess() throws Exception {
+        mockMvc.perform(post("/properties/" + DataSeeder.PROP_1_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("roomNumber", "P105")
+                .param("floor", "2")
+                .param("areaSqm", "28.0")
+                .param("basePrice", "4000000")
+                .param("maxOccupants", "2"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties/" + DataSeeder.PROP_1_ID))
+            .andExpect(flash().attributeExists("successMessage"));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 creating room via UI in PENDING property returns error flash message")
+    void testOwnerCreatingRoomInPendingPropertyViaUiFails() throws Exception {
+        mockMvc.perform(post("/properties/" + DataSeeder.PROP_2_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("roomNumber", "P205")
+                .param("floor", "2")
+                .param("areaSqm", "28.0")
+                .param("basePrice", "4000000")
+                .param("maxOccupants", "2"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties/" + DataSeeder.PROP_2_ID))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 creating duplicate room via UI returns error flash message")
+    void testOwnerCreatingDuplicateRoomViaUiFails() throws Exception {
+        mockMvc.perform(post("/properties/" + DataSeeder.PROP_1_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("roomNumber", "P101")
+                .param("floor", "1")
+                .param("areaSqm", "20.0")
+                .param("basePrice", "3500000")
+                .param("maxOccupants", "2"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties/" + DataSeeder.PROP_1_ID))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 sees add room form on verified property, but sees pending warning on pending property")
+    void testOwnerRoomFormVisibilityOnVerifiedVsPending() throws Exception {
+        // Verified property -> sees form
+        mockMvc.perform(get("/properties/" + DataSeeder.PROP_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Thêm phòng vào nhà trọ")));
+
+        // Pending property -> does not see form, sees warning
+        mockMvc.perform(get("/properties/" + DataSeeder.PROP_2_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("Thêm phòng vào nhà trọ"))))
+            .andExpect(content().string(containsString("Chức năng thêm phòng chỉ khả dụng khi nhà trọ đã được Quản trị viên duyệt")));
+    }
 }

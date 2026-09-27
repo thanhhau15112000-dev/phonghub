@@ -128,10 +128,13 @@ class AuthorizationAndPropertyScopeUnitTest {
     }
 
     @Test
-    @DisplayName("OWNER can access owned property; non-owned throws UnauthorizedPropertyAccessException")
+    @DisplayName("OWNER can access and manage owned property; non-owned throws UnauthorizedPropertyAccessException")
     void testOwnerScope() {
         assertDoesNotThrow(() -> authService.assertCanAccessProperty(ownerUser1, prop1Id));
         assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertCanAccessProperty(ownerUser1, prop2Id));
+
+        assertDoesNotThrow(() -> authService.assertCanManageProperty(ownerUser1, prop1Id));
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertCanManageProperty(ownerUser1, prop2Id));
 
         Set<UUID> ids = authService.getAccessiblePropertyIds(ownerUser1);
         assertEquals(1, ids.size());

@@ -67,8 +67,16 @@
         </div>
     </div>
 
-    <!-- Biểu mẫu thêm phòng (quản trị viên, nhân viên hoặc chủ trọ sở hữu) -->
-    <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() != null and property.ownerId().equals(currentUser.id())))}" class="card">
+    <!-- Thông báo khi nhà trọ chưa duyệt -->
+    <div th:if="${currentUser != null and property.approvalStatus() != null and property.approvalStatus().name() != 'VERIFIED' and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() != null and property.ownerId().equals(currentUser.id())))}" class="card" style="background-color: var(--bg-surface); border: 1px dashed var(--border-color); color: var(--text-secondary); padding: 16px;">
+        <p style="margin: 0; font-size: 13px;">
+            Nhà trọ này đang ở trạng thái <strong th:text="${uiText.approvalStatus(property.approvalStatus())}">Chờ duyệt</strong>.
+            Chức năng thêm phòng chỉ khả dụng khi nhà trọ đã được Quản trị viên duyệt (<strong>Đã duyệt</strong>).
+        </p>
+    </div>
+
+    <!-- Biểu mẫu thêm phòng (quản trị viên, nhân viên hoặc chủ trọ sở hữu khi nhà trọ đã duyệt) -->
+    <div th:if="${currentUser != null and property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED' and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() != null and property.ownerId().equals(currentUser.id())))}" class="card">
         <h2>Thêm phòng vào nhà trọ</h2>
         <form th:action="@{'/properties/' + ${property.id()} + '/rooms'}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">

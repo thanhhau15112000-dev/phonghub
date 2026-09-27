@@ -9,11 +9,15 @@ import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.exception.DuplicateRoomNumberException;
+import com.phonghub.domain.exception.InvalidPropertyStatusException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.RoomNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
+import com.phonghub.domain.model.Property;
+import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.Room;
@@ -58,13 +62,19 @@ public class RoomService implements RoomUseCase {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         authorizationService.assertCanManageProperty(currentUser, command.propertyId());
 
-        if (!propertyRepository.existsById(command.propertyId())) {
-            throw new PropertyNotFoundException("Property not found with ID: " + command.propertyId());
+        Property property = propertyRepository.findById(command.propertyId())
+            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + command.propertyId()));
+
+        if (property.approvalStatus() != PropertyApprovalStatus.VERIFIED) {
+            throw new InvalidPropertyStatusException(String.format(
+                "Chỉ có thể tạo phòng cho nhà trọ đã được duyệt (VERIFIED). Trạng thái hiện tại: '%s'.",
+                property.approvalStatus()
+            ));
         }
 
         if (roomRepository.findByPropertyIdAndRoomNumber(command.propertyId(), command.roomNumber().trim()).isPresent()) {
-            throw new DomainException(String.format(
-                "Room number '%s' already exists in this property", command.roomNumber().trim()
+            throw new DuplicateRoomNumberException(String.format(
+                "Số phòng '%s' đã tồn tại trong nhà trọ này.", command.roomNumber().trim()
             ));
         }
 
@@ -77,7 +87,26 @@ public class RoomService implements RoomUseCase {
             command.maxOccupants()
         );
 
-        return roomRepository.save(room);
+        Room saved = roomRepository.save(room);
+
+        // Tự động đồng bộ total_rooms nếu số phòng thực tế vượt quá ước lượng ban đầu
+        int currentRoomCount = roomRepository.findByPropertyId(command.propertyId()).size();
+        if (currentRoomCount > property.totalRooms()) {
+            Property updatedProperty = new Property(
+                property.id(),
+                property.name(),
+                property.address(),
+                property.description(),
+                currentRoomCount,
+                property.ownerId(),
+                property.approvalStatus(),
+                property.rejectionReason(),
+                property.createdAt()
+            );
+            propertyRepository.save(updatedProperty);
+        }
+
+        return saved;
     }
 
     @Override
