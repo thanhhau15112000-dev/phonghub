@@ -11,6 +11,7 @@ import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateRoomNumberException;
 import com.phonghub.domain.exception.InvalidPropertyStatusException;
+import com.phonghub.domain.exception.InvalidRoomCapacityException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.RoomNotFoundException;
@@ -24,6 +25,7 @@ import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.UserRole;
+import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -107,6 +109,49 @@ public class RoomService implements RoomUseCase {
         }
 
         return saved;
+    }
+
+    @Override
+    public Room updateRoom(UpdateRoomCommand command) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        Room room = roomRepository.findById(command.roomId())
+            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + command.roomId()));
+
+        authorizationService.assertOwnerOrAdmin(currentUser, room.getPropertyId());
+
+        Optional<Room> duplicate = roomRepository.findByPropertyIdAndRoomNumber(room.getPropertyId(), command.roomNumber().trim());
+        if (duplicate.isPresent() && !duplicate.get().getId().equals(room.getId())) {
+            throw new DuplicateRoomNumberException(String.format(
+                "Số phòng '%s' đã tồn tại trong nhà trọ này.", command.roomNumber().trim()
+            ));
+        }
+
+        Optional<Contract> activeContract = contractRepository.findActiveByRoomId(room.getId());
+        if (activeContract.isPresent()) {
+            LocalDate today = LocalDate.now();
+            long residingCount = (activeContract.get().getOccupants() == null || activeContract.get().getOccupants().isEmpty())
+                ? 1
+                : Math.max(1, activeContract.get().getOccupants().stream()
+                    .filter(o -> o.checkOutDate() == null || o.checkOutDate().isAfter(today))
+                    .count());
+
+            if (command.maxOccupants() < residingCount) {
+                throw new InvalidRoomCapacityException(String.format(
+                    "Không thể giảm số người tối đa (%d) xuống dưới số người đang ở theo hợp đồng hiệu lực (%d).",
+                    command.maxOccupants(), residingCount
+                ));
+            }
+        }
+
+        room.updateInfo(
+            command.roomNumber(),
+            command.floor(),
+            command.areaSqm(),
+            command.basePrice(),
+            command.maxOccupants()
+        );
+
+        return roomRepository.save(room);
     }
 
     @Override

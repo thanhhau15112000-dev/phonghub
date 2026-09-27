@@ -356,4 +356,80 @@ class PhongHubUiIntegrationTest {
             .andExpect(content().string(not(containsString("Thêm phòng vào nhà trọ"))))
             .andExpect(content().string(containsString("Chức năng thêm phòng chỉ khả dụng khi nhà trọ đã được Quản trị viên duyệt")));
     }
+
+    @Test
+    @DisplayName("OWNER 1 sees edit room button and modal on room detail page")
+    void testOwner1SeesEditRoomButtonAndModal() throws Exception {
+        mockMvc.perform(get("/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Sửa thông tin")))
+            .andExpect(content().string(containsString("id=\"editRoomModal\"")))
+            .andExpect(content().string(containsString("Cập nhật thông tin phòng")));
+    }
+
+    @Test
+    @DisplayName("STAFF does not see edit room button or modal on room detail page")
+    void testStaffDoesNotSeeEditRoomButtonOrModal() throws Exception {
+        mockMvc.perform(get("/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("id=\"editRoomBtn\""))))
+            .andExpect(content().string(not(containsString("id=\"editRoomModal\""))));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 updates room via UI successfully (redirect with success flash message)")
+    void testOwner1UpdatesRoomViaUiSuccess() throws Exception {
+        mockMvc.perform(post("/rooms/" + DataSeeder.ROOM_104_ID + "/edit")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("roomNumber", "P104-VIP")
+                .param("floor", "2")
+                .param("areaSqm", "35.0")
+                .param("basePrice", "4500000")
+                .param("maxOccupants", "4"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/rooms/" + DataSeeder.ROOM_104_ID))
+            .andExpect(flash().attributeExists("successMessage"));
+
+        // Verify updated room
+        var room = roomRepository.findById(DataSeeder.ROOM_104_ID).orElseThrow();
+        org.junit.jupiter.api.Assertions.assertEquals("P104-VIP", room.getRoomNumber());
+        org.junit.jupiter.api.Assertions.assertEquals(4, room.getMaxOccupants());
+    }
+
+    @Test
+    @DisplayName("OWNER 1 updating room via UI to duplicate room number returns error flash message")
+    void testOwner1UpdatingDuplicateRoomViaUiFails() throws Exception {
+        mockMvc.perform(post("/rooms/" + DataSeeder.ROOM_104_ID + "/edit")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("roomNumber", "P101")
+                .param("floor", "1")
+                .param("areaSqm", "25.0")
+                .param("basePrice", "3500000")
+                .param("maxOccupants", "2"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/rooms/" + DataSeeder.ROOM_104_ID))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 reducing room capacity below active occupants via UI returns error flash message")
+    void testOwner1ReducingCapacityBelowActiveOccupantsViaUiFails() throws Exception {
+        // Add 2nd occupant to contract on Room 101
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(java.util.UUID.randomUUID(), false, java.time.LocalDate.now());
+        contractRepository.save(contract);
+
+        mockMvc.perform(post("/rooms/" + DataSeeder.ROOM_101_ID + "/edit")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("roomNumber", "P101")
+                .param("floor", "1")
+                .param("areaSqm", "25.0")
+                .param("basePrice", "3500000")
+                .param("maxOccupants", "1"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/rooms/" + DataSeeder.ROOM_101_ID))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
 }

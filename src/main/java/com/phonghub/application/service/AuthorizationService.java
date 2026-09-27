@@ -117,6 +117,30 @@ public class AuthorizationService {
         ));
     }
 
+    public void assertOwnerOrAdmin(CurrentUser user, UUID propertyId) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (user.role() == UserRole.ADMIN) {
+            return;
+        }
+        if (user.role() == UserRole.OWNER) {
+            Property prop = propertyRepositoryPort.findById(propertyId)
+                .orElseThrow(() -> new UnauthorizedPropertyAccessException("Property not found: " + propertyId));
+            if (prop.ownerId() == null || !user.id().equals(prop.ownerId())) {
+                throw new UnauthorizedPropertyAccessException(String.format(
+                    "Owner %s does not own property %s",
+                    user.fullName(), propertyId
+                ));
+            }
+            return;
+        }
+        throw new UnauthorizedPropertyAccessException(String.format(
+            "User %s with role %s is not permitted to perform this action. Only Owner or Admin allowed.",
+            user.fullName(), user.role()
+        ));
+    }
+
     public void assertCanManageContracts(CurrentUser user, UUID propertyId) {
         assertCanManageProperty(user, propertyId);
     }

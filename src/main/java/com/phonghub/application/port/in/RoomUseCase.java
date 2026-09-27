@@ -8,6 +8,7 @@ import java.util.UUID;
 
 public interface RoomUseCase {
     Room createRoom(CreateRoomCommand command);
+    Room updateRoom(UpdateRoomCommand command);
     List<Room> listRoomsForProperty(UUID propertyId);
     Room getRoom(UUID roomId);
     Room changeRoomStatus(UUID roomId, RoomStatus targetStatus);
@@ -32,6 +33,36 @@ public interface RoomUseCase {
             }
             if (maxOccupants <= 0) {
                 throw new IllegalArgumentException("Max occupants must be positive");
+            }
+            if (areaSqm != null && areaSqm.compareTo(BigDecimal.ZERO) < 0) {
+                throw new IllegalArgumentException("Area cannot be negative");
+            }
+        }
+    }
+
+    record UpdateRoomCommand(
+        UUID roomId,
+        String roomNumber,
+        int floor,
+        BigDecimal areaSqm,
+        BigDecimal basePrice,
+        int maxOccupants
+    ) {
+        public UpdateRoomCommand {
+            if (roomId == null) {
+                throw new IllegalArgumentException("Room id cannot be null");
+            }
+            if (roomNumber == null || roomNumber.isBlank()) {
+                throw new IllegalArgumentException("Room number cannot be blank");
+            }
+            if (basePrice == null || basePrice.compareTo(BigDecimal.ZERO) < 0) {
+                throw new IllegalArgumentException("Base price cannot be negative");
+            }
+            if (maxOccupants <= 0) {
+                throw new IllegalArgumentException("Max occupants must be positive");
+            }
+            if (areaSqm != null && areaSqm.compareTo(BigDecimal.ZERO) < 0) {
+                throw new IllegalArgumentException("Area cannot be negative");
             }
         }
     }
