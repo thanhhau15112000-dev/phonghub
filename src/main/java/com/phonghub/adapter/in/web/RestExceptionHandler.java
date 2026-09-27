@@ -4,6 +4,7 @@ import com.phonghub.domain.exception.ContractNotFoundException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
 import com.phonghub.domain.exception.DuplicateEmailException;
+import com.phonghub.domain.exception.DuplicateRoomNumberException;
 import com.phonghub.domain.exception.DuplicateUsernameException;
 import com.phonghub.domain.exception.InvalidPropertyStatusException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
@@ -108,6 +109,15 @@ public class RestExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Invalid Room State Transition");
         problem.setType(URI.create("https://phonghub.local/errors/invalid-room-state"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(DuplicateRoomNumberException.class)
+    public ProblemDetail handleDuplicateRoomNumber(DuplicateRoomNumberException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Duplicate Room Number");
+        problem.setType(URI.create("https://phonghub.local/errors/duplicate-room-number"));
         problem.setProperty("timestamp", Instant.now());
         return problem;
     }

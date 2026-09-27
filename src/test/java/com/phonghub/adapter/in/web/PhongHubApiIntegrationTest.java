@@ -497,4 +497,104 @@ class PhongHubApiIntegrationTest {
             .andExpect(jsonPath("$.title", is("Resource Not Found")))
             .andExpect(jsonPath("$.status", is(404)));
     }
+
+    @Test
+    @DisplayName("OWNER 1 creates room in owned & VERIFIED property successfully (201 Created)")
+    void testOwnerCreatesRoomInVerifiedPropertySuccess() throws Exception {
+        RoomApiController.CreateRoomRequest req = new RoomApiController.CreateRoomRequest(
+            "P105", 2, new BigDecimal("28.5"), new BigDecimal("4200000"), 2
+        );
+
+        mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_1_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.roomNumber", is("P105")))
+            .andExpect(jsonPath("$.floor", is(2)))
+            .andExpect(jsonPath("$.basePrice", is(4200000)))
+            .andExpect(jsonPath("$.maxOccupants", is(2)))
+            .andExpect(jsonPath("$.status", is("AVAILABLE")));
+    }
+
+    @Test
+    @DisplayName("OWNER 2 creating room in unowned property returns 403 Forbidden")
+    void testOwnerCreatingRoomInUnownedPropertyForbidden() throws Exception {
+        RoomApiController.CreateRoomRequest req = new RoomApiController.CreateRoomRequest(
+            "P105", 2, new BigDecimal("28.5"), new BigDecimal("4200000"), 2
+        );
+
+        mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_1_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_2_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 creating room in PENDING property returns 409 Conflict")
+    void testOwnerCreatingRoomInPendingPropertyConflict() throws Exception {
+        RoomApiController.CreateRoomRequest req = new RoomApiController.CreateRoomRequest(
+            "P205", 2, new BigDecimal("25.0"), new BigDecimal("3800000"), 2
+        );
+
+        mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_2_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Property Status")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 creating room in REJECTED property returns 409 Conflict")
+    void testOwnerCreatingRoomInRejectedPropertyConflict() throws Exception {
+        RoomApiController.CreateRoomRequest req = new RoomApiController.CreateRoomRequest(
+            "P305", 2, new BigDecimal("25.0"), new BigDecimal("3800000"), 2
+        );
+
+        mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_3_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Property Status")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Creating room with DUPLICATE room number (case-insensitive) returns 409 Conflict")
+    void testCreatingDuplicateRoomNumberConflict() throws Exception {
+        // Room 101 already exists in PROP_1_ID, try adding "p101"
+        RoomApiController.CreateRoomRequest req = new RoomApiController.CreateRoomRequest(
+            "p101", 1, new BigDecimal("20.0"), new BigDecimal("3500000"), 2
+        );
+
+        mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_1_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Duplicate Room Number")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Creating room with negative basePrice returns 400 Bad Request")
+    void testCreatingRoomWithNegativePriceBadRequest() throws Exception {
+        RoomApiController.CreateRoomRequest req = new RoomApiController.CreateRoomRequest(
+            "P106", 1, new BigDecimal("20.0"), new BigDecimal("-1000"), 2
+        );
+
+        mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_1_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title", is("Bad Request")))
+            .andExpect(jsonPath("$.status", is(400)));
+    }
 }
