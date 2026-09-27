@@ -11,6 +11,8 @@ import com.phonghub.domain.exception.InvalidPropertyStatusException;
 import com.phonghub.domain.exception.InvalidRoomCapacityException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.exception.MaintenanceTicketException;
+import com.phonghub.domain.exception.PasswordChangeRequiredException;
+import com.phonghub.domain.exception.PrimaryOccupantRemovalException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.RoomNotFoundException;
 import com.phonghub.domain.exception.TenantNotFoundException;
@@ -139,6 +141,15 @@ public class RestExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Duplicate Identity Card");
         problem.setType(URI.create("https://phonghub.local/errors/duplicate-identity-card"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(PrimaryOccupantRemovalException.class)
+    public ProblemDetail handlePrimaryOccupantRemoval(PrimaryOccupantRemovalException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Primary Occupant Removal Not Allowed");
+        problem.setType(URI.create("https://phonghub.local/errors/primary-occupant-removal"));
         problem.setProperty("timestamp", Instant.now());
         return problem;
     }

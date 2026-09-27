@@ -17,6 +17,25 @@ public interface ContractUseCase {
     Optional<Contract> getActiveContractForTenant(UUID tenantUserId);
     List<Contract> listContractsForTenant(UUID tenantUserId);
     ContractOccupant addOccupant(AddOccupantCommand command);
+    ContractOccupant checkOutOccupant(CheckOutOccupantCommand command);
+
+    record CheckOutOccupantCommand(
+        UUID contractId,
+        UUID tenantId,
+        LocalDate checkOutDate
+    ) {
+        public CheckOutOccupantCommand {
+            if (contractId == null) {
+                throw new IllegalArgumentException("Contract ID cannot be null");
+            }
+            if (tenantId == null) {
+                throw new IllegalArgumentException("Tenant ID cannot be null");
+            }
+            if (checkOutDate == null) {
+                checkOutDate = LocalDate.now();
+            }
+        }
+    }
 
     record AddOccupantCommand(
         UUID contractId,

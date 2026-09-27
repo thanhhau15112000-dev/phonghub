@@ -75,10 +75,11 @@ public class PhongHubConfiguration {
         UserRepositoryPort userRepo,
         IdentityProviderPort identityProviderPort,
         CurrentUserPort currentUserPort,
-        AuthorizationService authorizationService
+        AuthorizationService authorizationService,
+        AuditPort auditPort
     ) {
         ContractService service = new ContractService(
-            contractRepo, roomRepo, propertyRepo, tenantRepo, userRepo, identityProviderPort, currentUserPort, authorizationService
+            contractRepo, roomRepo, propertyRepo, tenantRepo, userRepo, identityProviderPort, currentUserPort, authorizationService, auditPort
         );
         return new TransactionalContractUseCase(service);
     }

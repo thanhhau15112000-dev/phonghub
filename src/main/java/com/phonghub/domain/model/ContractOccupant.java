@@ -28,4 +28,15 @@ public record ContractOccupant(
             throw new IllegalArgumentException("Check out date cannot be before check in date");
         }
     }
+
+    public ContractOccupant withCheckOutDate(LocalDate checkOutDate) {
+        return new ContractOccupant(
+            this.id,
+            this.contractId,
+            this.tenantId,
+            this.isPrimary,
+            this.checkInDate,
+            checkOutDate
+        );
+    }
 }

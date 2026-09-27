@@ -1,6 +1,7 @@
 package com.phonghub.application.service;
 
 import com.phonghub.application.port.in.ContractUseCase;
+import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
@@ -30,7 +31,9 @@ import com.phonghub.domain.model.UserRole;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -45,6 +48,29 @@ public class ContractService implements ContractUseCase {
     private final IdentityProviderPort identityProviderPort;
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
+    private final AuditPort auditPort;
+
+    public ContractService(
+        ContractRepositoryPort contractRepository,
+        RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
+        TenantRepositoryPort tenantRepository,
+        UserRepositoryPort userRepository,
+        IdentityProviderPort identityProviderPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort
+    ) {
+        this.contractRepository = contractRepository;
+        this.roomRepository = roomRepository;
+        this.propertyRepository = propertyRepository;
+        this.tenantRepository = tenantRepository;
+        this.userRepository = userRepository;
+        this.identityProviderPort = identityProviderPort;
+        this.currentUserPort = currentUserPort;
+        this.authorizationService = authorizationService;
+        this.auditPort = auditPort;
+    }
 
     public ContractService(
         ContractRepositoryPort contractRepository,
@@ -56,14 +82,7 @@ public class ContractService implements ContractUseCase {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService
     ) {
-        this.contractRepository = contractRepository;
-        this.roomRepository = roomRepository;
-        this.propertyRepository = propertyRepository;
-        this.tenantRepository = tenantRepository;
-        this.userRepository = userRepository;
-        this.identityProviderPort = identityProviderPort;
-        this.currentUserPort = currentUserPort;
-        this.authorizationService = authorizationService;
+        this(contractRepository, roomRepository, propertyRepository, tenantRepository, userRepository, identityProviderPort, currentUserPort, authorizationService, null);
     }
 
     public ContractService(
@@ -74,7 +93,7 @@ public class ContractService implements ContractUseCase {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService
     ) {
-        this(contractRepository, roomRepository, propertyRepository, tenantRepository, null, null, currentUserPort, authorizationService);
+        this(contractRepository, roomRepository, propertyRepository, tenantRepository, null, null, currentUserPort, authorizationService, null);
     }
 
     @Override
@@ -419,5 +438,37 @@ public class ContractService implements ContractUseCase {
         ContractOccupant occupant = contract.addOccupant(tenant.id(), false, command.checkInDate());
         contractRepository.save(contract);
         return occupant;
+    }
+
+    @Override
+    public ContractOccupant checkOutOccupant(CheckOutOccupantCommand command) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        Contract contract = contractRepository.findById(command.contractId())
+            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + command.contractId()));
+
+        authorizationService.assertOwnerOrAdmin(currentUser, contract.getPropertyId());
+
+        LocalDate checkOutDate = command.checkOutDate() != null ? command.checkOutDate() : LocalDate.now();
+
+        ContractOccupant updatedOccupant = contract.checkOutOccupant(command.tenantId(), checkOutDate);
+        contractRepository.save(contract);
+
+        if (auditPort != null) {
+            Map<String, Object> details = new HashMap<>();
+            details.put("contractId", contract.getId().toString());
+            details.put("tenantId", command.tenantId().toString());
+            details.put("checkOutDate", checkOutDate.toString());
+            details.put("occupantId", updatedOccupant.id().toString());
+
+            auditPort.recordEvent(AuditPort.AuditEvent.of(
+                "OCCUPANT_CHECKOUT",
+                currentUser != null ? currentUser.id() : null,
+                "CONTRACT_OCCUPANT",
+                updatedOccupant.id().toString(),
+                details
+            ));
+        }
+
+        return updatedOccupant;
     }
 }

@@ -18,6 +18,7 @@ import com.phonghub.adapter.in.web.api.RoomApiController;
 import com.phonghub.adapter.in.web.api.TenantApiController;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.RoomStatus;
+import com.phonghub.domain.model.Tenant;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -32,6 +33,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -1002,6 +1005,99 @@ class PhongHubApiIntegrationTest {
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.title", is("Bad Request")))
+            .andExpect(jsonPath("$.status", is(400)));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 checks out occupant successfully (200 OK) and occupant loses access")
+    void testOwner1ChecksOutOccupantSuccess() throws Exception {
+        Tenant coTenant = tenantRepository.save(Tenant.create(
+            null,
+            "Lê Thị D",
+            "079200003333",
+            "0903333444",
+            "d@phonghub.local",
+            "Tiền Giang"
+        ));
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(coTenant.id(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        assertEquals(1, contractRepository.findByOccupantTenantId(coTenant.id()).size());
+
+        ContractApiController.CheckOutOccupantRequest req = new ContractApiController.CheckOutOccupantRequest(
+            LocalDate.now()
+        );
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants/" + coTenant.id() + "/check-out")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id", notNullValue()))
+            .andExpect(jsonPath("$.tenantId", is(coTenant.id().toString())))
+            .andExpect(jsonPath("$.checkOutDate", is(LocalDate.now().toString())));
+
+        assertTrue(contractRepository.findByOccupantTenantId(coTenant.id()).isEmpty());
+    }
+
+    @Test
+    @DisplayName("STAFF checking out occupant returns 403 Forbidden")
+    void testStaffChecksOutOccupantForbidden() throws Exception {
+        Tenant coTenant = tenantRepository.save(Tenant.create(
+            null,
+            "Lê Thị E",
+            "079200004444",
+            "0904444555",
+            null,
+            null
+        ));
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(coTenant.id(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants/" + coTenant.id() + "/check-out")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("Checking out primary occupant returns 409 Conflict")
+    void testCheckOutPrimaryOccupantConflict() throws Exception {
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants/" + DataSeeder.TENANT_RECORD_ID + "/check-out")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Primary Occupant Removal Not Allowed")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Checking out occupant with checkout date before checkin date returns 400 Bad Request")
+    void testCheckOutBeforeCheckInDateBadRequest() throws Exception {
+        Tenant coTenant = tenantRepository.save(Tenant.create(
+            null,
+            "Lê Thị F",
+            "079200005555",
+            "0905555666",
+            null,
+            null
+        ));
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(coTenant.id(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        ContractApiController.CheckOutOccupantRequest req = new ContractApiController.CheckOutOccupantRequest(
+            LocalDate.now().minusDays(5)
+        );
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants/" + coTenant.id() + "/check-out")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title", is("Invalid Argument")))
             .andExpect(jsonPath("$.status", is(400)));
     }
 }

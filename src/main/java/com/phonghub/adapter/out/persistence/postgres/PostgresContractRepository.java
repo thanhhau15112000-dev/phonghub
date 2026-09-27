@@ -161,6 +161,7 @@ public class PostgresContractRepository implements ContractRepositoryPort {
             SELECT c.* FROM contracts c
             JOIN contract_occupants co ON c.id = co.contract_id
             WHERE co.tenant_id = :tenantId
+              AND (co.check_out_date IS NULL OR co.check_out_date > CURRENT_DATE)
             ORDER BY c.created_at DESC
             """;
         return jdbcTemplate.query(sql, Map.of("tenantId", tenantId), (rs, rn) -> mapContract(rs));

@@ -280,4 +280,24 @@ public class ContractUiController {
         }
         return "redirect:/contracts/" + contractId;
     }
+
+    @PostMapping("/{contractId}/occupants/{tenantId}/check-out")
+    public String checkOutOccupant(
+        @PathVariable UUID contractId,
+        @PathVariable UUID tenantId,
+        @RequestParam(required = false) LocalDate checkOutDate,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            contractUseCase.checkOutOccupant(new ContractUseCase.CheckOutOccupantCommand(
+                contractId,
+                tenantId,
+                checkOutDate != null ? checkOutDate : LocalDate.now()
+            ));
+            redirectAttributes.addFlashAttribute("successMessage", "Ghi nhận người thuê rời phòng thành công.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + contractId;
+    }
 }
