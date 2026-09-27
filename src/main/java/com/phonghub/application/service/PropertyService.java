@@ -119,4 +119,54 @@ public class PropertyService implements PropertyUseCase {
 
         return saved;
     }
+
+    @Override
+    public Property rejectProperty(UUID propertyId, String reason) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        authorizationService.assertAdmin(currentUser);
+
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Lý do từ chối không được để trống");
+        }
+
+        Property property = propertyRepository.findById(propertyId)
+            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + propertyId));
+
+        if (property.approvalStatus() != PropertyApprovalStatus.PENDING) {
+            throw new InvalidPropertyStatusException(String.format(
+                "Chỉ có thể từ chối nhà trọ đang ở trạng thái 'PENDING'. Trạng thái hiện tại: '%s'.",
+                property.approvalStatus()
+            ));
+        }
+
+        Property rejectedProperty = new Property(
+            property.id(),
+            property.name(),
+            property.address(),
+            property.description(),
+            property.totalRooms(),
+            property.ownerId(),
+            PropertyApprovalStatus.REJECTED,
+            reason.trim(),
+            property.createdAt()
+        );
+
+        Property saved = propertyRepository.save(rejectedProperty);
+
+        auditPort.recordEvent(AuditPort.AuditEvent.of(
+            "ADMIN_REJECT_PROPERTY",
+            currentUser.id(),
+            "PROPERTY",
+            property.id().toString(),
+            Map.of(
+                "oldStatus", PropertyApprovalStatus.PENDING.name(),
+                "newStatus", PropertyApprovalStatus.REJECTED.name(),
+                "propertyName", property.name(),
+                "reason", reason.trim()
+            )
+        ));
+
+        return saved;
+    }
 }
+

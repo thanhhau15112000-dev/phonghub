@@ -10,6 +10,7 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
+import com.phonghub.adapter.in.web.api.AdminPropertyApiController;
 import com.phonghub.adapter.in.web.api.ContractApiController;
 import com.phonghub.adapter.in.web.api.MaintenanceApiController;
 import com.phonghub.adapter.in.web.api.PropertyApiController;
@@ -395,6 +396,103 @@ class PhongHubApiIntegrationTest {
         UUID nonExistentId = UUID.randomUUID();
         mockMvc.perform(post("/api/admin/properties/" + nonExistentId + "/verify")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.title", is("Resource Not Found")))
+            .andExpect(jsonPath("$.status", is(404)));
+    }
+
+    @Test
+    @DisplayName("ADMIN rejects PENDING property successfully with reason (200 OK)")
+    void testAdminRejectsPendingPropertySuccess() throws Exception {
+        AdminPropertyApiController.RejectPropertyRequest req = new AdminPropertyApiController.RejectPropertyRequest(
+            "Thiếu chứng nhận thẩm duyệt thiết kế PCCC"
+        );
+
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_2_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id", is(DataSeeder.PROP_2_ID.toString())))
+            .andExpect(jsonPath("$.approvalStatus", is("REJECTED")))
+            .andExpect(jsonPath("$.rejectionReason", is("Thiếu chứng nhận thẩm duyệt thiết kế PCCC")));
+    }
+
+    @Test
+    @DisplayName("ADMIN rejects property with blank reason returns 400 Bad Request")
+    void testAdminRejectsPropertyWithBlankReasonBadRequest() throws Exception {
+        AdminPropertyApiController.RejectPropertyRequest req = new AdminPropertyApiController.RejectPropertyRequest(
+            "   "
+        );
+
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_2_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title", is("Bad Request")))
+            .andExpect(jsonPath("$.status", is(400)));
+    }
+
+    @Test
+    @DisplayName("ADMIN rejects already VERIFIED property returns 409 Conflict")
+    void testAdminRejectsAlreadyVerifiedPropertyConflict() throws Exception {
+        AdminPropertyApiController.RejectPropertyRequest req = new AdminPropertyApiController.RejectPropertyRequest(
+            "Phát hiện vi phạm quy định"
+        );
+
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_1_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Property Status")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("ADMIN rejects already REJECTED property returns 409 Conflict")
+    void testAdminRejectsAlreadyRejectedPropertyConflict() throws Exception {
+        AdminPropertyApiController.RejectPropertyRequest req = new AdminPropertyApiController.RejectPropertyRequest(
+            "Từ chối lần nữa"
+        );
+
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_3_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Property Status")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Non-ADMIN (STAFF) rejecting property returns 403 Forbidden")
+    void testNonAdminRejectingPropertyForbidden() throws Exception {
+        AdminPropertyApiController.RejectPropertyRequest req = new AdminPropertyApiController.RejectPropertyRequest(
+            "Staff thử từ chối"
+        );
+
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_2_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("ADMIN rejects non-existent property returns 404 Not Found")
+    void testAdminRejectsNonExistentPropertyNotFound() throws Exception {
+        UUID nonExistentId = UUID.randomUUID();
+        AdminPropertyApiController.RejectPropertyRequest req = new AdminPropertyApiController.RejectPropertyRequest(
+            "Không tồn tại"
+        );
+
+        mockMvc.perform(post("/api/admin/properties/" + nonExistentId + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.title", is("Resource Not Found")))
             .andExpect(jsonPath("$.status", is(404)));
