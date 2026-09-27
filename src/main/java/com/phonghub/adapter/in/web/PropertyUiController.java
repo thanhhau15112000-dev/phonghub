@@ -81,6 +81,21 @@ public class PropertyUiController {
         return "redirect:/properties";
     }
 
+    @PostMapping("/{id}/reject")
+    public String rejectProperty(
+        @PathVariable UUID id,
+        @RequestParam(required = false) String reason,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            Property property = propertyUseCase.rejectProperty(id, reason);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã từ chối nhà trọ '" + property.name() + "'.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/properties";
+    }
+
     @PostMapping
     public String createProperty(
         @RequestParam String name,

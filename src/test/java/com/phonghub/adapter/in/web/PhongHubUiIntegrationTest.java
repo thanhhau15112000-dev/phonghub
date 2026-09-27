@@ -230,4 +230,48 @@ class PhongHubUiIntegrationTest {
             .andExpect(redirectedUrl("/properties"))
             .andExpect(flash().attributeExists("errorMessage"));
     }
+
+    @Test
+    @DisplayName("Admin can reject pending property via UI with reason")
+    void testAdminRejectsPropertyViaUi() throws Exception {
+        mockMvc.perform(post("/properties/" + DataSeeder.PROP_2_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .param("reason", "Thiếu chứng nhận PCCC"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties"))
+            .andExpect(flash().attributeExists("successMessage"));
+    }
+
+    @Test
+    @DisplayName("Admin rejecting property with blank reason via UI returns error flash message")
+    void testAdminRejectsPropertyWithBlankReasonViaUiFails() throws Exception {
+        mockMvc.perform(post("/properties/" + DataSeeder.PROP_2_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .param("reason", "   "))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties"))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("Non-admin rejecting property via UI returns error flash message")
+    void testNonAdminRejectingPropertyViaUiFails() throws Exception {
+        mockMvc.perform(post("/properties/" + DataSeeder.PROP_2_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString())
+                .param("reason", "Thiếu PCCC"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties"))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("Admin sees reject button and reject modal in properties list UI")
+    void testAdminSeesRejectButtonAndModal() throws Exception {
+        mockMvc.perform(get("/properties")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Từ chối")))
+            .andExpect(content().string(containsString("id=\"rejectModal\"")))
+            .andExpect(content().string(containsString("Lý do từ chối")));
+    }
 }

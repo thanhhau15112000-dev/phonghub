@@ -9,6 +9,7 @@ public interface PropertyUseCase {
     List<Property> listAccessibleProperties();
     Property getProperty(UUID propertyId);
     Property verifyProperty(UUID propertyId);
+    Property rejectProperty(UUID propertyId, String reason);
 
     record CreatePropertyCommand(
         String name,

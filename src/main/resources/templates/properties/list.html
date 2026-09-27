@@ -118,11 +118,49 @@
                                     style="background-color: var(--status-available, #047857); border-color: var(--status-available, #047857); color: white;"
                                     onclick="return confirm('Bạn có chắc chắn muốn duyệt nhà trọ này không?');">Duyệt</button>
                         </form>
+                        <button th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and p.approvalStatus().name() == 'PENDING'}"
+                                type="button" class="btn btn-sm btn-danger" style="margin-left: 4px;"
+                                th:attr="data-id=${p.id()},data-name=${p.name()}"
+                                onclick="openRejectModal(this.getAttribute('data-id'), this.getAttribute('data-name'))">
+                            Từ chối
+                        </button>
                     </td>
                 </tr>
             </tbody>
         </table>
     </div>
+
+    <!-- Dialog từ chối duyệt nhà trọ (Quản trị viên) -->
+    <dialog th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" id="rejectModal"
+            style="border: 1px solid var(--border-color); border-radius: 4px; padding: 20px; max-width: 480px; width: 90%; background: var(--bg-surface); color: var(--text-primary); box-shadow: 0 4px 16px rgba(0,0,0,0.15); margin: auto;">
+        <h3 style="margin-bottom: 8px; font-size: 16px;">Từ chối duyệt nhà trọ</h3>
+        <p id="rejectPropertyName" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; font-weight: 500;"></p>
+        <form id="rejectForm" method="post" action="">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group">
+                <label class="form-label" for="rejectionReasonInput">Lý do từ chối *</label>
+                <textarea id="rejectionReasonInput" name="reason" class="form-control" rows="3" required
+                          placeholder="Ví dụ: Thiếu giấy phép kinh doanh hoặc chưa đạt tiêu chuẩn PCCC..."></textarea>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
+                <button type="button" class="btn btn-sm" onclick="document.getElementById('rejectModal').close()">Hủy</button>
+                <button type="submit" class="btn btn-sm btn-danger" style="background-color: var(--status-maintenance); color: #fff;">Xác nhận từ chối</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}">
+        function openRejectModal(id, name) {
+            const modal = document.getElementById('rejectModal');
+            const form = document.getElementById('rejectForm');
+            const nameElem = document.getElementById('rejectPropertyName');
+            const input = document.getElementById('rejectionReasonInput');
+            form.action = '/properties/' + id + '/reject';
+            nameElem.textContent = 'Nhà trọ: ' + name;
+            input.value = '';
+            modal.showModal();
+        }
+    </script>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>
