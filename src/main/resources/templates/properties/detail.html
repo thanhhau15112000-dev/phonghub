@@ -9,17 +9,37 @@
 
     <div class="page-title-row">
         <div>
-            <h1 th:text="${property.name()}">Tên nhà trọ</h1>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <h1 th:text="${property.name()}">Tên nhà trọ</h1>
+                <span class="badge"
+                      th:classappend="${property.approvalStatus() != null ? 'badge-' + property.approvalStatus().name() : 'badge-VERIFIED'}"
+                      th:text="${property.approvalStatus() != null ? uiText.approvalStatus(property.approvalStatus()) : 'Đã duyệt'}">Đã duyệt</span>
+            </div>
             <p style="color: var(--text-secondary); font-size: 13px;" th:text="${property.address()}">Địa chỉ</p>
         </div>
-        <div>
-            <a th:href="@{/properties}" class="btn">&larr; Quay lại danh sách nhà trọ</a>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <!-- Nút Duyệt cho Quản trị viên khi nhà trọ PENDING -->
+            <form th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and property.approvalStatus() != null and property.approvalStatus().name() == 'PENDING'}"
+                  th:action="@{'/properties/' + ${property.id()} + '/verify'}" method="post" style="display: inline;">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn btn-sm btn-primary"
+                        style="background-color: var(--status-available, #047857); border-color: var(--status-available, #047857); color: white;"
+                        onclick="return confirm('Bạn có chắc chắn muốn duyệt nhà trọ này không?');">Duyệt nhà trọ</button>
+            </form>
+            <!-- Nút Từ chối cho Quản trị viên khi nhà trọ PENDING -->
+            <button th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and property.approvalStatus() != null and property.approvalStatus().name() == 'PENDING'}"
+                    type="button" class="btn btn-sm btn-danger"
+                    th:attr="data-id=${property.id()},data-name=${property.name()}"
+                    onclick="openRejectModal(this.getAttribute('data-id'), this.getAttribute('data-name'))">
+                Từ chối
+            </button>
+            <a th:href="@{/properties}" class="btn btn-sm">&larr; Quay lại danh sách nhà trọ</a>
         </div>
     </div>
 
     <!-- Thông tin nhà trọ -->
     <div class="card" style="margin-bottom: 20px;">
-        <div style="display: flex; gap: 32px; font-size: 13px;">
+        <div style="display: flex; gap: 32px; font-size: 13px; flex-wrap: wrap;">
             <div>
                 <span style="color: var(--text-secondary);">Địa chỉ: </span>
                 <strong th:text="${property.address()}">Địa chỉ</strong>
@@ -32,11 +52,23 @@
                 <span style="color: var(--text-secondary);">Mô tả: </span>
                 <span th:text="${property.description() != null ? property.description() : 'Chưa có'}">Ghi chú</span>
             </div>
+            <div>
+                <span style="color: var(--text-secondary);">Trạng thái duyệt: </span>
+                <span class="badge"
+                      th:classappend="${property.approvalStatus() != null ? 'badge-' + property.approvalStatus().name() : 'badge-VERIFIED'}"
+                      th:text="${property.approvalStatus() != null ? uiText.approvalStatus(property.approvalStatus()) : 'Đã duyệt'}">Đã duyệt</span>
+            </div>
+        </div>
+        <!-- Lý do từ chối (nếu có) -->
+        <div th:if="${property.approvalStatus() != null and property.approvalStatus().name() == 'REJECTED' and property.rejectionReason() != null and !#strings.isEmpty(property.rejectionReason())}"
+             style="margin-top: 14px; padding: 12px 16px; background-color: var(--error-bg); border: 1px solid var(--border-color); border-left: 4px solid var(--status-maintenance); border-radius: 2px;">
+            <div style="font-weight: 600; color: var(--error-text); font-size: 13px;">Lý do từ chối kiểm duyệt:</div>
+            <div style="color: var(--text-primary); font-size: 13px; margin-top: 4px;" th:text="${property.rejectionReason()}"></div>
         </div>
     </div>
 
-    <!-- Biểu mẫu thêm phòng (quản trị viên hoặc nhân viên) -->
-    <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" class="card">
+    <!-- Biểu mẫu thêm phòng (quản trị viên, nhân viên hoặc chủ trọ sở hữu) -->
+    <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() != null and property.ownerId().equals(currentUser.id())))}" class="card">
         <h2>Thêm phòng vào nhà trọ</h2>
         <form th:action="@{'/properties/' + ${property.id()} + '/rooms'}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -68,23 +100,21 @@
         </form>
     </div>
 
-    <!-- Bảng phòng -->
+    <!-- Danh sách phòng -->
     <div class="card">
-        <div class="flex-between" style="margin-bottom: 12px;">
-            <h2>Các phòng trong nhà trọ (<span th:text="${#lists.size(rooms)}">0</span>)</h2>
-        </div>
+        <h2>Danh sách phòng thuộc nhà trọ</h2>
 
         <div th:if="${#lists.isEmpty(rooms)}" class="empty-state">
-            <p>Chưa có phòng nào trong nhà trọ này.</p>
+            <p>Nhà trọ này chưa có phòng nào.</p>
         </div>
 
         <table th:if="${!#lists.isEmpty(rooms)}" class="data-table">
             <thead>
                 <tr>
-                    <th>Phòng số</th>
+                    <th>Số phòng</th>
                     <th>Tầng</th>
                     <th>Diện tích</th>
-                    <th>Giá thuê cơ bản</th>
+                    <th>Giá cơ bản</th>
                     <th>Sức chứa</th>
                     <th>Trạng thái</th>
                     <th>Thao tác</th>
@@ -105,7 +135,7 @@
                     <td>
                         <div class="inline-actions">
                             <a th:href="@{'/rooms/' + ${r.getId()}}" class="btn btn-sm">Chi tiết</a>
-                            <a th:if="${r.getStatus().name() == 'AVAILABLE' or r.getStatus().name() == 'RESERVED'}"
+                            <a th:if="${(r.getStatus().name() == 'AVAILABLE' or r.getStatus().name() == 'RESERVED') and property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED'}"
                                th:href="@{'/contracts/new?propertyId=' + ${property.id()} + '&roomId=' + ${r.getId()}}"
                                class="btn btn-sm btn-primary">+ Hợp đồng</a>
                             <a th:href="@{'/maintenance/new?roomId=' + ${r.getId()}}" class="btn btn-sm">Báo hỏng</a>
@@ -115,6 +145,38 @@
             </tbody>
         </table>
     </div>
+
+    <!-- Dialog từ chối duyệt nhà trọ (Quản trị viên) -->
+    <dialog th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" id="rejectModal"
+            style="border: 1px solid var(--border-color); border-radius: 4px; padding: 20px; max-width: 480px; width: 90%; background: var(--bg-surface); color: var(--text-primary); box-shadow: 0 4px 16px rgba(0,0,0,0.15); margin: auto;">
+        <h3 style="margin-bottom: 8px; font-size: 16px;">Từ chối duyệt nhà trọ</h3>
+        <p id="rejectPropertyName" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; font-weight: 500;"></p>
+        <form id="rejectForm" method="post" action="">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group">
+                <label class="form-label" for="rejectionReasonInput">Lý do từ chối *</label>
+                <textarea id="rejectionReasonInput" name="reason" class="form-control" rows="3" required
+                          placeholder="Ví dụ: Thiếu giấy phép kinh doanh hoặc chưa đạt tiêu chuẩn PCCC..."></textarea>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
+                <button type="button" class="btn btn-sm" onclick="document.getElementById('rejectModal').close()">Hủy</button>
+                <button type="submit" class="btn btn-sm btn-danger" style="background-color: var(--status-maintenance); color: #fff;">Xác nhận từ chối</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}">
+        function openRejectModal(id, name) {
+            const modal = document.getElementById('rejectModal');
+            const form = document.getElementById('rejectForm');
+            const nameElem = document.getElementById('rejectPropertyName');
+            const input = document.getElementById('rejectionReasonInput');
+            form.action = '/properties/' + id + '/reject';
+            nameElem.textContent = 'Nhà trọ: ' + name;
+            input.value = '';
+            modal.showModal();
+        }
+    </script>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>

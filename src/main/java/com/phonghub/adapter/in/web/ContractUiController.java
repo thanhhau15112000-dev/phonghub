@@ -10,6 +10,7 @@ import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Property;
+import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
@@ -88,10 +89,22 @@ public class ContractUiController {
             return "redirect:/contracts";
         }
 
-        List<Property> properties = propertyUseCase.listAccessibleProperties();
+        List<Property> properties = propertyUseCase.listAccessibleProperties().stream()
+            .filter(p -> p.approvalStatus() == PropertyApprovalStatus.VERIFIED)
+            .toList();
+
         List<Room> rooms = new ArrayList<>();
         if (propertyId != null) {
-            rooms = roomUseCase.listRoomsForProperty(propertyId);
+            UUID selectedId = propertyId;
+            boolean isVerified = properties.stream().anyMatch(p -> p.id().equals(selectedId));
+            if (isVerified) {
+                rooms = roomUseCase.listRoomsForProperty(propertyId);
+            } else {
+                propertyId = !properties.isEmpty() ? properties.getFirst().id() : null;
+                if (propertyId != null) {
+                    rooms = roomUseCase.listRoomsForProperty(propertyId);
+                }
+            }
         } else if (!properties.isEmpty()) {
             propertyId = properties.getFirst().id();
             rooms = roomUseCase.listRoomsForProperty(propertyId);
