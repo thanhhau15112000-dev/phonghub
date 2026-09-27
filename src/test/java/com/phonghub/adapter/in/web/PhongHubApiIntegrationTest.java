@@ -15,6 +15,7 @@ import com.phonghub.adapter.in.web.api.ContractApiController;
 import com.phonghub.adapter.in.web.api.MaintenanceApiController;
 import com.phonghub.adapter.in.web.api.PropertyApiController;
 import com.phonghub.adapter.in.web.api.RoomApiController;
+import com.phonghub.adapter.in.web.api.TenantApiController;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.RoomStatus;
 import java.math.BigDecimal;
@@ -887,6 +888,115 @@ class PhongHubApiIntegrationTest {
         );
 
         mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title", is("Bad Request")))
+            .andExpect(jsonPath("$.status", is(400)));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 updates tenant information successfully (200 OK)")
+    void testOwner1UpdatesTenantSuccess() throws Exception {
+        TenantApiController.UpdateTenantRequest req = new TenantApiController.UpdateTenantRequest(
+            "Nguyễn Văn A (Đã cập nhật)",
+            "079201001111",
+            "0909999888",
+            "an.updated@phonghub.local",
+            "Thủ Đức, TP.HCM"
+        );
+
+        mockMvc.perform(put("/api/tenants/" + DataSeeder.TENANT_RECORD_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id", is(DataSeeder.TENANT_RECORD_ID.toString())))
+            .andExpect(jsonPath("$.fullName", is("Nguyễn Văn A (Đã cập nhật)")))
+            .andExpect(jsonPath("$.phone", is("0909999888")))
+            .andExpect(jsonPath("$.email", is("an.updated@phonghub.local")))
+            .andExpect(jsonPath("$.permanentAddress", is("Thủ Đức, TP.HCM")));
+    }
+
+    @Test
+    @DisplayName("STAFF updating tenant information returns 403 Forbidden")
+    void testStaffUpdatesTenantForbidden() throws Exception {
+        TenantApiController.UpdateTenantRequest req = new TenantApiController.UpdateTenantRequest(
+            "Nguyễn Văn A (Hack)",
+            "079201001111",
+            "0909999888",
+            null,
+            null
+        );
+
+        mockMvc.perform(put("/api/tenants/" + DataSeeder.TENANT_RECORD_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("OWNER 2 updating tenant residing in OWNER 1 property returns 403 Forbidden")
+    void testOwner2UpdatesTenantForbidden() throws Exception {
+        TenantApiController.UpdateTenantRequest req = new TenantApiController.UpdateTenantRequest(
+            "Nguyễn Văn A (Hack)",
+            "079201001111",
+            "0909999888",
+            null,
+            null
+        );
+
+        mockMvc.perform(put("/api/tenants/" + DataSeeder.TENANT_RECORD_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_2_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("Updating tenant with duplicate CCCD returns 409 Conflict")
+    void testUpdateTenantDuplicateCccdConflict() throws Exception {
+        // Pre-create another tenant
+        tenantRepository.save(com.phonghub.domain.model.Tenant.create(
+            null, "Khách Khác", "079201008888", "0908888777", null, null
+        ));
+
+        // Attempt to update tenant 1 with tenant 2's CCCD
+        TenantApiController.UpdateTenantRequest req = new TenantApiController.UpdateTenantRequest(
+            "Nguyễn Văn A",
+            "079201008888",
+            "0901234567",
+            null,
+            null
+        );
+
+        mockMvc.perform(put("/api/tenants/" + DataSeeder.TENANT_RECORD_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Duplicate Identity Card")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Updating tenant with invalid phone number returns 400 Bad Request")
+    void testUpdateTenantInvalidPhoneBadRequest() throws Exception {
+        TenantApiController.UpdateTenantRequest req = new TenantApiController.UpdateTenantRequest(
+            "Nguyễn Văn A",
+            "079201001111",
+            "123456",
+            null,
+            null
+        );
+
+        mockMvc.perform(put("/api/tenants/" + DataSeeder.TENANT_RECORD_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))

@@ -3,6 +3,7 @@ package com.phonghub.adapter.in.web;
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
+import com.phonghub.application.port.in.TenantUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
@@ -40,6 +41,7 @@ public class ContractUiController {
     private final RoomRepositoryPort roomRepository;
     private final TenantRepositoryPort tenantRepository;
     private final CurrentUserPort currentUserPort;
+    private final TenantUseCase tenantUseCase;
 
     public ContractUiController(
         ContractUseCase contractUseCase,
@@ -47,7 +49,8 @@ public class ContractUiController {
         RoomUseCase roomUseCase,
         RoomRepositoryPort roomRepository,
         TenantRepositoryPort tenantRepository,
-        CurrentUserPort currentUserPort
+        CurrentUserPort currentUserPort,
+        TenantUseCase tenantUseCase
     ) {
         this.contractUseCase = contractUseCase;
         this.propertyUseCase = propertyUseCase;
@@ -55,6 +58,7 @@ public class ContractUiController {
         this.roomRepository = roomRepository;
         this.tenantRepository = tenantRepository;
         this.currentUserPort = currentUserPort;
+        this.tenantUseCase = tenantUseCase;
     }
 
     @GetMapping
@@ -248,5 +252,32 @@ public class ContractUiController {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }
         return "redirect:/contracts/" + id;
+    }
+
+    @PostMapping("/{contractId}/tenants/{tenantId}/edit")
+    public String updateTenant(
+        @PathVariable UUID contractId,
+        @PathVariable UUID tenantId,
+        @RequestParam String fullName,
+        @RequestParam String identityCardNumber,
+        @RequestParam String phone,
+        @RequestParam(required = false) String email,
+        @RequestParam(required = false) String permanentAddress,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            tenantUseCase.updateTenant(new TenantUseCase.UpdateTenantCommand(
+                tenantId,
+                fullName,
+                identityCardNumber,
+                phone,
+                email,
+                permanentAddress
+            ));
+            redirectAttributes.addFlashAttribute("successMessage", "Cập nhật thông tin người thuê thành công.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + contractId;
     }
 }

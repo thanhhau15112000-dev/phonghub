@@ -141,6 +141,44 @@ public class AuthorizationService {
         ));
     }
 
+    public void assertCanUpdateTenant(CurrentUser user, UUID tenantId) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (user.role() == UserRole.ADMIN) {
+            return;
+        }
+        if (user.role() == UserRole.OWNER) {
+            Set<UUID> propertyIds = new HashSet<>();
+            for (Contract c : contractRepositoryPort.findByPrimaryTenantId(tenantId)) {
+                propertyIds.add(c.getPropertyId());
+            }
+            for (Contract c : contractRepositoryPort.findByOccupantTenantId(tenantId)) {
+                propertyIds.add(c.getPropertyId());
+            }
+
+            boolean ownsProperty = propertyIds.stream()
+                .map(propertyRepositoryPort::findById)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .anyMatch(p -> user.id().equals(p.ownerId()));
+
+            if (ownsProperty) {
+                return;
+            }
+
+            throw new UnauthorizedPropertyAccessException(String.format(
+                "Chủ nhà trọ '%s' không quản lý nhà trọ nào mà người thuê '%s' đang hoặc đã từng cư trú.",
+                user.fullName(), tenantId
+            ));
+        }
+
+        throw new UnauthorizedPropertyAccessException(String.format(
+            "Người dùng '%s' với vai trò '%s' không có quyền cập nhật thông tin người thuê. Chỉ Chủ nhà trọ liên quan hoặc Quản trị viên mới được phép.",
+            user.fullName(), user.role()
+        ));
+    }
+
     public void assertCanManageContracts(CurrentUser user, UUID propertyId) {
         assertCanManageProperty(user, propertyId);
     }
