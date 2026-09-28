@@ -60,14 +60,22 @@ public class LocalDemoAuthenticationAdapter implements CurrentUserPort, DemoActo
             return user;
         }
         try {
+            org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth instanceof com.phonghub.adapter.in.security.DomainAuthenticationToken domainAuth) {
+                return domainAuth.getCurrentUser();
+            }
             org.springframework.web.context.request.RequestAttributes attrs =
                 org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
             if (attrs instanceof org.springframework.web.context.request.ServletRequestAttributes servletAttrs) {
                 jakarta.servlet.http.HttpSession session = servletAttrs.getRequest().getSession(false);
                 if (session != null) {
                     Object sessionUserId = session.getAttribute("currentUserId");
-                    if (sessionUserId instanceof UUID uid && DEMO_USERS.containsKey(uid)) {
-                        return DEMO_USERS.get(uid);
+                    if (sessionUserId instanceof UUID uid) {
+                        CurrentUser demoUser = DEMO_USERS.get(uid);
+                        if (demoUser != null) {
+                            return demoUser;
+                        }
                     }
                 }
             }

@@ -29,8 +29,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.phonghub.application.port.in.DemoActorPort;
+import com.phonghub.application.port.in.NotificationUseCase;
 import com.phonghub.application.port.in.UserUseCase;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 @Controller
@@ -41,6 +43,7 @@ public class AuthUiController {
     private final UserUseCase userUseCase;
     private final CurrentUserPort currentUserPort;
     private final Optional<DemoActorPort> demoActorPort;
+    private final Optional<NotificationUseCase> notificationUseCase;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
     public AuthUiController(
@@ -48,13 +51,15 @@ public class AuthUiController {
         UserRepositoryPort userRepository,
         UserUseCase userUseCase,
         CurrentUserPort currentUserPort,
-        Optional<DemoActorPort> demoActorPort
+        Optional<DemoActorPort> demoActorPort,
+        Optional<NotificationUseCase> notificationUseCase
     ) {
         this.authUseCase = authUseCase;
         this.userRepository = userRepository;
         this.userUseCase = userUseCase;
         this.currentUserPort = currentUserPort;
         this.demoActorPort = demoActorPort;
+        this.notificationUseCase = notificationUseCase;
     }
 
     private static final String SESSION_LOGIN_FAILED_ATTEMPTS = "LOGIN_FAILED_ATTEMPTS";
@@ -111,7 +116,8 @@ public class AuthUiController {
             if (existingSession != null) {
                 existingSession.removeAttribute(SESSION_LOGIN_FAILED_ATTEMPTS);
             }
-            request.getSession(true);
+            HttpSession session = request.getSession(true);
+            session.setAttribute("currentUserId", currentUser.id());
             request.changeSessionId();
 
             SecurityContext context = SecurityContextHolder.createEmptyContext();
@@ -123,6 +129,11 @@ public class AuthUiController {
             ));
             SecurityContextHolder.setContext(context);
             securityContextRepository.saveContext(context, request, response);
+
+            demoActorPort.ifPresent(p -> {
+                p.setCurrentUser(currentUser);
+                p.switchActor(currentUser.id());
+            });
 
             return currentUser.mustChangePassword()
                 ? "redirect:/account/password"
@@ -173,8 +184,9 @@ public class AuthUiController {
         if (user.role() == UserRole.ADMIN) {
             message = "Tài khoản <strong>" + user.username() + "</strong> có vai trò Quản trị viên (ADMIN). Vui lòng sử dụng tài khoản Supabase Auth / Render Dashboard hoặc liên hệ chủ sở hữu hệ thống để thiết lập lại mật khẩu.";
         } else {
+            notificationUseCase.ifPresent(n -> n.requestPasswordReset(user));
             String roleText = UiText.INSTANCE.role(user.role());
-            message = "Đã tìm thấy tài khoản <strong>" + user.username() + "</strong> (" + roleText + "). Đối với vai trò này, vui lòng liên hệ trực tiếp <strong>Quản trị viên (Admin)</strong> để được cấp lại mật khẩu tạm thời mới.";
+            message = "Đã gửi yêu cầu cấp lại mật khẩu cho tài khoản <strong>" + user.username() + "</strong> (" + roleText + ") tới <strong>Quản trị viên</strong>. Vui lòng liên hệ Quản trị viên để nhận mật khẩu tạm thời sau khi yêu cầu được xử lý.";
         }
 
         model.addAttribute("successMessage", message);
@@ -316,8 +328,13 @@ public class AuthUiController {
             SecurityContextHolder.clearContext();
             HttpSession session = request.getSession(false);
             if (session != null) {
+                session.removeAttribute("currentUserId");
                 session.invalidate();
             }
+            demoActorPort.ifPresent(p -> {
+                p.clear();
+                p.switchActor(LocalDemoAuthenticationAdapter.ADMIN_ID);
+            });
         }
         return "redirect:/login?loggedOut=true";
     }
