@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Thông báo hệ thống')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div class="page-title-row">
+        <div>
+            <h1>Thông báo hệ thống</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">
+                Theo dõi và xử lý các yêu cầu cấp lại mật khẩu và thông báo từ người dùng trong hệ thống.
+            </p>
+        </div>
+    </div>
+
+    <!-- Alert khi reset mật khẩu thành công: Hiển thị mật khẩu tạm thời -->
+    <div th:if="${resetResult != null}" class="alert alert-success" style="margin-bottom: 20px;">
+        <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">
+            Đã đặt lại mật khẩu cho <span th:text="${resetResult.username()}" style="font-weight: 700;">user</span> thành công!
+        </div>
+        <p style="margin: 0 0 8px; font-size: 13px;">Mật khẩu tạm thời chỉ hiển thị một lần. Hãy gửi cho người dùng và yêu cầu đổi mật khẩu ở lần đăng nhập tiếp theo:</p>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <code id="tempPasswordCode" th:text="${resetResult.temporaryPassword()}" style="font-size: 15px; font-weight: 700; padding: 6px 12px; background: rgba(0,0,0,0.06); border-radius: 4px; display: inline-block;">temp-password</code>
+            <button type="button" class="btn btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('tempPasswordCode').innerText); this.innerText='Đã sao chép!';" style="padding: 4px 8px; font-size: 12px;">Sao chép</button>
+        </div>
+    </div>
+
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="card">
+        <div class="card-header" style="margin-bottom: 16px;">
+            <h2>Danh sách thông báo</h2>
+        </div>
+
+        <div class="filter-search-bar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+            <div class="filter-tabs">
+                <a th:href="@{/admin/notifications(status='ALL', q=${!#strings.isEmpty(q) ? q : null}, size=${pageSize})}"
+                   th:classappend="${selectedStatus == 'ALL' ? 'active' : ''}"
+                   class="filter-tab">
+                    <span>Tất cả</span>
+                    <span class="badge-count" th:text="${totalCount}">0</span>
+                </a>
+                <a th:href="@{/admin/notifications(status='UNRESOLVED', q=${!#strings.isEmpty(q) ? q : null}, size=${pageSize})}"
+                   th:classappend="${selectedStatus == 'UNRESOLVED' ? 'active' : ''}"
+                   class="filter-tab">
+                    <span>Chờ xử lý</span>
+                    <span class="badge-count" th:text="${unresolvedCount}" style="background-color: #fef3c7; color: #b45309;">0</span>
+                </a>
+                <a th:href="@{/admin/notifications(status='RESOLVED', q=${!#strings.isEmpty(q) ? q : null}, size=${pageSize})}"
+                   th:classappend="${selectedStatus == 'RESOLVED' ? 'active' : ''}"
+                   class="filter-tab">
+                    <span>Đã xử lý</span>
+                    <span class="badge-count" th:text="${resolvedCount}">0</span>
+                </a>
+            </div>
+
+            <form th:action="@{/admin/notifications}" method="get" style="display: flex; gap: 8px; align-items: center;">
+                <input type="hidden" name="status" th:value="${selectedStatus}">
+                <input type="text" name="q" th:value="${q}" placeholder="Tìm theo tài khoản, tên..." class="form-control" style="width: 220px; padding: 6px 10px; font-size: 13px;">
+                <button type="submit" class="btn btn-sm">Tìm kiếm</button>
+                <a th:if="${!#strings.isEmpty(q)}" th:href="@{/admin/notifications(status=${selectedStatus})}" class="btn btn-sm" style="text-decoration: none;">Xóa tìm</a>
+            </form>
+        </div>
+
+        <div th:if="${#lists.isEmpty(notifications)}" style="text-align: center; padding: 48px 0; color: var(--text-secondary);">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 12px; color: var(--border-color);"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+            <p>Không có thông báo nào trong danh mục này.</p>
+        </div>
+
+        <table th:if="${!#lists.isEmpty(notifications)}" class="table">
+            <thead>
+                <tr>
+                    <th>Loại thông báo</th>
+                    <th>Tài khoản</th>
+                    <th>Họ và tên / Vai trò</th>
+                    <th>Nội dung</th>
+                    <th>Thời gian</th>
+                    <th>Trạng thái</th>
+                    <th style="text-align: right;">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="n : ${notifications}" th:style="${!n.isResolved() ? 'background-color: rgba(254, 243, 199, 0.25);' : ''}">
+                    <td>
+                        <span th:if="${n.type().name() == 'PASSWORD_RESET_REQUEST'}" class="status-pill" style="background-color: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px;">
+                            Quên mật khẩu
+                        </span>
+                        <span th:if="${n.type().name() != 'PASSWORD_RESET_REQUEST'}" class="status-pill" style="font-size: 11px;">
+                            Hệ thống
+                        </span>
+                    </td>
+                    <td>
+                        <strong th:text="${n.targetUsername()}">tenant1</strong>
+                    </td>
+                    <td>
+                        <div th:text="${n.targetFullName()}">Nguyễn Văn A</div>
+                        <div style="font-size: 11px; color: var(--text-secondary);" th:text="${n.targetRole() != null ? uiText.role(n.targetRole()) : ''}">Người thuê</div>
+                    </td>
+                    <td style="max-width: 260px;">
+                        <div th:text="${n.message()}" style="font-size: 13px;">Yêu cầu cấp lại mật khẩu</div>
+                        <div th:if="${n.resolutionNote() != null}" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;" th:text="${n.resolutionNote()}">Đã xử lý</div>
+                    </td>
+                    <td style="font-size: 12px; color: var(--text-secondary);" th:text="${#temporals.format(n.createdAt(), 'dd/MM/yyyy HH:mm')}">
+                        28/09/2026 10:00
+                    </td>
+                    <td>
+                        <span th:if="${!n.isResolved()}" class="status-pill" style="background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a;">
+                            Chờ xử lý
+                        </span>
+                        <span th:if="${n.isResolved()}" class="status-pill" style="background-color: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;">
+                            Đã xử lý
+                        </span>
+                    </td>
+                    <td style="text-align: right; white-space: nowrap;">
+                        <!-- Nút cấp lại mật khẩu nhanh -->
+                        <form th:if="${!n.isResolved() and n.type().name() == 'PASSWORD_RESET_REQUEST' and n.targetUserId() != null}"
+                              th:action="@{/admin/notifications/{id}/reset-password(id=${n.id()})}"
+                              method="post" style="display: inline-block; margin-right: 4px;"
+                              onsubmit="return confirm('Bạn có chắc chắn muốn cấp lại mật khẩu mới cho tài khoản ' + '[[${n.targetUsername()}]]' + '?');">
+                            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                            <button type="submit" class="btn btn-primary btn-sm" style="font-size: 12px; padding: 4px 8px;">Cấp lại mật khẩu</button>
+                        </form>
+
+                        <!-- Đánh dấu đã giải quyết -->
+                        <form th:if="${!n.isResolved()}"
+                              th:action="@{/admin/notifications/{id}/resolve(id=${n.id()})}"
+                              method="post" style="display: inline-block; margin-right: 4px;">
+                            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                            <button type="submit" class="btn btn-sm" style="font-size: 12px; padding: 4px 8px;" title="Đánh dấu đã xử lý">Đã xử lý</button>
+                        </form>
+
+                        <!-- Nút xóa thông báo -->
+                        <form th:action="@{/admin/notifications/{id}/delete(id=${n.id()})}"
+                              method="post" style="display: inline-block;"
+                              onsubmit="return confirm('Bạn có chắc muốn xóa thông báo này?');">
+                            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                            <button type="submit" class="btn btn-sm btn-danger" style="font-size: 12px; padding: 4px 8px;" title="Xóa thông báo">Xóa</button>
+                        </form>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Phân trang -->
+        <div th:if="${totalPages > 1}" class="pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 20px;">
+            <a th:if="${currentPage > 1}" th:href="@{/admin/notifications(page=${currentPage - 1}, status=${selectedStatus}, q=${q}, size=${pageSize})}" class="btn btn-sm">&laquo; Trước</a>
+            <span style="font-size: 13px; align-self: center;">Trang <strong th:text="${currentPage}">1</strong> / <span th:text="${totalPages}">1</span></span>
+            <a th:if="${currentPage < totalPages}" th:href="@{/admin/notifications(page=${currentPage + 1}, status=${selectedStatus}, q=${q}, size=${pageSize})}" class="btn btn-sm">Sau &raquo;</a>
+        </div>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

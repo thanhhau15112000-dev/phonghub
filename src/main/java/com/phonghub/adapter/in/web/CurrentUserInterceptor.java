@@ -73,6 +73,18 @@ public class CurrentUserInterceptor implements HandlerInterceptor {
             }
         }
 
+        // Check SecurityContextHolder for authenticated user
+        org.springframework.security.core.Authentication auth =
+            org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth instanceof com.phonghub.adapter.in.security.DomainAuthenticationToken domainAuth) {
+            CurrentUser authUser = domainAuth.getCurrentUser();
+            if (demoActorPort != null) {
+                demoActorPort.setCurrentUser(authUser);
+            }
+            request.setAttribute("currentUser", authUser);
+            return true;
+        }
+
         // Default to current fallback from read-only port
         if (currentUserPort != null) {
             try {

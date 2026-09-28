@@ -25,6 +25,10 @@ import com.phonghub.application.service.MaintenanceService;
 import com.phonghub.application.service.PropertyService;
 import com.phonghub.application.service.RoomService;
 import com.phonghub.application.service.UserService;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository;
+import com.phonghub.application.port.in.NotificationUseCase;
+import com.phonghub.application.port.out.NotificationRepositoryPort;
+import com.phonghub.application.service.NotificationService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -130,5 +134,20 @@ public class PhongHubConfiguration {
     ) {
         TenantService service = new TenantService(tenantRepo, currentUserPort, authorizationService, auditPort);
         return new TransactionalTenantUseCase(service);
+    }
+
+    @Bean
+    public NotificationRepositoryPort notificationRepository() {
+        return new InMemoryNotificationRepository();
+    }
+
+    @Bean
+    public NotificationUseCase notificationUseCase(
+        NotificationRepositoryPort notificationRepository,
+        AuthUseCase authUseCase,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService
+    ) {
+        return new NotificationService(notificationRepository, authUseCase, currentUserPort, authorizationService);
     }
 }
