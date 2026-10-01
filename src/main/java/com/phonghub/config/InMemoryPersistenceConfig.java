@@ -95,6 +95,11 @@ public class InMemoryPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryPaymentRepository paymentRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryPaymentRepository();
+    }
+
+    @Bean
     public Boolean seedInitialData(
         InMemoryUserRepository userRepo,
         InMemoryPropertyRepository propertyRepo,

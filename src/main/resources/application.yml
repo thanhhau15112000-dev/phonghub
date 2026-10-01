@@ -30,3 +30,6 @@ management:
 phonghub:
   demo:
     enabled: false
+  sepay:
+    webhook-api-key: ${SEPAY_WEBHOOK_API_KEY:}
+

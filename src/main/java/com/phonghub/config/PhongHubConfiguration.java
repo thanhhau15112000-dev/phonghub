@@ -29,10 +29,15 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationReposit
 import com.phonghub.application.port.in.NotificationUseCase;
 import com.phonghub.application.port.out.NotificationRepositoryPort;
 import com.phonghub.application.service.NotificationService;
+import com.phonghub.application.port.in.SepayWebhookUseCase;
+import com.phonghub.application.port.out.PaymentRepositoryPort;
+import com.phonghub.application.service.SepayPaymentService;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
+@EnableConfigurationProperties(SepayProperties.class)
 public class PhongHubConfiguration {
 
     @Bean
@@ -149,5 +154,24 @@ public class PhongHubConfiguration {
         AuthorizationService authorizationService
     ) {
         return new NotificationService(notificationRepository, authUseCase, currentUserPort, authorizationService);
+    }
+
+    @Bean
+    public SepayWebhookUseCase sepayWebhookUseCase(
+        PaymentRepositoryPort paymentRepository,
+        ContractRepositoryPort contractRepository,
+        PropertyRepositoryPort propertyRepository,
+        NotificationRepositoryPort notificationRepository,
+        UserRepositoryPort userRepository,
+        SepayProperties sepayProperties
+    ) {
+        return new SepayPaymentService(
+            paymentRepository,
+            contractRepository,
+            propertyRepository,
+            notificationRepository,
+            userRepository,
+            sepayProperties
+        );
     }
 }

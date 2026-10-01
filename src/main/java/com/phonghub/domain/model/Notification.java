@@ -64,6 +64,30 @@ public class Notification {
         );
     }
 
+    public static Notification createPaymentReceived(
+        String title,
+        String message,
+        UUID targetUserId,
+        String targetUsername,
+        String targetFullName,
+        UserRole targetRole
+    ) {
+        return new Notification(
+            UUID.randomUUID(),
+            NotificationType.PAYMENT_RECEIVED,
+            title,
+            message,
+            targetUserId,
+            targetUsername,
+            targetFullName,
+            targetRole,
+            Instant.now(),
+            false,
+            null,
+            null
+        );
+    }
+
     public void markResolved(String resolutionNote) {
         this.resolved = true;
         this.resolvedAt = Instant.now();
