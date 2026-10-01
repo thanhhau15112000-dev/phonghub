@@ -60,8 +60,8 @@
             </div>
         </div>
 
-        <!-- Biểu mẫu đổi trạng thái (quản trị viên hoặc nhân viên) -->
-        <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+        <!-- Biểu mẫu đổi trạng thái (quản trị viên, nhân viên hoặc chủ trọ) -->
+        <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
             <h3 style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Thay đổi trạng thái phòng</h3>
             <form th:action="@{'/rooms/' + ${room.getId()} + '/status'}" method="post" style="display: flex; gap: 8px; align-items: center;">
                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -85,7 +85,7 @@
     <div class="card">
         <div class="flex-between" style="margin-bottom: 12px;">
             <h2>Hợp đồng thuê</h2>
-            <a th:if="${activeContract == null and (room.getStatus().name() == 'AVAILABLE' or room.getStatus().name() == 'RESERVED') and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}"
+            <a th:if="${activeContract == null and (room.getStatus().name() == 'AVAILABLE' or room.getStatus().name() == 'RESERVED') and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                th:href="@{'/contracts/new?propertyId=' + ${property.id()} + '&roomId=' + ${room.getId()}}"
                class="btn btn-primary btn-sm">+ Tạo hợp đồng</a>
         </div>

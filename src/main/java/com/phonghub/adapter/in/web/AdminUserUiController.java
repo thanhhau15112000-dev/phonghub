@@ -204,9 +204,9 @@ public class AdminUserUiController {
 
         try {
             User target = userUseCase.getUser(userId);
-            if (target.role() != UserRole.TENANT) {
-                redirectAttributes.addFlashAttribute("errorMessage", "Chỉ có thể đặt lại mật khẩu cho tài khoản người thuê từ giao diện này.");
-                redirectAttributes.addFlashAttribute("tableErrorMessage", "Chỉ có thể đặt lại mật khẩu cho tài khoản người thuê từ giao diện này.");
+            if (target.role() == UserRole.ADMIN) {
+                redirectAttributes.addFlashAttribute("errorMessage", "Không thể đặt lại mật khẩu cho tài khoản Quản trị viên.");
+                redirectAttributes.addFlashAttribute("tableErrorMessage", "Không thể đặt lại mật khẩu cho tài khoản Quản trị viên.");
                 return "redirect:/admin/users";
             }
 
