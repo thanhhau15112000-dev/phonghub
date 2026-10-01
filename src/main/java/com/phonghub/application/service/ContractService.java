@@ -111,14 +111,7 @@ public class ContractService implements ContractUseCase {
             ));
         }
 
-        Room room = roomRepository.findById(command.roomId())
-            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + command.roomId()));
-
-        if (!room.getPropertyId().equals(command.propertyId())) {
-            throw new DomainException(String.format(
-                "Room %s does not belong to property %s", room.getRoomNumber(), command.propertyId()
-            ));
-        }
+        Room room = validateOwnershipOfRoom(currentUser, command.propertyId(), command.roomId());
 
         // Room must not already have an active contract
         Optional<Contract> existingActive = contractRepository.findActiveByRoomId(room.getId());
@@ -169,10 +162,14 @@ public class ContractService implements ContractUseCase {
         Contract contract = contractRepository.findById(contractId)
             .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
 
-        authorizationService.assertCanManageContracts(currentUser, contract.getPropertyId());
+        if (contract.getStatus() != ContractStatus.DRAFT) {
+            throw new DomainException(String.format(
+                "Chỉ có thể kích hoạt hợp đồng ở trạng thái DRAFT. Trạng thái hiện tại: '%s'.",
+                contract.getStatus()
+            ));
+        }
 
-        Room room = roomRepository.findById(contract.getRoomId())
-            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + contract.getRoomId()));
+        Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
 
         // Invariant: Do not allow two active contracts for one room
         Optional<Contract> activeContract = contractRepository.findActiveByRoomId(room.getId());
@@ -196,10 +193,14 @@ public class ContractService implements ContractUseCase {
         Contract contract = contractRepository.findById(contractId)
             .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
 
-        authorizationService.assertCanManageContracts(currentUser, contract.getPropertyId());
+        if (contract.getStatus() != ContractStatus.ACTIVE) {
+            throw new DomainException(String.format(
+                "Chỉ có thể kết thúc hợp đồng ở trạng thái ACTIVE. Trạng thái hiện tại: '%s'.",
+                contract.getStatus()
+            ));
+        }
 
-        Room room = roomRepository.findById(contract.getRoomId())
-            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + contract.getRoomId()));
+        Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
 
         // Invariant: Ending a contract changes room to AVAILABLE unless maintenance is explicitly required
         contract.terminate();
@@ -470,5 +471,17 @@ public class ContractService implements ContractUseCase {
         }
 
         return updatedOccupant;
+    }
+
+    private Room validateOwnershipOfRoom(CurrentUser user, UUID propertyId, UUID roomId) {
+        Room room = roomRepository.findById(roomId)
+            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
+        if (!room.getPropertyId().equals(propertyId)) {
+            throw new UnauthorizedPropertyAccessException(String.format(
+                "Phòng '%s' (ID: %s) không thuộc về nhà trọ (ID: %s).", room.getRoomNumber(), roomId, propertyId
+            ));
+        }
+        authorizationService.assertCanManageContracts(user, room.getPropertyId());
+        return room;
     }
 }

@@ -19,9 +19,12 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class AuthService implements AuthUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     private static final String TEMP_PASSWORD_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -181,6 +184,13 @@ public class AuthService implements AuthUseCase {
             targetUserId.toString(),
             Map.of("targetUsername", targetUser.username(), "targetRole", targetUser.role().name())
         ));
+
+        log.info("Admin [{}] (ID: {}) successfully reset password for user [{}] (ID: {}, Role: {})",
+            caller != null ? caller.email() : "SYSTEM",
+            caller != null ? caller.id() : null,
+            targetUser.username(),
+            targetUser.id(),
+            targetUser.role());
 
         return new PasswordResetResult(
             targetUser.id(),
