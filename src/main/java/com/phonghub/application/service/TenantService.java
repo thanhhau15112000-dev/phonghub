@@ -34,6 +34,8 @@ public class TenantService implements TenantUseCase {
 
     @Override
     public Optional<Tenant> getTenant(UUID tenantId) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        authorizationService.assertCanAccessTenant(currentUser, tenantId);
         return tenantRepository.findById(tenantId);
     }
 

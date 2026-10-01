@@ -5,6 +5,7 @@ import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.domain.exception.TenantNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Property;
@@ -41,6 +42,19 @@ public class AuthorizationService {
         if (user == null || user.role() != UserRole.ADMIN) {
             throw new UnauthorizedPropertyAccessException("Action requires ADMIN role");
         }
+    }
+
+    public void assertCanCreateProperty(CurrentUser user) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (user.role() == UserRole.ADMIN || user.role() == UserRole.OWNER) {
+            return;
+        }
+        throw new UnauthorizedPropertyAccessException(String.format(
+            "User %s with role %s cannot create property. Only Admin or Owner allowed.",
+            user.fullName(), user.role()
+        ));
     }
 
     public void assertCanAccessProperty(CurrentUser user, UUID propertyId) {
@@ -175,6 +189,65 @@ public class AuthorizationService {
 
         throw new UnauthorizedPropertyAccessException(String.format(
             "Người dùng '%s' với vai trò '%s' không có quyền cập nhật thông tin người thuê. Chỉ Chủ nhà trọ liên quan hoặc Quản trị viên mới được phép.",
+            user.fullName(), user.role()
+        ));
+    }
+
+    public void assertCanAccessTenant(CurrentUser user, UUID tenantId) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (user.role() == UserRole.ADMIN) {
+            return;
+        }
+
+        Tenant tenant = tenantRepositoryPort.findById(tenantId)
+            .orElseThrow(() -> new TenantNotFoundException("Tenant not found with ID: " + tenantId));
+
+        if (user.role() == UserRole.TENANT) {
+            if (tenant.userId() != null && tenant.userId().equals(user.id())) {
+                return;
+            }
+            throw new UnauthorizedPropertyAccessException("Tenant can only view their own tenant profile");
+        }
+
+        Set<UUID> propertyIds = new HashSet<>();
+        for (Contract c : contractRepositoryPort.findByPrimaryTenantId(tenantId)) {
+            propertyIds.add(c.getPropertyId());
+        }
+        for (Contract c : contractRepositoryPort.findByOccupantTenantId(tenantId)) {
+            propertyIds.add(c.getPropertyId());
+        }
+
+        if (user.role() == UserRole.OWNER) {
+            boolean ownsProperty = propertyIds.stream()
+                .map(propertyRepositoryPort::findById)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .anyMatch(p -> user.id().equals(p.ownerId()));
+            if (ownsProperty) {
+                return;
+            }
+            throw new UnauthorizedPropertyAccessException(String.format(
+                "Chủ nhà trọ '%s' không quản lý nhà trọ nào mà người thuê '%s' đang hoặc đã từng cư trú.",
+                user.fullName(), tenantId
+            ));
+        }
+
+        if (user.role() == UserRole.STAFF) {
+            boolean isAssigned = propertyIds.stream()
+                .anyMatch(pId -> assignmentPort.isUserAssignedToProperty(user.id(), pId));
+            if (isAssigned) {
+                return;
+            }
+            throw new UnauthorizedPropertyAccessException(String.format(
+                "Nhân viên '%s' không phụ trách nhà trọ nào mà người thuê '%s' đang hoặc đã từng cư trú.",
+                user.fullName(), tenantId
+            ));
+        }
+
+        throw new UnauthorizedPropertyAccessException(String.format(
+            "Người dùng '%s' với vai trò '%s' không có quyền xem thông tin người thuê.",
             user.fullName(), user.role()
         ));
     }

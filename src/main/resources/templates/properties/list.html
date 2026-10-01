@@ -17,9 +17,12 @@
         </div>
     </div>
 
-    <!-- Biểu mẫu thêm nhà trọ (chỉ quản trị viên) -->
-    <div th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" class="card">
+    <!-- Biểu mẫu thêm nhà trọ (quản trị viên hoặc chủ trọ) -->
+    <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'OWNER')}" class="card">
         <h2>Thêm nhà trọ</h2>
+        <p th:if="${currentUser.role().name() == 'OWNER'}" style="color: var(--text-secondary); font-size: 12px; margin-bottom: 12px;">
+            Lưu ý: Nhà trọ mới tạo sẽ ở trạng thái chờ duyệt (PENDING) bởi Quản trị viên trước khi có thể tạo phòng và hợp đồng.
+        </p>
         <form th:action="@{/properties}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="form-row">
