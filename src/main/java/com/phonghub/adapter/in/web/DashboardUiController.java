@@ -88,7 +88,17 @@ public class DashboardUiController {
         model.addAttribute("roomsCount", allRooms.size());
         model.addAttribute("activeContractsCount", allContracts.stream().filter(Contract::isActive).count());
         model.addAttribute("openTicketsCount", allTickets.stream().filter(t -> !t.isResolved()).count());
-        model.addAttribute("recentTickets", allTickets.stream().limit(5).toList());
+        // Phiếu chưa hoàn thành lên trước, mới nhất trước; chờ thanh toán hiển thị cùng trạng thái
+        model.addAttribute("recentTickets", allTickets.stream()
+            .sorted(java.util.Comparator
+                .comparing((MaintenanceTicket t) -> MaintenanceListFilter.isDone(t))
+                .thenComparing(MaintenanceTicket::getCreatedAt, java.util.Comparator.reverseOrder()))
+            .limit(5)
+            .toList());
+        model.addAttribute("ticketsNotDoneCount", allTickets.stream().filter(t -> !MaintenanceListFilter.isDone(t)).count());
+        model.addAttribute("ticketsAwaitingPaymentCount", allTickets.stream()
+            .filter(t -> t.getStatus() == com.phonghub.domain.model.MaintenanceStatus.AWAITING_PAYMENT).count());
+        model.addAttribute("ticketsDoneCount", allTickets.stream().filter(MaintenanceListFilter::isDone).count());
 
         return "dashboard";
     }

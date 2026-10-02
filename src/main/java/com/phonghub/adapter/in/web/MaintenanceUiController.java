@@ -53,7 +53,15 @@ public class MaintenanceUiController {
     }
 
     @GetMapping
-    public String listTickets(Model model) {
+    public String listTickets(
+        @RequestParam(required = false) String tab,
+        @RequestParam(required = false) String status,
+        @RequestParam(required = false) String propertyId,
+        @RequestParam(required = false) String priority,
+        @RequestParam(required = false) String from,
+        @RequestParam(required = false) String to,
+        Model model
+    ) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         List<MaintenanceTicket> tickets = new ArrayList<>();
 
@@ -75,16 +83,41 @@ public class MaintenanceUiController {
             }
         }
 
+        MaintenanceListFilter filter = MaintenanceListFilter.parse(tab, status, propertyId, priority, from, to);
+        List<MaintenanceTicket> common = tickets.stream().filter(filter::matchesCommon).toList();
+        List<MaintenanceTicket> visible = common.stream()
+            .filter(filter::matchesTab)
+            .sorted(java.util.Comparator.comparing(MaintenanceTicket::getCreatedAt).reversed())
+            .toList();
+
+        // Số phiếu theo tab / trạng thái, tính theo cơ sở, mức độ, thời gian đang lọc
+        List<MaintenanceTicket> openTickets = common.stream().filter(t -> !MaintenanceListFilter.isDone(t)).toList();
+        java.util.Map<com.phonghub.domain.model.MaintenanceStatus, Long> openByStatus = openTickets.stream()
+            .collect(java.util.stream.Collectors.groupingBy(MaintenanceTicket::getStatus, java.util.stream.Collectors.counting()));
+
         java.util.Map<UUID, com.phonghub.domain.model.Invoice> feeInvoices = new java.util.HashMap<>();
-        for (MaintenanceTicket t : tickets) {
+        for (MaintenanceTicket t : visible) {
             if (t.getStatus() == com.phonghub.domain.model.MaintenanceStatus.AWAITING_PAYMENT) {
                 invoiceUseCase.findFeeInvoiceForTicket(t.getId()).ifPresent(inv -> feeInvoices.put(t.getId(), inv));
             }
         }
 
+        List<Property> accessibleProperties = propertyUseCase.listAccessibleProperties();
+        java.util.Map<UUID, String> propertyNames = new java.util.HashMap<>();
+        accessibleProperties.forEach(p -> propertyNames.put(p.id(), p.name()));
+
         model.addAttribute("currentUser", currentUser);
-        model.addAttribute("tickets", tickets);
+        model.addAttribute("tickets", visible);
         model.addAttribute("feeInvoices", feeInvoices);
+        model.addAttribute("filter", filter);
+        model.addAttribute("commonQuery", filter.commonQuery());
+        model.addAttribute("properties", accessibleProperties);
+        model.addAttribute("propertyNames", propertyNames);
+        model.addAttribute("priorities", MaintenancePriority.values());
+        model.addAttribute("openStatuses", MaintenanceListFilter.OPEN_STATUSES);
+        model.addAttribute("openCount", openTickets.size());
+        model.addAttribute("doneCount", common.size() - openTickets.size());
+        model.addAttribute("openByStatus", openByStatus);
         return "maintenance/list";
     }
 
