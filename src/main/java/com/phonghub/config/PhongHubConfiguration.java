@@ -194,12 +194,13 @@ public class PhongHubConfiguration {
     @Bean
     public InvoiceUseCase invoiceUseCase(
         InvoiceRepositoryPort invoiceRepository,
+        MaintenanceTicketRepositoryPort ticketRepository,
         ContractUseCase contractUseCase,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService
     ) {
         InvoiceService service = new InvoiceService(
-            invoiceRepository, contractUseCase, currentUserPort, authorizationService
+            invoiceRepository, ticketRepository, contractUseCase, currentUserPort, authorizationService
         );
         return new TransactionalInvoiceUseCase(service);
     }

@@ -196,17 +196,28 @@ public class SepayPaymentService implements SepayWebhookUseCase {
 
     /** Hóa đơn phí sửa chữa đã trả đủ: phiếu bảo trì đang chờ thanh toán chuyển sang hoàn tất. */
     private void completeMaintenanceTicketIfPaid(Invoice invoice) {
-        if (invoice.getType() != InvoiceType.MAINTENANCE
-            || invoice.getTicketId() == null
-            || invoice.getStatus() != InvoiceStatus.PAID) {
+        if (invoice.getStatus() != InvoiceStatus.PAID) {
             return;
         }
-        ticketRepository.findById(invoice.getTicketId())
-            .filter(ticket -> ticket.getStatus() == MaintenanceStatus.AWAITING_PAYMENT)
-            .ifPresent(ticket -> {
-                ticket.markFeePaid();
-                ticketRepository.save(ticket);
-            });
+        // Hóa đơn phí riêng: phiếu của nó. Hóa đơn tháng: phiếu của các khoản phí đã gộp (dòng chi tiết).
+        List<UUID> ticketIds = new java.util.ArrayList<>();
+        if (invoice.getType() == InvoiceType.MAINTENANCE && invoice.getTicketId() != null) {
+            ticketIds.add(invoice.getTicketId());
+        }
+        invoice.getItems().stream()
+            .filter(item -> item.sourceInvoiceId() != null)
+            .forEach(item -> invoiceRepository.findById(item.sourceInvoiceId())
+                .map(Invoice::getTicketId)
+                .ifPresent(ticketIds::add));
+
+        for (UUID ticketId : ticketIds) {
+            ticketRepository.findById(ticketId)
+                .filter(ticket -> ticket.getStatus() == MaintenanceStatus.AWAITING_PAYMENT)
+                .ifPresent(ticket -> {
+                    ticket.markFeePaid();
+                    ticketRepository.save(ticket);
+                });
+        }
     }
 
     private Invoice matchInvoice(String code, String content) {

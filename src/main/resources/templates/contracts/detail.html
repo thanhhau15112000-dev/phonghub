@@ -275,6 +275,11 @@
                     <td>
                         <span th:text="${uiText.invoiceLabel(inv)}">Tiền thuê 10/2026</span>
                         <a th:if="${inv.getTicketId() != null}" th:href="@{'/maintenance/' + ${inv.getTicketId()}}" style="color: var(--accent); font-size: 12px;">Xem phiếu</a>
+                        <a th:if="${inv.isConsolidated()}" th:href="@{'/invoices/' + ${inv.getConsolidatedIntoInvoiceId()} + '/pay'}" style="color: var(--accent); font-size: 12px;">Xem hóa đơn tháng</a>
+                        <ul th:if="${#lists.size(inv.getItems()) > 1}" style="margin: 4px 0 0; padding-left: 16px; font-size: 12px; color: var(--text-secondary);">
+                            <li th:each="item : ${inv.getItems()}"
+                                th:text="${item.name() + ': ' + #numbers.formatDecimal(item.totalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">Mục</li>
+                        </ul>
                     </td>
                     <td th:text="${#numbers.formatDecimal(inv.getTotalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
                     <td th:text="${#numbers.formatDecimal(inv.getPaidAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</td>

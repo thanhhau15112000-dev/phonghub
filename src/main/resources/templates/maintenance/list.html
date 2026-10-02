@@ -117,6 +117,11 @@
                                class="btn btn-sm btn-primary" title="Xem số tiền, mã chuyển khoản và QR">
                                 <span>Thanh toán</span>
                             </a>
+                            <a th:if="${currentUser.role().name() == 'TENANT' and feeInvoices.containsKey(t.getId()) and feeInvoices.get(t.getId()).isConsolidated()}"
+                               th:href="@{'/invoices/' + ${feeInvoices.get(t.getId()).getConsolidatedIntoInvoiceId()} + '/pay'}"
+                               class="btn btn-sm btn-primary" title="Khoản này nằm trong hóa đơn tháng">
+                                <span>Thanh toán (hóa đơn tháng)</span>
+                            </a>
                             <a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm btn-secondary" title="Xem và cập nhật sự cố">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                 <span>Quản lý</span>

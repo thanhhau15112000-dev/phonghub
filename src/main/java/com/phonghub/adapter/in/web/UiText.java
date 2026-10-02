@@ -74,6 +74,9 @@ public final class UiText {
         if (invoice == null) {
             return "Chưa xác định";
         }
+        if (invoice.isConsolidated()) {
+            return "Đã gộp vào hóa đơn tháng";
+        }
         return switch (invoice.getStatus()) {
             case PAID -> "Đã thanh toán";
             case VOIDED -> "Đã hủy";
@@ -89,7 +92,8 @@ public final class UiText {
 
     /** Hậu tố class badge-* có sẵn trong style.css, tái sử dụng màu theo mức độ. */
     public String invoiceBadge(Invoice invoice, LocalDate today) {
-        if (invoice == null || invoice.getStatus() == InvoiceStatus.VOIDED || invoice.getStatus() == InvoiceStatus.DRAFT) {
+        if (invoice == null || invoice.isConsolidated()
+            || invoice.getStatus() == InvoiceStatus.VOIDED || invoice.getStatus() == InvoiceStatus.DRAFT) {
             return "DRAFT";
         }
         if (invoice.getStatus() == InvoiceStatus.PAID) {
@@ -105,9 +109,12 @@ public final class UiText {
         if (invoice == null) {
             return "Chưa xác định";
         }
-        return invoice.getType() == InvoiceType.MAINTENANCE
-            ? "Phí sửa chữa"
-            : String.format("Tiền thuê %02d/%d", invoice.getMonth(), invoice.getYear());
+        if (invoice.getType() == InvoiceType.MAINTENANCE) {
+            return "Phí sửa chữa";
+        }
+        boolean hasFees = invoice.getItems().stream().anyMatch(item -> item.sourceInvoiceId() != null);
+        return String.format("Tiền thuê %02d/%d", invoice.getMonth(), invoice.getYear())
+            + (hasFees ? " và phí sửa chữa" : "");
     }
 
     public String maintenanceCause(MaintenanceCause cause) {
