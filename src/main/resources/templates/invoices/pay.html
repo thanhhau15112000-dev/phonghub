@@ -23,8 +23,12 @@
     </div>
 
     <div class="card" id="invoice-pay">
-        <div th:if="${invoice.getStatus().name() == 'PAID'}" class="empty-state">
-            <p>Khoản này đã được thanh toán đủ.</p>
+        <div th:if="${invoice.getStatus().name() == 'PAID'}" class="empty-state" id="paid-notice">
+            <p style="font-weight: 600;">Khoản này đã được thanh toán đủ.</p>
+            <a th:href="@{${returnUrl}}" class="btn btn-primary">Quay lại</a>
+        </div>
+        <div id="paid-live" class="alert alert-success" style="display: none; margin-bottom: 16px;">
+            Đã nhận thanh toán. Đang quay lại...
         </div>
         <div th:if="${invoice.getStatus().name() == 'VOIDED'}" class="empty-state">
             <p>Khoản này đã bị hủy, không cần thanh toán.</p>
@@ -92,13 +96,41 @@
                         </tr>
                     </tbody>
                 </table>
+                <form th:if="${simulationEnabled}" th:action="@{'/invoices/' + ${invoice.getId()} + '/simulate-payment'}" method="post"
+                      style="margin-top: 14px; padding: 10px 12px; border: 1px dashed var(--border-color);">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">
+                        <strong>Chế độ thử nghiệm:</strong> chưa chuyển tiền thật. Bấm nút dưới để mô phỏng một lần chuyển khoản
+                        đủ số tiền; hệ thống xử lý như khi nhận webhook từ SePay.
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-secondary">Mô phỏng chuyển khoản</button>
+                </form>
                 <p style="font-size: 12px; color: var(--text-secondary); margin: 10px 0 0;">
                     Quét mã QR hoặc chuyển khoản đúng số tiền và <strong>đúng nội dung</strong> ở trên để hệ thống tự ghi nhận thanh toán.
+                    Trang này tự cập nhật khi nhận được tiền.
                     <span th:unless="${bankConfigured}">Hệ thống chưa cấu hình tài khoản nhận tiền, vui lòng liên hệ chủ trọ để nhận số tài khoản.</span>
                 </p>
             </div>
         </div>
     </div>
+    <script th:if="${invoice.isPayable()}" th:inline="javascript">
+        (function () {
+            var statusUrl = /*[[@{'/invoices/' + ${invoice.getId()} + '/status'}]]*/ '';
+            var returnUrl = /*[[@{${returnUrl}}]]*/ '/';
+            var timer = setInterval(function () {
+                fetch(statusUrl, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (s) {
+                        if (!s || !(s.paid || s.consolidated)) { return; }
+                        clearInterval(timer);
+                        var box = document.getElementById('paid-live');
+                        if (box) { box.style.display = 'block'; }
+                        setTimeout(function () { window.location.href = returnUrl; }, 2000);
+                    })
+                    .catch(function () { /* mạng chập chờn: thử lại ở lần sau */ });
+            }, 3000);
+        })();
+    </script>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>
