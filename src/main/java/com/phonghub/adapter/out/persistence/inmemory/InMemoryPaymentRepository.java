@@ -15,9 +15,12 @@ public class InMemoryPaymentRepository implements PaymentRepositoryPort {
     private final Map<UUID, PaymentTransaction> store = new ConcurrentHashMap<>();
 
     @Override
-    public PaymentTransaction save(PaymentTransaction transaction) {
+    public synchronized boolean saveIfNew(PaymentTransaction transaction) {
+        if (existsBySepayId(transaction.sepayId())) {
+            return false;
+        }
         store.put(transaction.id(), transaction);
-        return transaction;
+        return true;
     }
 
     @Override

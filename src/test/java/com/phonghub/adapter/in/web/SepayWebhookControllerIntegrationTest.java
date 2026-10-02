@@ -23,6 +23,9 @@ import org.springframework.test.web.servlet.MockMvc;
 @ActiveProfiles("test")
 class SepayWebhookControllerIntegrationTest {
 
+    private static final String ADMIN =
+        com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter.ADMIN_ID.toString();
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -62,7 +65,7 @@ class SepayWebhookControllerIntegrationTest {
             .andExpect(jsonPath("$.message", is("Xử lý giao dịch SePay thành công")))
             .andExpect(jsonPath("$.paymentId").isNotEmpty());
 
-        mockMvc.perform(get("/api/v1/payments/transactions"))
+        mockMvc.perform(get("/api/v1/payments/transactions").header("X-User-Id", ADMIN))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$", hasSize(1)))
             .andExpect(jsonPath("$[0].sepayId", is(99001)))
@@ -105,7 +108,7 @@ class SepayWebhookControllerIntegrationTest {
             .andExpect(jsonPath("$.message", is("Giao dịch đã được ghi nhận trước đó")));
 
         // Exactly 1 record in repository
-        mockMvc.perform(get("/api/v1/payments/transactions"))
+        mockMvc.perform(get("/api/v1/payments/transactions").header("X-User-Id", ADMIN))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$", hasSize(1)));
     }

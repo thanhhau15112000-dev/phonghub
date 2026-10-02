@@ -6,7 +6,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface PaymentRepositoryPort {
-    PaymentTransaction save(PaymentTransaction transaction);
+    /**
+     * Ghi giao dịch nếu sepayId chưa tồn tại. Trả về false khi trùng (SePay gửi lại webhook),
+     * kể cả khi hai request trùng chạy đồng thời — dựa trên ràng buộc UNIQUE(sepay_id).
+     */
+    boolean saveIfNew(PaymentTransaction transaction);
     Optional<PaymentTransaction> findById(UUID id);
     Optional<PaymentTransaction> findBySepayId(Long sepayId);
     boolean existsBySepayId(Long sepayId);

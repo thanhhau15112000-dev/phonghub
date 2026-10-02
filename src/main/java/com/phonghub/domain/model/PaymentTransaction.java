@@ -21,6 +21,7 @@ public record PaymentTransaction(
     String description,
     PaymentStatus status,
     UUID contractId,
+    UUID invoiceId,
     Instant createdAt
 ) {
     public PaymentTransaction {

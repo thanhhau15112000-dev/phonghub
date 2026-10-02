@@ -1,6 +1,7 @@
 package com.phonghub.adapter.in.web;
 
 import com.phonghub.application.port.in.ContractUseCase;
+import com.phonghub.application.port.in.InvoiceUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.in.TenantUseCase;
@@ -8,8 +9,10 @@ import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.config.SepayProperties;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.model.Contract;
+import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
@@ -17,8 +20,12 @@ import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,6 +37,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @Controller
 @RequestMapping("/contracts")
@@ -42,6 +50,8 @@ public class ContractUiController {
     private final TenantRepositoryPort tenantRepository;
     private final CurrentUserPort currentUserPort;
     private final TenantUseCase tenantUseCase;
+    private final InvoiceUseCase invoiceUseCase;
+    private final SepayProperties sepayProperties;
 
     public ContractUiController(
         ContractUseCase contractUseCase,
@@ -50,7 +60,9 @@ public class ContractUiController {
         RoomRepositoryPort roomRepository,
         TenantRepositoryPort tenantRepository,
         CurrentUserPort currentUserPort,
-        TenantUseCase tenantUseCase
+        TenantUseCase tenantUseCase,
+        InvoiceUseCase invoiceUseCase,
+        SepayProperties sepayProperties
     ) {
         this.contractUseCase = contractUseCase;
         this.propertyUseCase = propertyUseCase;
@@ -59,6 +71,8 @@ public class ContractUiController {
         this.tenantRepository = tenantRepository;
         this.currentUserPort = currentUserPort;
         this.tenantUseCase = tenantUseCase;
+        this.invoiceUseCase = invoiceUseCase;
+        this.sepayProperties = sepayProperties;
     }
 
     @GetMapping
@@ -185,12 +199,73 @@ public class ContractUiController {
             model.addAttribute("room", room);
             model.addAttribute("primaryTenant", primaryTenant);
             model.addAttribute("occupantTenants", occupantTenants);
+            addPaymentAttributes(model, currentUser, contract, property);
 
             return "contracts/detail";
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
             return "redirect:/contracts";
         }
+    }
+
+    @PostMapping("/{id}/invoices")
+    public String issueInvoice(
+        @PathVariable UUID id,
+        @RequestParam String period,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            YearMonth yearMonth = YearMonth.parse(period);
+            Invoice invoice = invoiceUseCase.issueMonthlyInvoice(id, yearMonth);
+            redirectAttributes.addFlashAttribute("successMessage", String.format(
+                "Đã tạo kỳ thanh toán %02d/%d, mã chuyển khoản %s.",
+                invoice.getMonth(), invoice.getYear(), invoice.getPaymentCode()
+            ));
+        } catch (DateTimeParseException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Kỳ thanh toán không hợp lệ, định dạng yêu cầu: yyyy-MM.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
+    }
+
+    private void addPaymentAttributes(Model model, CurrentUser currentUser, Contract contract, Property property) {
+        List<Invoice> invoices = invoiceUseCase.listInvoicesForContract(contract.getId());
+        LocalDate today = LocalDate.now();
+        // Kỳ cũ nhất còn nợ được ưu tiên hiển thị hướng dẫn thanh toán.
+        Invoice payableInvoice = invoices.stream()
+            .filter(Invoice::isPayable)
+            .min(Comparator.comparing(Invoice::getYear).thenComparing(Invoice::getMonth))
+            .orElse(null);
+
+        boolean canIssueInvoice = contract.isActive() && currentUser != null && (
+            currentUser.role() == UserRole.ADMIN
+                || currentUser.role() == UserRole.STAFF
+                || (currentUser.role() == UserRole.OWNER && currentUser.id().equals(property.ownerId()))
+        );
+
+        model.addAttribute("invoices", invoices);
+        model.addAttribute("today", today);
+        model.addAttribute("payableInvoice", payableInvoice);
+        model.addAttribute("canIssueInvoice", canIssueInvoice);
+        model.addAttribute("defaultInvoicePeriod", YearMonth.now().toString());
+        model.addAttribute("bankConfigured", sepayProperties.hasBankAccount());
+        model.addAttribute("bankCode", sepayProperties.getBankCode());
+        model.addAttribute("bankAccountNumber", sepayProperties.getBankAccountNumber());
+        model.addAttribute("bankAccountName", sepayProperties.getBankAccountName());
+        model.addAttribute("paymentQrUrl", payableInvoice != null && sepayProperties.hasBankAccount()
+            ? sepayQrUrl(payableInvoice)
+            : null);
+    }
+
+    private String sepayQrUrl(Invoice invoice) {
+        return UriComponentsBuilder.fromUriString("https://qr.sepay.vn/img")
+            .queryParam("acc", sepayProperties.getBankAccountNumber().trim())
+            .queryParam("bank", sepayProperties.getBankCode().trim())
+            .queryParam("amount", invoice.remainingAmount().setScale(0, RoundingMode.UP).toPlainString())
+            .queryParam("des", invoice.getPaymentCode())
+            .encode()
+            .toUriString();
     }
 
     @PostMapping("/{id}/occupants")

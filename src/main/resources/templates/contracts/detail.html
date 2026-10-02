@@ -196,6 +196,92 @@
         </div>
     </div>
 
+    <!-- Thanh toán tiền thuê -->
+    <div class="card" id="payments" style="margin-top: 20px;">
+        <div class="flex-between" style="margin-bottom: 12px;">
+            <h2 style="margin: 0;">Thanh toán tiền thuê</h2>
+            <form th:if="${canIssueInvoice}" th:action="@{'/contracts/' + ${contract.getId()} + '/invoices'}" method="post" style="display: flex; align-items: center; gap: 8px;">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <label for="invoicePeriod" style="font-size: 12px;">Kỳ</label>
+                <input type="month" id="invoicePeriod" name="period" class="form-control" th:value="${defaultInvoicePeriod}" required style="width: auto;">
+                <button type="submit" class="btn btn-sm btn-primary">Tạo kỳ thanh toán</button>
+            </form>
+        </div>
+
+        <!-- Hướng dẫn chuyển khoản cho kỳ còn nợ cũ nhất -->
+        <div th:if="${payableInvoice != null}" style="display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 16px;">
+            <img th:if="${paymentQrUrl != null}" th:src="${paymentQrUrl}" alt="Mã QR chuyển khoản" width="180" height="180" style="border: 1px solid var(--border-color);">
+            <div style="flex: 1; min-width: 260px;">
+                <table class="data-table">
+                    <tbody>
+                        <tr>
+                            <td style="color: var(--text-secondary); width: 160px;">Kỳ thanh toán:</td>
+                            <td th:text="${#numbers.formatInteger(payableInvoice.getMonth(), 2) + '/' + payableInvoice.getYear()}">10/2026</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--text-secondary);">Số tiền cần chuyển:</td>
+                            <td style="font-weight: 600;" th:text="${#numbers.formatDecimal(payableInvoice.remainingAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--text-secondary);">Hạn thanh toán:</td>
+                            <td>
+                                <span th:text="${payableInvoice.getDueDate()}">2026-10-05</span>
+                                <span th:class="'badge badge-' + ${uiText.invoiceBadge(payableInvoice, today)}" th:text="${uiText.invoiceState(payableInvoice, today)}">Đến hạn</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--text-secondary);">Nội dung chuyển khoản:</td>
+                            <td style="font-family: monospace; font-weight: 700; font-size: 15px;" th:text="${payableInvoice.getPaymentCode()}">PHXXXXXXXX</td>
+                        </tr>
+                        <tr th:if="${bankConfigured}">
+                            <td style="color: var(--text-secondary);">Ngân hàng:</td>
+                            <td th:text="${bankCode}">MBBank</td>
+                        </tr>
+                        <tr th:if="${bankConfigured}">
+                            <td style="color: var(--text-secondary);">Số tài khoản:</td>
+                            <td style="font-family: monospace;" th:text="${bankAccountNumber}">0123456789</td>
+                        </tr>
+                        <tr th:if="${bankConfigured and bankAccountName != null and !#strings.isEmpty(bankAccountName)}">
+                            <td style="color: var(--text-secondary);">Chủ tài khoản:</td>
+                            <td th:text="${bankAccountName}">NGUYEN VAN B</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p style="font-size: 12px; color: var(--text-secondary); margin: 8px 0 0;">
+                    Ghi đúng nội dung chuyển khoản để hệ thống tự ghi nhận thanh toán.
+                    <span th:unless="${bankConfigured}">Hệ thống chưa cấu hình tài khoản nhận tiền, vui lòng liên hệ chủ trọ để nhận số tài khoản.</span>
+                </p>
+            </div>
+        </div>
+
+        <div th:if="${#lists.isEmpty(invoices)}" class="empty-state" style="padding: 16px;">
+            <p style="margin: 0; font-size: 13px;">Chưa có kỳ thanh toán nào cho hợp đồng này.</p>
+        </div>
+
+        <table th:unless="${#lists.isEmpty(invoices)}" class="data-table" style="font-size: 13px;">
+            <thead>
+                <tr>
+                    <th>Kỳ</th>
+                    <th>Số tiền</th>
+                    <th>Đã trả</th>
+                    <th>Hạn thanh toán</th>
+                    <th>Nội dung CK</th>
+                    <th>Trạng thái</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="inv : ${invoices}">
+                    <td th:text="${#numbers.formatInteger(inv.getMonth(), 2) + '/' + inv.getYear()}">10/2026</td>
+                    <td th:text="${#numbers.formatDecimal(inv.getTotalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                    <td th:text="${#numbers.formatDecimal(inv.getPaidAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</td>
+                    <td th:text="${inv.getDueDate()}">2026-10-05</td>
+                    <td style="font-family: monospace;" th:text="${inv.getPaymentCode() != null ? inv.getPaymentCode() : '—'}">PHXXXXXXXX</td>
+                    <td><span th:class="'badge badge-' + ${uiText.invoiceBadge(inv, today)}" th:text="${uiText.invoiceState(inv, today)}">Đến hạn</span></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
     <!-- Dialog thêm người ở vào phòng (Chủ nhà hoặc Quản trị viên) -->
     <dialog th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
             id="addOccupantModal"

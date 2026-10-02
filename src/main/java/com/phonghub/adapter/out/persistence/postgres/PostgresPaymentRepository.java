@@ -30,6 +30,8 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
     private PaymentTransaction mapRow(ResultSet rs, int rowNum) throws SQLException {
         String contractIdStr = rs.getString("contract_id");
         UUID contractId = contractIdStr != null ? UUID.fromString(contractIdStr) : null;
+        String invoiceIdStr = rs.getString("invoice_id");
+        UUID invoiceId = invoiceIdStr != null ? UUID.fromString(invoiceIdStr) : null;
 
         return new PaymentTransaction(
             UUID.fromString(rs.getString("id")),
@@ -47,25 +49,24 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
             rs.getString("description"),
             PaymentStatus.valueOf(rs.getString("status")),
             contractId,
+            invoiceId,
             toInstant(rs.getTimestamp("created_at"))
         );
     }
 
     @Override
-    public PaymentTransaction save(PaymentTransaction tx) {
+    public boolean saveIfNew(PaymentTransaction tx) {
         String sql = """
             INSERT INTO sepay_transactions (
                 id, sepay_id, gateway, transaction_date, account_number, sub_account,
                 transfer_type, transfer_amount, accumulated, code, content,
-                reference_code, description, status, contract_id, created_at
+                reference_code, description, status, contract_id, invoice_id, created_at
             ) VALUES (
                 :id, :sepayId, :gateway, :transactionDate, :accountNumber, :subAccount,
                 :transferType, :transferAmount, :accumulated, :code, :content,
-                :referenceCode, :description, :status, :contractId, :createdAt
+                :referenceCode, :description, :status, :contractId, :invoiceId, :createdAt
             )
-            ON CONFLICT (sepay_id) DO UPDATE SET
-                status = EXCLUDED.status,
-                contract_id = EXCLUDED.contract_id
+            ON CONFLICT (sepay_id) DO NOTHING
             """;
 
         MapSqlParameterSource params = new MapSqlParameterSource()
@@ -84,10 +85,10 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
             .addValue("description", tx.description())
             .addValue("status", tx.status().name())
             .addValue("contractId", tx.contractId())
+            .addValue("invoiceId", tx.invoiceId())
             .addValue("createdAt", Timestamp.from(tx.createdAt()));
 
-        jdbcTemplate.update(sql, params);
-        return tx;
+        return jdbcTemplate.update(sql, params) == 1;
     }
 
     @Override
