@@ -17,7 +17,7 @@ import java.util.UUID;
 public class InvoiceService implements InvoiceUseCase {
 
     private final InvoiceRepositoryPort invoiceRepository;
-    private final MaintenanceTicketRepositoryPort ticketRepository;
+    private final MonthlyInvoiceIssuer issuer;
     private final ContractUseCase contractUseCase;
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
@@ -30,7 +30,7 @@ public class InvoiceService implements InvoiceUseCase {
         AuthorizationService authorizationService
     ) {
         this.invoiceRepository = invoiceRepository;
-        this.ticketRepository = ticketRepository;
+        this.issuer = new MonthlyInvoiceIssuer(invoiceRepository, ticketRepository);
         this.contractUseCase = contractUseCase;
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
@@ -59,33 +59,12 @@ public class InvoiceService implements InvoiceUseCase {
         Contract contract = contractUseCase.getContract(contractId);
         authorizationService.assertCanManageContracts(currentUserPort.getCurrentUser(), contract.getPropertyId());
 
-        if (invoiceRepository.findActiveRentByContractIdAndPeriod(contractId, period.getYear(), period.getMonthValue()).isPresent()) {
+        if (issuer.exists(contract, period)) {
             throw new DomainException(String.format(
                 "Kỳ thanh toán %02d/%d đã tồn tại cho hợp đồng này.", period.getMonthValue(), period.getYear()
             ));
         }
-
-        // Phí sửa chữa chưa trả đồng nào được gộp vào hóa đơn tháng; khoản đã trả không đưa vào.
-        List<Invoice> rollable = invoiceRepository.findByContractId(contractId).stream()
-            .filter(Invoice::isRollableFee)
-            .sorted(Comparator.comparing(Invoice::getCreatedAt))
-            .toList();
-        List<Invoice.RolledFee> rolledFees = rollable.stream()
-            .map(fee -> new Invoice.RolledFee(fee, ticketTitle(fee)))
-            .toList();
-
-        Invoice invoice = Invoice.issueMonthlyRent(contract, period, invoiceRepository.newUniquePaymentCode(), rolledFees);
-        // Lưu hóa đơn tháng trước (các khoản phí tham chiếu tới nó), rồi cập nhật các khoản đã gộp
-        invoiceRepository.save(invoice);
-        rollable.forEach(invoiceRepository::save);
-        return invoice;
-    }
-
-    private String ticketTitle(Invoice fee) {
-        if (fee.getTicketId() == null) {
-            return null;
-        }
-        return ticketRepository.findById(fee.getTicketId()).map(t -> t.getTitle()).orElse(null);
+        return issuer.issue(contract, period);
     }
 
     @Override
