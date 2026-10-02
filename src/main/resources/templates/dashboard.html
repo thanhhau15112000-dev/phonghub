@@ -51,13 +51,13 @@
             </div>
 
             <div th:if="${nextInvoice != null}">
-                <p th:if="${overdueInvoiceCount > 0}" style="color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;"
-                   th:text="'Có ' + ${overdueInvoiceCount} + ' kỳ đã quá hạn. Hiển thị kỳ cũ nhất còn nợ.'">Có kỳ quá hạn.</p>
+                <p th:if="${#lists.size(payableInvoices) > 1}" style="color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;"
+                   th:text="'Có ' + ${#lists.size(payableInvoices)} + ' khoản chưa thanh toán (' + ${overdueInvoiceCount} + ' quá hạn). Hiển thị khoản cũ nhất.'">Có nhiều khoản.</p>
                 <table class="data-table">
                     <tbody>
                         <tr>
-                            <td style="color: var(--text-secondary); width: 180px;">Kỳ thanh toán:</td>
-                            <td th:text="${#numbers.formatInteger(nextInvoice.getMonth(), 2) + '/' + nextInvoice.getYear()}">10/2026</td>
+                            <td style="color: var(--text-secondary); width: 180px;">Khoản thanh toán:</td>
+                            <td th:text="${uiText.invoiceLabel(nextInvoice)}">Tiền thuê 10/2026</td>
                         </tr>
                         <tr>
                             <td style="color: var(--text-secondary);">Số tiền cần chuyển:</td>

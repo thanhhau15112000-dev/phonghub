@@ -1,6 +1,8 @@
 package com.phonghub.adapter.out.persistence.postgres;
 
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
+import com.phonghub.domain.model.LiableParty;
+import com.phonghub.domain.model.MaintenanceCause;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
@@ -29,6 +31,7 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
         UUID tenantId = tenantIdStr != null ? UUID.fromString(tenantIdStr) : null;
         String techIdStr = rs.getString("assigned_technician_id");
         UUID techId = techIdStr != null ? UUID.fromString(techIdStr) : null;
+        String causeStr = rs.getString("cause_category");
 
         return new MaintenanceTicket(
             UUID.fromString(rs.getString("id")),
@@ -42,6 +45,8 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
             MaintenanceStatus.valueOf(rs.getString("status")),
             rs.getBigDecimal("repair_cost"),
             rs.getString("resolution_notes"),
+            causeStr != null ? MaintenanceCause.valueOf(causeStr) : null,
+            LiableParty.valueOf(rs.getString("liable_party")),
             toInstant(rs.getTimestamp("created_at")),
             toInstant(rs.getTimestamp("updated_at"))
         );
@@ -54,8 +59,8 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
     @Override
     public MaintenanceTicket save(MaintenanceTicket ticket) {
         String sql = """
-            INSERT INTO maintenance_tickets (id, room_id, requested_by_tenant_id, assigned_technician_id, title, description, priority, status, repair_cost, resolution_notes, created_at, updated_at)
-            VALUES (:id, :roomId, :tenantId, :technicianId, :title, :description, :priority, :status, :repairCost, :resolutionNotes, :createdAt, :updatedAt)
+            INSERT INTO maintenance_tickets (id, room_id, requested_by_tenant_id, assigned_technician_id, title, description, priority, status, repair_cost, resolution_notes, cause_category, liable_party, created_at, updated_at)
+            VALUES (:id, :roomId, :tenantId, :technicianId, :title, :description, :priority, :status, :repairCost, :resolutionNotes, :causeCategory, :liableParty, :createdAt, :updatedAt)
             ON CONFLICT (id) DO UPDATE SET
                 assigned_technician_id = EXCLUDED.assigned_technician_id,
                 title = EXCLUDED.title,
@@ -64,6 +69,7 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
                 status = EXCLUDED.status,
                 repair_cost = EXCLUDED.repair_cost,
                 resolution_notes = EXCLUDED.resolution_notes,
+                liable_party = EXCLUDED.liable_party,
                 updated_at = EXCLUDED.updated_at
             """;
 
@@ -78,6 +84,8 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
             .addValue("status", ticket.getStatus().name())
             .addValue("repairCost", ticket.getRepairCost())
             .addValue("resolutionNotes", ticket.getResolutionNotes())
+            .addValue("causeCategory", ticket.getCauseCategory() != null ? ticket.getCauseCategory().name() : null)
+            .addValue("liableParty", ticket.getLiableParty().name())
             .addValue("createdAt", Timestamp.from(ticket.getCreatedAt()))
             .addValue("updatedAt", Timestamp.from(ticket.getUpdatedAt()));
 

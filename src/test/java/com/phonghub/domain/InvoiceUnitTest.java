@@ -81,6 +81,34 @@ class InvoiceUnitTest {
     }
 
     @Test
+    @DisplayName("Maintenance fee invoice: ACTIVE contract only, due in 7 days, voidable only while unpaid")
+    void maintenanceFeeInvoice() {
+        UUID ticketId = UUID.randomUUID();
+        LocalDate today = LocalDate.of(2026, 3, 10);
+
+        assertThrows(DomainException.class, () -> Invoice.issueMaintenanceFee(
+            contract(ContractStatus.DRAFT, 5), ticketId, new BigDecimal("200000"), "PHAAAA2222", today));
+        assertThrows(IllegalArgumentException.class, () -> Invoice.issueMaintenanceFee(
+            contract(ContractStatus.ACTIVE, 5), ticketId, BigDecimal.ZERO, "PHAAAA2222", today));
+
+        Invoice fee = Invoice.issueMaintenanceFee(
+            contract(ContractStatus.ACTIVE, 5), ticketId, new BigDecimal("200000"), "PHAAAA2222", today);
+        assertEquals(com.phonghub.domain.model.InvoiceType.MAINTENANCE, fee.getType());
+        assertEquals(ticketId, fee.getTicketId());
+        assertEquals(LocalDate.of(2026, 3, 17), fee.getDueDate());
+        assertEquals(0, fee.getRentAmount().signum());
+
+        fee.applyPayment(new BigDecimal("50000"), Instant.now());
+        assertThrows(DomainException.class, fee::voidInvoice);
+
+        Invoice unpaid = Invoice.issueMaintenanceFee(
+            contract(ContractStatus.ACTIVE, 5), ticketId, new BigDecimal("200000"), "PHBBBB3333", today);
+        unpaid.voidInvoice();
+        assertEquals(InvoiceStatus.VOIDED, unpaid.getStatus());
+        assertFalse(unpaid.isPayable());
+    }
+
+    @Test
     @DisplayName("Payment code format and candidate extraction")
     void paymentCodeFormat() {
         String code = PaymentCode.generate();

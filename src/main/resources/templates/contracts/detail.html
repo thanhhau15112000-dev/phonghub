@@ -215,8 +215,8 @@
                 <table class="data-table">
                     <tbody>
                         <tr>
-                            <td style="color: var(--text-secondary); width: 160px;">Kỳ thanh toán:</td>
-                            <td th:text="${#numbers.formatInteger(payableInvoice.getMonth(), 2) + '/' + payableInvoice.getYear()}">10/2026</td>
+                            <td style="color: var(--text-secondary); width: 160px;">Khoản thanh toán:</td>
+                            <td th:text="${uiText.invoiceLabel(payableInvoice)}">Tiền thuê 10/2026</td>
                         </tr>
                         <tr>
                             <td style="color: var(--text-secondary);">Số tiền cần chuyển:</td>
@@ -261,7 +261,7 @@
         <table th:unless="${#lists.isEmpty(invoices)}" class="data-table" style="font-size: 13px;">
             <thead>
                 <tr>
-                    <th>Kỳ</th>
+                    <th>Khoản thanh toán</th>
                     <th>Số tiền</th>
                     <th>Đã trả</th>
                     <th>Hạn thanh toán</th>
@@ -271,7 +271,10 @@
             </thead>
             <tbody>
                 <tr th:each="inv : ${invoices}">
-                    <td th:text="${#numbers.formatInteger(inv.getMonth(), 2) + '/' + inv.getYear()}">10/2026</td>
+                    <td>
+                        <span th:text="${uiText.invoiceLabel(inv)}">Tiền thuê 10/2026</span>
+                        <a th:if="${inv.getTicketId() != null}" th:href="@{'/maintenance/' + ${inv.getTicketId()}}" style="color: var(--accent); font-size: 12px;">Xem phiếu</a>
+                    </td>
                     <td th:text="${#numbers.formatDecimal(inv.getTotalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
                     <td th:text="${#numbers.formatDecimal(inv.getPaidAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</td>
                     <td th:text="${inv.getDueDate()}">2026-10-05</td>

@@ -33,6 +33,20 @@
             </div>
 
             <div class="form-group">
+                <label class="form-label" for="causeSelect">Nguyên nhân sự cố <span th:if="${currentUser.role().name() == 'TENANT'}">*</span></label>
+                <select name="cause" id="causeSelect" class="form-control" th:required="${currentUser.role().name() == 'TENANT'}">
+                    <option value="">-- Chọn nguyên nhân --</option>
+                    <option th:each="c : ${causes}" th:value="${c}" th:text="${uiText.maintenanceCause(c)}"></option>
+                </select>
+                <div id="causeHint" style="display: none; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--border-color); font-size: 12px; color: var(--text-secondary);"></div>
+            </div>
+
+            <div class="form-group" id="causeDetailGroup" style="display: none;">
+                <label class="form-label" for="causeDetail">Hạng mục</label>
+                <select name="causeDetail" id="causeDetail" class="form-control"></select>
+            </div>
+
+            <div class="form-group">
                 <label class="form-label">Tiêu đề sự cố *</label>
                 <input type="text" name="title" class="form-control" placeholder="Ví dụ: Vòi nước trong nhà tắm bị hỏng" required>
             </div>
@@ -67,6 +81,49 @@
             </div>
         </form>
     </div>
+    <script>
+        (function () {
+            var config = {
+                NATURAL_WEAR: {
+                    hint: 'Hư hao do thời gian sử dụng: chủ trọ chịu chi phí sửa chữa.',
+                    details: []
+                },
+                INFRASTRUCTURE: {
+                    hint: 'Sự cố hạ tầng / kết cấu của nhà trọ: chủ trọ chịu chi phí sửa chữa.',
+                    details: ['Điện âm tường', 'Đường nước / thoát nước', 'Dột, thấm, nứt tường trần', 'Khác']
+                },
+                TENANT_USAGE: {
+                    hint: 'Hư hỏng do sử dụng: người thuê có thể phải chịu chi phí. Kỹ thuật viên sẽ báo giá sau khi sửa xong và bạn thanh toán qua ứng dụng.',
+                    details: ['Cửa, khóa, chìa khóa', 'Điện, ổ cắm, thiết bị điện', 'Vòi, bồn, thiết bị vệ sinh', 'Nội thất, tài sản trong phòng', 'Khác']
+                },
+                UNKNOWN: {
+                    hint: 'Kỹ thuật viên sẽ xác định nguyên nhân và bên chịu chi phí sau khi kiểm tra.',
+                    details: []
+                }
+            };
+            var select = document.getElementById('causeSelect');
+            var hint = document.getElementById('causeHint');
+            var detailGroup = document.getElementById('causeDetailGroup');
+            var detail = document.getElementById('causeDetail');
+
+            function render() {
+                var entry = config[select.value];
+                hint.style.display = entry ? 'block' : 'none';
+                hint.textContent = entry ? entry.hint : '';
+                detail.innerHTML = '';
+                var items = entry ? entry.details : [];
+                detailGroup.style.display = items.length ? 'block' : 'none';
+                items.forEach(function (text) {
+                    var option = document.createElement('option');
+                    option.value = text;
+                    option.textContent = text;
+                    detail.appendChild(option);
+                });
+            }
+            select.addEventListener('change', render);
+            render();
+        })();
+    </script>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>

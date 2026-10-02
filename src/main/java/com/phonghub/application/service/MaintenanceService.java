@@ -1,22 +1,32 @@
 package com.phonghub.application.service;
 
 import com.phonghub.application.port.in.MaintenanceUseCase;
+import com.phonghub.application.port.out.AuditPort;
+import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.exception.MaintenanceTicketException;
 import com.phonghub.domain.exception.RoomNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
+import com.phonghub.domain.model.Contract;
+import com.phonghub.domain.model.Invoice;
+import com.phonghub.domain.model.LiableParty;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.UserRole;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -27,7 +37,11 @@ public class MaintenanceService implements MaintenanceUseCase {
     private final TenantRepositoryPort tenantRepository;
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
+    private final ContractRepositoryPort contractRepository;
+    private final InvoiceRepositoryPort invoiceRepository;
+    private final AuditPort auditPort;
 
+    /** Không hỗ trợ thu phí sửa chữa: phiếu có chi phí do người thuê chịu sẽ bị từ chối khi xử lý. */
     public MaintenanceService(
         MaintenanceTicketRepositoryPort maintenanceTicketRepository,
         RoomRepositoryPort roomRepository,
@@ -35,9 +49,26 @@ public class MaintenanceService implements MaintenanceUseCase {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService
     ) {
+        this(maintenanceTicketRepository, roomRepository, tenantRepository, null, null, null,
+            currentUserPort, authorizationService);
+    }
+
+    public MaintenanceService(
+        MaintenanceTicketRepositoryPort maintenanceTicketRepository,
+        RoomRepositoryPort roomRepository,
+        TenantRepositoryPort tenantRepository,
+        ContractRepositoryPort contractRepository,
+        InvoiceRepositoryPort invoiceRepository,
+        AuditPort auditPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService
+    ) {
         this.maintenanceTicketRepository = maintenanceTicketRepository;
         this.roomRepository = roomRepository;
         this.tenantRepository = tenantRepository;
+        this.contractRepository = contractRepository;
+        this.invoiceRepository = invoiceRepository;
+        this.auditPort = auditPort;
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
     }
@@ -79,7 +110,8 @@ public class MaintenanceService implements MaintenanceUseCase {
             requestedByTenantId,
             command.title(),
             command.description(),
-            command.priority()
+            command.priority(),
+            command.cause()
         );
 
         return maintenanceTicketRepository.save(ticket);
@@ -106,6 +138,17 @@ public class MaintenanceService implements MaintenanceUseCase {
 
         authorizationService.assertTechnicianCanWorkOnProperty(currentUser, ticket.getPropertyId());
 
+        // Kiểm tra điều kiện thu phí TRƯỚC khi thay đổi bất kỳ trạng thái nào
+        LiableParty liable = command.liableParty() != null ? command.liableParty() : ticket.getLiableParty();
+        BigDecimal cost = command.repairCost() != null ? command.repairCost() : ticket.getRepairCost();
+        if (liable == LiableParty.UNDETERMINED && cost.signum() > 0) {
+            throw new MaintenanceTicketException("Cần xác định bên chịu phí (chủ trọ hoặc người thuê) trước khi ghi nhận chi phí sửa chữa");
+        }
+        Contract feeContract = null;
+        if (liable == LiableParty.TENANT && cost.signum() > 0) {
+            feeContract = requireFeeContract(ticket);
+        }
+
         Room room = null;
         if (command.releaseRoomToAvailable()) {
             room = roomRepository.findById(ticket.getRoomId())
@@ -117,7 +160,7 @@ public class MaintenanceService implements MaintenanceUseCase {
                     room.getId(), MaintenanceStatus.RESOLVED
                 ).stream()
                  .filter(t -> !t.getId().equals(ticket.getId()))
-                 .filter(t -> t.getStatus() != MaintenanceStatus.VERIFIED && t.getStatus() != MaintenanceStatus.REJECTED)
+                 .filter(t -> !t.isWorkFinished())
                  .toList();
 
                 if (!otherOpenTickets.isEmpty()) {
@@ -129,8 +172,27 @@ public class MaintenanceService implements MaintenanceUseCase {
             }
         }
 
+        LiableParty previousLiable = ticket.getLiableParty();
+        if (liable != previousLiable) {
+            ticket.changeLiableParty(liable);
+            audit("MAINTENANCE_LIABLE_PARTY_CHANGED", currentUser, ticket, Map.of(
+                "from", previousLiable.name(), "to", liable.name(),
+                "reportedCause", ticket.getCauseCategory() != null ? ticket.getCauseCategory().name() : "NONE"
+            ));
+        }
         ticket.resolve(command.resolutionNotes(), command.repairCost());
         MaintenanceTicket savedTicket = maintenanceTicketRepository.save(ticket);
+
+        if (feeContract != null && savedTicket.getStatus() == MaintenanceStatus.AWAITING_PAYMENT) {
+            Invoice fee = Invoice.issueMaintenanceFee(
+                feeContract, savedTicket.getId(), savedTicket.getRepairCost(),
+                invoiceRepository.newUniquePaymentCode(), LocalDate.now()
+            );
+            invoiceRepository.save(fee);
+            audit("MAINTENANCE_FEE_ISSUED", currentUser, savedTicket, Map.of(
+                "invoiceId", fee.getId().toString(), "amount", fee.getTotalAmount().toPlainString()
+            ));
+        }
 
         if (command.releaseRoomToAvailable() && room != null && room.getStatus() == RoomStatus.MAINTENANCE) {
             room.releaseFromMaintenance();
@@ -138,6 +200,51 @@ public class MaintenanceService implements MaintenanceUseCase {
         }
 
         return savedTicket;
+    }
+
+    @Override
+    public MaintenanceTicket waiveRepairFee(UUID ticketId, String reason) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
+            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+
+        authorizationService.assertCanManageProperty(currentUser, ticket.getPropertyId());
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Lý do miễn phí không được để trống");
+        }
+        if (ticket.getStatus() != MaintenanceStatus.AWAITING_PAYMENT) {
+            throw new MaintenanceTicketException("Chỉ có thể miễn phí cho phiếu đang chờ thanh toán: " + ticket.getStatus());
+        }
+        if (invoiceRepository == null) {
+            throw new DomainException("Hệ thống chưa cấu hình thu phí sửa chữa");
+        }
+
+        invoiceRepository.findActiveByTicketId(ticketId).ifPresent(invoice -> {
+            invoice.voidInvoice();
+            invoiceRepository.save(invoice);
+        });
+        ticket.waiveFee();
+        MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
+        audit("MAINTENANCE_FEE_WAIVED", currentUser, saved, Map.of("reason", reason.trim()));
+        return saved;
+    }
+
+    private Contract requireFeeContract(MaintenanceTicket ticket) {
+        if (contractRepository == null || invoiceRepository == null) {
+            throw new DomainException("Hệ thống chưa cấu hình thu phí sửa chữa");
+        }
+        return contractRepository.findActiveByRoomId(ticket.getRoomId())
+            .orElseThrow(() -> new DomainException(
+                "Phòng không có hợp đồng đang hiệu lực nên không thể thu phí từ người thuê. Hãy chọn chủ trọ chịu phí."
+            ));
+    }
+
+    private void audit(String action, CurrentUser actor, MaintenanceTicket ticket, Map<String, Object> details) {
+        if (auditPort != null) {
+            auditPort.recordEvent(AuditPort.AuditEvent.of(
+                action, actor.id(), "MAINTENANCE_TICKET", ticket.getId().toString(), details
+            ));
+        }
     }
 
     @Override

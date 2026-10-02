@@ -3,6 +3,7 @@ package com.phonghub.adapter.out.persistence.inmemory;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.InvoiceStatus;
+import com.phonghub.domain.model.InvoiceType;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,9 +33,17 @@ public class InMemoryInvoiceRepository implements InvoiceRepositoryPort {
     }
 
     @Override
-    public Optional<Invoice> findActiveByContractIdAndPeriod(UUID contractId, int year, int month) {
+    public Optional<Invoice> findActiveByTicketId(UUID ticketId) {
+        return store.values().stream()
+            .filter(i -> ticketId.equals(i.getTicketId()) && i.getStatus() != InvoiceStatus.VOIDED)
+            .findFirst();
+    }
+
+    @Override
+    public Optional<Invoice> findActiveRentByContractIdAndPeriod(UUID contractId, int year, int month) {
         return store.values().stream()
             .filter(i -> i.getContractId().equals(contractId)
+                && i.getType() == InvoiceType.RENT
                 && i.getYear() == year
                 && i.getMonth() == month
                 && i.getStatus() != InvoiceStatus.VOIDED)

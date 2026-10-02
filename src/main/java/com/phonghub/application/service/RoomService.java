@@ -237,7 +237,7 @@ public class RoomService implements RoomUseCase {
         if (room.getStatus() == RoomStatus.MAINTENANCE && targetStatus == RoomStatus.AVAILABLE) {
             List<MaintenanceTicket> openTickets = maintenanceTicketRepository.findByRoomIdAndStatusNot(
                 roomId, MaintenanceStatus.RESOLVED
-            ).stream().filter(t -> t.getStatus() != MaintenanceStatus.VERIFIED && t.getStatus() != MaintenanceStatus.REJECTED).toList();
+            ).stream().filter(t -> !t.isWorkFinished()).toList();
 
             if (!openTickets.isEmpty()) {
                 throw new InvalidRoomStateException(String.format(

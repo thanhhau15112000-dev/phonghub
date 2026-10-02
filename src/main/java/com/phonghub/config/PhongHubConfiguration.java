@@ -101,11 +101,15 @@ public class PhongHubConfiguration {
         MaintenanceTicketRepositoryPort ticketRepo,
         RoomRepositoryPort roomRepo,
         TenantRepositoryPort tenantRepo,
+        ContractRepositoryPort contractRepo,
+        InvoiceRepositoryPort invoiceRepo,
+        AuditPort auditPort,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService
     ) {
         MaintenanceService service = new MaintenanceService(
-            ticketRepo, roomRepo, tenantRepo, currentUserPort, authorizationService
+            ticketRepo, roomRepo, tenantRepo, contractRepo, invoiceRepo, auditPort,
+            currentUserPort, authorizationService
         );
         return new TransactionalMaintenanceUseCase(service);
     }
@@ -163,6 +167,7 @@ public class PhongHubConfiguration {
     public SepayWebhookUseCase sepayWebhookUseCase(
         PaymentRepositoryPort paymentRepository,
         InvoiceRepositoryPort invoiceRepository,
+        MaintenanceTicketRepositoryPort ticketRepository,
         ContractRepositoryPort contractRepository,
         PropertyRepositoryPort propertyRepository,
         NotificationRepositoryPort notificationRepository,
@@ -174,6 +179,7 @@ public class PhongHubConfiguration {
         SepayPaymentService service = new SepayPaymentService(
             paymentRepository,
             invoiceRepository,
+            ticketRepository,
             contractRepository,
             propertyRepository,
             notificationRepository,
