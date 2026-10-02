@@ -18,39 +18,124 @@
                 <li><a th:href="@{/contracts}">Hợp đồng</a></li>
                 <li><a th:href="@{/maintenance}">Bảo trì</a></li>
                 <li th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}"><a th:href="@{/admin/users}">Tài khoản</a></li>
+                <li th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}">
+                    <a th:href="@{/admin/notifications}">Thông báo
+                        <span th:if="${unreadNotificationCount > 0}" class="badge-count" style="background-color: #ef4444; color: #ffffff; margin-left: 4px;" th:text="${unreadNotificationCount}">1</span>
+                    </a>
+                </li>
             </ul>
         </nav>
     </div>
 
-    <div class="actor-switcher-box" th:if="${demoEnabled}">
-        <span class="actor-tag" th:text="${currentUser != null ? uiText.role(currentUser.role()) : 'Chưa đăng nhập'}">Quản trị viên</span>
-        <form th:action="@{/switch-user}" method="get" style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;">
-            <select name="userId" class="form-control" aria-label="Chọn người dùng demo" style="width: auto; padding: 2px 6px; font-size: 12px;" onchange="this.form.submit()">
-                <option th:each="u : ${demoUsers}"
-                        th:value="${u.key}"
-                        th:text="${uiText.role(u.value.role()) + ' — ' + u.value.fullName()}"
-                        th:selected="${currentUser != null and currentUser.id() == u.key}">
-                </option>
-            </select>
-        </form>
-    </div>
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <!-- Chuông thông báo dành riêng cho Quản trị viên (ADMIN) -->
+        <div th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" class="notif-bell-wrapper" style="position: relative;">
+            <button type="button" id="notifBellBtn" class="notif-bell-btn" aria-label="Xem thông báo" title="Thông báo hệ thống" style="position: relative; background: none; border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--text-primary);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+                <span th:if="${unreadNotificationCount > 0}" class="notif-badge" style="position: absolute; top: -6px; right: -6px; background-color: #ef4444; color: #ffffff; font-size: 10px; font-weight: 700; border-radius: 10px; padding: 1px 5px; min-width: 16px; text-align: center; border: 2px solid var(--bg-surface); line-height: 1.2;" th:text="${unreadNotificationCount}">1</span>
+            </button>
 
-    <div th:if="${!demoEnabled and currentUser != null}" style="display: flex; align-items: center; gap: 10px;">
-        <span class="actor-tag" th:text="${uiText.role(currentUser.role())}">Quản trị viên</span>
-        <form th:action="@{/session/logout}" method="post" style="display: inline;">
-            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-            <button type="submit" class="btn btn-sm">Đăng xuất</button>
-        </form>
+            <!-- Dropdown Popover hiển thị thông báo nhanh -->
+            <div id="notifDropdown" class="notif-dropdown" style="display: none; position: absolute; right: 0; top: calc(100% + 8px); width: 340px; background-color: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.12); z-index: 1000; overflow: hidden;">
+                <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-main);">
+                    <span style="font-weight: 600; font-size: 13px;">Thông báo hệ thống</span>
+                    <a th:href="@{/admin/notifications}" style="font-size: 12px; font-weight: 500; text-decoration: none;">Xem tất cả</a>
+                </div>
+                <div style="max-height: 320px; overflow-y: auto;">
+                    <div th:if="${#lists.isEmpty(adminNotifications)}" style="padding: 24px; text-align: center; color: var(--text-secondary); font-size: 13px;">
+                        Không có thông báo mới nào.
+                    </div>
+                    <div th:each="n, stat : ${adminNotifications}" th:if="${stat.index < 5}" style="padding: 10px 14px; border-bottom: 1px solid var(--border-color); font-size: 13px;" th:styleappend="${!n.isResolved() ? 'background-color: rgba(254, 243, 199, 0.2);' : ''}">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
+                            <span style="font-weight: 600; font-size: 12px; color: var(--text-primary);" th:text="${n.title()}">Yêu cầu cấp lại mật khẩu</span>
+                            <span th:if="${!n.isResolved()}" style="font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background-color: #fef3c7; color: #b45309;">Chờ xử lý</span>
+                            <span th:if="${n.isResolved()}" style="font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background-color: #ecfdf5; color: #047857;">Đã xong</span>
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;">
+                            <span th:text="${n.message()}">Tài khoản tenant1 yêu cầu cấp lại mật khẩu</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 11px; color: var(--text-secondary);" th:text="${#temporals.format(n.createdAt(), 'dd/MM HH:mm')}">28/09 10:00</span>
+                            <form th:if="${!n.isResolved() and n.type().name() == 'PASSWORD_RESET_REQUEST' and n.targetUserId() != null}" th:action="@{/admin/notifications/{id}/reset-password(id=${n.id()})}" method="post" style="display: inline;" onsubmit="return confirm('Cấp lại mật khẩu mới cho ' + '[[${n.targetUsername()}]]' + '?');">
+                                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                <button type="submit" class="btn btn-primary btn-sm" style="font-size: 11px; padding: 2px 6px;">Cấp lại</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div style="padding: 8px; text-align: center; border-top: 1px solid var(--border-color); background-color: var(--bg-main);">
+                    <a th:href="@{/admin/notifications}" class="btn btn-sm" style="width: 100%; display: block; text-align: center; box-sizing: border-box;">Quản lý toàn bộ thông báo</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="actor-switcher-box" th:if="${demoEnabled}">
+            <span class="actor-tag" th:text="${currentUser != null ? uiText.role(currentUser.role()) : 'Chưa đăng nhập'}">Quản trị viên</span>
+            <form th:action="@{/switch-user}" method="get" style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;">
+                <select name="userId" class="form-control" aria-label="Chọn người dùng demo" style="width: auto; padding: 2px 6px; font-size: 12px;" onchange="this.form.submit()">
+                    <option th:each="u : ${demoUsers}"
+                            th:value="${u.key}"
+                            th:text="${uiText.role(u.value.role()) + ' — ' + u.value.fullName()}"
+                            th:selected="${currentUser != null and currentUser.id() == u.key}">
+                    </option>
+                </select>
+            </form>
+            <a th:if="${currentUser != null}" th:href="@{/account/profile}" class="btn btn-sm" style="margin-left: 8px; text-decoration: none;" title="Xem và chỉnh sửa hồ sơ">Hồ sơ</a>
+            <a th:if="${currentUser != null}" th:href="@{/account/password}" class="btn btn-sm" style="margin-left: 4px; text-decoration: none;" title="Đổi mật khẩu tài khoản">Đổi mật khẩu</a>
+            <form th:if="${currentUser != null}" th:action="@{/session/logout}" method="post" style="display: inline; margin-left: 4px;">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn btn-sm">Đăng xuất</button>
+            </form>
+        </div>
+
+        <div th:if="${!demoEnabled and currentUser != null}" style="display: flex; align-items: center; gap: 8px;">
+            <span class="actor-tag" th:text="${uiText.role(currentUser.role())}">Quản trị viên</span>
+            <a th:href="@{/account/profile}" class="btn btn-sm" style="text-decoration: none;" title="Xem và chỉnh sửa hồ sơ">Hồ sơ</a>
+            <a th:href="@{/account/password}" class="btn btn-sm" style="text-decoration: none;" title="Đổi mật khẩu tài khoản">Đổi mật khẩu</a>
+            <form th:action="@{/session/logout}" method="post" style="display: inline;">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn btn-sm">Đăng xuất</button>
+            </form>
+        </div>
     </div>
 </header>
 
 <div th:fragment="alerts">
-    <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}">Thông báo thành công</div>
-    <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}">Thông báo lỗi</div>
+    <div th:if="${successMessage}" class="alert alert-success" style="display: flex; align-items: center; gap: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        <span th:text="${successMessage}">Thông báo thành công</span>
+    </div>
+    <div th:if="${errorMessage}" class="alert alert-error" style="display: flex; align-items: center; gap: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+        <span th:text="${errorMessage}">Thông báo lỗi</span>
+    </div>
 </div>
 
 <footer th:fragment="footer" style="margin-top: 48px; padding: 24px 0; border-top: 1px solid var(--border-color); text-align: center; font-size: 12px; color: var(--text-secondary);">
     PhongHub B2B — Quản lý nhà trọ (MVP, Spring Boot + Pure Domain)
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const bellBtn = document.getElementById('notifBellBtn');
+            const notifDropdown = document.getElementById('notifDropdown');
+
+            if (bellBtn && notifDropdown) {
+                bellBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    const isHidden = notifDropdown.style.display === 'none' || notifDropdown.style.display === '';
+                    notifDropdown.style.display = isHidden ? 'block' : 'none';
+                });
+
+                document.addEventListener('click', function (e) {
+                    if (!notifDropdown.contains(e.target) && e.target !== bellBtn && !bellBtn.contains(e.target)) {
+                        notifDropdown.style.display = 'none';
+                    }
+                });
+            }
+        });
+    </script>
 </footer>
 
 </body>

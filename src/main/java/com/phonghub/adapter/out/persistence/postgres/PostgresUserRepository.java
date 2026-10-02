@@ -105,4 +105,10 @@ public class PostgresUserRepository implements UserRepositoryPort {
         String sql = "SELECT * FROM users ORDER BY created_at DESC";
         return jdbcTemplate.query(sql, ROW_MAPPER);
     }
+
+    @Override
+    public void deleteById(UUID id) {
+        String sql = "DELETE FROM users WHERE id = :id";
+        jdbcTemplate.update(sql, Map.of("id", id));
+    }
 }

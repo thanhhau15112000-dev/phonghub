@@ -28,7 +28,7 @@
             </div>
 
             <!-- Các nút thao tác -->
-            <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" class="inline-actions">
+            <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" class="inline-actions">
                 <!-- Nút kích hoạt khi ở trạng thái bản nháp -->
                 <form th:if="${contract.getStatus().name() == 'DRAFT'}" th:action="@{'/contracts/' + ${contract.getId()} + '/activate'}" method="post">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -85,7 +85,22 @@
 
         <!-- Bên phải: Thông tin người thuê chính -->
         <div class="card">
-            <h2>Thông tin người thuê chính</h2>
+            <div class="flex-between" style="margin-bottom: 8px;">
+                <h2 style="margin: 0;">Thông tin người thuê chính</h2>
+                <button th:if="${primaryTenant != null and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                        type="button"
+                        id="editPrimaryTenantBtn"
+                        class="btn btn-sm btn-secondary"
+                        th:attr="data-id=${primaryTenant.id()},data-name=${primaryTenant.fullName()},data-idcard=${primaryTenant.identityCardNumber()},data-phone=${primaryTenant.phone()},data-email=${primaryTenant.email() != null ? primaryTenant.email() : ''},data-addr=${primaryTenant.permanentAddress() != null ? primaryTenant.permanentAddress() : ''}"
+                        onclick="openEditTenantModalFromElement(this)"
+                        style="font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20h9"></path>
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                    Sửa thông tin
+                </button>
+            </div>
             <div th:if="${primaryTenant == null}" class="empty-state">
                 <p>Không tìm thấy hồ sơ người thuê.</p>
             </div>
@@ -114,17 +129,364 @@
                 </tbody>
             </table>
 
-            <h3 style="font-size: 13px; font-weight: 600; margin-top: 16px; margin-bottom: 8px;">Người ở bổ sung</h3>
-            <div th:if="${#lists.isEmpty(contract.getOccupants()) or #lists.size(contract.getOccupants()) <= 1}" style="font-size: 12px; color: var(--text-secondary);">
-                Chưa đăng ký người ở bổ sung.
+            <div class="flex-between" style="margin-top: 20px; margin-bottom: 8px;">
+                <h3 style="font-size: 14px; font-weight: 600; margin: 0;">Người ở cùng phòng</h3>
+                <button th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                        type="button"
+                        id="addOccupantBtn"
+                        class="btn btn-sm btn-primary"
+                        onclick="document.getElementById('addOccupantModal').showModal()"
+                        style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Thêm người ở
+                </button>
             </div>
-            <ul th:if="${#lists.size(contract.getOccupants()) > 1}" style="padding-left: 20px; font-size: 13px;">
-                <li th:each="occ : ${contract.getOccupants()}" th:if="${!occ.isPrimary()}">
-                    Mã người ở: <span th:text="${occ.tenantId()}"></span> (Ngày nhận phòng: <span th:text="${occ.checkInDate()}"></span>)
-                </li>
-            </ul>
+
+            <div th:if="${#lists.isEmpty(contract.getOccupants()) or #lists.size(contract.getOccupants()) <= 1}" class="empty-state" style="padding: 16px;">
+                <p style="margin: 0; font-size: 13px;">Chưa đăng ký thêm người ở bổ sung cho phòng này.</p>
+            </div>
+
+            <table th:if="${#lists.size(contract.getOccupants()) > 1}" class="data-table" style="font-size: 12px; margin-top: 8px;">
+                <thead>
+                    <tr>
+                        <th>Họ và tên</th>
+                        <th>CCCD</th>
+                        <th>Số điện thoại</th>
+                        <th>Ngày vào</th>
+                        <th>Trạng thái</th>
+                        <th th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="occ : ${contract.getOccupants()}" th:if="${!occ.isPrimary()}">
+                        <td style="font-weight: 600;">
+                            <span th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).fullName() : 'Khách thuê'}">Họ tên</span>
+                        </td>
+                        <td th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).identityCardNumber() : '—'}">CCCD</td>
+                        <td th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).phone() : '—'}">SĐT</td>
+                        <td th:text="${occ.checkInDate()}">2026-01-01</td>
+                        <td>
+                            <span th:if="${occ.checkOutDate() == null}" class="badge badge-ACTIVE" style="font-size: 11px; padding: 2px 6px;">Đang ở</span>
+                            <span th:if="${occ.checkOutDate() != null}" class="badge badge-TERMINATED" style="font-size: 11px; padding: 2px 6px;" th:text="'Đã rời ' + ${occ.checkOutDate()}">Đã rời</span>
+                        </td>
+                        <td th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" style="display: flex; gap: 4px; align-items: center;">
+                            <button th:if="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId())}"
+                                    type="button"
+                                    class="btn btn-sm btn-secondary edit-occupant-btn"
+                                    th:attr="data-id=${occupantTenants.get(occ.tenantId()).id()},data-name=${occupantTenants.get(occ.tenantId()).fullName()},data-idcard=${occupantTenants.get(occ.tenantId()).identityCardNumber()},data-phone=${occupantTenants.get(occ.tenantId()).phone()},data-email=${occupantTenants.get(occ.tenantId()).email() != null ? occupantTenants.get(occ.tenantId()).email() : ''},data-addr=${occupantTenants.get(occ.tenantId()).permanentAddress() != null ? occupantTenants.get(occ.tenantId()).permanentAddress() : ''}"
+                                    onclick="openEditTenantModalFromElement(this)"
+                                    style="padding: 2px 8px; font-size: 11px;">
+                                Sửa
+                            </button>
+                            <button th:if="${contract.getStatus().name() == 'ACTIVE' and occ.checkOutDate() == null and occupantTenants != null and occupantTenants.containsKey(occ.tenantId())}"
+                                    type="button"
+                                    class="btn btn-sm btn-danger checkout-occupant-btn"
+                                    th:attr="data-id=${occ.tenantId()},data-name=${occupantTenants.get(occ.tenantId()).fullName()},data-checkin=${occ.checkInDate()}"
+                                    onclick="openCheckOutModalFromElement(this)"
+                                    style="padding: 2px 8px; font-size: 11px;">
+                                Rời phòng
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
+
+    <!-- Thanh toán tiền thuê -->
+    <div class="card" id="payments" style="margin-top: 20px;">
+        <div class="flex-between" style="margin-bottom: 12px;">
+            <h2 style="margin: 0;">Thanh toán tiền thuê</h2>
+            <form th:if="${canIssueInvoice}" th:action="@{'/contracts/' + ${contract.getId()} + '/invoices'}" method="post" style="display: flex; align-items: center; gap: 8px;">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <label for="invoicePeriod" style="font-size: 12px;">Kỳ</label>
+                <input type="month" id="invoicePeriod" name="period" class="form-control" th:value="${defaultInvoicePeriod}" required style="width: auto;">
+                <button type="submit" class="btn btn-sm btn-primary">Tạo kỳ thanh toán</button>
+            </form>
+        </div>
+
+        <!-- Hướng dẫn chuyển khoản cho kỳ còn nợ cũ nhất -->
+        <div th:if="${payableInvoice != null}" style="display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 16px;">
+            <img th:if="${paymentQrUrl != null}" th:src="${paymentQrUrl}" alt="Mã QR chuyển khoản" width="180" height="180" style="border: 1px solid var(--border-color);">
+            <div style="flex: 1; min-width: 260px;">
+                <table class="data-table">
+                    <tbody>
+                        <tr>
+                            <td style="color: var(--text-secondary); width: 160px;">Khoản thanh toán:</td>
+                            <td th:text="${uiText.invoiceLabel(payableInvoice)}">Tiền thuê 10/2026</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--text-secondary);">Số tiền cần chuyển:</td>
+                            <td style="font-weight: 600;" th:text="${#numbers.formatDecimal(payableInvoice.remainingAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--text-secondary);">Hạn thanh toán:</td>
+                            <td>
+                                <span th:text="${payableInvoice.getDueDate()}">2026-10-05</span>
+                                <span th:class="'badge badge-' + ${uiText.invoiceBadge(payableInvoice, today)}" th:text="${uiText.invoiceState(payableInvoice, today)}">Đến hạn</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--text-secondary);">Nội dung chuyển khoản:</td>
+                            <td style="font-family: monospace; font-weight: 700; font-size: 15px;" th:text="${payableInvoice.getPaymentCode()}">PHXXXXXXXX</td>
+                        </tr>
+                        <tr th:if="${bankConfigured}">
+                            <td style="color: var(--text-secondary);">Ngân hàng:</td>
+                            <td th:text="${bankCode}">MBBank</td>
+                        </tr>
+                        <tr th:if="${bankConfigured}">
+                            <td style="color: var(--text-secondary);">Số tài khoản:</td>
+                            <td style="font-family: monospace;" th:text="${bankAccountNumber}">0123456789</td>
+                        </tr>
+                        <tr th:if="${bankConfigured and bankAccountName != null and !#strings.isEmpty(bankAccountName)}">
+                            <td style="color: var(--text-secondary);">Chủ tài khoản:</td>
+                            <td th:text="${bankAccountName}">NGUYEN VAN B</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p style="font-size: 12px; color: var(--text-secondary); margin: 8px 0 0;">
+                    Ghi đúng nội dung chuyển khoản để hệ thống tự ghi nhận thanh toán.
+                    <span th:unless="${bankConfigured}">Hệ thống chưa cấu hình tài khoản nhận tiền, vui lòng liên hệ chủ trọ để nhận số tài khoản.</span>
+                </p>
+            </div>
+        </div>
+
+        <div th:if="${#lists.isEmpty(invoices)}" class="empty-state" style="padding: 16px;">
+            <p style="margin: 0; font-size: 13px;">Chưa có kỳ thanh toán nào cho hợp đồng này.</p>
+        </div>
+
+        <table th:unless="${#lists.isEmpty(invoices)}" class="data-table" style="font-size: 13px;">
+            <thead>
+                <tr>
+                    <th>Khoản thanh toán</th>
+                    <th>Số tiền</th>
+                    <th>Đã trả</th>
+                    <th>Hạn thanh toán</th>
+                    <th>Nội dung CK</th>
+                    <th>Trạng thái</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="inv : ${invoices}">
+                    <td>
+                        <span th:text="${uiText.invoiceLabel(inv)}">Tiền thuê 10/2026</span>
+                        <a th:if="${inv.getTicketId() != null}" th:href="@{'/maintenance/' + ${inv.getTicketId()}}" style="color: var(--accent); font-size: 12px;">Xem phiếu</a>
+                    </td>
+                    <td th:text="${#numbers.formatDecimal(inv.getTotalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                    <td th:text="${#numbers.formatDecimal(inv.getPaidAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</td>
+                    <td th:text="${inv.getDueDate()}">2026-10-05</td>
+                    <td style="font-family: monospace;" th:text="${inv.getPaymentCode() != null ? inv.getPaymentCode() : '—'}">PHXXXXXXXX</td>
+                    <td><span th:class="'badge badge-' + ${uiText.invoiceBadge(inv, today)}" th:text="${uiText.invoiceState(inv, today)}">Đến hạn</span></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Dialog thêm người ở vào phòng (Chủ nhà hoặc Quản trị viên) -->
+    <dialog th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            id="addOccupantModal"
+            class="modal-dialog"
+            style="max-width: 520px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--primary-light, #eff6ff); color: var(--primary-color, #2563eb); display: flex; align-items: center; justify-content: center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="8.5" cy="7" r="4"></circle>
+                        <line x1="20" y1="8" x2="20" y2="14"></line>
+                        <line x1="23" y1="11" x2="17" y2="11"></line>
+                    </svg>
+                </div>
+                <div>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Thêm người thuê vào phòng</h3>
+                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Phòng <strong th:text="${room.getRoomNumber()}">P101</strong> — Sức chứa: <strong th:text="${room.getMaxOccupants()}">2</strong> người</p>
+                </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('addOccupantModal').close()">✕</button>
+        </div>
+
+        <form th:action="@{'/contracts/' + ${contract.getId()} + '/occupants'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label class="form-label" for="addOccupantFullName">Họ và tên <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                <input type="text" id="addOccupantFullName" name="fullName" class="form-control" required placeholder="VD: Nguyễn Văn B">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label" for="addOccupantIdCard">Số CCCD / Định danh <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                    <input type="text" id="addOccupantIdCard" name="identityCardNumber" class="form-control" required placeholder="12 chữ số">
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label" for="addOccupantPhone">Số điện thoại <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                    <input type="tel" id="addOccupantPhone" name="phone" class="form-control" required placeholder="090xxxxxxx">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label" for="addOccupantEmail">Email</label>
+                    <input type="email" id="addOccupantEmail" name="email" class="form-control" placeholder="tenant@gmail.com">
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label" for="addOccupantCheckInDate">Ngày nhận phòng</label>
+                    <input type="date" id="addOccupantCheckInDate" name="checkInDate" th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}" class="form-control">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label class="form-label" for="addOccupantAddress">Địa chỉ thường trú</label>
+                <input type="text" id="addOccupantAddress" name="permanentAddress" class="form-control" placeholder="Xã/Phường, Huyện/Quận, Tỉnh/TP">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 16px; padding: 10px 12px; background: var(--bg-hover, #f8fafc); border-radius: 6px; border: 1px solid var(--border-color);">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; cursor: pointer; margin: 0;">
+                    <input type="checkbox" id="addOccupantCreateAccount" name="createAccount" value="true">
+                    <span>Cấp tài khoản đăng nhập cho người thuê</span>
+                </label>
+                <p style="color: var(--text-secondary); font-size: 11px; margin: 4px 0 0 24px;">
+                    Hệ thống sẽ tạo tài khoản vai trò Người thuê (TENANT) và liên kết hồ sơ khi nhập email hợp lệ.
+                </p>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('addOccupantModal').close()">Hủy</button>
+                <button type="submit" class="btn btn-sm btn-primary">Thêm người thuê</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Dialog sửa hồ sơ người thuê (Chủ nhà hoặc Quản trị viên) -->
+    <dialog th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            id="editTenantModal"
+            class="modal-dialog"
+            style="max-width: 500px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--primary-light, #eff6ff); color: var(--primary-color, #2563eb); display: flex; align-items: center; justify-content: center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Cập nhật hồ sơ người thuê</h3>
+                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Chỉnh sửa thông tin liên lạc và định danh của khách thuê</p>
+                </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('editTenantModal').close()">✕</button>
+        </div>
+
+        <form id="editTenantForm" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label class="form-label" for="editTenantFullName">Họ và tên <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                <input type="text" id="editTenantFullName" name="fullName" class="form-control" required placeholder="VD: Nguyễn Văn A">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label" for="editTenantIdCard">Số CCCD / Định danh <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                    <input type="text" id="editTenantIdCard" name="identityCardNumber" class="form-control" required placeholder="12 chữ số">
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label" for="editTenantPhone">Số điện thoại <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                    <input type="tel" id="editTenantPhone" name="phone" class="form-control" pattern="0[0-9]{9}" required placeholder="090xxxxxxx (10 số)">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label class="form-label" for="editTenantEmail">Email</label>
+                <input type="email" id="editTenantEmail" name="email" class="form-control" placeholder="tenant@gmail.com">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label" for="editTenantAddress">Địa chỉ thường trú</label>
+                <input type="text" id="editTenantAddress" name="permanentAddress" class="form-control" placeholder="Xã/Phường, Huyện/Quận, Tỉnh/TP">
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('editTenantModal').close()">Hủy</button>
+                <button type="submit" class="btn btn-sm btn-primary">Lưu thay đổi</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Dialog ghi nhận rời phòng cho người ở cùng (Chủ nhà hoặc Quản trị viên) -->
+    <dialog th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            id="checkOutModal"
+            class="modal-dialog"
+            style="max-width: 450px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--danger-light, #fee2e2); color: var(--danger-color, #dc2626); display: flex; align-items: center; justify-content: center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                </div>
+                <div>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Ghi nhận rời phòng</h3>
+                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Xác nhận kết thúc thời gian ở của khách thuê cùng phòng</p>
+                </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('checkOutModal').close()">✕</button>
+        </div>
+
+        <form id="checkOutForm" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+
+            <p style="font-size: 13px; line-height: 1.5; margin-bottom: 16px;">
+                Bạn có chắc chắn muốn ghi nhận người thuê <strong id="checkOutOccupantName"></strong> rời khỏi phòng không?
+            </p>
+
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label" for="checkOutDateInput">Ngày rời phòng <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                <input type="date" id="checkOutDateInput" name="checkOutDate" class="form-control" required th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}">
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('checkOutModal').close()">Hủy</button>
+                <button type="submit" class="btn btn-sm btn-danger">Xác nhận rời phòng</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script th:inline="javascript">
+        function openEditTenantModalFromElement(el) {
+            const contractId = /*[[${contract.getId()}]]*/ '';
+            const tenantId = el.getAttribute('data-id');
+            const form = document.getElementById('editTenantForm');
+            form.action = '/contracts/' + contractId + '/tenants/' + tenantId + '/edit';
+            document.getElementById('editTenantFullName').value = el.getAttribute('data-name') || '';
+            document.getElementById('editTenantIdCard').value = el.getAttribute('data-idcard') || '';
+            document.getElementById('editTenantPhone').value = el.getAttribute('data-phone') || '';
+            document.getElementById('editTenantEmail').value = el.getAttribute('data-email') || '';
+            document.getElementById('editTenantAddress').value = el.getAttribute('data-addr') || '';
+            document.getElementById('editTenantModal').showModal();
+        }
+
+        function openCheckOutModalFromElement(el) {
+            const contractId = /*[[${contract.getId()}]]*/ '';
+            const tenantId = el.getAttribute('data-id');
+            const tenantName = el.getAttribute('data-name');
+            const checkInDate = el.getAttribute('data-checkin');
+            const form = document.getElementById('checkOutForm');
+            form.action = '/contracts/' + contractId + '/occupants/' + tenantId + '/check-out';
+            document.getElementById('checkOutOccupantName').textContent = tenantName || '';
+            const dateInput = document.getElementById('checkOutDateInput');
+            if (checkInDate) {
+                dateInput.min = checkInDate;
+            }
+            document.getElementById('checkOutModal').showModal();
+        }
+    </script>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>

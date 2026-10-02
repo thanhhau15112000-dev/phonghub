@@ -9,17 +9,23 @@ import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.exception.DuplicateRoomNumberException;
+import com.phonghub.domain.exception.InvalidPropertyStatusException;
+import com.phonghub.domain.exception.InvalidRoomCapacityException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.RoomNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
+import com.phonghub.domain.model.Property;
+import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.UserRole;
+import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -58,19 +64,87 @@ public class RoomService implements RoomUseCase {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         authorizationService.assertCanManageProperty(currentUser, command.propertyId());
 
-        if (!propertyRepository.existsById(command.propertyId())) {
-            throw new PropertyNotFoundException("Property not found with ID: " + command.propertyId());
+        Property property = propertyRepository.findById(command.propertyId())
+            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + command.propertyId()));
+
+        if (property.approvalStatus() != PropertyApprovalStatus.VERIFIED) {
+            throw new InvalidPropertyStatusException(String.format(
+                "Chỉ có thể tạo phòng cho nhà trọ đã được duyệt (VERIFIED). Trạng thái hiện tại: '%s'.",
+                property.approvalStatus()
+            ));
         }
 
         if (roomRepository.findByPropertyIdAndRoomNumber(command.propertyId(), command.roomNumber().trim()).isPresent()) {
-            throw new DomainException(String.format(
-                "Room number '%s' already exists in this property", command.roomNumber().trim()
+            throw new DuplicateRoomNumberException(String.format(
+                "Số phòng '%s' đã tồn tại trong nhà trọ này.", command.roomNumber().trim()
             ));
         }
 
         Room room = Room.create(
             command.propertyId(),
             command.roomNumber().trim(),
+            command.floor(),
+            command.areaSqm(),
+            command.basePrice(),
+            command.maxOccupants()
+        );
+
+        Room saved = roomRepository.save(room);
+
+        // Tự động đồng bộ total_rooms nếu số phòng thực tế vượt quá ước lượng ban đầu
+        int currentRoomCount = roomRepository.findByPropertyId(command.propertyId()).size();
+        if (currentRoomCount > property.totalRooms()) {
+            Property updatedProperty = new Property(
+                property.id(),
+                property.name(),
+                property.address(),
+                property.description(),
+                currentRoomCount,
+                property.ownerId(),
+                property.approvalStatus(),
+                property.rejectionReason(),
+                property.createdAt()
+            );
+            propertyRepository.save(updatedProperty);
+        }
+
+        return saved;
+    }
+
+    @Override
+    public Room updateRoom(UpdateRoomCommand command) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        Room room = roomRepository.findById(command.roomId())
+            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + command.roomId()));
+
+        authorizationService.assertOwnerOrAdmin(currentUser, room.getPropertyId());
+
+        Optional<Room> duplicate = roomRepository.findByPropertyIdAndRoomNumber(room.getPropertyId(), command.roomNumber().trim());
+        if (duplicate.isPresent() && !duplicate.get().getId().equals(room.getId())) {
+            throw new DuplicateRoomNumberException(String.format(
+                "Số phòng '%s' đã tồn tại trong nhà trọ này.", command.roomNumber().trim()
+            ));
+        }
+
+        Optional<Contract> activeContract = contractRepository.findActiveByRoomId(room.getId());
+        if (activeContract.isPresent()) {
+            LocalDate today = LocalDate.now();
+            long residingCount = (activeContract.get().getOccupants() == null || activeContract.get().getOccupants().isEmpty())
+                ? 1
+                : Math.max(1, activeContract.get().getOccupants().stream()
+                    .filter(o -> o.checkOutDate() == null || o.checkOutDate().isAfter(today))
+                    .count());
+
+            if (command.maxOccupants() < residingCount) {
+                throw new InvalidRoomCapacityException(String.format(
+                    "Không thể giảm số người tối đa (%d) xuống dưới số người đang ở theo hợp đồng hiệu lực (%d).",
+                    command.maxOccupants(), residingCount
+                ));
+            }
+        }
+
+        room.updateInfo(
+            command.roomNumber(),
             command.floor(),
             command.areaSqm(),
             command.basePrice(),
@@ -144,7 +218,7 @@ public class RoomService implements RoomUseCase {
 
         authorizationService.assertCanManageProperty(currentUser, room.getPropertyId());
 
-        // Invariant F2: Cannot manually set an OCCUPIED room to AVAILABLE if an ACTIVE contract exists
+        // Invariant F2: Cannot manually set an OCCUPIED room to AVAILABLE
         if (room.getStatus() == RoomStatus.OCCUPIED && targetStatus == RoomStatus.AVAILABLE) {
             Optional<Contract> activeContract = contractRepository.findActiveByRoomId(roomId);
             if (activeContract.isPresent()) {
@@ -153,13 +227,17 @@ public class RoomService implements RoomUseCase {
                     room.getRoomNumber(), activeContract.get().getId()
                 ));
             }
+            throw new InvalidRoomStateException(String.format(
+                "Cannot manually change status of room '%s' to AVAILABLE: room is OCCUPIED. Room must be vacated via contract lifecycle or transitioned to MAINTENANCE.",
+                room.getRoomNumber()
+            ));
         }
 
         // Invariant: Leaving MAINTENANCE requires that all maintenance tickets are resolved
         if (room.getStatus() == RoomStatus.MAINTENANCE && targetStatus == RoomStatus.AVAILABLE) {
             List<MaintenanceTicket> openTickets = maintenanceTicketRepository.findByRoomIdAndStatusNot(
                 roomId, MaintenanceStatus.RESOLVED
-            ).stream().filter(t -> t.getStatus() != MaintenanceStatus.VERIFIED && t.getStatus() != MaintenanceStatus.REJECTED).toList();
+            ).stream().filter(t -> !t.isWorkFinished()).toList();
 
             if (!openTickets.isEmpty()) {
                 throw new InvalidRoomStateException(String.format(

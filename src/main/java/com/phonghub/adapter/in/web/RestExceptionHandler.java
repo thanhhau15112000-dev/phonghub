@@ -3,10 +3,19 @@ package com.phonghub.adapter.in.web;
 import com.phonghub.domain.exception.ContractNotFoundException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
+import com.phonghub.domain.exception.DuplicateEmailException;
+import com.phonghub.domain.exception.DuplicateIdentityCardException;
+import com.phonghub.domain.exception.DuplicateRoomNumberException;
+import com.phonghub.domain.exception.DuplicateUsernameException;
+import com.phonghub.domain.exception.InvalidPropertyStatusException;
+import com.phonghub.domain.exception.InvalidRoomCapacityException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.exception.MaintenanceTicketException;
+import com.phonghub.domain.exception.PasswordChangeRequiredException;
+import com.phonghub.domain.exception.PrimaryOccupantRemovalException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.RoomNotFoundException;
+import com.phonghub.domain.exception.TenantNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.exception.UserNotFoundException;
 import com.phonghub.domain.exception.AccountDisabledException;
@@ -79,6 +88,27 @@ public class RestExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(InvalidPropertyStatusException.class)
+    public ProblemDetail handleInvalidPropertyStatus(InvalidPropertyStatusException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Invalid Property Status");
+        problem.setType(URI.create("https://phonghub.local/errors/invalid-property-status"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler({
+        DuplicateEmailException.class,
+        DuplicateUsernameException.class
+    })
+    public ProblemDetail handleDuplicateAccountConflict(DomainException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Conflict");
+        problem.setType(URI.create("https://phonghub.local/errors/conflict"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
     @ExceptionHandler(InvalidRoomStateException.class)
     public ProblemDetail handleInvalidRoomState(InvalidRoomStateException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
@@ -88,11 +118,48 @@ public class RestExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(DuplicateRoomNumberException.class)
+    public ProblemDetail handleDuplicateRoomNumber(DuplicateRoomNumberException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Duplicate Room Number");
+        problem.setType(URI.create("https://phonghub.local/errors/duplicate-room-number"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(InvalidRoomCapacityException.class)
+    public ProblemDetail handleInvalidRoomCapacity(InvalidRoomCapacityException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Invalid Room Capacity");
+        problem.setType(URI.create("https://phonghub.local/errors/invalid-room-capacity"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(DuplicateIdentityCardException.class)
+    public ProblemDetail handleDuplicateIdentityCard(DuplicateIdentityCardException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Duplicate Identity Card");
+        problem.setType(URI.create("https://phonghub.local/errors/duplicate-identity-card"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(PrimaryOccupantRemovalException.class)
+    public ProblemDetail handlePrimaryOccupantRemoval(PrimaryOccupantRemovalException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Primary Occupant Removal Not Allowed");
+        problem.setType(URI.create("https://phonghub.local/errors/primary-occupant-removal"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
     @ExceptionHandler({
         PropertyNotFoundException.class,
         RoomNotFoundException.class,
         ContractNotFoundException.class,
-        UserNotFoundException.class
+        UserNotFoundException.class,
+        TenantNotFoundException.class
     })
     public ProblemDetail handleNotFound(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());

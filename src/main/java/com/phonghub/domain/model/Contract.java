@@ -118,7 +118,7 @@ public class Contract {
         return contract;
     }
 
-    public void addOccupant(UUID tenantId, boolean isPrimary, LocalDate checkInDate) {
+    public ContractOccupant addOccupant(UUID tenantId, boolean isPrimary, LocalDate checkInDate) {
         if (tenantId == null) {
             throw new IllegalArgumentException("Tenant id cannot be null");
         }
@@ -139,6 +139,65 @@ public class Contract {
         );
         this.occupants.add(occupant);
         this.updatedAt = Instant.now();
+        return occupant;
+    }
+
+    public ContractOccupant checkOutOccupant(UUID tenantId, LocalDate checkOutDate) {
+        if (tenantId == null) {
+            throw new IllegalArgumentException("Tenant id cannot be null");
+        }
+        if (this.status != ContractStatus.ACTIVE) {
+            throw new DomainException(String.format(
+                "Chỉ có thể ghi nhận rời phòng cho hợp đồng đang có hiệu lực (ACTIVE). Trạng thái hiện tại: '%s'.",
+                this.status
+            ));
+        }
+        if (checkOutDate == null) {
+            checkOutDate = LocalDate.now();
+        }
+
+        int targetIndex = -1;
+        ContractOccupant target = null;
+        for (int i = 0; i < this.occupants.size(); i++) {
+            ContractOccupant o = this.occupants.get(i);
+            if (o.tenantId().equals(tenantId)) {
+                targetIndex = i;
+                target = o;
+                break;
+            }
+        }
+
+        if (target == null) {
+            throw new DomainException(String.format(
+                "Người thuê '%s' không có trong danh sách người ở của hợp đồng này.",
+                tenantId
+            ));
+        }
+
+        if (target.isPrimary()) {
+            throw new com.phonghub.domain.exception.PrimaryOccupantRemovalException(
+                "Không thể gỡ người thuê chính khỏi hợp đồng. Muốn người thuê chính rời đi phải chấm dứt toàn bộ hợp đồng."
+            );
+        }
+
+        if (target.checkOutDate() != null) {
+            throw new DomainException(String.format(
+                "Người thuê này đã được ghi nhận rời phòng vào ngày %s.",
+                target.checkOutDate()
+            ));
+        }
+
+        if (checkOutDate.isBefore(target.checkInDate())) {
+            throw new IllegalArgumentException(String.format(
+                "Ngày rời phòng (%s) không được trước ngày nhận phòng (%s).",
+                checkOutDate, target.checkInDate()
+            ));
+        }
+
+        ContractOccupant updated = target.withCheckOutDate(checkOutDate);
+        this.occupants.set(targetIndex, updated);
+        this.updatedAt = Instant.now();
+        return updated;
     }
 
     public void activate() {

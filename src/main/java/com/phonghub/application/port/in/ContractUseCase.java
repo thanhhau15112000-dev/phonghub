@@ -1,6 +1,7 @@
 package com.phonghub.application.port.in;
 
 import com.phonghub.domain.model.Contract;
+import com.phonghub.domain.model.ContractOccupant;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -15,6 +16,55 @@ public interface ContractUseCase {
     List<Contract> listContractsForProperty(UUID propertyId);
     Optional<Contract> getActiveContractForTenant(UUID tenantUserId);
     List<Contract> listContractsForTenant(UUID tenantUserId);
+    ContractOccupant addOccupant(AddOccupantCommand command);
+    ContractOccupant checkOutOccupant(CheckOutOccupantCommand command);
+
+    record CheckOutOccupantCommand(
+        UUID contractId,
+        UUID tenantId,
+        LocalDate checkOutDate
+    ) {
+        public CheckOutOccupantCommand {
+            if (contractId == null) {
+                throw new IllegalArgumentException("Contract ID cannot be null");
+            }
+            if (tenantId == null) {
+                throw new IllegalArgumentException("Tenant ID cannot be null");
+            }
+            if (checkOutDate == null) {
+                checkOutDate = LocalDate.now();
+            }
+        }
+    }
+
+    record AddOccupantCommand(
+        UUID contractId,
+        String fullName,
+        String identityCardNumber,
+        String phone,
+        String email,
+        String permanentAddress,
+        LocalDate checkInDate,
+        boolean createAccount
+    ) {
+        public AddOccupantCommand {
+            if (contractId == null) {
+                throw new IllegalArgumentException("Contract ID cannot be null");
+            }
+            if (fullName == null || fullName.isBlank()) {
+                throw new IllegalArgumentException("Họ và tên không được để trống");
+            }
+            if (identityCardNumber == null || identityCardNumber.isBlank()) {
+                throw new IllegalArgumentException("Số CCCD không được để trống");
+            }
+            if (phone == null || phone.isBlank()) {
+                throw new IllegalArgumentException("Số điện thoại không được để trống");
+            }
+            if (checkInDate == null) {
+                checkInDate = LocalDate.now();
+            }
+        }
+    }
 
     record CreateContractCommand(
         UUID propertyId,

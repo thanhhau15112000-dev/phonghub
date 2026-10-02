@@ -79,8 +79,10 @@ public class InMemoryContractRepository implements ContractRepositoryPort {
 
     @Override
     public List<Contract> findByOccupantTenantId(UUID tenantId) {
+        java.time.LocalDate today = java.time.LocalDate.now();
         return store.values().stream()
-            .filter(c -> c.getOccupants().stream().anyMatch(o -> o.tenantId().equals(tenantId)))
+            .filter(c -> c.getOccupants().stream()
+                .anyMatch(o -> o.tenantId().equals(tenantId) && (o.checkOutDate() == null || o.checkOutDate().isAfter(today))))
             .map(this::clone)
             .toList();
     }

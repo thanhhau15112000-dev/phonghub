@@ -10,6 +10,7 @@ import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
 import com.phonghub.domain.model.Property;
+import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.StaffPropertyAssignment;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.UserRole;
@@ -37,6 +38,8 @@ class AuthorizationAndPropertyScopeUnitTest {
     private UUID prop2Id;
 
     private CurrentUser admin;
+    private CurrentUser ownerUser1;
+    private CurrentUser ownerUser2;
     private CurrentUser staffUser;
     private CurrentUser techUser;
     private CurrentUser tenantUser;
@@ -53,13 +56,18 @@ class AuthorizationAndPropertyScopeUnitTest {
         prop1Id = UUID.randomUUID();
         prop2Id = UUID.randomUUID();
 
-        propertyRepo.save(new Property(prop1Id, "Prop 1", "Addr 1", "", 10, Instant.now()));
-        propertyRepo.save(new Property(prop2Id, "Prop 2", "Addr 2", "", 5, Instant.now()));
+        UUID owner1Id = UUID.randomUUID();
+        UUID owner2Id = UUID.randomUUID();
 
         admin = new CurrentUser(UUID.randomUUID(), "admin@local", "Admin", UserRole.ADMIN);
+        ownerUser1 = new CurrentUser(owner1Id, "owner1@local", "Owner 1", UserRole.OWNER);
+        ownerUser2 = new CurrentUser(owner2Id, "owner2@local", "Owner 2", UserRole.OWNER);
         staffUser = new CurrentUser(UUID.randomUUID(), "staff@local", "Staff", UserRole.STAFF);
         techUser = new CurrentUser(UUID.randomUUID(), "tech@local", "Tech", UserRole.TECHNICIAN);
         tenantUser = new CurrentUser(UUID.randomUUID(), "tenant@local", "Tenant", UserRole.TENANT);
+
+        propertyRepo.save(new Property(prop1Id, "Prop 1", "Addr 1", "", 10, owner1Id, PropertyApprovalStatus.VERIFIED, null, Instant.now()));
+        propertyRepo.save(new Property(prop2Id, "Prop 2", "Addr 2", "", 5, null, PropertyApprovalStatus.VERIFIED, null, Instant.now()));
 
         // Staff and Tech assigned only to Prop 1
         assignmentRepo.save(new StaffPropertyAssignment(UUID.randomUUID(), staffUser.id(), prop1Id, true, true, Instant.now()));
@@ -113,8 +121,71 @@ class AuthorizationAndPropertyScopeUnitTest {
     @DisplayName("assertAdmin rejects non-admin users")
     void testAssertAdmin() {
         assertDoesNotThrow(() -> authService.assertAdmin(admin));
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertAdmin(ownerUser1));
         assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertAdmin(staffUser));
         assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertAdmin(techUser));
         assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertAdmin(tenantUser));
+    }
+
+    @Test
+    @DisplayName("OWNER can access and manage owned property; non-owned throws UnauthorizedPropertyAccessException")
+    void testOwnerScope() {
+        assertDoesNotThrow(() -> authService.assertCanAccessProperty(ownerUser1, prop1Id));
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertCanAccessProperty(ownerUser1, prop2Id));
+
+        assertDoesNotThrow(() -> authService.assertCanManageProperty(ownerUser1, prop1Id));
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertCanManageProperty(ownerUser1, prop2Id));
+
+        Set<UUID> ids = authService.getAccessiblePropertyIds(ownerUser1);
+        assertEquals(1, ids.size());
+        assertTrue(ids.contains(prop1Id));
+    }
+
+    @Test
+    @DisplayName("OWNER with no properties returns empty set and cannot access other properties")
+    void testOwnerWithNoPropertiesReturnsEmpty() {
+        Set<UUID> ids = authService.getAccessiblePropertyIds(ownerUser2);
+        assertTrue(ids.isEmpty());
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertCanAccessProperty(ownerUser2, prop1Id));
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertCanAccessProperty(ownerUser2, prop2Id));
+    }
+
+    @Test
+    @DisplayName("assertCanCreateProperty allows ADMIN and OWNER, rejects STAFF, TECH, and TENANT")
+    void testAssertCanCreateProperty() {
+        assertDoesNotThrow(() -> authService.assertCanCreateProperty(admin));
+        assertDoesNotThrow(() -> authService.assertCanCreateProperty(ownerUser1));
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertCanCreateProperty(staffUser));
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertCanCreateProperty(techUser));
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertCanCreateProperty(tenantUser));
+    }
+
+    @Test
+    @DisplayName("assertCanAccessTenant checks object-level permissions properly")
+    void testAssertCanAccessTenant() {
+        Tenant tenant = tenantRepo.findByUserId(tenantUser.id()).orElseThrow();
+
+        // 1. ADMIN can access
+        assertDoesNotThrow(() -> authService.assertCanAccessTenant(admin, tenant.id()));
+
+        // 2. Self (Tenant itself) can access
+        assertDoesNotThrow(() -> authService.assertCanAccessTenant(tenantUser, tenant.id()));
+
+        // 3. Other tenant cannot access
+        CurrentUser otherTenant = new CurrentUser(UUID.randomUUID(), "other@local", "Other", UserRole.TENANT);
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertCanAccessTenant(otherTenant, tenant.id()));
+
+        // 4. Owner 1 (owns Prop 1 where tenant resides) can access
+        assertDoesNotThrow(() -> authService.assertCanAccessTenant(ownerUser1, tenant.id()));
+
+        // 5. Owner 2 (does not own Prop 1) cannot access
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertCanAccessTenant(ownerUser2, tenant.id()));
+
+        // 6. Staff (assigned to Prop 1) can access
+        assertDoesNotThrow(() -> authService.assertCanAccessTenant(staffUser, tenant.id()));
+
+        // 7. Staff not assigned cannot access
+        CurrentUser otherStaff = new CurrentUser(UUID.randomUUID(), "otherstaff@local", "Other Staff", UserRole.STAFF);
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> authService.assertCanAccessTenant(otherStaff, tenant.id()));
     }
 }

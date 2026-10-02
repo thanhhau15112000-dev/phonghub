@@ -2,6 +2,7 @@ package com.phonghub.config;
 
 import com.phonghub.adapter.in.security.PasswordChangeGate;
 import com.phonghub.adapter.in.security.SupabaseJwtAuthenticationConverter;
+import com.phonghub.adapter.in.security.UserActiveValidationFilter;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -52,7 +53,11 @@ public class ProductionSecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/login", "/api/auth/refresh").permitAll()
+                .requestMatchers(
+                    "/api/auth/login",
+                    "/api/auth/refresh",
+                    "/api/v1/payments/sepay/webhook"
+                ).permitAll()
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2
@@ -76,10 +81,11 @@ public class ProductionSecurityConfig {
             .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/health", "/login", "/session/logout").permitAll()
+                .requestMatchers("/health", "/login", "/session/logout", "/forgot-password").permitAll()
                 .requestMatchers("/static/**", "/css/**", "/favicon.ico").permitAll()
                 .anyRequest().authenticated()
             )
+            .addFilterBefore(new UserActiveValidationFilter(userRepository), AuthorizationFilter.class)
             .addFilterBefore(new PasswordChangeGate(), AuthorizationFilter.class)
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login"))

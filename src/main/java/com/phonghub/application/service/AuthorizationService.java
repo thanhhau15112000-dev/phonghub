@@ -5,6 +5,7 @@ import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.domain.exception.TenantNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Property;
@@ -43,11 +44,35 @@ public class AuthorizationService {
         }
     }
 
+    public void assertCanCreateProperty(CurrentUser user) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (user.role() == UserRole.ADMIN || user.role() == UserRole.OWNER) {
+            return;
+        }
+        throw new UnauthorizedPropertyAccessException(String.format(
+            "User %s with role %s cannot create property. Only Admin or Owner allowed.",
+            user.fullName(), user.role()
+        ));
+    }
+
     public void assertCanAccessProperty(CurrentUser user, UUID propertyId) {
         if (user == null) {
             throw new UnauthorizedPropertyAccessException("Authentication required");
         }
         if (user.role() == UserRole.ADMIN) {
+            return;
+        }
+        if (user.role() == UserRole.OWNER) {
+            Property prop = propertyRepositoryPort.findById(propertyId)
+                .orElseThrow(() -> new UnauthorizedPropertyAccessException("Property not found: " + propertyId));
+            if (prop.ownerId() == null || !user.id().equals(prop.ownerId())) {
+                throw new UnauthorizedPropertyAccessException(String.format(
+                    "Owner %s does not own property %s",
+                    user.fullName(), propertyId
+                ));
+            }
             return;
         }
         if (user.role() == UserRole.STAFF || user.role() == UserRole.TECHNICIAN) {
@@ -80,6 +105,17 @@ public class AuthorizationService {
         if (user.role() == UserRole.ADMIN) {
             return;
         }
+        if (user.role() == UserRole.OWNER) {
+            Property prop = propertyRepositoryPort.findById(propertyId)
+                .orElseThrow(() -> new UnauthorizedPropertyAccessException("Property not found: " + propertyId));
+            if (prop.ownerId() == null || !user.id().equals(prop.ownerId())) {
+                throw new UnauthorizedPropertyAccessException(String.format(
+                    "Owner %s does not own property %s",
+                    user.fullName(), propertyId
+                ));
+            }
+            return;
+        }
         if (user.role() == UserRole.STAFF) {
             if (!assignmentPort.isUserAssignedToProperty(user.id(), propertyId)) {
                 throw new UnauthorizedPropertyAccessException(String.format(
@@ -92,6 +128,127 @@ public class AuthorizationService {
         throw new UnauthorizedPropertyAccessException(String.format(
             "User %s with role %s cannot manage property %s",
             user.fullName(), user.role(), propertyId
+        ));
+    }
+
+    public void assertOwnerOrAdmin(CurrentUser user, UUID propertyId) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (user.role() == UserRole.ADMIN) {
+            return;
+        }
+        if (user.role() == UserRole.OWNER) {
+            Property prop = propertyRepositoryPort.findById(propertyId)
+                .orElseThrow(() -> new UnauthorizedPropertyAccessException("Property not found: " + propertyId));
+            if (prop.ownerId() == null || !user.id().equals(prop.ownerId())) {
+                throw new UnauthorizedPropertyAccessException(String.format(
+                    "Owner %s does not own property %s",
+                    user.fullName(), propertyId
+                ));
+            }
+            return;
+        }
+        throw new UnauthorizedPropertyAccessException(String.format(
+            "User %s with role %s is not permitted to perform this action. Only Owner or Admin allowed.",
+            user.fullName(), user.role()
+        ));
+    }
+
+    public void assertCanUpdateTenant(CurrentUser user, UUID tenantId) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (user.role() == UserRole.ADMIN) {
+            return;
+        }
+        if (user.role() == UserRole.OWNER) {
+            Set<UUID> propertyIds = new HashSet<>();
+            for (Contract c : contractRepositoryPort.findByPrimaryTenantId(tenantId)) {
+                propertyIds.add(c.getPropertyId());
+            }
+            for (Contract c : contractRepositoryPort.findByOccupantTenantId(tenantId)) {
+                propertyIds.add(c.getPropertyId());
+            }
+
+            boolean ownsProperty = propertyIds.stream()
+                .map(propertyRepositoryPort::findById)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .anyMatch(p -> user.id().equals(p.ownerId()));
+
+            if (ownsProperty) {
+                return;
+            }
+
+            throw new UnauthorizedPropertyAccessException(String.format(
+                "Chủ nhà trọ '%s' không quản lý nhà trọ nào mà người thuê '%s' đang hoặc đã từng cư trú.",
+                user.fullName(), tenantId
+            ));
+        }
+
+        throw new UnauthorizedPropertyAccessException(String.format(
+            "Người dùng '%s' với vai trò '%s' không có quyền cập nhật thông tin người thuê. Chỉ Chủ nhà trọ liên quan hoặc Quản trị viên mới được phép.",
+            user.fullName(), user.role()
+        ));
+    }
+
+    public void assertCanAccessTenant(CurrentUser user, UUID tenantId) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (user.role() == UserRole.ADMIN) {
+            return;
+        }
+
+        Tenant tenant = tenantRepositoryPort.findById(tenantId)
+            .orElseThrow(() -> new TenantNotFoundException("Tenant not found with ID: " + tenantId));
+
+        if (user.role() == UserRole.TENANT) {
+            if (tenant.userId() != null && tenant.userId().equals(user.id())) {
+                return;
+            }
+            throw new UnauthorizedPropertyAccessException("Tenant can only view their own tenant profile");
+        }
+
+        Set<UUID> propertyIds = new HashSet<>();
+        for (Contract c : contractRepositoryPort.findByPrimaryTenantId(tenantId)) {
+            propertyIds.add(c.getPropertyId());
+        }
+        for (Contract c : contractRepositoryPort.findByOccupantTenantId(tenantId)) {
+            propertyIds.add(c.getPropertyId());
+        }
+
+        if (user.role() == UserRole.OWNER) {
+            boolean ownsProperty = propertyIds.stream()
+                .map(propertyRepositoryPort::findById)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .anyMatch(p -> user.id().equals(p.ownerId()));
+            if (ownsProperty) {
+                return;
+            }
+            throw new UnauthorizedPropertyAccessException(String.format(
+                "Chủ nhà trọ '%s' không quản lý nhà trọ nào mà người thuê '%s' đang hoặc đã từng cư trú.",
+                user.fullName(), tenantId
+            ));
+        }
+
+        if (user.role() == UserRole.STAFF) {
+            boolean isAssigned = propertyIds.stream()
+                .anyMatch(pId -> assignmentPort.isUserAssignedToProperty(user.id(), pId));
+            if (isAssigned) {
+                return;
+            }
+            throw new UnauthorizedPropertyAccessException(String.format(
+                "Nhân viên '%s' không phụ trách nhà trọ nào mà người thuê '%s' đang hoặc đã từng cư trú.",
+                user.fullName(), tenantId
+            ));
+        }
+
+        throw new UnauthorizedPropertyAccessException(String.format(
+            "Người dùng '%s' với vai trò '%s' không có quyền xem thông tin người thuê.",
+            user.fullName(), user.role()
         ));
     }
 
@@ -127,6 +284,11 @@ public class AuthorizationService {
         }
         if (user.role() == UserRole.ADMIN) {
             return propertyRepositoryPort.findAll().stream()
+                .map(Property::id)
+                .collect(Collectors.toSet());
+        }
+        if (user.role() == UserRole.OWNER) {
+            return propertyRepositoryPort.findByOwnerId(user.id()).stream()
                 .map(Property::id)
                 .collect(Collectors.toSet());
         }

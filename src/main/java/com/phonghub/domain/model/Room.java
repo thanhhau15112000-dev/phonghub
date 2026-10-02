@@ -9,11 +9,11 @@ import java.util.UUID;
 public class Room {
     private final UUID id;
     private final UUID propertyId;
-    private final String roomNumber;
-    private final int floor;
-    private final BigDecimal areaSqm;
-    private final BigDecimal basePrice;
-    private final int maxOccupants;
+    private String roomNumber;
+    private int floor;
+    private BigDecimal areaSqm;
+    private BigDecimal basePrice;
+    private int maxOccupants;
     private RoomStatus status;
     private final Instant createdAt;
     private Instant updatedAt;
@@ -44,6 +44,9 @@ public class Room {
         }
         if (maxOccupants <= 0) {
             throw new IllegalArgumentException("Max occupants must be positive");
+        }
+        if (areaSqm != null && areaSqm.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Area cannot be negative");
         }
 
         this.id = id;
@@ -81,6 +84,34 @@ public class Room {
         );
     }
 
+    public void updateInfo(
+        String roomNumber,
+        int floor,
+        BigDecimal areaSqm,
+        BigDecimal basePrice,
+        int maxOccupants
+    ) {
+        if (roomNumber == null || roomNumber.isBlank()) {
+            throw new IllegalArgumentException("Room number cannot be blank");
+        }
+        if (basePrice == null || basePrice.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Base price cannot be negative");
+        }
+        if (maxOccupants <= 0) {
+            throw new IllegalArgumentException("Max occupants must be positive");
+        }
+        if (areaSqm != null && areaSqm.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Area cannot be negative");
+        }
+
+        this.roomNumber = roomNumber.trim();
+        this.floor = floor;
+        this.areaSqm = areaSqm;
+        this.basePrice = basePrice;
+        this.maxOccupants = maxOccupants;
+        this.updatedAt = Instant.now();
+    }
+
     public boolean canTransitionTo(RoomStatus target) {
         if (target == null) {
             return false;
@@ -91,7 +122,7 @@ public class Room {
         return switch (this.status) {
             case AVAILABLE -> target == RoomStatus.RESERVED || target == RoomStatus.OCCUPIED || target == RoomStatus.MAINTENANCE;
             case RESERVED -> target == RoomStatus.AVAILABLE || target == RoomStatus.OCCUPIED;
-            case OCCUPIED -> target == RoomStatus.AVAILABLE || target == RoomStatus.MAINTENANCE;
+            case OCCUPIED -> target == RoomStatus.MAINTENANCE;
             case MAINTENANCE -> target == RoomStatus.AVAILABLE;
         };
     }
@@ -151,10 +182,11 @@ public class Room {
             ));
         }
         if (requiresMaintenance) {
-            transitionTo(RoomStatus.MAINTENANCE);
+            this.status = RoomStatus.MAINTENANCE;
         } else {
-            transitionTo(RoomStatus.AVAILABLE);
+            this.status = RoomStatus.AVAILABLE;
         }
+        this.updatedAt = Instant.now();
     }
 
     public void putUnderMaintenance() {

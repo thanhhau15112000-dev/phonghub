@@ -28,3 +28,11 @@ services:
         sync: false
       - key: SUPABASE_JWT_AUDIENCE
         value: authenticated
+      - key: SEPAY_WEBHOOK_API_KEY
+        sync: false
+      - key: SEPAY_BANK_CODE
+        sync: false
+      - key: SEPAY_BANK_ACCOUNT_NUMBER
+        sync: false
+      - key: SEPAY_BANK_ACCOUNT_NAME
+        sync: false

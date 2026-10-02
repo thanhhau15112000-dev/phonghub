@@ -4,6 +4,8 @@ import com.phonghub.adapter.in.security.SecurityCurrentUserAdapter;
 import com.phonghub.adapter.out.audit.PostgresAuditAdapter;
 import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresMaintenanceTicketRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresPaymentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresStaffPropertyAssignmentRepository;
@@ -12,6 +14,8 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresUserRepository;
 import com.phonghub.adapter.out.supabase.auth.SupabaseIdentityProviderAdapter;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
+import com.phonghub.application.port.out.InvoiceRepositoryPort;
+import com.phonghub.application.port.out.PaymentRepositoryPort;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
@@ -106,6 +110,16 @@ public class PostgresPersistenceConfig {
     @Bean
     public StaffPropertyAssignmentPort staffPropertyAssignmentRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         return new PostgresStaffPropertyAssignmentRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public PaymentRepositoryPort paymentRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresPaymentRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public InvoiceRepositoryPort invoiceRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresInvoiceRepository(jdbcTemplate);
     }
 
     @Bean

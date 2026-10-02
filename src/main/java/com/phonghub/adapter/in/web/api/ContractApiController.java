@@ -95,6 +95,64 @@ public class ContractApiController {
             .orElse(ResponseEntity.notFound().build());
     }
 
+    @PostMapping("/contracts/{id}/occupants")
+    public ResponseEntity<ContractResponse.ContractOccupantResponse> addOccupant(
+        @PathVariable UUID id,
+        @Valid @RequestBody AddOccupantRequest request
+    ) {
+        com.phonghub.domain.model.ContractOccupant occupant = contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
+            id,
+            request.fullName(),
+            request.identityCardNumber(),
+            request.phone(),
+            request.email(),
+            request.permanentAddress(),
+            request.checkInDate() != null ? request.checkInDate() : LocalDate.now(),
+            request.createAccount()
+        ));
+        ContractResponse.ContractOccupantResponse response = ContractResponse.ContractOccupantResponse.from(occupant);
+        return ResponseEntity.created(URI.create("/api/contracts/" + id + "/occupants/" + response.id())).body(response);
+    }
+
+    public record AddOccupantRequest(
+        @NotBlank(message = "Họ và tên không được để trống")
+        String fullName,
+
+        @NotBlank(message = "Số CCCD không được để trống")
+        String identityCardNumber,
+
+        @NotBlank(message = "Số điện thoại không được để trống")
+        String phone,
+
+        String email,
+
+        String permanentAddress,
+
+        LocalDate checkInDate,
+
+        boolean createAccount
+    ) {}
+
+    @PostMapping("/contracts/{contractId}/occupants/{tenantId}/check-out")
+    public ResponseEntity<ContractResponse.ContractOccupantResponse> checkOutOccupant(
+        @PathVariable UUID contractId,
+        @PathVariable UUID tenantId,
+        @RequestBody(required = false) CheckOutOccupantRequest request
+    ) {
+        LocalDate checkOutDate = request != null && request.checkOutDate() != null
+            ? request.checkOutDate()
+            : LocalDate.now();
+
+        com.phonghub.domain.model.ContractOccupant occupant = contractUseCase.checkOutOccupant(
+            new ContractUseCase.CheckOutOccupantCommand(contractId, tenantId, checkOutDate)
+        );
+        return ResponseEntity.ok(ContractResponse.ContractOccupantResponse.from(occupant));
+    }
+
+    public record CheckOutOccupantRequest(
+        LocalDate checkOutDate
+    ) {}
+
     public record CreateContractRequest(
         @NotNull(message = "Property ID is required")
         UUID propertyId,

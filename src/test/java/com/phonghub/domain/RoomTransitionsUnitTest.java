@@ -61,12 +61,14 @@ class RoomTransitionsUnitTest {
     }
 
     @Test
-    @DisplayName("OCCUPIED can vacate to AVAILABLE or MAINTENANCE")
+    @DisplayName("OCCUPIED can vacate to AVAILABLE or MAINTENANCE, but cannot transition to AVAILABLE directly")
     void testValidTransitionsFromOccupied() {
         room.occupy();
-        assertTrue(room.canTransitionTo(RoomStatus.AVAILABLE));
+        assertFalse(room.canTransitionTo(RoomStatus.AVAILABLE));
         assertTrue(room.canTransitionTo(RoomStatus.MAINTENANCE));
         assertFalse(room.canTransitionTo(RoomStatus.RESERVED));
+
+        assertThrows(InvalidRoomStateException.class, () -> room.transitionTo(RoomStatus.AVAILABLE));
 
         room.vacate(false);
         assertEquals(RoomStatus.AVAILABLE, room.getStatus());

@@ -20,6 +20,12 @@ public class LocalDemoAuthenticationAdapter implements CurrentUserPort, DemoActo
     public static final CurrentUser DEMO_ADMIN = new CurrentUser(
         ADMIN_ID, "admin@phonghub.local", "Quản trị viên", UserRole.ADMIN, false
     );
+    public static final CurrentUser DEMO_OWNER_1 = new CurrentUser(
+        OWNER_1_ID, "owner1@phonghub.local", "Chủ trọ Nguyễn Văn B", UserRole.OWNER, false
+    );
+    public static final CurrentUser DEMO_OWNER_2 = new CurrentUser(
+        OWNER_2_ID, "owner2@phonghub.local", "Chủ trọ Trần Thị C", UserRole.OWNER, false
+    );
     public static final CurrentUser DEMO_STAFF_1 = new CurrentUser(
         STAFF_1_ID, "staff1@phonghub.local", "Nhân viên Quận 7", UserRole.STAFF, false
     );
@@ -36,6 +42,8 @@ public class LocalDemoAuthenticationAdapter implements CurrentUserPort, DemoActo
     private static final Map<UUID, CurrentUser> DEMO_USERS = new LinkedHashMap<>();
     static {
         DEMO_USERS.put(ADMIN_ID, DEMO_ADMIN);
+        DEMO_USERS.put(OWNER_1_ID, DEMO_OWNER_1);
+        DEMO_USERS.put(OWNER_2_ID, DEMO_OWNER_2);
         DEMO_USERS.put(STAFF_1_ID, DEMO_STAFF_1);
         DEMO_USERS.put(STAFF_2_ID, DEMO_STAFF_2);
         DEMO_USERS.put(TECH_1_ID, DEMO_TECH_1);
@@ -51,6 +59,27 @@ public class LocalDemoAuthenticationAdapter implements CurrentUserPort, DemoActo
         if (user != null) {
             return user;
         }
+        try {
+            org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth instanceof com.phonghub.adapter.in.security.DomainAuthenticationToken domainAuth) {
+                return domainAuth.getCurrentUser();
+            }
+            org.springframework.web.context.request.RequestAttributes attrs =
+                org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+            if (attrs instanceof org.springframework.web.context.request.ServletRequestAttributes servletAttrs) {
+                jakarta.servlet.http.HttpSession session = servletAttrs.getRequest().getSession(false);
+                if (session != null) {
+                    Object sessionUserId = session.getAttribute("currentUserId");
+                    if (sessionUserId instanceof UUID uid) {
+                        CurrentUser demoUser = DEMO_USERS.get(uid);
+                        if (demoUser != null) {
+                            return demoUser;
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
         return fallbackUser;
     }
 
@@ -60,6 +89,8 @@ public class LocalDemoAuthenticationAdapter implements CurrentUserPort, DemoActo
             currentUserHolder.remove();
         } else {
             currentUserHolder.set(user);
+            DEMO_USERS.put(user.id(), user);
+            this.fallbackUser = user;
         }
     }
 
@@ -71,6 +102,7 @@ public class LocalDemoAuthenticationAdapter implements CurrentUserPort, DemoActo
     public void switchActor(UUID userId) {
         CurrentUser user = DEMO_USERS.get(userId);
         if (user != null) {
+            this.fallbackUser = user;
             setCurrentUser(user);
         }
     }

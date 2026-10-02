@@ -2,6 +2,17 @@ package com.phonghub.adapter.in.web;
 
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
+import com.phonghub.domain.model.Tenant;
+import java.time.LocalDate;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,8 +35,50 @@ class PhongHubUiIntegrationTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private InMemoryUserRepository userRepository;
+
+    @Autowired
+    private InMemoryPropertyRepository propertyRepository;
+
+    @Autowired
+    private InMemoryStaffPropertyAssignmentRepository assignmentRepository;
+
+    @Autowired
+    private InMemoryRoomRepository roomRepository;
+
+    @Autowired
+    private InMemoryTenantRepository tenantRepository;
+
+    @Autowired
+    private InMemoryContractRepository contractRepository;
+
+    @Autowired
+    private InMemoryMaintenanceTicketRepository ticketRepository;
+
+    @BeforeEach
+    void resetData() {
+        userRepository.clear();
+        propertyRepository.clear();
+        assignmentRepository.clear();
+        roomRepository.clear();
+        tenantRepository.clear();
+        contractRepository.clear();
+        ticketRepository.clear();
+
+        DataSeeder.seedAll(
+            userRepository,
+            propertyRepository,
+            assignmentRepository,
+            roomRepository,
+            tenantRepository,
+            contractRepository,
+            ticketRepository
+        );
+    }
+
     @Test
-    @DisplayName("Dashboard page renders successfully")
+    @DisplayName("Dashboard page renders successfully with approval status")
     void testDashboardRenders() throws Exception {
         mockMvc.perform(get("/dashboard")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
@@ -33,6 +86,7 @@ class PhongHubUiIntegrationTest {
             .andExpect(content().string(containsString("Bảng điều khiển quản lý nhà trọ")))
             .andExpect(content().string(containsString("Nhà trọ được truy cập")))
             .andExpect(content().string(containsString("PhongHub")))
+            .andExpect(content().string(containsString("Trạng thái duyệt")))
             .andExpect(content().string(not(containsString("PhongHub Ops"))))
             .andExpect(content().string(containsString("aria-label=\"Chọn người dùng demo\"")))
             .andExpect(content().string(not(containsString("Người dùng hiện tại"))))
@@ -49,14 +103,55 @@ class PhongHubUiIntegrationTest {
     }
 
     @Test
-    @DisplayName("Property detail page renders room list and status badges")
+    @DisplayName("Properties list page for OWNER 1 renders custom title and approval status badges")
+    void testPropertiesListForOwner1() throws Exception {
+        mockMvc.perform(get("/properties")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Nhà trọ của tôi")))
+            .andExpect(content().string(containsString("Nhà trọ Xanh - Quận 7")))
+            .andExpect(content().string(containsString("Đã duyệt")))
+            .andExpect(content().string(containsString("Chờ duyệt")))
+            .andExpect(content().string(containsString("Bị từ chối")))
+            .andExpect(content().string(containsString("Giấy phép kinh doanh chưa hợp lệ hoặc thiếu chứng nhận PCCC")));
+    }
+
+    @Test
+    @DisplayName("Properties list page for OWNER 2 with no properties renders owner empty state")
+    void testPropertiesListForOwner2EmptyState() throws Exception {
+        mockMvc.perform(get("/properties")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_2_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Nhà trọ của tôi")))
+            .andExpect(content().string(containsString("Bạn chưa có nhà trọ nào trên hệ thống.")));
+    }
+
+    @Test
+    @DisplayName("Property detail page renders room list, status badges, and action buttons for admin")
     void testPropertyDetailRenders() throws Exception {
+        // Verified property (PROP_1_ID)
         mockMvc.perform(get("/properties/" + DataSeeder.PROP_1_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("P101")))
             .andExpect(content().string(containsString("Đang thuê")))
-            .andExpect(content().string(containsString("Bảo trì")));
+            .andExpect(content().string(containsString("Bảo trì")))
+            .andExpect(content().string(containsString("Đã duyệt")));
+
+        // Pending property (PROP_2_ID) renders verify and reject buttons for Admin
+        mockMvc.perform(get("/properties/" + DataSeeder.PROP_2_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Chờ duyệt")))
+            .andExpect(content().string(containsString("Duyệt nhà trọ")))
+            .andExpect(content().string(containsString("Từ chối")));
+
+        // Rejected property (PROP_3_ID) renders rejection reason
+        mockMvc.perform(get("/properties/" + DataSeeder.PROP_3_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Bị từ chối")))
+            .andExpect(content().string(containsString("Giấy phép kinh doanh chưa hợp lệ hoặc thiếu chứng nhận PCCC")));
     }
 
     @Test
@@ -87,7 +182,9 @@ class PhongHubUiIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Chọn nhà trọ")))
-            .andExpect(content().string(containsString("Chọn phòng")));
+            .andExpect(content().string(containsString("Chọn phòng")))
+            .andExpect(content().string(containsString("Nhà trọ Xanh - Quận 7")))
+            .andExpect(content().string(not(containsString("Khu trọ Tân Bình"))));
     }
 
     @Test
@@ -117,5 +214,414 @@ class PhongHubUiIntegrationTest {
         mockMvc.perform(get("/switch-user?userId=" + LocalDemoAuthenticationAdapter.STAFF_1_ID))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/"));
+    }
+
+    @Test
+    @DisplayName("Admin can filter properties list by approval status")
+    void testAdminFilterPropertiesByStatus() throws Exception {
+        // Filter by PENDING
+        mockMvc.perform(get("/properties?status=PENDING")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Khu trọ Tân Bình")))
+            .andExpect(content().string(not(containsString("Nhà trọ Xanh - Quận 7"))));
+
+        // Filter by VERIFIED
+        mockMvc.perform(get("/properties?status=VERIFIED")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Nhà trọ Xanh - Quận 7")))
+            .andExpect(content().string(not(containsString("Khu trọ Tân Bình"))));
+    }
+
+    @Test
+    @DisplayName("Admin can verify pending property via UI")
+    void testAdminVerifiesPropertyViaUi() throws Exception {
+        mockMvc.perform(post("/properties/" + DataSeeder.PROP_2_ID + "/verify")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties"))
+            .andExpect(flash().attributeExists("successMessage"));
+    }
+
+    @Test
+    @DisplayName("Non-admin verifying property via UI returns error flash message")
+    void testNonAdminVerifyingPropertyViaUiFails() throws Exception {
+        mockMvc.perform(post("/properties/" + DataSeeder.PROP_2_ID + "/verify")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties"))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("Admin can reject pending property via UI with reason")
+    void testAdminRejectsPropertyViaUi() throws Exception {
+        mockMvc.perform(post("/properties/" + DataSeeder.PROP_2_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .param("reason", "Thiếu chứng nhận PCCC"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties"))
+            .andExpect(flash().attributeExists("successMessage"));
+    }
+
+    @Test
+    @DisplayName("Admin rejecting property with blank reason via UI returns error flash message")
+    void testAdminRejectsPropertyWithBlankReasonViaUiFails() throws Exception {
+        mockMvc.perform(post("/properties/" + DataSeeder.PROP_2_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .param("reason", "   "))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties"))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("Non-admin rejecting property via UI returns error flash message")
+    void testNonAdminRejectingPropertyViaUiFails() throws Exception {
+        mockMvc.perform(post("/properties/" + DataSeeder.PROP_2_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString())
+                .param("reason", "Thiếu PCCC"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties"))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("Admin sees reject button and reject modal in properties list UI")
+    void testAdminSeesRejectButtonAndModal() throws Exception {
+        mockMvc.perform(get("/properties")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Từ chối")))
+            .andExpect(content().string(containsString("id=\"rejectModal\"")))
+            .andExpect(content().string(containsString("Lý do từ chối")));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 creates room via UI in verified property successfully")
+    void testOwnerCreatesRoomViaUiSuccess() throws Exception {
+        mockMvc.perform(post("/properties/" + DataSeeder.PROP_1_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("roomNumber", "P105")
+                .param("floor", "2")
+                .param("areaSqm", "28.0")
+                .param("basePrice", "4000000")
+                .param("maxOccupants", "2"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties/" + DataSeeder.PROP_1_ID))
+            .andExpect(flash().attributeExists("successMessage"));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 creating room via UI in PENDING property returns error flash message")
+    void testOwnerCreatingRoomInPendingPropertyViaUiFails() throws Exception {
+        mockMvc.perform(post("/properties/" + DataSeeder.PROP_2_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("roomNumber", "P205")
+                .param("floor", "2")
+                .param("areaSqm", "28.0")
+                .param("basePrice", "4000000")
+                .param("maxOccupants", "2"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties/" + DataSeeder.PROP_2_ID))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 creating duplicate room via UI returns error flash message")
+    void testOwnerCreatingDuplicateRoomViaUiFails() throws Exception {
+        mockMvc.perform(post("/properties/" + DataSeeder.PROP_1_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("roomNumber", "P101")
+                .param("floor", "1")
+                .param("areaSqm", "20.0")
+                .param("basePrice", "3500000")
+                .param("maxOccupants", "2"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties/" + DataSeeder.PROP_1_ID))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 sees add room form on verified property, but sees pending warning on pending property")
+    void testOwnerRoomFormVisibilityOnVerifiedVsPending() throws Exception {
+        // Verified property -> sees form
+        mockMvc.perform(get("/properties/" + DataSeeder.PROP_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Thêm phòng vào nhà trọ")));
+
+        // Pending property -> does not see form, sees warning
+        mockMvc.perform(get("/properties/" + DataSeeder.PROP_2_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("Thêm phòng vào nhà trọ"))))
+            .andExpect(content().string(containsString("Chức năng thêm phòng chỉ khả dụng khi nhà trọ đã được Quản trị viên duyệt")));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 sees edit room button and modal on room detail page")
+    void testOwner1SeesEditRoomButtonAndModal() throws Exception {
+        mockMvc.perform(get("/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Sửa thông tin")))
+            .andExpect(content().string(containsString("id=\"editRoomModal\"")))
+            .andExpect(content().string(containsString("Cập nhật thông tin phòng")));
+    }
+
+    @Test
+    @DisplayName("STAFF does not see edit room button or modal on room detail page")
+    void testStaffDoesNotSeeEditRoomButtonOrModal() throws Exception {
+        mockMvc.perform(get("/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("id=\"editRoomBtn\""))))
+            .andExpect(content().string(not(containsString("id=\"editRoomModal\""))));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 updates room via UI successfully (redirect with success flash message)")
+    void testOwner1UpdatesRoomViaUiSuccess() throws Exception {
+        mockMvc.perform(post("/rooms/" + DataSeeder.ROOM_104_ID + "/edit")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("roomNumber", "P104-VIP")
+                .param("floor", "2")
+                .param("areaSqm", "35.0")
+                .param("basePrice", "4500000")
+                .param("maxOccupants", "4"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/rooms/" + DataSeeder.ROOM_104_ID))
+            .andExpect(flash().attributeExists("successMessage"));
+
+        // Verify updated room
+        var room = roomRepository.findById(DataSeeder.ROOM_104_ID).orElseThrow();
+        org.junit.jupiter.api.Assertions.assertEquals("P104-VIP", room.getRoomNumber());
+        org.junit.jupiter.api.Assertions.assertEquals(4, room.getMaxOccupants());
+    }
+
+    @Test
+    @DisplayName("OWNER 1 updating room via UI to duplicate room number returns error flash message")
+    void testOwner1UpdatingDuplicateRoomViaUiFails() throws Exception {
+        mockMvc.perform(post("/rooms/" + DataSeeder.ROOM_104_ID + "/edit")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("roomNumber", "P101")
+                .param("floor", "1")
+                .param("areaSqm", "25.0")
+                .param("basePrice", "3500000")
+                .param("maxOccupants", "2"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/rooms/" + DataSeeder.ROOM_104_ID))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 reducing room capacity below active occupants via UI returns error flash message")
+    void testOwner1ReducingCapacityBelowActiveOccupantsViaUiFails() throws Exception {
+        // Add 2nd occupant to contract on Room 101
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(java.util.UUID.randomUUID(), false, java.time.LocalDate.now());
+        contractRepository.save(contract);
+
+        mockMvc.perform(post("/rooms/" + DataSeeder.ROOM_101_ID + "/edit")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("roomNumber", "P101")
+                .param("floor", "1")
+                .param("areaSqm", "25.0")
+                .param("basePrice", "3500000")
+                .param("maxOccupants", "1"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/rooms/" + DataSeeder.ROOM_101_ID))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 sees add occupant button and modal dialog on active contract detail page")
+    void testOwner1SeesAddOccupantButtonAndModal() throws Exception {
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Thêm người ở")))
+            .andExpect(content().string(containsString("id=\"addOccupantBtn\"")))
+            .andExpect(content().string(containsString("id=\"addOccupantModal\"")))
+            .andExpect(content().string(containsString("addOccupantFullName")))
+            .andExpect(content().string(containsString("addOccupantIdCard")))
+            .andExpect(content().string(containsString("addOccupantPhone")));
+    }
+
+    @Test
+    @DisplayName("STAFF does not see add occupant button or modal on contract detail page")
+    void testStaffDoesNotSeeAddOccupantButtonOrModal() throws Exception {
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("id=\"addOccupantBtn\""))))
+            .andExpect(content().string(not(containsString("id=\"addOccupantModal\""))));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 adds occupant via UI successfully (redirect with success flash message)")
+    void testOwner1AddsOccupantViaUiSuccess() throws Exception {
+        mockMvc.perform(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("fullName", "Trần Thị Cẩm")
+                .param("identityCardNumber", "079200007777")
+                .param("phone", "0907777888")
+                .param("email", "cam@phonghub.local")
+                .param("permanentAddress", "Cần Thơ")
+                .param("checkInDate", LocalDate.now().toString()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/contracts/" + DataSeeder.CONTRACT_1_ID))
+            .andExpect(flash().attributeExists("successMessage"));
+
+        // Verify occupant appears on detail page
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Trần Thị Cẩm")))
+            .andExpect(content().string(containsString("079200007777")));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 adding occupant exceeding capacity via UI returns error flash message")
+    void testOwner1AddsOccupantExceedingCapacityViaUiFails() throws Exception {
+        // Contract 1 on Room 101 has 1 occupant. Room 101 maxOccupants = 2.
+        // Add 1st additional occupant
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(UUID.randomUUID(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        // Try to add another occupant exceeding capacity
+        mockMvc.perform(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("fullName", "Lê Văn Tèo")
+                .param("identityCardNumber", "079200006666")
+                .param("phone", "0906666777"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/contracts/" + DataSeeder.CONTRACT_1_ID))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 sees edit tenant button and modal on contract detail page")
+    void testOwner1SeesEditTenantButtonAndModal() throws Exception {
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("id=\"editPrimaryTenantBtn\"")))
+            .andExpect(content().string(containsString("id=\"editTenantModal\"")))
+            .andExpect(content().string(containsString("editTenantFullName")))
+            .andExpect(content().string(containsString("editTenantIdCard")))
+            .andExpect(content().string(containsString("editTenantPhone")));
+    }
+
+    @Test
+    @DisplayName("STAFF does not see edit tenant button on contract detail page")
+    void testStaffDoesNotSeeEditTenantButton() throws Exception {
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("id=\"editPrimaryTenantBtn\""))));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 updates tenant via UI successfully (redirect with success flash message)")
+    void testOwner1UpdatesTenantViaUiSuccess() throws Exception {
+        mockMvc.perform(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/tenants/" + DataSeeder.TENANT_RECORD_ID + "/edit")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("fullName", "Nguyễn Văn A (Cập nhật UI)")
+                .param("identityCardNumber", "079201001111")
+                .param("phone", "0901234567")
+                .param("email", "an.ui@phonghub.local")
+                .param("permanentAddress", "Hà Nội"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/contracts/" + DataSeeder.CONTRACT_1_ID))
+            .andExpect(flash().attributeExists("successMessage"));
+
+        // Verify updated tenant displayed on page
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Nguyễn Văn A (Cập nhật UI)")))
+            .andExpect(content().string(containsString("an.ui@phonghub.local")));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 updating tenant with duplicate CCCD via UI returns error flash message")
+    void testOwner1UpdatesTenantDuplicateCccdViaUiFails() throws Exception {
+        // Pre-create duplicate tenant
+        tenantRepository.save(com.phonghub.domain.model.Tenant.create(
+            null, "Khách Khác", "079201008888", "0908888777", null, null
+        ));
+
+        mockMvc.perform(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/tenants/" + DataSeeder.TENANT_RECORD_ID + "/edit")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("fullName", "Nguyễn Văn A")
+                .param("identityCardNumber", "079201008888")
+                .param("phone", "0901234567"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/contracts/" + DataSeeder.CONTRACT_1_ID))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 sees check out occupant button and modal dialog on active contract detail page")
+    void testOwner1SeesCheckOutOccupantButtonAndModal() throws Exception {
+        Tenant coTenant = tenantRepository.save(Tenant.create(
+            null, "Nguyễn Văn B", "079200009999", "0909999000", null, null
+        ));
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(coTenant.id(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Rời phòng")))
+            .andExpect(content().string(containsString("checkout-occupant-btn")))
+            .andExpect(content().string(containsString("id=\"checkOutModal\"")))
+            .andExpect(content().string(containsString("id=\"checkOutDateInput\"")));
+    }
+
+    @Test
+    @DisplayName("STAFF does not see check out occupant button on contract detail page")
+    void testStaffDoesNotSeeCheckOutOccupantButton() throws Exception {
+        Tenant coTenant = tenantRepository.save(Tenant.create(
+            null, "Nguyễn Văn B", "079200009999", "0909999000", null, null
+        ));
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(coTenant.id(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("checkout-occupant-btn"))))
+            .andExpect(content().string(not(containsString("id=\"checkOutModal\""))));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 checks out occupant via UI successfully (redirect with success flash message)")
+    void testOwner1ChecksOutOccupantViaUiSuccess() throws Exception {
+        Tenant coTenant = tenantRepository.save(Tenant.create(
+            null, "Nguyễn Văn C", "079200008877", "0908877665", null, null
+        ));
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(coTenant.id(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        mockMvc.perform(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants/" + coTenant.id() + "/check-out")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("checkOutDate", LocalDate.now().toString()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/contracts/" + DataSeeder.CONTRACT_1_ID))
+            .andExpect(flash().attributeExists("successMessage"));
+
+        // Verify occupant status on detail page is now "Đã rời"
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Đã rời " + LocalDate.now())));
     }
 }

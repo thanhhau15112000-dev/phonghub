@@ -10,12 +10,15 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
+import com.phonghub.adapter.in.web.api.AdminPropertyApiController;
 import com.phonghub.adapter.in.web.api.ContractApiController;
 import com.phonghub.adapter.in.web.api.MaintenanceApiController;
 import com.phonghub.adapter.in.web.api.PropertyApiController;
 import com.phonghub.adapter.in.web.api.RoomApiController;
+import com.phonghub.adapter.in.web.api.TenantApiController;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.RoomStatus;
+import com.phonghub.domain.model.Tenant;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -30,6 +33,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -92,7 +97,7 @@ class PhongHubApiIntegrationTest {
         mockMvc.perform(get("/api/properties")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$", hasSize(2)))
+            .andExpect(jsonPath("$", hasSize(3)))
             .andExpect(jsonPath("$[0].name", notNullValue()));
     }
 
@@ -114,6 +119,45 @@ class PhongHubApiIntegrationTest {
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
             .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 only sees owned properties with approval status")
+    void testOwner1ListsOwnedProperties() throws Exception {
+        mockMvc.perform(get("/api/properties")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(3)))
+            .andExpect(jsonPath("$[0].ownerId", is(LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())));
+    }
+
+    @Test
+    @DisplayName("OWNER 2 with no properties sees empty list")
+    void testOwner2ListsEmptyProperties() throws Exception {
+        mockMvc.perform(get("/api/properties")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_2_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    @DisplayName("OWNER 2 accessing Property 1 owned by OWNER 1 returns 403 Forbidden")
+    void testOwner2AccessingOtherOwnerPropertyForbidden() throws Exception {
+        mockMvc.perform(get("/api/properties/" + DataSeeder.PROP_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_2_ID.toString()))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 accessing Property 1 returns 200 OK with approval status")
+    void testOwner1AccessingOwnedProperty() throws Exception {
+        mockMvc.perform(get("/api/properties/" + DataSeeder.PROP_1_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id", is(DataSeeder.PROP_1_ID.toString())))
+            .andExpect(jsonPath("$.approvalStatus", is("VERIFIED")));
     }
 
     @Test
@@ -309,5 +353,751 @@ class PhongHubApiIntegrationTest {
         mockMvc.perform(get("/api/rooms/" + DataSeeder.ROOM_102_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.TENANT_1_ID.toString()))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("ADMIN verifies PENDING property successfully (200 OK)")
+    void testAdminVerifiesPendingPropertySuccess() throws Exception {
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_2_ID + "/verify")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id", is(DataSeeder.PROP_2_ID.toString())))
+            .andExpect(jsonPath("$.approvalStatus", is("VERIFIED")));
+    }
+
+    @Test
+    @DisplayName("ADMIN verifies already VERIFIED property returns 409 Conflict")
+    void testAdminVerifiesAlreadyVerifiedPropertyConflict() throws Exception {
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_1_ID + "/verify")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Property Status")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("ADMIN verifies REJECTED property returns 409 Conflict")
+    void testAdminVerifiesRejectedPropertyConflict() throws Exception {
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_3_ID + "/verify")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Property Status")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Non-ADMIN (STAFF) verifying property returns 403 Forbidden")
+    void testNonAdminVerifyingPropertyForbidden() throws Exception {
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_2_ID + "/verify")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("ADMIN verifies non-existent property returns 404 Not Found")
+    void testAdminVerifiesNonExistentPropertyNotFound() throws Exception {
+        UUID nonExistentId = UUID.randomUUID();
+        mockMvc.perform(post("/api/admin/properties/" + nonExistentId + "/verify")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.title", is("Resource Not Found")))
+            .andExpect(jsonPath("$.status", is(404)));
+    }
+
+    @Test
+    @DisplayName("ADMIN rejects PENDING property successfully with reason (200 OK)")
+    void testAdminRejectsPendingPropertySuccess() throws Exception {
+        AdminPropertyApiController.RejectPropertyRequest req = new AdminPropertyApiController.RejectPropertyRequest(
+            "Thiếu chứng nhận thẩm duyệt thiết kế PCCC"
+        );
+
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_2_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id", is(DataSeeder.PROP_2_ID.toString())))
+            .andExpect(jsonPath("$.approvalStatus", is("REJECTED")))
+            .andExpect(jsonPath("$.rejectionReason", is("Thiếu chứng nhận thẩm duyệt thiết kế PCCC")));
+    }
+
+    @Test
+    @DisplayName("ADMIN rejects property with blank reason returns 400 Bad Request")
+    void testAdminRejectsPropertyWithBlankReasonBadRequest() throws Exception {
+        AdminPropertyApiController.RejectPropertyRequest req = new AdminPropertyApiController.RejectPropertyRequest(
+            "   "
+        );
+
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_2_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title", is("Bad Request")))
+            .andExpect(jsonPath("$.status", is(400)));
+    }
+
+    @Test
+    @DisplayName("ADMIN rejects already VERIFIED property returns 409 Conflict")
+    void testAdminRejectsAlreadyVerifiedPropertyConflict() throws Exception {
+        AdminPropertyApiController.RejectPropertyRequest req = new AdminPropertyApiController.RejectPropertyRequest(
+            "Phát hiện vi phạm quy định"
+        );
+
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_1_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Property Status")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("ADMIN rejects already REJECTED property returns 409 Conflict")
+    void testAdminRejectsAlreadyRejectedPropertyConflict() throws Exception {
+        AdminPropertyApiController.RejectPropertyRequest req = new AdminPropertyApiController.RejectPropertyRequest(
+            "Từ chối lần nữa"
+        );
+
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_3_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Property Status")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Non-ADMIN (STAFF) rejecting property returns 403 Forbidden")
+    void testNonAdminRejectingPropertyForbidden() throws Exception {
+        AdminPropertyApiController.RejectPropertyRequest req = new AdminPropertyApiController.RejectPropertyRequest(
+            "Staff thử từ chối"
+        );
+
+        mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_2_ID + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("ADMIN rejects non-existent property returns 404 Not Found")
+    void testAdminRejectsNonExistentPropertyNotFound() throws Exception {
+        UUID nonExistentId = UUID.randomUUID();
+        AdminPropertyApiController.RejectPropertyRequest req = new AdminPropertyApiController.RejectPropertyRequest(
+            "Không tồn tại"
+        );
+
+        mockMvc.perform(post("/api/admin/properties/" + nonExistentId + "/reject")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.title", is("Resource Not Found")))
+            .andExpect(jsonPath("$.status", is(404)));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 creates room in owned & VERIFIED property successfully (201 Created)")
+    void testOwnerCreatesRoomInVerifiedPropertySuccess() throws Exception {
+        RoomApiController.CreateRoomRequest req = new RoomApiController.CreateRoomRequest(
+            "P105", 2, new BigDecimal("28.5"), new BigDecimal("4200000"), 2
+        );
+
+        mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_1_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.roomNumber", is("P105")))
+            .andExpect(jsonPath("$.floor", is(2)))
+            .andExpect(jsonPath("$.basePrice", is(4200000)))
+            .andExpect(jsonPath("$.maxOccupants", is(2)))
+            .andExpect(jsonPath("$.status", is("AVAILABLE")));
+    }
+
+    @Test
+    @DisplayName("OWNER 2 creating room in unowned property returns 403 Forbidden")
+    void testOwnerCreatingRoomInUnownedPropertyForbidden() throws Exception {
+        RoomApiController.CreateRoomRequest req = new RoomApiController.CreateRoomRequest(
+            "P105", 2, new BigDecimal("28.5"), new BigDecimal("4200000"), 2
+        );
+
+        mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_1_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_2_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 creating room in PENDING property returns 409 Conflict")
+    void testOwnerCreatingRoomInPendingPropertyConflict() throws Exception {
+        RoomApiController.CreateRoomRequest req = new RoomApiController.CreateRoomRequest(
+            "P205", 2, new BigDecimal("25.0"), new BigDecimal("3800000"), 2
+        );
+
+        mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_2_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Property Status")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 creating room in REJECTED property returns 409 Conflict")
+    void testOwnerCreatingRoomInRejectedPropertyConflict() throws Exception {
+        RoomApiController.CreateRoomRequest req = new RoomApiController.CreateRoomRequest(
+            "P305", 2, new BigDecimal("25.0"), new BigDecimal("3800000"), 2
+        );
+
+        mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_3_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Property Status")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Creating room with DUPLICATE room number (case-insensitive) returns 409 Conflict")
+    void testCreatingDuplicateRoomNumberConflict() throws Exception {
+        // Room 101 already exists in PROP_1_ID, try adding "p101"
+        RoomApiController.CreateRoomRequest req = new RoomApiController.CreateRoomRequest(
+            "p101", 1, new BigDecimal("20.0"), new BigDecimal("3500000"), 2
+        );
+
+        mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_1_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Duplicate Room Number")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Creating room with negative basePrice returns 400 Bad Request")
+    void testCreatingRoomWithNegativePriceBadRequest() throws Exception {
+        RoomApiController.CreateRoomRequest req = new RoomApiController.CreateRoomRequest(
+            "P106", 1, new BigDecimal("20.0"), new BigDecimal("-1000"), 2
+        );
+
+        mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_1_ID + "/rooms")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title", is("Bad Request")))
+            .andExpect(jsonPath("$.status", is(400)));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 updates room info in owned property successfully (200 OK)")
+    void testOwner1UpdatesRoomSuccess() throws Exception {
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P104-VIP", 2, new BigDecimal("35.0"), new BigDecimal("4500000"), 4
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id", is(DataSeeder.ROOM_104_ID.toString())))
+            .andExpect(jsonPath("$.roomNumber", is("P104-VIP")))
+            .andExpect(jsonPath("$.floor", is(2)))
+            .andExpect(jsonPath("$.areaSqm", is(35.0)))
+            .andExpect(jsonPath("$.basePrice", is(4500000)))
+            .andExpect(jsonPath("$.maxOccupants", is(4)));
+    }
+
+    @Test
+    @DisplayName("ADMIN updates room info successfully (200 OK)")
+    void testAdminUpdatesRoomSuccess() throws Exception {
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P104-ADM", 1, new BigDecimal("32.0"), new BigDecimal("4200000"), 3
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.roomNumber", is("P104-ADM")));
+    }
+
+    @Test
+    @DisplayName("STAFF attempting to update room returns 403 Forbidden")
+    void testStaffUpdatingRoomForbidden() throws Exception {
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P104-HACK", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 3
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("OWNER 2 attempting to update room in unowned property returns 403 Forbidden")
+    void testOwner2UpdatingRoomInUnownedPropertyForbidden() throws Exception {
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P104-HACK", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 3
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_2_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("Updating room number to existing room in same property returns 409 Conflict")
+    void testUpdatingRoomDuplicateNumberConflict() throws Exception {
+        // P101 already exists in PROP_1_ID
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "p101", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 3
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Duplicate Room Number")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Updating room keeping same room number succeeds (200 OK)")
+    void testUpdatingRoomSameNumberSuccess() throws Exception {
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P104", 1, new BigDecimal("31.0"), new BigDecimal("4100000"), 3
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.roomNumber", is("P104")))
+            .andExpect(jsonPath("$.basePrice", is(4100000)));
+    }
+
+    @Test
+    @DisplayName("Decreasing room maxOccupants below active contract occupants returns 409 Conflict")
+    void testReducingRoomCapacityBelowActiveContractOccupantsConflict() throws Exception {
+        // Contract 1 on Room 101 has primary occupant (tenant1). Add a 2nd occupant.
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(UUID.randomUUID(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        // Active contract now has 2 occupants. Attempt to reduce maxOccupants to 1.
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P101", 1, new BigDecimal("25.0"), new BigDecimal("3500000"), 1
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_101_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Room Capacity")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Updating room with negative basePrice returns 400 Bad Request")
+    void testUpdatingRoomWithNegativePriceBadRequest() throws Exception {
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P104", 1, new BigDecimal("30.0"), new BigDecimal("-500"), 3
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title", is("Bad Request")))
+            .andExpect(jsonPath("$.status", is(400)));
+    }
+
+    @Test
+    @DisplayName("Updating room with maxOccupants = 0 returns 400 Bad Request")
+    void testUpdatingRoomWithZeroOccupantsBadRequest() throws Exception {
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P104", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 0
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title", is("Bad Request")))
+            .andExpect(jsonPath("$.status", is(400)));
+    }
+
+    @Test
+    @DisplayName("Updating room basePrice does not alter active contract rent amount")
+    void testUpdatingRoomPriceDoesNotAlterContractRent() throws Exception {
+        var contractBefore = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        BigDecimal originalRent = contractBefore.getRentAmount();
+
+        RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
+            "P101", 1, new BigDecimal("25.0"), new BigDecimal("5500000"), 2
+        );
+
+        mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_101_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.basePrice", is(5500000)));
+
+        var contractAfter = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        org.junit.jupiter.api.Assertions.assertEquals(originalRent, contractAfter.getRentAmount());
+    }
+
+    @Test
+    @DisplayName("OWNER 1 adds occupant to active contract (201 Created)")
+    void testOwner1AddsOccupantSuccess() throws Exception {
+        ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
+            "Trần Thị Lan",
+            "079200008888",
+            "0908888999",
+            "lan@phonghub.local",
+            "Bình Phước",
+            LocalDate.now(),
+            false
+        );
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id", notNullValue()))
+            .andExpect(jsonPath("$.contractId", is(DataSeeder.CONTRACT_1_ID.toString())))
+            .andExpect(jsonPath("$.isPrimary", is(false)))
+            .andExpect(jsonPath("$.checkInDate", is(LocalDate.now().toString())));
+    }
+
+    @Test
+    @DisplayName("STAFF adding occupant to contract returns 403 Forbidden")
+    void testStaffAddsOccupantForbidden() throws Exception {
+        ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
+            "Trần Thị Lan",
+            "079200008888",
+            "0908888999",
+            "lan@phonghub.local",
+            "Bình Phước",
+            LocalDate.now(),
+            false
+        );
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("Adding occupant exceeding room maxOccupants returns 409 Conflict")
+    void testAddOccupantExceedingMaxOccupantsConflict() throws Exception {
+        // Contract 1 on Room 101 has 1 occupant. Room 101 maxOccupants = 2.
+        // Add 2nd occupant:
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(UUID.randomUUID(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        // Attempt to add 3rd occupant:
+        ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
+            "Trần Thị Lan",
+            "079200008888",
+            "0908888999",
+            null,
+            null,
+            LocalDate.now(),
+            false
+        );
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Invalid Room Capacity")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Adding occupant who is already in an active contract returns 409 Conflict")
+    void testAddOccupantWithDuplicateActiveContractConflict() throws Exception {
+        // Tenant 1 is primary tenant in active Contract 1
+        var tenant1 = tenantRepository.findById(DataSeeder.TENANT_RECORD_ID).orElseThrow();
+
+        ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
+            tenant1.fullName(),
+            tenant1.identityCardNumber(),
+            tenant1.phone(),
+            tenant1.email(),
+            null,
+            LocalDate.now(),
+            false
+        );
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Duplicate Active Contract")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Adding occupant with blank required fields returns 400 Bad Request")
+    void testAddOccupantBlankFieldsBadRequest() throws Exception {
+        ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
+            "   ",
+            "",
+            "",
+            null,
+            null,
+            LocalDate.now(),
+            false
+        );
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title", is("Bad Request")))
+            .andExpect(jsonPath("$.status", is(400)));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 updates tenant information successfully (200 OK)")
+    void testOwner1UpdatesTenantSuccess() throws Exception {
+        TenantApiController.UpdateTenantRequest req = new TenantApiController.UpdateTenantRequest(
+            "Nguyễn Văn A (Đã cập nhật)",
+            "079201001111",
+            "0909999888",
+            "an.updated@phonghub.local",
+            "Thủ Đức, TP.HCM"
+        );
+
+        mockMvc.perform(put("/api/tenants/" + DataSeeder.TENANT_RECORD_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id", is(DataSeeder.TENANT_RECORD_ID.toString())))
+            .andExpect(jsonPath("$.fullName", is("Nguyễn Văn A (Đã cập nhật)")))
+            .andExpect(jsonPath("$.phone", is("0909999888")))
+            .andExpect(jsonPath("$.email", is("an.updated@phonghub.local")))
+            .andExpect(jsonPath("$.permanentAddress", is("Thủ Đức, TP.HCM")));
+    }
+
+    @Test
+    @DisplayName("STAFF updating tenant information returns 403 Forbidden")
+    void testStaffUpdatesTenantForbidden() throws Exception {
+        TenantApiController.UpdateTenantRequest req = new TenantApiController.UpdateTenantRequest(
+            "Nguyễn Văn A (Hack)",
+            "079201001111",
+            "0909999888",
+            null,
+            null
+        );
+
+        mockMvc.perform(put("/api/tenants/" + DataSeeder.TENANT_RECORD_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("OWNER 2 updating tenant residing in OWNER 1 property returns 403 Forbidden")
+    void testOwner2UpdatesTenantForbidden() throws Exception {
+        TenantApiController.UpdateTenantRequest req = new TenantApiController.UpdateTenantRequest(
+            "Nguyễn Văn A (Hack)",
+            "079201001111",
+            "0909999888",
+            null,
+            null
+        );
+
+        mockMvc.perform(put("/api/tenants/" + DataSeeder.TENANT_RECORD_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_2_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("Updating tenant with duplicate CCCD returns 409 Conflict")
+    void testUpdateTenantDuplicateCccdConflict() throws Exception {
+        // Pre-create another tenant
+        tenantRepository.save(com.phonghub.domain.model.Tenant.create(
+            null, "Khách Khác", "079201008888", "0908888777", null, null
+        ));
+
+        // Attempt to update tenant 1 with tenant 2's CCCD
+        TenantApiController.UpdateTenantRequest req = new TenantApiController.UpdateTenantRequest(
+            "Nguyễn Văn A",
+            "079201008888",
+            "0901234567",
+            null,
+            null
+        );
+
+        mockMvc.perform(put("/api/tenants/" + DataSeeder.TENANT_RECORD_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Duplicate Identity Card")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Updating tenant with invalid phone number returns 400 Bad Request")
+    void testUpdateTenantInvalidPhoneBadRequest() throws Exception {
+        TenantApiController.UpdateTenantRequest req = new TenantApiController.UpdateTenantRequest(
+            "Nguyễn Văn A",
+            "079201001111",
+            "123456",
+            null,
+            null
+        );
+
+        mockMvc.perform(put("/api/tenants/" + DataSeeder.TENANT_RECORD_ID)
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title", is("Bad Request")))
+            .andExpect(jsonPath("$.status", is(400)));
+    }
+
+    @Test
+    @DisplayName("OWNER 1 checks out occupant successfully (200 OK) and occupant loses access")
+    void testOwner1ChecksOutOccupantSuccess() throws Exception {
+        Tenant coTenant = tenantRepository.save(Tenant.create(
+            null,
+            "Lê Thị D",
+            "079200003333",
+            "0903333444",
+            "d@phonghub.local",
+            "Tiền Giang"
+        ));
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(coTenant.id(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        assertEquals(1, contractRepository.findByOccupantTenantId(coTenant.id()).size());
+
+        ContractApiController.CheckOutOccupantRequest req = new ContractApiController.CheckOutOccupantRequest(
+            LocalDate.now()
+        );
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants/" + coTenant.id() + "/check-out")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id", notNullValue()))
+            .andExpect(jsonPath("$.tenantId", is(coTenant.id().toString())))
+            .andExpect(jsonPath("$.checkOutDate", is(LocalDate.now().toString())));
+
+        assertTrue(contractRepository.findByOccupantTenantId(coTenant.id()).isEmpty());
+    }
+
+    @Test
+    @DisplayName("STAFF checking out occupant returns 403 Forbidden")
+    void testStaffChecksOutOccupantForbidden() throws Exception {
+        Tenant coTenant = tenantRepository.save(Tenant.create(
+            null,
+            "Lê Thị E",
+            "079200004444",
+            "0904444555",
+            null,
+            null
+        ));
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(coTenant.id(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants/" + coTenant.id() + "/check-out")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
+            .andExpect(jsonPath("$.status", is(403)));
+    }
+
+    @Test
+    @DisplayName("Checking out primary occupant returns 409 Conflict")
+    void testCheckOutPrimaryOccupantConflict() throws Exception {
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants/" + DataSeeder.TENANT_RECORD_ID + "/check-out")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.title", is("Primary Occupant Removal Not Allowed")))
+            .andExpect(jsonPath("$.status", is(409)));
+    }
+
+    @Test
+    @DisplayName("Checking out occupant with checkout date before checkin date returns 400 Bad Request")
+    void testCheckOutBeforeCheckInDateBadRequest() throws Exception {
+        Tenant coTenant = tenantRepository.save(Tenant.create(
+            null,
+            "Lê Thị F",
+            "079200005555",
+            "0905555666",
+            null,
+            null
+        ));
+        var contract = contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contract.addOccupant(coTenant.id(), false, LocalDate.now());
+        contractRepository.save(contract);
+
+        ContractApiController.CheckOutOccupantRequest req = new ContractApiController.CheckOutOccupantRequest(
+            LocalDate.now().minusDays(5)
+        );
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants/" + coTenant.id() + "/check-out")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title", is("Invalid Argument")))
+            .andExpect(jsonPath("$.status", is(400)));
     }
 }
