@@ -45,8 +45,17 @@ ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_invoices_payment_code
     ON invoices (payment_code) WHERE payment_code IS NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_invoices_contract_period
-    ON invoices (contract_id, year, month) WHERE status <> 'VOIDED';
+-- Index này được V12 thay thế; chỉ tạo khi V12 chưa chạy (xem V11__link_invoices_to_sepay_payments.sql)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'invoices' AND column_name = 'invoice_type'
+    ) THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS uk_invoices_contract_period
+            ON invoices (contract_id, year, month) WHERE status <> 'VOIDED';
+    END IF;
+END $$;
 
 ALTER TABLE sepay_transactions
     ADD COLUMN IF NOT EXISTS invoice_id UUID REFERENCES invoices(id) ON DELETE SET NULL;
