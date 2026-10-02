@@ -21,6 +21,11 @@ public class TransactionalInvoiceUseCase implements InvoiceUseCase {
     }
 
     @Override
+    public Invoice getInvoice(UUID invoiceId) {
+        return delegate.getInvoice(invoiceId);
+    }
+
+    @Override
     public java.util.Optional<Invoice> findFeeInvoiceForTicket(UUID ticketId) {
         return delegate.findFeeInvoiceForTicket(ticketId);
     }

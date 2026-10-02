@@ -267,6 +267,7 @@
                     <th>Hạn thanh toán</th>
                     <th>Nội dung CK</th>
                     <th>Trạng thái</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -280,6 +281,9 @@
                     <td th:text="${inv.getDueDate()}">2026-10-05</td>
                     <td style="font-family: monospace;" th:text="${inv.getPaymentCode() != null ? inv.getPaymentCode() : '—'}">PHXXXXXXXX</td>
                     <td><span th:class="'badge badge-' + ${uiText.invoiceBadge(inv, today)}" th:text="${uiText.invoiceState(inv, today)}">Đến hạn</span></td>
+                    <td>
+                        <a th:if="${inv.isPayable()}" th:href="@{'/invoices/' + ${inv.getId()} + '/pay'}" class="btn btn-sm btn-primary">Thanh toán</a>
+                    </td>
                 </tr>
             </tbody>
         </table>

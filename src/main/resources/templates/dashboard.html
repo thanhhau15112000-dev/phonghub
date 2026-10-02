@@ -39,7 +39,10 @@
         <div class="card" id="rent-payment">
             <div class="flex-between" style="margin-bottom: 12px;">
                 <h2>Thanh toán tiền thuê</h2>
-                <a th:if="${tenantContract != null}" th:href="@{'/contracts/' + ${tenantContract.getId()} + '#payments'}" class="btn btn-sm btn-secondary">Lịch sử và hướng dẫn chuyển khoản</a>
+                <div style="display: flex; gap: 8px;">
+                    <a th:if="${nextInvoice != null}" th:href="@{'/invoices/' + ${nextInvoice.getId()} + '/pay'}" class="btn btn-sm btn-primary">Thanh toán</a>
+                    <a th:if="${tenantContract != null}" th:href="@{'/contracts/' + ${tenantContract.getId()} + '#payments'}" class="btn btn-sm btn-secondary">Tất cả khoản thanh toán</a>
+                </div>
             </div>
 
             <div th:if="${tenantContract == null}" class="empty-state">

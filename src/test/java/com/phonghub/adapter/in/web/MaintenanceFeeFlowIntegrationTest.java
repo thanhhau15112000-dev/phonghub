@@ -271,6 +271,69 @@ class MaintenanceFeeFlowIntegrationTest {
     }
 
     @Test
+    @DisplayName("Awaiting-payment ticket exposes a Pay button; the pay page shows amount and transfer code, and a paid invoice no longer asks for money")
+    void payButtonAndPayPage() throws Exception {
+        MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Hỏng vòi sen", "TENANT_USAGE");
+        accept(ticket.getId());
+        resolve(ticket.getId(), "180000", null);
+        Invoice fee = invoiceRepository.findActiveByTicketId(ticket.getId()).orElseThrow();
+        String payUrl = "/invoices/" + fee.getId() + "/pay";
+
+        mockMvc.perform(asUser(get("/maintenance"), TENANT))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString(payUrl)))
+            .andExpect(content().string(containsString("Thanh toán")));
+        mockMvc.perform(asUser(get("/maintenance/" + ticket.getId()), TENANT))
+            .andExpect(content().string(containsString(payUrl)));
+        mockMvc.perform(asUser(get("/contracts/" + DataSeeder.CONTRACT_1_ID), TENANT))
+            .andExpect(content().string(containsString(payUrl)));
+        mockMvc.perform(asUser(get("/dashboard"), TENANT))
+            .andExpect(content().string(containsString(payUrl)));
+
+        mockMvc.perform(asUser(get(payUrl), TENANT))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Phí sửa chữa")))
+            .andExpect(content().string(containsString("Hỏng vòi sen")))
+            .andExpect(content().string(containsString("180,000 đ")))
+            .andExpect(content().string(containsString(fee.getPaymentCode())));
+
+        payByWebhook(fee.getPaymentCode(), "180000");
+        mockMvc.perform(asUser(get(payUrl), TENANT))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("đã được thanh toán đủ")));
+        mockMvc.perform(asUser(get("/maintenance"), TENANT))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString(payUrl))));
+    }
+
+    @Test
+    @DisplayName("Pay page for an unknown invoice redirects with an error")
+    void payPageUnknownInvoice() throws Exception {
+        mockMvc.perform(asUser(get("/invoices/" + UUID.randomUUID() + "/pay"), TENANT))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("Tenant only sees tickets of their own room; other rooms' tickets are hidden and not openable")
+    void tenantSeesOnlyOwnRoomTickets() throws Exception {
+        // Phiếu seed nằm ở phòng 102, người thuê ở phòng 101
+        mockMvc.perform(asUser(get("/maintenance"), TENANT))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Sửa vòi nước và kiểm tra máy lạnh"))));
+        mockMvc.perform(asUser(get("/maintenance/" + DataSeeder.TICKET_1_ID), TENANT))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(flash().attributeExists("errorMessage"));
+        mockMvc.perform(asUser(get("/maintenance"), ADMIN))
+            .andExpect(content().string(containsString("Sửa vòi nước và kiểm tra máy lạnh")));
+
+        MaintenanceTicket own = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Phiếu của phòng mình", "NATURAL_WEAR");
+        mockMvc.perform(asUser(get("/maintenance"), TENANT))
+            .andExpect(content().string(containsString("Phiếu của phòng mình")));
+        mockMvc.perform(asUser(get("/maintenance/" + own.getId()), TENANT))
+            .andExpect(status().isOk());
+    }
+
+    @Test
     @DisplayName("Tenant must pick a cause when reporting; the form exposes the cause dropdown")
     void tenantMustPickCause() throws Exception {
         mockMvc.perform(asUser(get("/maintenance/new"), TENANT))
