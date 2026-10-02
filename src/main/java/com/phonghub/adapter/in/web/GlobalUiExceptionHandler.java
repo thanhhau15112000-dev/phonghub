@@ -15,6 +15,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * luôn hiển thị thông báo lỗi rõ ràng thay vì im lặng hoặc văng màn hình 500.
  */
 @ControllerAdvice(assignableTypes = {
+    AdminNotificationUiController.class,
     AdminUserUiController.class,
     AuthUiController.class,
     ContractUiController.class,

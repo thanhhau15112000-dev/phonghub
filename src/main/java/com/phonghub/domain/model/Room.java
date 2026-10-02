@@ -122,7 +122,7 @@ public class Room {
         return switch (this.status) {
             case AVAILABLE -> target == RoomStatus.RESERVED || target == RoomStatus.OCCUPIED || target == RoomStatus.MAINTENANCE;
             case RESERVED -> target == RoomStatus.AVAILABLE || target == RoomStatus.OCCUPIED;
-            case OCCUPIED -> target == RoomStatus.AVAILABLE || target == RoomStatus.MAINTENANCE;
+            case OCCUPIED -> target == RoomStatus.MAINTENANCE;
             case MAINTENANCE -> target == RoomStatus.AVAILABLE;
         };
     }
@@ -182,10 +182,11 @@ public class Room {
             ));
         }
         if (requiresMaintenance) {
-            transitionTo(RoomStatus.MAINTENANCE);
+            this.status = RoomStatus.MAINTENANCE;
         } else {
-            transitionTo(RoomStatus.AVAILABLE);
+            this.status = RoomStatus.AVAILABLE;
         }
+        this.updatedAt = Instant.now();
     }
 
     public void putUnderMaintenance() {

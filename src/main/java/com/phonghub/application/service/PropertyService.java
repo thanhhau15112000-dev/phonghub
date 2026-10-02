@@ -14,6 +14,7 @@ import java.util.UUID;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.domain.exception.InvalidPropertyStatusException;
 import com.phonghub.domain.model.PropertyApprovalStatus;
+import com.phonghub.domain.model.UserRole;
 import java.util.Map;
 
 public class PropertyService implements PropertyUseCase {
@@ -46,7 +47,12 @@ public class PropertyService implements PropertyUseCase {
     @Override
     public Property createProperty(CreatePropertyCommand command) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
-        authorizationService.assertAdmin(currentUser);
+        authorizationService.assertCanCreateProperty(currentUser);
+
+        UUID ownerId = currentUser.role() == UserRole.OWNER ? currentUser.id() : null;
+        PropertyApprovalStatus approvalStatus = currentUser.role() == UserRole.OWNER
+            ? PropertyApprovalStatus.PENDING
+            : PropertyApprovalStatus.VERIFIED;
 
         Property property = new Property(
             UUID.randomUUID(),
@@ -54,6 +60,9 @@ public class PropertyService implements PropertyUseCase {
             command.address().trim(),
             command.description(),
             command.totalRooms(),
+            ownerId,
+            approvalStatus,
+            null,
             Instant.now()
         );
 
