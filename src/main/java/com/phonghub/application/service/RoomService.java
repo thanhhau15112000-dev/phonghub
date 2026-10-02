@@ -218,7 +218,7 @@ public class RoomService implements RoomUseCase {
 
         authorizationService.assertCanManageProperty(currentUser, room.getPropertyId());
 
-        // Invariant F2: Cannot manually set an OCCUPIED room to AVAILABLE if an ACTIVE contract exists
+        // Invariant F2: Cannot manually set an OCCUPIED room to AVAILABLE
         if (room.getStatus() == RoomStatus.OCCUPIED && targetStatus == RoomStatus.AVAILABLE) {
             Optional<Contract> activeContract = contractRepository.findActiveByRoomId(roomId);
             if (activeContract.isPresent()) {
@@ -227,6 +227,10 @@ public class RoomService implements RoomUseCase {
                     room.getRoomNumber(), activeContract.get().getId()
                 ));
             }
+            throw new InvalidRoomStateException(String.format(
+                "Cannot manually change status of room '%s' to AVAILABLE: room is OCCUPIED. Room must be vacated via contract lifecycle or transitioned to MAINTENANCE.",
+                room.getRoomNumber()
+            ));
         }
 
         // Invariant: Leaving MAINTENANCE requires that all maintenance tickets are resolved

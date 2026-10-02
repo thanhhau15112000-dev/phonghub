@@ -102,8 +102,8 @@ public class ContractUiController {
         RedirectAttributes redirectAttributes
     ) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
-        if (currentUser.role() != UserRole.ADMIN && currentUser.role() != UserRole.STAFF) {
-            redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên hoặc nhân viên mới có thể tạo hợp đồng.");
+        if (currentUser.role() != UserRole.ADMIN && currentUser.role() != UserRole.STAFF && currentUser.role() != UserRole.OWNER) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên, chủ nhà trọ hoặc nhân viên mới có thể tạo hợp đồng.");
             return "redirect:/contracts";
         }
 

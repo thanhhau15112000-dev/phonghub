@@ -108,6 +108,10 @@ public class PropertyUiController {
             Property property = propertyUseCase.createProperty(new PropertyUseCase.CreatePropertyCommand(
                 name, address, description, totalRooms
             ));
+            if (property.approvalStatus() == PropertyApprovalStatus.PENDING) {
+                redirectAttributes.addFlashAttribute("successMessage", "Đã gửi thông tin nhà trọ '" + property.name() + "' để chờ Quản trị viên duyệt.");
+                return "redirect:/properties";
+            }
             redirectAttributes.addFlashAttribute("successMessage", "Đã tạo nhà trọ '" + property.name() + "'.");
             return "redirect:/properties/" + property.id();
         } catch (DomainException | IllegalArgumentException ex) {
