@@ -220,6 +220,9 @@ public class MaintenanceService implements MaintenanceUseCase {
         }
 
         invoiceRepository.findActiveByTicketId(ticketId).ifPresent(invoice -> {
+            if (invoice.isConsolidated()) {
+                throw new DomainException("Khoản phí đã được gộp vào hóa đơn tháng, không thể miễn từ phiếu này.");
+            }
             invoice.voidInvoice();
             invoiceRepository.save(invoice);
         });

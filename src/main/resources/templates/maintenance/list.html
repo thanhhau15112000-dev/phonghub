@@ -18,18 +18,84 @@
     </div>
 
     <div class="card">
+        <!-- Tab: đang xử lý / đã hoàn thành -->
+        <div class="filter-tabs" style="margin-bottom: 12px;">
+            <a th:href="@{'/maintenance?tab=open' + ${commonQuery.isEmpty() ? '' : '&' + commonQuery}}"
+               class="filter-tab" th:classappend="${filter.tab().name() == 'OPEN'} ? 'active'">
+                <span>Đang xử lý</span>
+                <span class="badge-count" th:text="${openCount}">0</span>
+            </a>
+            <a th:href="@{'/maintenance?tab=done' + ${commonQuery.isEmpty() ? '' : '&' + commonQuery}}"
+               class="filter-tab" th:classappend="${filter.tab().name() == 'DONE'} ? 'active'">
+                <span>Đã hoàn thành</span>
+                <span class="badge-count" th:text="${doneCount}">0</span>
+            </a>
+        </div>
+
+        <!-- Bộ lọc trạng thái (chỉ ở tab đang xử lý), có "Chờ thanh toán" -->
+        <div th:if="${filter.tab().name() == 'OPEN'}" class="filter-tabs" style="margin-bottom: 12px;">
+            <a th:href="@{'/maintenance?tab=open' + ${commonQuery.isEmpty() ? '' : '&' + commonQuery}}"
+               class="filter-tab" th:classappend="${filter.status() == null} ? 'active'">
+                <span>Tất cả</span>
+            </a>
+            <a th:each="s : ${openStatuses}"
+               th:href="@{'/maintenance?tab=open&status=' + ${s.name()} + ${commonQuery.isEmpty() ? '' : '&' + commonQuery}}"
+               class="filter-tab" th:classappend="${filter.status() == s} ? 'active'">
+                <span th:text="${uiText.maintenanceStatus(s)}">Đã báo</span>
+                <span class="badge-count" th:text="${openByStatus.get(s) != null ? openByStatus.get(s) : 0}">0</span>
+            </a>
+        </div>
+
+        <!-- Lọc theo cơ sở, mức độ, thời gian báo cáo (không dành cho người thuê) -->
+        <form th:if="${currentUser.role().name() != 'TENANT'}" th:action="@{/maintenance}" method="get"
+              style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px;">
+            <input type="hidden" name="tab" th:value="${filter.tab().name().toLowerCase()}">
+            <input type="hidden" name="status" th:if="${filter.status() != null}" th:value="${filter.status().name()}">
+
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="filterProperty">Cơ sở</label>
+                <select id="filterProperty" name="propertyId" class="form-control">
+                    <option value="">Tất cả cơ sở</option>
+                    <option th:each="p : ${properties}" th:value="${p.id()}" th:text="${p.name()}"
+                            th:selected="${filter.propertyId() != null and filter.propertyId().equals(p.id())}"></option>
+                </select>
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="filterPriority">Mức độ</label>
+                <select id="filterPriority" name="priority" class="form-control">
+                    <option value="">Tất cả mức độ</option>
+                    <option th:each="pr : ${priorities}" th:value="${pr.name()}" th:text="${uiText.maintenancePriority(pr)}"
+                            th:selected="${filter.priority() == pr}"></option>
+                </select>
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="filterFrom">Báo cáo từ ngày</label>
+                <input type="date" id="filterFrom" name="from" class="form-control" th:value="${filter.from()}">
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="filterTo">Đến ngày</label>
+                <input type="date" id="filterTo" name="to" class="form-control" th:value="${filter.to()}">
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button type="submit" class="btn btn-primary">Lọc</button>
+                <a th:href="@{'/maintenance?tab=' + ${filter.tab().name().toLowerCase()}}" class="btn">Xóa lọc</a>
+            </div>
+        </form>
+
         <div th:if="${#lists.isEmpty(tickets)}" class="empty-state">
-            <p>Không tìm thấy yêu cầu bảo trì trong phạm vi hiện tại.</p>
+            <p th:if="${filter.tab().name() == 'DONE'}">Chưa có yêu cầu bảo trì nào đã hoàn thành theo bộ lọc hiện tại.</p>
+            <p th:if="${filter.tab().name() == 'OPEN'}">Không có yêu cầu bảo trì đang xử lý theo bộ lọc hiện tại.</p>
         </div>
 
         <table th:if="${!#lists.isEmpty(tickets)}" class="data-table">
             <thead>
                 <tr>
                     <th>Tiêu đề và mô tả</th>
+                    <th th:if="${currentUser.role().name() != 'TENANT'}">Cơ sở</th>
                     <th>Mức độ</th>
                     <th>Trạng thái</th>
                     <th>Chi phí sửa chữa</th>
-                    <th>Ngày tạo</th>
+                    <th>Ngày báo cáo</th>
                     <th class="col-actions">Thao tác</th>
                 </tr>
             </thead>
@@ -39,6 +105,7 @@
                         <a th:href="@{'/maintenance/' + ${t.getId()}}" th:text="${t.getTitle()}" style="font-weight: 600; color: var(--accent);">Tiêu đề</a>
                         <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;" th:text="${t.getDescription()}">Mô tả</div>
                     </td>
+                    <td th:if="${currentUser.role().name() != 'TENANT'}" th:text="${propertyNames.get(t.getPropertyId())}">Cơ sở</td>
                     <td><span class="badge" th:text="${uiText.maintenancePriority(t.getPriority())}">Trung bình</span></td>
                     <td><span th:class="'badge badge-' + ${t.getStatus()}" th:text="${uiText.maintenanceStatus(t.getStatus())}">Đã báo</span></td>
                     <td th:text="${t.getRepairCost() != null and t.getRepairCost().compareTo(T(java.math.BigDecimal).ZERO) > 0 ? #numbers.formatDecimal(t.getRepairCost(), 0, 'COMMA', 0, 'POINT') + ' đ' : '—'}">—</td>
@@ -49,6 +116,11 @@
                                th:href="@{'/invoices/' + ${feeInvoices.get(t.getId()).getId()} + '/pay'}"
                                class="btn btn-sm btn-primary" title="Xem số tiền, mã chuyển khoản và QR">
                                 <span>Thanh toán</span>
+                            </a>
+                            <a th:if="${currentUser.role().name() == 'TENANT' and feeInvoices.containsKey(t.getId()) and feeInvoices.get(t.getId()).isConsolidated()}"
+                               th:href="@{'/invoices/' + ${feeInvoices.get(t.getId()).getConsolidatedIntoInvoiceId()} + '/pay'}"
+                               class="btn btn-sm btn-primary" title="Khoản này nằm trong hóa đơn tháng">
+                                <span>Thanh toán (hóa đơn tháng)</span>
                             </a>
                             <a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm btn-secondary" title="Xem và cập nhật sự cố">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>

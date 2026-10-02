@@ -29,6 +29,30 @@
         <div th:if="${invoice.getStatus().name() == 'VOIDED'}" class="empty-state">
             <p>Khoản này đã bị hủy, không cần thanh toán.</p>
         </div>
+        <div th:if="${invoice.isConsolidated()}" class="empty-state">
+            <p>Khoản này đã được gộp vào hóa đơn tháng, hãy thanh toán trong hóa đơn đó.</p>
+            <a th:href="@{'/invoices/' + ${invoice.getConsolidatedIntoInvoiceId()} + '/pay'}" class="btn btn-primary">Xem hóa đơn tháng</a>
+        </div>
+
+        <!-- Chi tiết các mục của hóa đơn -->
+        <div th:if="${!#lists.isEmpty(invoice.getItems())}" style="margin-bottom: 16px;">
+            <h2 style="font-size: 14px; margin-bottom: 8px;">Chi tiết hóa đơn</h2>
+            <table class="data-table" style="font-size: 13px;">
+                <thead>
+                    <tr><th>Mục</th><th style="text-align: right;">Thành tiền</th></tr>
+                </thead>
+                <tbody>
+                    <tr th:each="item : ${invoice.getItems()}">
+                        <td th:text="${item.name()}">Tiền thuê phòng tháng 10/2026</td>
+                        <td style="text-align: right;" th:text="${#numbers.formatDecimal(item.totalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight: 600;">Tổng cộng</td>
+                        <td style="text-align: right; font-weight: 600;" th:text="${#numbers.formatDecimal(invoice.getTotalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
 
         <div th:if="${invoice.isPayable()}" style="display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start;">
             <img th:if="${paymentQrUrl != null}" th:src="${paymentQrUrl}" alt="Mã QR chuyển khoản" width="220" height="220" style="border: 1px solid var(--border-color);">

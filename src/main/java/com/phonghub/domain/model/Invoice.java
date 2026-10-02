@@ -5,6 +5,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -27,6 +30,8 @@ public class Invoice {
     private final String paymentCode;
     private final InvoiceType type;
     private final UUID ticketId;
+    private UUID consolidatedIntoInvoiceId;
+    private final List<InvoiceItem> items = new ArrayList<>();
     private Instant paidAt;
     private final Instant createdAt;
     private Instant updatedAt;
@@ -46,6 +51,31 @@ public class Invoice {
         String paymentCode,
         InvoiceType type,
         UUID ticketId,
+        Instant paidAt,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
+        this(id, contractId, roomId, tenantId, month, year, rentAmount, totalAmount, paidAmount, dueDate, status,
+            paymentCode, type, ticketId, null, List.of(), paidAt, createdAt, updatedAt);
+    }
+
+    public Invoice(
+        UUID id,
+        UUID contractId,
+        UUID roomId,
+        UUID tenantId,
+        int month,
+        int year,
+        BigDecimal rentAmount,
+        BigDecimal totalAmount,
+        BigDecimal paidAmount,
+        LocalDate dueDate,
+        InvoiceStatus status,
+        String paymentCode,
+        InvoiceType type,
+        UUID ticketId,
+        UUID consolidatedIntoInvoiceId,
+        List<InvoiceItem> items,
         Instant paidAt,
         Instant createdAt,
         Instant updatedAt
@@ -76,6 +106,10 @@ public class Invoice {
         this.paymentCode = paymentCode;
         this.type = type != null ? type : InvoiceType.RENT;
         this.ticketId = ticketId;
+        this.consolidatedIntoInvoiceId = consolidatedIntoInvoiceId;
+        if (items != null) {
+            this.items.addAll(items);
+        }
         if (this.type == InvoiceType.MAINTENANCE && ticketId == null) {
             throw new IllegalArgumentException("Maintenance invoice requires a ticket id");
         }
@@ -89,6 +123,20 @@ public class Invoice {
      * Hạn thanh toán = ngày thanh toán của hợp đồng, kẹp về ngày cuối tháng nếu tháng ngắn hơn.
      */
     public static Invoice issueMonthlyRent(Contract contract, YearMonth period, String paymentCode) {
+        return issueMonthlyRent(contract, period, paymentCode, List.of());
+    }
+
+    /** Khoản phí sửa chữa chưa trả được gộp vào hóa đơn tháng, kèm tên phiếu để ghi dòng chi tiết. */
+    public record RolledFee(Invoice fee, String ticketTitle) {}
+
+    /**
+     * Như {@link #issueMonthlyRent(Contract, YearMonth, String)} nhưng gộp thêm các khoản phí sửa chữa chưa
+     * thanh toán của hợp đồng. Mỗi khoản là một dòng chi tiết; hóa đơn phí gốc được đánh dấu đã gộp (không còn
+     * thanh toán riêng). Khoản đã thanh toán hoặc đã trả một phần không được gộp.
+     */
+    public static Invoice issueMonthlyRent(
+        Contract contract, YearMonth period, String paymentCode, List<RolledFee> rolledFees
+    ) {
         if (contract == null || period == null) {
             throw new IllegalArgumentException("Contract and period are required");
         }
@@ -108,15 +156,34 @@ public class Invoice {
         }
         int dueDay = Math.min(contract.getPaymentDay(), period.lengthOfMonth());
         Instant now = Instant.now();
-        return new Invoice(
-            UUID.randomUUID(),
+        UUID invoiceId = UUID.randomUUID();
+
+        List<InvoiceItem> lines = new ArrayList<>();
+        lines.add(InvoiceItem.of(
+            String.format("Tiền thuê phòng tháng %02d/%d", period.getMonthValue(), period.getYear()),
+            contract.getRentAmount(), null
+        ));
+        BigDecimal total = contract.getRentAmount();
+        for (RolledFee rolled : rolledFees == null ? List.<RolledFee>of() : rolledFees) {
+            Invoice fee = rolled.fee();
+            if (!fee.isRollableFee() || !fee.getContractId().equals(contract.getId())) {
+                throw new DomainException("Khoản phí sửa chữa không thể gộp vào hóa đơn tháng.");
+            }
+            String title = rolled.ticketTitle() != null && !rolled.ticketTitle().isBlank()
+                ? rolled.ticketTitle().trim() : "Phiếu bảo trì";
+            lines.add(InvoiceItem.of("Phí sửa chữa: " + title, fee.remainingAmount(), fee.getId()));
+            total = total.add(fee.remainingAmount());
+        }
+
+        Invoice invoice = new Invoice(
+            invoiceId,
             contract.getId(),
             contract.getRoomId(),
             contract.getPrimaryTenantId(),
             period.getMonthValue(),
             period.getYear(),
             contract.getRentAmount(),
-            contract.getRentAmount(),
+            total,
             BigDecimal.ZERO,
             period.atDay(dueDay),
             InvoiceStatus.ISSUED,
@@ -124,9 +191,39 @@ public class Invoice {
             InvoiceType.RENT,
             null,
             null,
+            lines,
+            null,
             now,
             now
         );
+        if (rolledFees != null) {
+            rolledFees.forEach(rolled -> rolled.fee().consolidateInto(invoiceId));
+        }
+        return invoice;
+    }
+
+    /** Khoản phí sửa chữa chưa trả đồng nào và chưa được gộp: đủ điều kiện gộp vào hóa đơn tháng. */
+    public boolean isRollableFee() {
+        return type == InvoiceType.MAINTENANCE
+            && consolidatedIntoInvoiceId == null
+            && isPayable()
+            && paidAmount.signum() == 0;
+    }
+
+    /** Khoản phí được gộp vào hóa đơn tháng: từ đây chỉ thanh toán qua hóa đơn tháng. */
+    public void consolidateInto(UUID monthlyInvoiceId) {
+        if (monthlyInvoiceId == null) {
+            throw new IllegalArgumentException("Monthly invoice id is required");
+        }
+        if (!isRollableFee()) {
+            throw new DomainException("Khoản phí sửa chữa không thể gộp vào hóa đơn tháng.");
+        }
+        this.consolidatedIntoInvoiceId = monthlyInvoiceId;
+        this.updatedAt = Instant.now();
+    }
+
+    public boolean isConsolidated() {
+        return consolidatedIntoInvoiceId != null;
     }
 
     /** Số ngày người thuê có để thanh toán phí sửa chữa kể từ ngày phát hành. */
@@ -185,9 +282,9 @@ public class Invoice {
     }
 
     public boolean isPayable() {
-        return status == InvoiceStatus.ISSUED
+        return consolidatedIntoInvoiceId == null && (status == InvoiceStatus.ISSUED
             || status == InvoiceStatus.PARTIALLY_PAID
-            || status == InvoiceStatus.OVERDUE;
+            || status == InvoiceStatus.OVERDUE);
     }
 
     /**
@@ -239,6 +336,16 @@ public class Invoice {
     public String getPaymentCode() { return paymentCode; }
     public InvoiceType getType() { return type; }
     public UUID getTicketId() { return ticketId; }
+    public UUID getConsolidatedIntoInvoiceId() { return consolidatedIntoInvoiceId; }
+    public List<InvoiceItem> getItems() { return Collections.unmodifiableList(items); }
+
+    /** Dùng khi nạp từ cơ sở dữ liệu. */
+    public void loadItems(List<InvoiceItem> loaded) {
+        items.clear();
+        if (loaded != null) {
+            items.addAll(loaded);
+        }
+    }
     public Instant getPaidAt() { return paidAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

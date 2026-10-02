@@ -163,6 +163,21 @@
             <a th:href="@{/maintenance/new}" class="btn btn-primary btn-sm">+ Báo hỏng</a>
         </div>
 
+        <div class="filter-tabs" style="margin-bottom: 12px;">
+            <a th:href="@{/maintenance(tab='open')}" class="filter-tab">
+                <span>Chưa hoàn thành</span>
+                <span class="badge-count" th:text="${ticketsNotDoneCount}">0</span>
+            </a>
+            <a th:href="@{/maintenance(tab='open',status='AWAITING_PAYMENT')}" class="filter-tab">
+                <span>Chờ thanh toán</span>
+                <span class="badge-count" style="background-color: #fef3c7; color: #b45309;" th:text="${ticketsAwaitingPaymentCount}">0</span>
+            </a>
+            <a th:href="@{/maintenance(tab='done')}" class="filter-tab">
+                <span>Đã hoàn thành</span>
+                <span class="badge-count" th:text="${ticketsDoneCount}">0</span>
+            </a>
+        </div>
+
         <div th:if="${#lists.isEmpty(recentTickets)}" class="empty-state">
             <p>Chưa có yêu cầu bảo trì.</p>
         </div>

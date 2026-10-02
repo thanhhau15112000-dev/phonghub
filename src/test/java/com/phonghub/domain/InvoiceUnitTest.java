@@ -109,6 +109,56 @@ class InvoiceUnitTest {
     }
 
     @Test
+    @DisplayName("Month-end invoice itemizes rent plus unpaid repair fees; fees paid or part-paid are never rolled in")
+    void monthEndInvoiceRollsUnpaidFees() {
+        Contract contract = contract(ContractStatus.ACTIVE, 5);
+        LocalDate today = LocalDate.of(2026, 3, 10);
+        Invoice unpaid = Invoice.issueMaintenanceFee(contract, UUID.randomUUID(), new BigDecimal("200000"), "PHAAAA2222", today);
+        Invoice paid = Invoice.issueMaintenanceFee(contract, UUID.randomUUID(), new BigDecimal("100000"), "PHBBBB3333", today);
+        paid.applyPayment(new BigDecimal("100000"), Instant.now());
+        Invoice partial = Invoice.issueMaintenanceFee(contract, UUID.randomUUID(), new BigDecimal("300000"), "PHCCCC4444", today);
+        partial.applyPayment(new BigDecimal("50000"), Instant.now());
+
+        assertTrue(unpaid.isRollableFee());
+        assertFalse(paid.isRollableFee());
+        assertFalse(partial.isRollableFee());
+
+        Invoice monthly = Invoice.issueMonthlyRent(
+            contract, YearMonth.of(2026, 3), "PHDDDD5555", List.of(new Invoice.RolledFee(unpaid, "Vỡ kính")));
+
+        assertEquals(0, new BigDecimal("3700000").compareTo(monthly.getTotalAmount()));
+        assertEquals(0, new BigDecimal("3500000").compareTo(monthly.getRentAmount()));
+        assertEquals(2, monthly.getItems().size());
+        assertEquals("Tiền thuê phòng tháng 03/2026", monthly.getItems().get(0).name());
+        assertEquals("Phí sửa chữa: Vỡ kính", monthly.getItems().get(1).name());
+        assertEquals(unpaid.getId(), monthly.getItems().get(1).sourceInvoiceId());
+        assertEquals(0, new BigDecimal("200000").compareTo(monthly.getItems().get(1).totalAmount()));
+
+        // Khoản đã gộp không còn thanh toán riêng
+        assertTrue(unpaid.isConsolidated());
+        assertEquals(monthly.getId(), unpaid.getConsolidatedIntoInvoiceId());
+        assertFalse(unpaid.isPayable());
+        assertThrows(DomainException.class, () -> unpaid.applyPayment(BigDecimal.ONE, Instant.now()));
+
+        // Khoản đã trả / trả một phần không gộp được
+        assertThrows(DomainException.class, () -> Invoice.issueMonthlyRent(
+            contract, YearMonth.of(2026, 4), "PHEEEE6666", List.of(new Invoice.RolledFee(paid, "x"))));
+        assertThrows(DomainException.class, () -> Invoice.issueMonthlyRent(
+            contract, YearMonth.of(2026, 4), "PHFFFF7777", List.of(new Invoice.RolledFee(partial, "x"))));
+        // Không gộp hai lần
+        assertThrows(DomainException.class, () -> Invoice.issueMonthlyRent(
+            contract, YearMonth.of(2026, 4), "PHGGGG8888", List.of(new Invoice.RolledFee(unpaid, "x"))));
+    }
+
+    @Test
+    @DisplayName("Month invoice without fees has a single rent line")
+    void monthInvoiceWithoutFees() {
+        Invoice monthly = Invoice.issueMonthlyRent(contract(ContractStatus.ACTIVE, 5), YearMonth.of(2026, 3), "PHAAAA2222");
+        assertEquals(1, monthly.getItems().size());
+        assertEquals(0, new BigDecimal("3500000").compareTo(monthly.getTotalAmount()));
+    }
+
+    @Test
     @DisplayName("Payment code format and candidate extraction")
     void paymentCodeFormat() {
         String code = PaymentCode.generate();
