@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Thanh toán')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Thanh toán</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">
+                <span th:text="${uiText.invoiceLabel(invoice)}">Tiền thuê 10/2026</span>
+                <span th:if="${ticketTitle != null}">
+                    - <a th:href="@{'/maintenance/' + ${invoice.getTicketId()}}" th:text="${ticketTitle}" style="color: var(--accent);">Tên phiếu</a>
+                </span>
+            </p>
+        </div>
+        <div>
+            <a th:href="@{'/contracts/' + ${invoice.getContractId()} + '#payments'}" class="btn">&larr; Quay lại hợp đồng</a>
+        </div>
+    </div>
+
+    <div class="card" id="invoice-pay">
+        <div th:if="${invoice.getStatus().name() == 'PAID'}" class="empty-state">
+            <p>Khoản này đã được thanh toán đủ.</p>
+        </div>
+        <div th:if="${invoice.getStatus().name() == 'VOIDED'}" class="empty-state">
+            <p>Khoản này đã bị hủy, không cần thanh toán.</p>
+        </div>
+
+        <div th:if="${invoice.isPayable()}" style="display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start;">
+            <img th:if="${paymentQrUrl != null}" th:src="${paymentQrUrl}" alt="Mã QR chuyển khoản" width="220" height="220" style="border: 1px solid var(--border-color);">
+            <div style="flex: 1; min-width: 280px;">
+                <table class="data-table">
+                    <tbody>
+                        <tr>
+                            <td style="color: var(--text-secondary); width: 170px;">Số tiền cần chuyển:</td>
+                            <td style="font-weight: 700; font-size: 16px;" th:text="${#numbers.formatDecimal(invoice.remainingAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">250,000 đ</td>
+                        </tr>
+                        <tr th:if="${invoice.getPaidAmount().signum() > 0}">
+                            <td style="color: var(--text-secondary);">Đã thanh toán:</td>
+                            <td th:text="${#numbers.formatDecimal(invoice.getPaidAmount(), 0, 'COMMA', 0, 'POINT') + ' / ' + #numbers.formatDecimal(invoice.getTotalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 / 250,000 đ</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--text-secondary);">Hạn thanh toán:</td>
+                            <td>
+                                <span th:text="${invoice.getDueDate()}">2026-10-09</span>
+                                <span th:class="'badge badge-' + ${uiText.invoiceBadge(invoice, today)}" th:text="${uiText.invoiceState(invoice, today)}">Chưa đến hạn</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--text-secondary);">Nội dung chuyển khoản:</td>
+                            <td style="font-family: monospace; font-weight: 700; font-size: 16px;" th:text="${invoice.getPaymentCode()}">PHXXXXXXXX</td>
+                        </tr>
+                        <tr th:if="${bankConfigured}">
+                            <td style="color: var(--text-secondary);">Ngân hàng:</td>
+                            <td th:text="${bankCode}">MBBank</td>
+                        </tr>
+                        <tr th:if="${bankConfigured}">
+                            <td style="color: var(--text-secondary);">Số tài khoản:</td>
+                            <td style="font-family: monospace;" th:text="${bankAccountNumber}">0123456789</td>
+                        </tr>
+                        <tr th:if="${bankConfigured and bankAccountName != null and !#strings.isEmpty(bankAccountName)}">
+                            <td style="color: var(--text-secondary);">Chủ tài khoản:</td>
+                            <td th:text="${bankAccountName}">NGUYEN VAN B</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p style="font-size: 12px; color: var(--text-secondary); margin: 10px 0 0;">
+                    Quét mã QR hoặc chuyển khoản đúng số tiền và <strong>đúng nội dung</strong> ở trên để hệ thống tự ghi nhận thanh toán.
+                    <span th:unless="${bankConfigured}">Hệ thống chưa cấu hình tài khoản nhận tiền, vui lòng liên hệ chủ trọ để nhận số tài khoản.</span>
+                </p>
+            </div>
+        </div>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

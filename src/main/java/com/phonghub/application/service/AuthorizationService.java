@@ -252,6 +252,26 @@ public class AuthorizationService {
         ));
     }
 
+    /**
+     * Người thuê chỉ xem được phiếu bảo trì của phòng mình đang ở (hợp đồng ACTIVE, người thuê chính
+     * hoặc người ở cùng) hoặc phiếu do chính họ tạo.
+     */
+    public boolean canTenantViewTicket(CurrentUser user, UUID roomId, UUID requestedByTenantId) {
+        Optional<Tenant> tenantOpt = tenantRepositoryPort.findByUserId(user.id());
+        if (tenantOpt.isEmpty()) {
+            return false;
+        }
+        UUID tenantId = tenantOpt.get().id();
+        if (tenantId.equals(requestedByTenantId)) {
+            return true;
+        }
+        return java.util.stream.Stream.concat(
+                contractRepositoryPort.findByPrimaryTenantId(tenantId).stream(),
+                contractRepositoryPort.findByOccupantTenantId(tenantId).stream()
+            )
+            .anyMatch(c -> c.isActive() && c.getRoomId().equals(roomId));
+    }
+
     public void assertCanManageContracts(CurrentUser user, UUID propertyId) {
         assertCanManageProperty(user, propertyId);
     }

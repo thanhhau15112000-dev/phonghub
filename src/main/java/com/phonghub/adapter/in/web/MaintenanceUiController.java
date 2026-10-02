@@ -75,8 +75,16 @@ public class MaintenanceUiController {
             }
         }
 
+        java.util.Map<UUID, com.phonghub.domain.model.Invoice> feeInvoices = new java.util.HashMap<>();
+        for (MaintenanceTicket t : tickets) {
+            if (t.getStatus() == com.phonghub.domain.model.MaintenanceStatus.AWAITING_PAYMENT) {
+                invoiceUseCase.findFeeInvoiceForTicket(t.getId()).ifPresent(inv -> feeInvoices.put(t.getId(), inv));
+            }
+        }
+
         model.addAttribute("currentUser", currentUser);
         model.addAttribute("tickets", tickets);
+        model.addAttribute("feeInvoices", feeInvoices);
         return "maintenance/list";
     }
 

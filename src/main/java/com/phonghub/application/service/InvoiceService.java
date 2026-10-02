@@ -42,6 +42,15 @@ public class InvoiceService implements InvoiceUseCase {
     }
 
     @Override
+    public Invoice getInvoice(UUID invoiceId) {
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+            .orElseThrow(() -> new DomainException("Không tìm thấy hóa đơn."));
+        // getContract áp dụng quy tắc xem hợp đồng (người thuê chỉ xem hợp đồng của mình).
+        contractUseCase.getContract(invoice.getContractId());
+        return invoice;
+    }
+
+    @Override
     public Invoice issueMonthlyInvoice(UUID contractId, YearMonth period) {
         Contract contract = contractUseCase.getContract(contractId);
         authorizationService.assertCanManageContracts(currentUserPort.getCurrentUser(), contract.getPropertyId());
