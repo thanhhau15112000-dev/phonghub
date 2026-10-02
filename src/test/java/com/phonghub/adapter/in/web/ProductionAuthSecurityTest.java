@@ -90,6 +90,9 @@ class ProductionAuthSecurityTest {
     @MockitoBean
     private UserUseCase userUseCase;
 
+    @MockitoBean
+    private com.phonghub.application.port.in.SepayWebhookUseCase sepayWebhookUseCase;
+
     @Test
     void healthEndpointIsPermittedWithoutAuthenticationInProd() throws Exception {
         mockMvc.perform(get("/health"))
@@ -1091,6 +1094,27 @@ class ProductionAuthSecurityTest {
             .andExpect(redirectedUrl("/login"));
 
         assertTrue(session.isInvalid(), "Session must be invalidated immediately when user is deleted");
+    }
+
+    @Test
+    void sepayWebhookEndpointIsPermittedWithoutJwtTokenInProd() throws Exception {
+        when(sepayWebhookUseCase.processWebhook(any(), any()))
+            .thenReturn(new com.phonghub.application.port.in.SepayWebhookUseCase.WebhookProcessResult(true, "OK", null));
+
+        String payload = """
+            {
+              "id": 88001,
+              "gateway": "MBBank",
+              "accountNumber": "0389999999",
+              "transferType": "in",
+              "transferAmount": 1000000
+            }
+            """;
+        mockMvc.perform(post("/api/v1/payments/sepay/webhook")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payload))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true));
     }
 
     private MockHttpSession loginAsAdmin() throws Exception {

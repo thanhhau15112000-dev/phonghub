@@ -1,10 +1,13 @@
 package com.phonghub.adapter.in.web;
 
 import com.phonghub.domain.model.ContractStatus;
+import com.phonghub.domain.model.Invoice;
+import com.phonghub.domain.model.InvoiceStatus;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.UserRole;
+import java.time.LocalDate;
 
 /**
  * Nhãn tiếng Việt dành riêng cho giao diện web.
@@ -62,6 +65,37 @@ public final class UiText {
             case EXPIRED -> "Đã hết hạn";
             case TERMINATED -> "Đã chấm dứt";
         };
+    }
+
+    public String invoiceState(Invoice invoice, LocalDate today) {
+        if (invoice == null) {
+            return "Chưa xác định";
+        }
+        return switch (invoice.getStatus()) {
+            case PAID -> "Đã thanh toán";
+            case VOIDED -> "Đã hủy";
+            case DRAFT -> "Bản nháp";
+            case ISSUED, PARTIALLY_PAID, OVERDUE -> {
+                String state = invoice.isOverdue(today) ? "Quá hạn"
+                    : invoice.isDue(today) ? "Đến hạn"
+                    : "Chưa đến hạn";
+                yield invoice.getStatus() == InvoiceStatus.PARTIALLY_PAID ? state + " (đã trả một phần)" : state;
+            }
+        };
+    }
+
+    /** Hậu tố class badge-* có sẵn trong style.css, tái sử dụng màu theo mức độ. */
+    public String invoiceBadge(Invoice invoice, LocalDate today) {
+        if (invoice == null || invoice.getStatus() == InvoiceStatus.VOIDED || invoice.getStatus() == InvoiceStatus.DRAFT) {
+            return "DRAFT";
+        }
+        if (invoice.getStatus() == InvoiceStatus.PAID) {
+            return "ACTIVE";
+        }
+        if (invoice.isOverdue(today)) {
+            return "REJECTED";
+        }
+        return invoice.isDue(today) ? "PENDING" : "DRAFT";
     }
 
     public String maintenancePriority(MaintenancePriority priority) {

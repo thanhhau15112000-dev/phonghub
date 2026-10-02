@@ -34,8 +34,81 @@
         </div>
     </div>
 
-    <!-- Bảng nhà trọ -->
-    <div class="card">
+    <!-- Người thuê: kỳ thanh toán và nơi ở -->
+    <div th:if="${currentUser != null and currentUser.role().name() == 'TENANT'}">
+        <div class="card" id="rent-payment">
+            <div class="flex-between" style="margin-bottom: 12px;">
+                <h2>Thanh toán tiền thuê</h2>
+                <a th:if="${tenantContract != null}" th:href="@{'/contracts/' + ${tenantContract.getId()} + '#payments'}" class="btn btn-sm btn-secondary">Lịch sử và hướng dẫn chuyển khoản</a>
+            </div>
+
+            <div th:if="${tenantContract == null}" class="empty-state">
+                <p>Bạn chưa có hợp đồng đang hiệu lực.</p>
+            </div>
+
+            <div th:if="${tenantContract != null and nextInvoice == null}" class="empty-state">
+                <p>Hiện không có khoản nào cần thanh toán.</p>
+            </div>
+
+            <div th:if="${nextInvoice != null}">
+                <p th:if="${overdueInvoiceCount > 0}" style="color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;"
+                   th:text="'Có ' + ${overdueInvoiceCount} + ' kỳ đã quá hạn. Hiển thị kỳ cũ nhất còn nợ.'">Có kỳ quá hạn.</p>
+                <table class="data-table">
+                    <tbody>
+                        <tr>
+                            <td style="color: var(--text-secondary); width: 180px;">Kỳ thanh toán:</td>
+                            <td th:text="${#numbers.formatInteger(nextInvoice.getMonth(), 2) + '/' + nextInvoice.getYear()}">10/2026</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--text-secondary);">Số tiền cần chuyển:</td>
+                            <td style="font-weight: 600;" th:text="${#numbers.formatDecimal(nextInvoice.remainingAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--text-secondary);">Hạn thanh toán:</td>
+                            <td>
+                                <span th:text="${nextInvoice.getDueDate()}">2026-10-05</span>
+                                <span th:class="'badge badge-' + ${uiText.invoiceBadge(nextInvoice, today)}" th:text="${uiText.invoiceState(nextInvoice, today)}">Đến hạn</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="color: var(--text-secondary);">Nội dung chuyển khoản:</td>
+                            <td style="font-family: monospace; font-weight: 700;" th:text="${nextInvoice.getPaymentCode()}">PHXXXXXXXX</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom: 12px;">Nơi ở của tôi</h2>
+            <div th:if="${tenantProperty == null}" class="empty-state">
+                <p>Tài khoản hiện tại chưa gắn với phòng nào.</p>
+            </div>
+            <table th:if="${tenantProperty != null}" class="data-table">
+                <tbody>
+                    <tr>
+                        <td style="color: var(--text-secondary); width: 180px;">Nhà trọ:</td>
+                        <td th:text="${tenantProperty.name()}" style="font-weight: 600;">Nhà trọ</td>
+                    </tr>
+                    <tr>
+                        <td style="color: var(--text-secondary);">Địa chỉ:</td>
+                        <td th:text="${tenantProperty.address()}">Địa chỉ</td>
+                    </tr>
+                    <tr th:if="${tenantRoom != null}">
+                        <td style="color: var(--text-secondary);">Phòng:</td>
+                        <td th:text="${tenantRoom.getRoomNumber()}">P101</td>
+                    </tr>
+                    <tr th:if="${tenantContract != null}">
+                        <td style="color: var(--text-secondary);">Hợp đồng:</td>
+                        <td><a th:href="@{'/contracts/' + ${tenantContract.getId()}}" style="color: var(--accent);">Xem hợp đồng</a></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Bảng nhà trọ (không dành cho người thuê) -->
+    <div class="card" th:unless="${currentUser != null and currentUser.role().name() == 'TENANT'}">
         <div class="flex-between" style="margin-bottom: 12px;">
             <h2>Nhà trọ trong phạm vi</h2>
             <a th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" th:href="@{/properties}" class="btn btn-primary btn-sm">+ Thêm nhà trọ</a>

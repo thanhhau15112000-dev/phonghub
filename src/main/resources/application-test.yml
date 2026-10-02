@@ -1,3 +1,5 @@
 phonghub:
   demo:
     enabled: true
+  sepay:
+    allow-unsigned-webhook: true
