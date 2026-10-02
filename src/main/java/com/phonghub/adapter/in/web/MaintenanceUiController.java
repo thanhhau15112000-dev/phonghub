@@ -1,17 +1,21 @@
 package com.phonghub.adapter.in.web;
 
+import com.phonghub.application.port.in.InvoiceUseCase;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.model.LiableParty;
+import com.phonghub.domain.model.MaintenanceCause;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -32,13 +36,16 @@ public class MaintenanceUiController {
     private final PropertyUseCase propertyUseCase;
     private final RoomUseCase roomUseCase;
     private final CurrentUserPort currentUserPort;
+    private final InvoiceUseCase invoiceUseCase;
 
     public MaintenanceUiController(
         MaintenanceUseCase maintenanceUseCase,
         PropertyUseCase propertyUseCase,
         RoomUseCase roomUseCase,
-        CurrentUserPort currentUserPort
+        CurrentUserPort currentUserPort,
+        InvoiceUseCase invoiceUseCase
     ) {
+        this.invoiceUseCase = invoiceUseCase;
         this.maintenanceUseCase = maintenanceUseCase;
         this.propertyUseCase = propertyUseCase;
         this.roomUseCase = roomUseCase;
@@ -89,6 +96,7 @@ public class MaintenanceUiController {
         model.addAttribute("rooms", rooms);
         model.addAttribute("selectedRoomId", roomId);
         model.addAttribute("priorities", MaintenancePriority.values());
+        model.addAttribute("causes", MaintenanceCause.values());
 
         return "maintenance/new";
     }
@@ -100,11 +108,20 @@ public class MaintenanceUiController {
         @RequestParam String description,
         @RequestParam(defaultValue = "MEDIUM") MaintenancePriority priority,
         @RequestParam(name = "setRoomMaintenance", defaultValue = "true") boolean setRoomMaintenance,
+        @RequestParam(required = false) MaintenanceCause cause,
+        @RequestParam(required = false) String causeDetail,
         RedirectAttributes redirectAttributes
     ) {
+        if (cause == null && currentUserPort.getCurrentUser().role() == UserRole.TENANT) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Vui lòng chọn nguyên nhân sự cố.");
+            return "redirect:/maintenance/new?roomId=" + roomId;
+        }
+        String fullDescription = causeDetail != null && !causeDetail.isBlank()
+            ? "[" + causeDetail.trim() + "] " + description
+            : description;
         try {
             MaintenanceTicket ticket = maintenanceUseCase.createTicket(new MaintenanceUseCase.CreateMaintenanceTicketCommand(
-                roomId, title, description, priority, setRoomMaintenance
+                roomId, title, fullDescription, priority, setRoomMaintenance, cause
             ));
             redirectAttributes.addFlashAttribute("successMessage", "Đã tạo yêu cầu bảo trì '" + ticket.getTitle() + "'.");
             return "redirect:/maintenance/" + ticket.getId();
@@ -126,6 +143,9 @@ public class MaintenanceUiController {
             model.addAttribute("ticket", ticket);
             model.addAttribute("room", room);
             model.addAttribute("property", property);
+            model.addAttribute("liableParties", LiableParty.values());
+            model.addAttribute("today", LocalDate.now());
+            model.addAttribute("feeInvoice", invoiceUseCase.findFeeInvoiceForTicket(id).orElse(null));
 
             return "maintenance/detail";
         } catch (DomainException ex) {
@@ -145,21 +165,40 @@ public class MaintenanceUiController {
         return "redirect:/maintenance/" + id;
     }
 
+    @PostMapping("/{id}/waive-fee")
+    public String waiveFee(
+        @PathVariable UUID id,
+        @RequestParam String reason,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            maintenanceUseCase.waiveRepairFee(id, reason);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã miễn khoản phí sửa chữa. Chủ trọ chịu chi phí.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/maintenance/" + id;
+    }
+
     @PostMapping("/{id}/resolve")
     public String resolveTicket(
         @PathVariable UUID id,
         @RequestParam String resolutionNotes,
         @RequestParam(defaultValue = "0") BigDecimal repairCost,
         @RequestParam(name = "releaseRoomToAvailable", defaultValue = "true") boolean releaseRoomToAvailable,
+        @RequestParam(required = false) LiableParty liableParty,
         RedirectAttributes redirectAttributes
     ) {
         try {
-            maintenanceUseCase.resolveTicket(new MaintenanceUseCase.ResolveMaintenanceTicketCommand(
-                id, resolutionNotes, repairCost, releaseRoomToAvailable
+            MaintenanceTicket resolved = maintenanceUseCase.resolveTicket(new MaintenanceUseCase.ResolveMaintenanceTicketCommand(
+                id, resolutionNotes, repairCost, releaseRoomToAvailable, liableParty
             ));
+            String message = resolved.getStatus() == com.phonghub.domain.model.MaintenanceStatus.AWAITING_PAYMENT
+                ? "Đã ghi nhận chi phí sửa chữa. Phiếu chuyển sang chờ người thuê thanh toán."
+                : "Đã hoàn tất xử lý yêu cầu.";
             redirectAttributes.addFlashAttribute(
                 "successMessage",
-                "Đã hoàn tất xử lý yêu cầu." + (releaseRoomToAvailable ? " Phòng đã được chuyển về trạng thái trống." : "")
+                message + (releaseRoomToAvailable ? " Phòng đã được chuyển về trạng thái trống." : "")
             );
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());

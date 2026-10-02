@@ -3,6 +3,7 @@ package com.phonghub.adapter.out.persistence.postgres;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.InvoiceStatus;
+import com.phonghub.domain.model.InvoiceType;
 import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -18,7 +19,7 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
 
     private static final String COLUMNS = """
         id, contract_id, room_id, tenant_id, month, year, rent_amount, total_amount,
-        paid_amount, due_date, status, payment_code, paid_at, created_at, updated_at
+        paid_amount, due_date, status, payment_code, invoice_type, ticket_id, paid_at, created_at, updated_at
         """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -29,6 +30,7 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
 
     private Invoice mapRow(ResultSet rs, int rowNum) throws SQLException {
         Timestamp paidAt = rs.getTimestamp("paid_at");
+        String ticketIdStr = rs.getString("ticket_id");
         return new Invoice(
             UUID.fromString(rs.getString("id")),
             UUID.fromString(rs.getString("contract_id")),
@@ -42,6 +44,8 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
             rs.getDate("due_date").toLocalDate(),
             InvoiceStatus.valueOf(rs.getString("status")),
             rs.getString("payment_code"),
+            InvoiceType.valueOf(rs.getString("invoice_type")),
+            ticketIdStr != null ? UUID.fromString(ticketIdStr) : null,
             paidAt != null ? paidAt.toInstant() : null,
             rs.getTimestamp("created_at").toInstant(),
             rs.getTimestamp("updated_at").toInstant()
@@ -53,12 +57,12 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
         String sql = """
             INSERT INTO invoices (
                 id, contract_id, room_id, tenant_id, month, year, rent_amount, utility_amount,
-                other_amount, total_amount, paid_amount, due_date, status, payment_code, paid_at,
-                created_at, updated_at
+                other_amount, total_amount, paid_amount, due_date, status, payment_code,
+                invoice_type, ticket_id, paid_at, created_at, updated_at
             ) VALUES (
                 :id, :contractId, :roomId, :tenantId, :month, :year, :rentAmount, 0,
-                0, :totalAmount, :paidAmount, :dueDate, :status, :paymentCode, :paidAt,
-                :createdAt, :updatedAt
+                :otherAmount, :totalAmount, :paidAmount, :dueDate, :status, :paymentCode,
+                :invoiceType, :ticketId, :paidAt, :createdAt, :updatedAt
             )
             ON CONFLICT (id) DO UPDATE SET
                 paid_amount = EXCLUDED.paid_amount,
@@ -75,7 +79,10 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
             .addValue("month", invoice.getMonth())
             .addValue("year", invoice.getYear())
             .addValue("rentAmount", invoice.getRentAmount())
+            .addValue("otherAmount", invoice.getTotalAmount().subtract(invoice.getRentAmount()))
             .addValue("totalAmount", invoice.getTotalAmount())
+            .addValue("invoiceType", invoice.getType().name())
+            .addValue("ticketId", invoice.getTicketId())
             .addValue("paidAmount", invoice.getPaidAmount())
             .addValue("dueDate", Date.valueOf(invoice.getDueDate()))
             .addValue("status", invoice.getStatus().name())
@@ -101,10 +108,17 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
     }
 
     @Override
-    public Optional<Invoice> findActiveByContractIdAndPeriod(UUID contractId, int year, int month) {
+    public Optional<Invoice> findActiveByTicketId(UUID ticketId) {
+        String sql = "SELECT " + COLUMNS + " FROM invoices WHERE ticket_id = :ticketId AND status <> 'VOIDED'";
+        return jdbcTemplate.query(sql, Map.of("ticketId", ticketId), this::mapRow).stream().findFirst();
+    }
+
+    @Override
+    public Optional<Invoice> findActiveRentByContractIdAndPeriod(UUID contractId, int year, int month) {
         String sql = "SELECT " + COLUMNS + """
              FROM invoices
-            WHERE contract_id = :contractId AND year = :year AND month = :month AND status <> 'VOIDED'
+            WHERE contract_id = :contractId AND year = :year AND month = :month
+              AND invoice_type = 'RENT' AND status <> 'VOIDED'
             """;
         return jdbcTemplate.query(
             sql, Map.of("contractId", contractId, "year", year, "month", month), this::mapRow

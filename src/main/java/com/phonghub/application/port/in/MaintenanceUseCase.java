@@ -1,5 +1,7 @@
 package com.phonghub.application.port.in;
 
+import com.phonghub.domain.model.LiableParty;
+import com.phonghub.domain.model.MaintenanceCause;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceTicket;
 import java.math.BigDecimal;
@@ -10,6 +12,8 @@ public interface MaintenanceUseCase {
     MaintenanceTicket createTicket(CreateMaintenanceTicketCommand command);
     MaintenanceTicket acceptTicket(UUID ticketId);
     MaintenanceTicket resolveTicket(ResolveMaintenanceTicketCommand command);
+    /** Quản lý miễn khoản phí đang chờ thanh toán: hủy hóa đơn, chủ trọ chịu phí, phiếu hoàn tất. */
+    MaintenanceTicket waiveRepairFee(UUID ticketId, String reason);
     MaintenanceTicket getTicket(UUID ticketId);
     List<MaintenanceTicket> listTicketsForProperty(UUID propertyId);
     List<MaintenanceTicket> listAssignedTicketsForTechnician(UUID technicianId);
@@ -20,8 +24,15 @@ public interface MaintenanceUseCase {
         String title,
         String description,
         MaintenancePriority priority,
-        boolean setRoomMaintenance
+        boolean setRoomMaintenance,
+        MaintenanceCause cause
     ) {
+        public CreateMaintenanceTicketCommand(
+            UUID roomId, String title, String description, MaintenancePriority priority, boolean setRoomMaintenance
+        ) {
+            this(roomId, title, description, priority, setRoomMaintenance, null);
+        }
+
         public CreateMaintenanceTicketCommand {
             if (roomId == null) {
                 throw new IllegalArgumentException("Room id cannot be null");
@@ -42,8 +53,15 @@ public interface MaintenanceUseCase {
         UUID ticketId,
         String resolutionNotes,
         BigDecimal repairCost,
-        boolean releaseRoomToAvailable
+        boolean releaseRoomToAvailable,
+        LiableParty liableParty
     ) {
+        public ResolveMaintenanceTicketCommand(
+            UUID ticketId, String resolutionNotes, BigDecimal repairCost, boolean releaseRoomToAvailable
+        ) {
+            this(ticketId, resolutionNotes, repairCost, releaseRoomToAvailable, null);
+        }
+
         public ResolveMaintenanceTicketCommand {
             if (ticketId == null) {
                 throw new IllegalArgumentException("Ticket id cannot be null");

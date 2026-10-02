@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPaymentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
@@ -46,6 +47,7 @@ class SepayPaymentServiceUnitTest {
 
     private InMemoryPaymentRepository paymentRepo;
     private InMemoryInvoiceRepository invoiceRepo;
+    private InMemoryMaintenanceTicketRepository ticketRepo;
     private InMemoryContractRepository contractRepo;
     private InMemoryPropertyRepository propertyRepo;
     private InMemoryNotificationRepository notifRepo;
@@ -58,6 +60,7 @@ class SepayPaymentServiceUnitTest {
     void setUp() {
         paymentRepo = new InMemoryPaymentRepository();
         invoiceRepo = new InMemoryInvoiceRepository();
+        ticketRepo = new InMemoryMaintenanceTicketRepository();
         contractRepo = new InMemoryContractRepository();
         propertyRepo = new InMemoryPropertyRepository();
         notifRepo = new InMemoryNotificationRepository();
@@ -77,6 +80,7 @@ class SepayPaymentServiceUnitTest {
         service = new SepayPaymentService(
             paymentRepo,
             invoiceRepo,
+            ticketRepo,
             contractRepo,
             propertyRepo,
             notifRepo,

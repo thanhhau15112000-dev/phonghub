@@ -25,6 +25,8 @@ public class Invoice {
     private final LocalDate dueDate;
     private InvoiceStatus status;
     private final String paymentCode;
+    private final InvoiceType type;
+    private final UUID ticketId;
     private Instant paidAt;
     private final Instant createdAt;
     private Instant updatedAt;
@@ -42,6 +44,8 @@ public class Invoice {
         LocalDate dueDate,
         InvoiceStatus status,
         String paymentCode,
+        InvoiceType type,
+        UUID ticketId,
         Instant paidAt,
         Instant createdAt,
         Instant updatedAt
@@ -70,6 +74,11 @@ public class Invoice {
         this.dueDate = dueDate;
         this.status = status != null ? status : InvoiceStatus.ISSUED;
         this.paymentCode = paymentCode;
+        this.type = type != null ? type : InvoiceType.RENT;
+        this.ticketId = ticketId;
+        if (this.type == InvoiceType.MAINTENANCE && ticketId == null) {
+            throw new IllegalArgumentException("Maintenance invoice requires a ticket id");
+        }
         this.paidAt = paidAt;
         this.createdAt = createdAt != null ? createdAt : Instant.now();
         this.updatedAt = updatedAt != null ? updatedAt : this.createdAt;
@@ -112,10 +121,67 @@ public class Invoice {
             period.atDay(dueDay),
             InvoiceStatus.ISSUED,
             paymentCode,
+            InvoiceType.RENT,
+            null,
             null,
             now,
             now
         );
+    }
+
+    /** Số ngày người thuê có để thanh toán phí sửa chữa kể từ ngày phát hành. */
+    public static final int MAINTENANCE_FEE_DUE_DAYS = 7;
+
+    /**
+     * Khoản phí sửa chữa người thuê phải trả cho một phiếu bảo trì, gắn với hợp đồng ACTIVE của phòng.
+     */
+    public static Invoice issueMaintenanceFee(
+        Contract contract, UUID ticketId, BigDecimal amount, String paymentCode, LocalDate today
+    ) {
+        if (contract == null || ticketId == null || today == null) {
+            throw new IllegalArgumentException("Contract, ticket and date are required");
+        }
+        if (!contract.isActive()) {
+            throw new DomainException("Chỉ có thể tạo khoản phí cho hợp đồng đang hiệu lực.");
+        }
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("Fee amount must be greater than zero");
+        }
+        if (paymentCode == null || paymentCode.isBlank()) {
+            throw new IllegalArgumentException("Payment code is required");
+        }
+        Instant now = Instant.now();
+        return new Invoice(
+            UUID.randomUUID(),
+            contract.getId(),
+            contract.getRoomId(),
+            contract.getPrimaryTenantId(),
+            today.getMonthValue(),
+            today.getYear(),
+            BigDecimal.ZERO,
+            amount,
+            BigDecimal.ZERO,
+            today.plusDays(MAINTENANCE_FEE_DUE_DAYS),
+            InvoiceStatus.ISSUED,
+            paymentCode,
+            InvoiceType.MAINTENANCE,
+            ticketId,
+            null,
+            now,
+            now
+        );
+    }
+
+    /** Hủy hóa đơn chưa có tiền nào được ghi nhận. */
+    public void voidInvoice() {
+        if (!isPayable() && status != InvoiceStatus.DRAFT) {
+            throw new DomainException("Không thể hủy hóa đơn ở trạng thái " + status);
+        }
+        if (paidAmount.signum() > 0) {
+            throw new DomainException("Hóa đơn đã được thanh toán một phần, không thể hủy.");
+        }
+        this.status = InvoiceStatus.VOIDED;
+        this.updatedAt = Instant.now();
     }
 
     public boolean isPayable() {
@@ -171,6 +237,8 @@ public class Invoice {
     public LocalDate getDueDate() { return dueDate; }
     public InvoiceStatus getStatus() { return status; }
     public String getPaymentCode() { return paymentCode; }
+    public InvoiceType getType() { return type; }
+    public UUID getTicketId() { return ticketId; }
     public Instant getPaidAt() { return paidAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

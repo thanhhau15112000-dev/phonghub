@@ -4,6 +4,7 @@ import com.phonghub.application.port.in.SepayWebhookUseCase;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
+import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.NotificationRepositoryPort;
 import com.phonghub.application.port.out.PaymentRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
@@ -12,6 +13,9 @@ import com.phonghub.config.SepayProperties;
 import com.phonghub.domain.exception.UnauthorizedWebhookException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
+import com.phonghub.domain.model.InvoiceStatus;
+import com.phonghub.domain.model.InvoiceType;
+import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.Notification;
 import com.phonghub.domain.model.PaymentCode;
 import com.phonghub.domain.model.PaymentStatus;
@@ -41,6 +45,7 @@ public class SepayPaymentService implements SepayWebhookUseCase {
 
     private final PaymentRepositoryPort paymentRepository;
     private final InvoiceRepositoryPort invoiceRepository;
+    private final MaintenanceTicketRepositoryPort ticketRepository;
     private final ContractRepositoryPort contractRepository;
     private final PropertyRepositoryPort propertyRepository;
     private final NotificationRepositoryPort notificationRepository;
@@ -52,6 +57,7 @@ public class SepayPaymentService implements SepayWebhookUseCase {
     public SepayPaymentService(
         PaymentRepositoryPort paymentRepository,
         InvoiceRepositoryPort invoiceRepository,
+        MaintenanceTicketRepositoryPort ticketRepository,
         ContractRepositoryPort contractRepository,
         PropertyRepositoryPort propertyRepository,
         NotificationRepositoryPort notificationRepository,
@@ -62,6 +68,7 @@ public class SepayPaymentService implements SepayWebhookUseCase {
     ) {
         this.paymentRepository = paymentRepository;
         this.invoiceRepository = invoiceRepository;
+        this.ticketRepository = ticketRepository;
         this.contractRepository = contractRepository;
         this.propertyRepository = propertyRepository;
         this.notificationRepository = notificationRepository;
@@ -132,6 +139,7 @@ public class SepayPaymentService implements SepayWebhookUseCase {
         if (invoice != null && invoice.isPayable() && tx.transferAmount().signum() > 0) {
             invoice.applyPayment(tx.transferAmount(), tx.createdAt());
             invoiceRepository.save(invoice);
+            completeMaintenanceTicketIfPaid(invoice);
         }
 
         // 6. Gửi thông báo đến người quản lý nếu là tiền vào thành công
@@ -184,6 +192,21 @@ public class SepayPaymentService implements SepayWebhookUseCase {
 
     private static boolean constantTimeEquals(String a, String b) {
         return MessageDigest.isEqual(a.getBytes(StandardCharsets.UTF_8), b.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** Hóa đơn phí sửa chữa đã trả đủ: phiếu bảo trì đang chờ thanh toán chuyển sang hoàn tất. */
+    private void completeMaintenanceTicketIfPaid(Invoice invoice) {
+        if (invoice.getType() != InvoiceType.MAINTENANCE
+            || invoice.getTicketId() == null
+            || invoice.getStatus() != InvoiceStatus.PAID) {
+            return;
+        }
+        ticketRepository.findById(invoice.getTicketId())
+            .filter(ticket -> ticket.getStatus() == MaintenanceStatus.AWAITING_PAYMENT)
+            .ifPresent(ticket -> {
+                ticket.markFeePaid();
+                ticketRepository.save(ticket);
+            });
     }
 
     private Invoice matchInvoice(String code, String content) {
@@ -259,10 +282,12 @@ public class SepayPaymentService implements SepayWebhookUseCase {
             amount, gateway, acc, content
         );
         if (invoice != null) {
+            String label = invoice.getType() == InvoiceType.MAINTENANCE
+                ? "Phí sửa chữa"
+                : String.format("Kỳ %02d/%d", invoice.getMonth(), invoice.getYear());
             message += String.format(
-                ". Kỳ %02d/%d (mã %s): đã thu %,.0f / %,.0f đ.",
-                invoice.getMonth(), invoice.getYear(), invoice.getPaymentCode(),
-                invoice.getPaidAmount(), invoice.getTotalAmount()
+                ". %s (mã %s): đã thu %,.0f / %,.0f đ.",
+                label, invoice.getPaymentCode(), invoice.getPaidAmount(), invoice.getTotalAmount()
             );
         }
 

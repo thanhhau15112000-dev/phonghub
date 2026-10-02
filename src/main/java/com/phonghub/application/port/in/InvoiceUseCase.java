@@ -10,6 +10,9 @@ public interface InvoiceUseCase {
     /** Danh sách kỳ thanh toán, mới nhất trước. Quyền xem theo quyền xem hợp đồng. */
     List<Invoice> listInvoicesForContract(UUID contractId);
 
+    /** Khoản phí sửa chữa của phiếu bảo trì; rỗng nếu chưa có hoặc người gọi không được xem hợp đồng liên quan. */
+    java.util.Optional<Invoice> findFeeInvoiceForTicket(UUID ticketId);
+
     /** ADMIN / STAFF được phân công / OWNER của nhà trọ phát hành kỳ thanh toán tiền thuê. */
     Invoice issueMonthlyInvoice(UUID contractId, YearMonth period);
 }

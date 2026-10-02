@@ -33,6 +33,12 @@ public class TransactionalMaintenanceUseCase implements MaintenanceUseCase {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket waiveRepairFee(UUID ticketId, String reason) {
+        return delegate.waiveRepairFee(ticketId, reason);
+    }
+
+    @Override
     public MaintenanceTicket getTicket(UUID ticketId) {
         return delegate.getTicket(ticketId);
     }

@@ -263,6 +263,7 @@ h2 {
 
 .badge-RESERVED,
 .badge-REPORTED,
+.badge-AWAITING_PAYMENT,
 .badge-PENDING {
   background-color: #fffbeb;
   color: #b45309;
@@ -270,6 +271,7 @@ h2 {
 }
 .badge-RESERVED::before,
 .badge-REPORTED::before,
+.badge-AWAITING_PAYMENT::before,
 .badge-PENDING::before {
   background-color: #f59e0b;
 }
