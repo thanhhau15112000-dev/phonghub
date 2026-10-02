@@ -146,6 +146,40 @@ class RentPaymentFlowIntegrationTest {
     }
 
     @Test
+    @DisplayName("Tenant dashboard shows the next unpaid invoice, own residence, and hides other rooms' tickets and manager table")
+    void tenantDashboardShowsInvoice() throws Exception {
+        mockMvc.perform(get("/dashboard").header("X-User-Id", TENANT))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Nơi ở của tôi")))
+            .andExpect(content().string(containsString("Hiện không có khoản nào cần thanh toán")))
+            .andExpect(content().string(not(containsString("Nhà trọ trong phạm vi"))))
+            .andExpect(content().string(not(containsString("Sửa vòi nước và kiểm tra máy lạnh"))));
+
+        mockMvc.perform(post(CONTRACT_URL + "/invoices")
+                .header("X-User-Id", ADMIN)
+                .param("period", YearMonth.now().toString()))
+            .andExpect(redirectedUrl(CONTRACT_URL));
+        String code = invoiceRepository.findByContractId(DataSeeder.CONTRACT_1_ID).get(0).getPaymentCode();
+
+        mockMvc.perform(get("/dashboard").header("X-User-Id", TENANT))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Thanh toán tiền thuê")))
+            .andExpect(content().string(containsString(code)))
+            .andExpect(content().string(containsString("3,500,000 đ")))
+            .andExpect(content().string(containsString("#payments")));
+    }
+
+    @Test
+    @DisplayName("Admin dashboard keeps the property table and does not show tenant payment card")
+    void adminDashboardUnchanged() throws Exception {
+        mockMvc.perform(get("/dashboard").header("X-User-Id", ADMIN))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Nhà trọ trong phạm vi")))
+            .andExpect(content().string(not(containsString("Nơi ở của tôi"))))
+            .andExpect(content().string(containsString("Sửa vòi nước và kiểm tra máy lạnh")));
+    }
+
+    @Test
     @DisplayName("Raw SePay transaction listing is forbidden for tenants")
     void tenantCannotListTransactions() throws Exception {
         mockMvc.perform(get("/api/v1/payments/transactions").header("X-User-Id", TENANT))
