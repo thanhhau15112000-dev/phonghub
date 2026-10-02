@@ -16,6 +16,12 @@ public class SepayProperties {
      */
     private boolean allowUnsignedWebhook;
 
+    /**
+     * Chỉ bật cho môi trường demo/thử nghiệm: hiện nút "Mô phỏng chuyển khoản" trên trang thanh toán, ghi nhận
+     * giao dịch giả cho hóa đơn mà không có tiền thật. TUYỆT ĐỐI không bật khi nhận tiền thật.
+     */
+    private boolean simulationEnabled;
+
     /** Mã ngân hàng theo SePay QR (ví dụ: MBBank, Vietcombank). */
     private String bankCode;
 
@@ -31,6 +37,14 @@ public class SepayProperties {
 
     public void setWebhookApiKey(String webhookApiKey) {
         this.webhookApiKey = webhookApiKey;
+    }
+
+    public boolean isSimulationEnabled() {
+        return simulationEnabled;
+    }
+
+    public void setSimulationEnabled(boolean simulationEnabled) {
+        this.simulationEnabled = simulationEnabled;
     }
 
     public boolean isAllowUnsignedWebhook() {

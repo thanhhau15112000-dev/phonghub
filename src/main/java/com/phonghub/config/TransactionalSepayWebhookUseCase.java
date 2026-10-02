@@ -22,6 +22,12 @@ public class TransactionalSepayWebhookUseCase implements SepayWebhookUseCase {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public WebhookProcessResult simulateTransfer(UUID invoiceId) {
+        return delegate.simulateTransfer(invoiceId);
+    }
+
+    @Override
     public List<PaymentTransaction> getAllTransactions() {
         return delegate.getAllTransactions();
     }

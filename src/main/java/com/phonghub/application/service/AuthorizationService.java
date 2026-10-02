@@ -272,6 +272,23 @@ public class AuthorizationService {
             .anyMatch(c -> c.isActive() && c.getRoomId().equals(roomId));
     }
 
+    /** Xem hóa đơn: người thuê của hợp đồng (chính hoặc ở cùng), hoặc người có quyền với nhà trọ. */
+    public void assertCanViewInvoice(CurrentUser user, com.phonghub.domain.model.Invoice invoice) {
+        Contract contract = contractRepositoryPort.findById(invoice.getContractId())
+            .orElseThrow(() -> new UnauthorizedPropertyAccessException("Contract not found: " + invoice.getContractId()));
+        if (user.role() == UserRole.TENANT) {
+            Optional<Tenant> tenantOpt = tenantRepositoryPort.findByUserId(user.id());
+            boolean allowed = tenantOpt.isPresent() && (
+                contract.getPrimaryTenantId().equals(tenantOpt.get().id())
+                    || contract.getOccupants().stream().anyMatch(o -> o.tenantId().equals(tenantOpt.get().id())));
+            if (!allowed) {
+                throw new UnauthorizedPropertyAccessException("Tenant can only view their own invoice");
+            }
+            return;
+        }
+        assertCanAccessProperty(user, contract.getPropertyId());
+    }
+
     public void assertCanManageContracts(CurrentUser user, UUID propertyId) {
         assertCanManageProperty(user, propertyId);
     }

@@ -36,3 +36,6 @@ services:
         sync: false
       - key: SEPAY_BANK_ACCOUNT_NAME
         sync: false
+      # Chỉ đặt "true" cho môi trường demo/test mode SePay: hiện nút mô phỏng chuyển khoản, KHÔNG có tiền thật
+      - key: SEPAY_SIMULATION_ENABLED
+        value: "false"
