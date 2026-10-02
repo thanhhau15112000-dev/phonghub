@@ -30,6 +30,8 @@ management:
 phonghub:
   demo:
     enabled: false
+  invoicing:
+    auto-generate: true
   sepay:
     webhook-api-key: ${SEPAY_WEBHOOK_API_KEY:}
     allow-unsigned-webhook: false
