@@ -85,6 +85,13 @@ public class PostgresTenantRepository implements TenantRepositoryPort {
     }
 
     @Override
+    public Optional<Tenant> findByIdForUpdate(UUID id) {
+        List<Tenant> tenants = jdbcTemplate.query(
+            "SELECT * FROM tenants WHERE id = :id FOR UPDATE", Map.of("id", id), ROW_MAPPER);
+        return tenants.stream().findFirst();
+    }
+
+    @Override
     public Optional<Tenant> findByIdentityCardNumber(String idCard) {
         if (idCard == null) return Optional.empty();
         String sql = "SELECT * FROM tenants WHERE LOWER(identity_card_number) = LOWER(:idCard)";

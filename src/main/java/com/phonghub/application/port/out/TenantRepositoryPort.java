@@ -8,6 +8,10 @@ import java.util.UUID;
 public interface TenantRepositoryPort {
     Tenant save(Tenant tenant);
     Optional<Tenant> findById(UUID id);
+    /** Serialize residency changes for an existing tenant within the caller's transaction. */
+    default Optional<Tenant> findByIdForUpdate(UUID id) {
+        return findById(id);
+    }
     Optional<Tenant> findByUserId(UUID userId);
     Optional<Tenant> findByIdentityCardNumber(String idCard);
     List<Tenant> findAll();

@@ -133,6 +133,69 @@ class ContractServiceInvariantsUnitTest {
         assertEquals(RoomStatus.AVAILABLE, roomRepo.findById(room.getId()).get().getStatus());
     }
 
+    private Contract draft(Room targetRoom, String idCard) {
+        return contractService.createContract(new ContractUseCase.CreateContractCommand(
+            property.id(), targetRoom.getId(), "Tenant " + idCard, idCard, "0900", null, null,
+            new BigDecimal("3000000"), new BigDecimal("3000000"),
+            LocalDate.now(), LocalDate.now().plusMonths(6), 5
+        ));
+    }
+
+    private Room anotherRoom() {
+        return roomRepo.save(Room.create(property.id(), "R102", 1,
+            new BigDecimal("25.0"), new BigDecimal("3000000"), 2));
+    }
+
+    @Test
+    void activationRejectsPrimaryTenantAlreadyActiveInAnotherRoom() {
+        Contract first = draft(room, "ID1");
+        Room secondRoom = anotherRoom();
+        Contract second = draft(secondRoom, "ID1");
+        contractService.activateContract(first.getId());
+
+        assertThrows(DuplicateActiveContractException.class,
+            () -> contractService.activateContract(second.getId()));
+        assertEquals(ContractStatus.DRAFT, contractRepo.findById(second.getId()).orElseThrow().getStatus());
+        assertEquals(RoomStatus.AVAILABLE, roomRepo.findById(secondRoom.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void activationRejectsPrimaryTenantAlreadyResidingAsCoOccupant() {
+        Contract first = draft(room, "ID1");
+        Contract second = draft(anotherRoom(), "ID2");
+        first = contractService.activateContract(first.getId());
+        first.addOccupant(second.getPrimaryTenantId(), false, LocalDate.now());
+        contractRepo.save(first);
+
+        assertThrows(DuplicateActiveContractException.class,
+            () -> contractService.activateContract(second.getId()));
+        assertEquals(ContractStatus.DRAFT, contractRepo.findById(second.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void terminatedContractDoesNotPreventActivationForSameTenant() {
+        Contract first = draft(room, "ID1");
+        Contract second = draft(anotherRoom(), "ID1");
+        contractService.activateContract(first.getId());
+        contractService.terminateContract(first.getId(), false);
+
+        Contract activated = contractService.activateContract(second.getId());
+        assertEquals(ContractStatus.ACTIVE, activated.getStatus());
+    }
+
+    @Test
+    void checkedOutCoOccupantCanActivateAnotherContract() {
+        Contract first = draft(room, "ID1");
+        Contract second = draft(anotherRoom(), "ID2");
+        first = contractService.activateContract(first.getId());
+        first.addOccupant(second.getPrimaryTenantId(), false, LocalDate.now());
+        first.checkOutOccupant(second.getPrimaryTenantId(), LocalDate.now());
+        contractRepo.save(first);
+
+        Contract activated = contractService.activateContract(second.getId());
+        assertEquals(ContractStatus.ACTIVE, activated.getStatus());
+    }
+
     @Test
     @DisplayName("Ending contract changes room to MAINTENANCE when maintenance is explicitly required")
     void testEndingContractWithMaintenance() {
