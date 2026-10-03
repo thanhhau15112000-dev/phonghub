@@ -27,6 +27,7 @@
             <thead>
                 <tr>
                     <th>Mã hợp đồng</th>
+                    <th>Phòng / người thuê</th>
                     <th>Thời hạn</th>
                     <th>Tiền thuê</th>
                     <th>Tiền đặt cọc</th>
@@ -39,6 +40,10 @@
                 <tr th:each="c : ${contracts}">
                     <td>
                         <a th:href="@{'/contracts/' + ${c.getId()}}" th:text="${#strings.substring(c.getId().toString(), 0, 8) + '...'}" style="font-weight: 600; color: var(--accent);">Mã</a>
+                    </td>
+                    <td>
+                        <strong th:text="${roomNames[c.getRoomId()]}">Phòng</strong>
+                        <div th:text="${tenantNames[c.getPrimaryTenantId()]}">Người thuê</div>
                     </td>
                     <td th:text="${c.getStartDate()} + ' đến ' + ${c.getEndDate()}">2026-01-01 đến 2027-01-01</td>
                     <td th:text="${#numbers.formatDecimal(c.getRentAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>

@@ -51,8 +51,8 @@
                 <span th:class="'badge badge-' + ${room.getStatus()}" th:text="${uiText.roomStatus(room.getStatus())}">Bảo trì</span>
             </div>
             <div>
-                <span style="color: var(--text-secondary);">Mã kỹ thuật viên được phân công:</span>
-                <span th:text="${ticket.getAssignedTechnicianId() != null ? ticket.getAssignedTechnicianId() : 'Chưa phân công'}" style="font-family: monospace;">Mã định danh</span>
+                <span style="color: var(--text-secondary);">Người xử lý được phân công:</span>
+                <span th:text="${technicianName}">Người xử lý</span>
             </div>
             <div>
                 <span style="color: var(--text-secondary);">Tạo lúc:</span>

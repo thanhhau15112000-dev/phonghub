@@ -98,7 +98,10 @@ public class ProductionSecurityConfig {
 
     @Bean
     public JwtDecoder jwtDecoder() {
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(supabaseProperties.getJwksUri()).build();
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(supabaseProperties.getJwksUri())
+            .jwsAlgorithm(org.springframework.security.oauth2.jose.jws.SignatureAlgorithm.ES256)
+            .jwsAlgorithm(org.springframework.security.oauth2.jose.jws.SignatureAlgorithm.RS256)
+            .build();
 
         OAuth2TokenValidator<Jwt> defaultWithIssuer = JwtValidators.createDefaultWithIssuer(supabaseProperties.getJwtIssuer());
         OAuth2TokenValidator<Jwt> audienceValidator = new AudienceValidator(supabaseProperties.getJwtAudience());
