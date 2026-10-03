@@ -6,6 +6,8 @@ import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.UserRepositoryPort;
+import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.model.LiableParty;
 import com.phonghub.domain.model.MaintenanceCause;
@@ -37,15 +39,18 @@ public class MaintenanceUiController {
     private final RoomUseCase roomUseCase;
     private final CurrentUserPort currentUserPort;
     private final InvoiceUseCase invoiceUseCase;
+    private final UserRepositoryPort userRepository;
 
     public MaintenanceUiController(
         MaintenanceUseCase maintenanceUseCase,
         PropertyUseCase propertyUseCase,
         RoomUseCase roomUseCase,
         CurrentUserPort currentUserPort,
-        InvoiceUseCase invoiceUseCase
+        InvoiceUseCase invoiceUseCase,
+        UserRepositoryPort userRepository
     ) {
         this.invoiceUseCase = invoiceUseCase;
+        this.userRepository = userRepository;
         this.maintenanceUseCase = maintenanceUseCase;
         this.propertyUseCase = propertyUseCase;
         this.roomUseCase = roomUseCase;
@@ -148,7 +153,7 @@ public class MaintenanceUiController {
         @RequestParam String title,
         @RequestParam String description,
         @RequestParam(defaultValue = "MEDIUM") MaintenancePriority priority,
-        @RequestParam(name = "setRoomMaintenance", defaultValue = "true") boolean setRoomMaintenance,
+        @RequestParam(name = "setRoomMaintenance", defaultValue = "false") boolean setRoomMaintenance,
         @RequestParam(required = false) MaintenanceCause cause,
         @RequestParam(required = false) String causeDetail,
         RedirectAttributes redirectAttributes
@@ -167,7 +172,9 @@ public class MaintenanceUiController {
             redirectAttributes.addFlashAttribute("successMessage", "Đã tạo yêu cầu bảo trì '" + ticket.getTitle() + "'.");
             return "redirect:/maintenance/" + ticket.getId();
         } catch (DomainException | IllegalArgumentException ex) {
-            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+            redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
+                ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
+                : ex.getMessage());
             return "redirect:/maintenance/new?roomId=" + roomId;
         }
     }
@@ -182,6 +189,9 @@ public class MaintenanceUiController {
 
             model.addAttribute("currentUser", currentUser);
             model.addAttribute("ticket", ticket);
+            model.addAttribute("technicianName", ticket.getAssignedTechnicianId() == null
+                ? "Chưa phân công" : userRepository.findById(ticket.getAssignedTechnicianId())
+                    .map(com.phonghub.domain.model.User::fullName).orElse("Không tìm thấy tài khoản"));
             model.addAttribute("room", room);
             model.addAttribute("property", property);
             model.addAttribute("liableParties", LiableParty.values());
@@ -190,7 +200,9 @@ public class MaintenanceUiController {
 
             return "maintenance/detail";
         } catch (DomainException ex) {
-            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+            redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
+                ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
+                : ex.getMessage());
             return "redirect:/maintenance";
         }
     }
@@ -201,7 +213,9 @@ public class MaintenanceUiController {
             maintenanceUseCase.acceptTicket(id);
             redirectAttributes.addFlashAttribute("successMessage", "Đã tiếp nhận yêu cầu và chuyển sang trạng thái đang xử lý.");
         } catch (DomainException ex) {
-            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+            redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
+                ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
+                : ex.getMessage());
         }
         return "redirect:/maintenance/" + id;
     }
@@ -216,7 +230,9 @@ public class MaintenanceUiController {
             maintenanceUseCase.waiveRepairFee(id, reason);
             redirectAttributes.addFlashAttribute("successMessage", "Đã miễn khoản phí sửa chữa. Chủ trọ chịu chi phí.");
         } catch (DomainException | IllegalArgumentException ex) {
-            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+            redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
+                ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
+                : ex.getMessage());
         }
         return "redirect:/maintenance/" + id;
     }
@@ -226,7 +242,7 @@ public class MaintenanceUiController {
         @PathVariable UUID id,
         @RequestParam String resolutionNotes,
         @RequestParam(defaultValue = "0") BigDecimal repairCost,
-        @RequestParam(name = "releaseRoomToAvailable", defaultValue = "true") boolean releaseRoomToAvailable,
+        @RequestParam(name = "releaseRoomToAvailable", defaultValue = "false") boolean releaseRoomToAvailable,
         @RequestParam(required = false) LiableParty liableParty,
         RedirectAttributes redirectAttributes
     ) {
@@ -242,7 +258,9 @@ public class MaintenanceUiController {
                 message + (releaseRoomToAvailable ? " Phòng đã được chuyển về trạng thái trống." : "")
             );
         } catch (DomainException | IllegalArgumentException ex) {
-            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+            redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
+                ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
+                : ex.getMessage());
         }
         return "redirect:/maintenance/" + id;
     }

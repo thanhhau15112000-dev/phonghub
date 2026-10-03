@@ -283,7 +283,12 @@ public class MaintenanceService implements MaintenanceUseCase {
         if (currentUser.role() != UserRole.ADMIN && !currentUser.id().equals(technicianId)) {
             throw new UnauthorizedPropertyAccessException("Cannot view tickets assigned to another technician");
         }
-        return maintenanceTicketRepository.findByAssignedTechnicianId(technicianId);
+        List<MaintenanceTicket> assigned = maintenanceTicketRepository.findByAssignedTechnicianId(technicianId);
+        if (currentUser.role() == UserRole.TECHNICIAN) {
+            var propertyIds = authorizationService.getAccessiblePropertyIds(currentUser);
+            return assigned.stream().filter(ticket -> propertyIds.contains(ticket.getPropertyId())).toList();
+        }
+        return assigned;
     }
 
     @Override
