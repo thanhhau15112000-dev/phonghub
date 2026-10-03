@@ -49,6 +49,6 @@ public class MonthlyInvoiceService implements MonthlyInvoiceUseCase {
         }
         YearMonth firstMonth = YearMonth.from(contract.getStartDate());
         YearMonth lastMonth = YearMonth.from(contract.getEndDate());
-        return period.isAfter(firstMonth) && !period.isAfter(lastMonth);
+        return !period.isBefore(firstMonth) && !period.isAfter(lastMonth);
     }
 }
