@@ -91,7 +91,12 @@
                 <span style="font-family: monospace; font-weight: 700;" th:text="${feeInvoice.getPaymentCode()}">PHXXXXXXXX</span>
             </div>
         </div>
-        <a th:if="${feeInvoice != null}" th:href="@{'/contracts/' + ${feeInvoice.getContractId()} + '#payments'}" class="btn btn-sm btn-primary">Xem hướng dẫn chuyển khoản</a>
+        <a th:if="${feeInvoice != null and feeInvoice.isPayable() and (currentUser.role().name() == 'TENANT' or currentUser.role().name() == 'ADMIN')}"
+           th:href="@{'/invoices/' + ${feeInvoice.getId()} + '/pay'}" class="btn btn-sm btn-primary">Thanh toán</a>
+        <div th:if="${feeInvoice != null and feeInvoice.isConsolidated()}" style="font-size: 13px;">
+            <span>Khoản này đã được gộp vào hóa đơn tháng.</span>
+            <a th:href="@{'/invoices/' + ${feeInvoice.getConsolidatedIntoInvoiceId()} + '/pay'}" class="btn btn-sm btn-primary" style="margin-left: 8px;">Xem hóa đơn tháng</a>
+        </div>
 
         <form th:if="${currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF'}"
               th:action="@{'/maintenance/' + ${ticket.getId()} + '/waive-fee'}" method="post"

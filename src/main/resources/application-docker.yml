@@ -11,5 +11,8 @@ spring:
 phonghub:
   demo:
     enabled: true
+  invoicing:
+    auto-generate: false
   sepay:
     allow-unsigned-webhook: true
+    simulation-enabled: true

@@ -34,7 +34,9 @@ import com.phonghub.application.port.out.PaymentRepositoryPort;
 import com.phonghub.application.service.SepayPaymentService;
 import com.phonghub.application.port.in.InvoiceUseCase;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
+import com.phonghub.application.port.in.MonthlyInvoiceUseCase;
 import com.phonghub.application.service.InvoiceService;
+import com.phonghub.application.service.MonthlyInvoiceService;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -192,14 +194,26 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public MonthlyInvoiceUseCase monthlyInvoiceUseCase(
+        ContractRepositoryPort contractRepository,
+        InvoiceRepositoryPort invoiceRepository,
+        MaintenanceTicketRepositoryPort ticketRepository
+    ) {
+        return new TransactionalMonthlyInvoiceUseCase(
+            new MonthlyInvoiceService(contractRepository, invoiceRepository, ticketRepository)
+        );
+    }
+
+    @Bean
     public InvoiceUseCase invoiceUseCase(
         InvoiceRepositoryPort invoiceRepository,
+        MaintenanceTicketRepositoryPort ticketRepository,
         ContractUseCase contractUseCase,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService
     ) {
         InvoiceService service = new InvoiceService(
-            invoiceRepository, contractUseCase, currentUserPort, authorizationService
+            invoiceRepository, ticketRepository, contractUseCase, currentUserPort, authorizationService
         );
         return new TransactionalInvoiceUseCase(service);
     }

@@ -220,6 +220,9 @@ public class MaintenanceService implements MaintenanceUseCase {
         }
 
         invoiceRepository.findActiveByTicketId(ticketId).ifPresent(invoice -> {
+            if (invoice.isConsolidated()) {
+                throw new DomainException("Khoản phí đã được gộp vào hóa đơn tháng, không thể miễn từ phiếu này.");
+            }
             invoice.voidInvoice();
             invoiceRepository.save(invoice);
         });
@@ -254,6 +257,10 @@ public class MaintenanceService implements MaintenanceUseCase {
             .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
 
         authorizationService.assertCanAccessProperty(currentUser, ticket.getPropertyId());
+        if (currentUser.role() == UserRole.TENANT
+            && !authorizationService.canTenantViewTicket(currentUser, ticket.getRoomId(), ticket.getRequestedByTenantId())) {
+            throw new UnauthorizedPropertyAccessException("Tenant can only view tickets of their own room");
+        }
         return ticket;
     }
 
@@ -261,7 +268,13 @@ public class MaintenanceService implements MaintenanceUseCase {
     public List<MaintenanceTicket> listTicketsForProperty(UUID propertyId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         authorizationService.assertCanAccessProperty(currentUser, propertyId);
-        return maintenanceTicketRepository.findByPropertyId(propertyId);
+        List<MaintenanceTicket> tickets = maintenanceTicketRepository.findByPropertyId(propertyId);
+        if (currentUser.role() == UserRole.TENANT) {
+            return tickets.stream()
+                .filter(t -> authorizationService.canTenantViewTicket(currentUser, t.getRoomId(), t.getRequestedByTenantId()))
+                .toList();
+        }
+        return tickets;
     }
 
     @Override
@@ -280,6 +293,11 @@ public class MaintenanceService implements MaintenanceUseCase {
             .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
 
         authorizationService.assertCanAccessProperty(currentUser, room.getPropertyId());
+        if (currentUser.role() == UserRole.TENANT) {
+            return maintenanceTicketRepository.findByRoomId(roomId).stream()
+                .filter(t -> authorizationService.canTenantViewTicket(currentUser, t.getRoomId(), t.getRequestedByTenantId()))
+                .toList();
+        }
         return maintenanceTicketRepository.findByRoomId(roomId);
     }
 }

@@ -20,7 +20,6 @@ import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
@@ -37,7 +36,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
-import org.springframework.web.util.UriComponentsBuilder;
 
 @Controller
 @RequestMapping("/contracts")
@@ -254,18 +252,8 @@ public class ContractUiController {
         model.addAttribute("bankAccountNumber", sepayProperties.getBankAccountNumber());
         model.addAttribute("bankAccountName", sepayProperties.getBankAccountName());
         model.addAttribute("paymentQrUrl", payableInvoice != null && sepayProperties.hasBankAccount()
-            ? sepayQrUrl(payableInvoice)
+            ? PaymentQr.url(sepayProperties, payableInvoice)
             : null);
-    }
-
-    private String sepayQrUrl(Invoice invoice) {
-        return UriComponentsBuilder.fromUriString("https://qr.sepay.vn/img")
-            .queryParam("acc", sepayProperties.getBankAccountNumber().trim())
-            .queryParam("bank", sepayProperties.getBankCode().trim())
-            .queryParam("amount", invoice.remainingAmount().setScale(0, RoundingMode.UP).toPlainString())
-            .queryParam("des", invoice.getPaymentCode())
-            .encode()
-            .toUriString();
     }
 
     @PostMapping("/{id}/occupants")

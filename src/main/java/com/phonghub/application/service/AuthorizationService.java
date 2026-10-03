@@ -252,6 +252,43 @@ public class AuthorizationService {
         ));
     }
 
+    /**
+     * Người thuê chỉ xem được phiếu bảo trì của phòng mình đang ở (hợp đồng ACTIVE, người thuê chính
+     * hoặc người ở cùng) hoặc phiếu do chính họ tạo.
+     */
+    public boolean canTenantViewTicket(CurrentUser user, UUID roomId, UUID requestedByTenantId) {
+        Optional<Tenant> tenantOpt = tenantRepositoryPort.findByUserId(user.id());
+        if (tenantOpt.isEmpty()) {
+            return false;
+        }
+        UUID tenantId = tenantOpt.get().id();
+        if (tenantId.equals(requestedByTenantId)) {
+            return true;
+        }
+        return java.util.stream.Stream.concat(
+                contractRepositoryPort.findByPrimaryTenantId(tenantId).stream(),
+                contractRepositoryPort.findByOccupantTenantId(tenantId).stream()
+            )
+            .anyMatch(c -> c.isActive() && c.getRoomId().equals(roomId));
+    }
+
+    /** Xem hóa đơn: người thuê của hợp đồng (chính hoặc ở cùng), hoặc người có quyền với nhà trọ. */
+    public void assertCanViewInvoice(CurrentUser user, com.phonghub.domain.model.Invoice invoice) {
+        Contract contract = contractRepositoryPort.findById(invoice.getContractId())
+            .orElseThrow(() -> new UnauthorizedPropertyAccessException("Contract not found: " + invoice.getContractId()));
+        if (user.role() == UserRole.TENANT) {
+            Optional<Tenant> tenantOpt = tenantRepositoryPort.findByUserId(user.id());
+            boolean allowed = tenantOpt.isPresent() && (
+                contract.getPrimaryTenantId().equals(tenantOpt.get().id())
+                    || contract.getOccupants().stream().anyMatch(o -> o.tenantId().equals(tenantOpt.get().id())));
+            if (!allowed) {
+                throw new UnauthorizedPropertyAccessException("Tenant can only view their own invoice");
+            }
+            return;
+        }
+        assertCanAccessProperty(user, contract.getPropertyId());
+    }
+
     public void assertCanManageContracts(CurrentUser user, UUID propertyId) {
         assertCanManageProperty(user, propertyId);
     }

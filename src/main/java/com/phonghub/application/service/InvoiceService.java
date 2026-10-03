@@ -4,6 +4,7 @@ import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.InvoiceUseCase;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
+import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
@@ -16,17 +17,20 @@ import java.util.UUID;
 public class InvoiceService implements InvoiceUseCase {
 
     private final InvoiceRepositoryPort invoiceRepository;
+    private final MonthlyInvoiceIssuer issuer;
     private final ContractUseCase contractUseCase;
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
 
     public InvoiceService(
         InvoiceRepositoryPort invoiceRepository,
+        MaintenanceTicketRepositoryPort ticketRepository,
         ContractUseCase contractUseCase,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService
     ) {
         this.invoiceRepository = invoiceRepository;
+        this.issuer = new MonthlyInvoiceIssuer(invoiceRepository, ticketRepository);
         this.contractUseCase = contractUseCase;
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
@@ -42,18 +46,25 @@ public class InvoiceService implements InvoiceUseCase {
     }
 
     @Override
+    public Invoice getInvoice(UUID invoiceId) {
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+            .orElseThrow(() -> new DomainException("Không tìm thấy hóa đơn."));
+        // getContract áp dụng quy tắc xem hợp đồng (người thuê chỉ xem hợp đồng của mình).
+        contractUseCase.getContract(invoice.getContractId());
+        return invoice;
+    }
+
+    @Override
     public Invoice issueMonthlyInvoice(UUID contractId, YearMonth period) {
         Contract contract = contractUseCase.getContract(contractId);
         authorizationService.assertCanManageContracts(currentUserPort.getCurrentUser(), contract.getPropertyId());
 
-        if (invoiceRepository.findActiveRentByContractIdAndPeriod(contractId, period.getYear(), period.getMonthValue()).isPresent()) {
+        if (issuer.exists(contract, period)) {
             throw new DomainException(String.format(
                 "Kỳ thanh toán %02d/%d đã tồn tại cho hợp đồng này.", period.getMonthValue(), period.getYear()
             ));
         }
-
-        Invoice invoice = Invoice.issueMonthlyRent(contract, period, invoiceRepository.newUniquePaymentCode());
-        return invoiceRepository.save(invoice);
+        return issuer.issue(contract, period);
     }
 
     @Override

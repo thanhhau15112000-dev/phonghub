@@ -2,6 +2,7 @@ package com.phonghub.application.service;
 
 import com.phonghub.application.port.in.SepayWebhookUseCase;
 import com.phonghub.application.port.out.ContractRepositoryPort;
+import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
@@ -10,6 +11,8 @@ import com.phonghub.application.port.out.PaymentRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.config.SepayProperties;
+import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.exception.UnauthorizedWebhookException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
@@ -46,6 +49,7 @@ public class SepayPaymentService implements SepayWebhookUseCase {
     private final PaymentRepositoryPort paymentRepository;
     private final InvoiceRepositoryPort invoiceRepository;
     private final MaintenanceTicketRepositoryPort ticketRepository;
+    private static final java.util.concurrent.atomic.AtomicLong SIMULATION_SEQ = new java.util.concurrent.atomic.AtomicLong();
     private final ContractRepositoryPort contractRepository;
     private final PropertyRepositoryPort propertyRepository;
     private final NotificationRepositoryPort notificationRepository;
@@ -81,6 +85,47 @@ public class SepayPaymentService implements SepayWebhookUseCase {
     @Override
     public WebhookProcessResult processWebhook(String authorizationHeader, SepayWebhookCommand command) {
         validateAuthorization(authorizationHeader);
+        return processTransfer(command);
+    }
+
+    @Override
+    public WebhookProcessResult simulateTransfer(UUID invoiceId) {
+        if (!sepayProperties.isSimulationEnabled()) {
+            throw new DomainException("Chế độ mô phỏng chuyển khoản chưa được bật.");
+        }
+        CurrentUser user = currentUserPort.getCurrentUser();
+        if (user == null || (user.role() != UserRole.TENANT && user.role() != UserRole.ADMIN)) {
+            throw new UnauthorizedPropertyAccessException("Chỉ người thuê hoặc quản trị viên được mô phỏng chuyển khoản.");
+        }
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+            .orElseThrow(() -> new DomainException("Không tìm thấy hóa đơn."));
+        authorizationService.assertCanViewInvoice(user, invoice);
+        if (!invoice.isPayable()) {
+            throw new DomainException("Hóa đơn này không còn cần thanh toán.");
+        }
+
+        String account = sepayProperties.getBankAccountNumber() != null && !sepayProperties.getBankAccountNumber().isBlank()
+            ? sepayProperties.getBankAccountNumber() : "SIMULATED";
+        log.warn("Sepay: MÔ PHỎNG chuyển khoản {} cho hóa đơn {} (chế độ thử nghiệm)", invoice.remainingAmount(), invoiceId);
+        // sepayId âm, tăng dần theo thời gian: không bao giờ trùng id giao dịch thật của SePay
+        long simulatedId = -(System.currentTimeMillis() * 1000 + SIMULATION_SEQ.incrementAndGet() % 1000);
+        return processTransfer(new SepayWebhookCommand(
+            simulatedId,
+            "SIMULATION",
+            Instant.now().toString(),
+            account,
+            null,
+            null,
+            "MO PHONG " + invoice.getPaymentCode(),
+            "in",
+            invoice.remainingAmount(),
+            null,
+            "SIM-" + Math.abs(simulatedId),
+            "Mô phỏng chuyển khoản (chế độ thử nghiệm)"
+        ));
+    }
+
+    private WebhookProcessResult processTransfer(SepayWebhookCommand command) {
         if (command.id() == null) {
             throw new IllegalArgumentException("Thiếu id giao dịch SePay");
         }
@@ -196,17 +241,28 @@ public class SepayPaymentService implements SepayWebhookUseCase {
 
     /** Hóa đơn phí sửa chữa đã trả đủ: phiếu bảo trì đang chờ thanh toán chuyển sang hoàn tất. */
     private void completeMaintenanceTicketIfPaid(Invoice invoice) {
-        if (invoice.getType() != InvoiceType.MAINTENANCE
-            || invoice.getTicketId() == null
-            || invoice.getStatus() != InvoiceStatus.PAID) {
+        if (invoice.getStatus() != InvoiceStatus.PAID) {
             return;
         }
-        ticketRepository.findById(invoice.getTicketId())
-            .filter(ticket -> ticket.getStatus() == MaintenanceStatus.AWAITING_PAYMENT)
-            .ifPresent(ticket -> {
-                ticket.markFeePaid();
-                ticketRepository.save(ticket);
-            });
+        // Hóa đơn phí riêng: phiếu của nó. Hóa đơn tháng: phiếu của các khoản phí đã gộp (dòng chi tiết).
+        List<UUID> ticketIds = new java.util.ArrayList<>();
+        if (invoice.getType() == InvoiceType.MAINTENANCE && invoice.getTicketId() != null) {
+            ticketIds.add(invoice.getTicketId());
+        }
+        invoice.getItems().stream()
+            .filter(item -> item.sourceInvoiceId() != null)
+            .forEach(item -> invoiceRepository.findById(item.sourceInvoiceId())
+                .map(Invoice::getTicketId)
+                .ifPresent(ticketIds::add));
+
+        for (UUID ticketId : ticketIds) {
+            ticketRepository.findById(ticketId)
+                .filter(ticket -> ticket.getStatus() == MaintenanceStatus.AWAITING_PAYMENT)
+                .ifPresent(ticket -> {
+                    ticket.markFeePaid();
+                    ticketRepository.save(ticket);
+                });
+        }
     }
 
     private Invoice matchInvoice(String code, String content) {

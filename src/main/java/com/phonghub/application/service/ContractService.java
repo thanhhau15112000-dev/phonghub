@@ -179,6 +179,17 @@ public class ContractService implements ContractUseCase {
             ));
         }
 
+        LocalDate today = LocalDate.now();
+        List<UUID> residingTenantIds = java.util.stream.Stream.concat(
+                java.util.stream.Stream.of(contract.getPrimaryTenantId()),
+                contract.getOccupants().stream()
+                    .filter(o -> o.checkOutDate() == null || o.checkOutDate().isAfter(today))
+                    .map(ContractOccupant::tenantId))
+            .distinct().sorted().toList();
+        // A stable lock order avoids deadlocks when two drafts share multiple tenants.
+        residingTenantIds.forEach(tenantRepository::findByIdForUpdate);
+        residingTenantIds.forEach(tenantId -> assertTenantHasNoActiveContract(tenantId, today));
+
         // Invariant: Activating contract changes the room to OCCUPIED
         contract.activate();
         room.occupy();
@@ -362,21 +373,8 @@ public class ContractService implements ContractUseCase {
         }
 
         // Một người không được ở đồng thời ở 2 hợp đồng đang hiệu lực -> 409
-        final UUID tenantId = tenant.id();
-        boolean alreadyActiveAsPrimary = contractRepository.findByPrimaryTenantId(tenantId).stream()
-            .anyMatch(Contract::isActive);
-
-        boolean alreadyActiveAsOccupant = contractRepository.findByOccupantTenantId(tenantId).stream()
-            .filter(Contract::isActive)
-            .anyMatch(c -> c.getOccupants().stream()
-                .anyMatch(o -> o.tenantId().equals(tenantId) && (o.checkOutDate() == null || o.checkOutDate().isAfter(today))));
-
-        if (alreadyActiveAsPrimary || alreadyActiveAsOccupant) {
-            throw new DuplicateActiveContractException(String.format(
-                "Người thuê '%s' (CCCD: %s) hiện đang có hợp đồng hiệu lực tại hệ thống.",
-                tenant.fullName(), tenant.identityCardNumber()
-            ));
-        }
+        tenantRepository.findByIdForUpdate(tenant.id());
+        assertTenantHasNoActiveContract(tenant.id(), today);
 
         // Tùy chọn: tạo tài khoản TENANT cho người thuê
         if (command.createAccount()) {
@@ -439,6 +437,19 @@ public class ContractService implements ContractUseCase {
         ContractOccupant occupant = contract.addOccupant(tenant.id(), false, command.checkInDate());
         contractRepository.save(contract);
         return occupant;
+    }
+
+    private void assertTenantHasNoActiveContract(UUID tenantId, LocalDate today) {
+        boolean alreadyActiveAsPrimary = contractRepository.findByPrimaryTenantId(tenantId).stream()
+            .anyMatch(Contract::isActive);
+        boolean alreadyActiveAsOccupant = contractRepository.findByOccupantTenantId(tenantId).stream()
+            .filter(Contract::isActive)
+            .anyMatch(c -> c.getOccupants().stream().anyMatch(o -> o.tenantId().equals(tenantId)
+                && (o.checkOutDate() == null || o.checkOutDate().isAfter(today))));
+        if (alreadyActiveAsPrimary || alreadyActiveAsOccupant) {
+            throw new DuplicateActiveContractException(
+                "Người thuê hiện đang có hợp đồng hiệu lực tại hệ thống.");
+        }
     }
 
     @Override

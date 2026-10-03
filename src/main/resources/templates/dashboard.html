@@ -39,7 +39,10 @@
         <div class="card" id="rent-payment">
             <div class="flex-between" style="margin-bottom: 12px;">
                 <h2>Thanh toán tiền thuê</h2>
-                <a th:if="${tenantContract != null}" th:href="@{'/contracts/' + ${tenantContract.getId()} + '#payments'}" class="btn btn-sm btn-secondary">Lịch sử và hướng dẫn chuyển khoản</a>
+                <div style="display: flex; gap: 8px;">
+                    <a th:if="${nextInvoice != null}" th:href="@{'/invoices/' + ${nextInvoice.getId()} + '/pay'}" class="btn btn-sm btn-primary">Thanh toán</a>
+                    <a th:if="${tenantContract != null}" th:href="@{'/contracts/' + ${tenantContract.getId()} + '#payments'}" class="btn btn-sm btn-secondary">Tất cả khoản thanh toán</a>
+                </div>
             </div>
 
             <div th:if="${tenantContract == null}" class="empty-state">
@@ -158,6 +161,21 @@
         <div class="flex-between" style="margin-bottom: 12px;">
             <h2>Yêu cầu bảo trì</h2>
             <a th:href="@{/maintenance/new}" class="btn btn-primary btn-sm">+ Báo hỏng</a>
+        </div>
+
+        <div class="filter-tabs" style="margin-bottom: 12px;">
+            <a th:href="@{/maintenance(tab='open')}" class="filter-tab">
+                <span>Chưa hoàn thành</span>
+                <span class="badge-count" th:text="${ticketsNotDoneCount}">0</span>
+            </a>
+            <a th:href="@{/maintenance(tab='open',status='AWAITING_PAYMENT')}" class="filter-tab">
+                <span>Chờ thanh toán</span>
+                <span class="badge-count" style="background-color: #fef3c7; color: #b45309;" th:text="${ticketsAwaitingPaymentCount}">0</span>
+            </a>
+            <a th:href="@{/maintenance(tab='done')}" class="filter-tab">
+                <span>Đã hoàn thành</span>
+                <span class="badge-count" th:text="${ticketsDoneCount}">0</span>
+            </a>
         </div>
 
         <div th:if="${#lists.isEmpty(recentTickets)}" class="empty-state">
