@@ -88,6 +88,16 @@ public class ContractUiController {
         }
 
         model.addAttribute("currentUser", currentUser);
+        java.util.Map<UUID, String> roomNames = new java.util.HashMap<>();
+        java.util.Map<UUID, String> tenantNames = new java.util.HashMap<>();
+        for (Contract contract : contracts) {
+            roomRepository.findById(contract.getRoomId())
+                .ifPresent(room -> roomNames.put(room.getId(), room.getRoomNumber()));
+            tenantRepository.findById(contract.getPrimaryTenantId())
+                .ifPresent(tenant -> tenantNames.put(tenant.id(), tenant.fullName()));
+        }
+        model.addAttribute("roomNames", roomNames);
+        model.addAttribute("tenantNames", tenantNames);
         model.addAttribute("contracts", contracts);
         return "contracts/list";
     }

@@ -348,4 +348,52 @@ class MaintenanceFeeFlowIntegrationTest {
             .andExpect(flash().attributeExists("errorMessage"));
         assertTrue(ticketRepository.findAll().stream().noneMatch(t -> t.getTitle().equals("Không chọn nguyên nhân")));
     }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"omitted", "false", "true"})
+    void checkboxControlsCreationAndResolution(String value) throws Exception {
+        var request = asUser(post("/maintenance"), ADMIN)
+            .param("roomId", DataSeeder.ROOM_104_ID.toString()).param("title", "Checkbox QA")
+            .param("description", "Checkbox regression").param("cause", "NATURAL_WEAR");
+        if (!value.equals("omitted")) request.param("setRoomMaintenance", value);
+        mockMvc.perform(request).andExpect(status().is3xxRedirection());
+        assertEquals(value.equals("true") ? com.phonghub.domain.model.RoomStatus.MAINTENANCE
+            : com.phonghub.domain.model.RoomStatus.AVAILABLE,
+            roomRepository.findById(DataSeeder.ROOM_104_ID).orElseThrow().getStatus());
+        var room = roomRepository.findById(DataSeeder.ROOM_104_ID).orElseThrow();
+        if (room.getStatus() != com.phonghub.domain.model.RoomStatus.MAINTENANCE) {
+            room.putUnderMaintenance(); roomRepository.save(room);
+        }
+        var ticket = ticketRepository.findAll().stream().filter(t -> t.getTitle().equals("Checkbox QA")).findFirst().orElseThrow();
+        accept(ticket.getId());
+        var resolve = asUser(post("/maintenance/" + ticket.getId() + "/resolve"), ADMIN)
+            .param("resolutionNotes", "Done").param("repairCost", "0");
+        if (!value.equals("omitted")) resolve.param("releaseRoomToAvailable", value);
+        mockMvc.perform(resolve).andExpect(status().is3xxRedirection());
+        assertEquals(MaintenanceStatus.RESOLVED, reload(ticket.getId()).getStatus());
+        assertEquals(value.equals("true") ? com.phonghub.domain.model.RoomStatus.AVAILABLE
+            : com.phonghub.domain.model.RoomStatus.MAINTENANCE,
+            roomRepository.findById(room.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void technicianListAndDashboardExcludeAssignedTicketsOutsidePropertyScope() throws Exception {
+        String tech = LocalDemoAuthenticationAdapter.TECH_1_ID.toString();
+        var outside = MaintenanceTicket.create(DataSeeder.ROOM_201_ID, DataSeeder.PROP_2_ID, null,
+            "Outside technician scope", "Private ticket", com.phonghub.domain.model.MaintenancePriority.LOW);
+        outside.accept(LocalDemoAuthenticationAdapter.TECH_1_ID);
+        ticketRepository.save(outside);
+        for (String path : new String[] {"/maintenance", "/dashboard"}) {
+            mockMvc.perform(asUser(get(path), tech)).andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Outside technician scope"))));
+        }
+        mockMvc.perform(asUser(get("/maintenance/" + outside.getId()), tech))
+            .andExpect(status().is3xxRedirection());
+        var inside = ticketRepository.findAll().stream()
+            .filter(t -> LocalDemoAuthenticationAdapter.TECH_1_ID.equals(t.getAssignedTechnicianId()))
+            .filter(t -> t.getPropertyId().equals(DataSeeder.PROP_1_ID)).findFirst().orElseThrow();
+        mockMvc.perform(asUser(get("/maintenance/" + inside.getId()), tech)).andExpect(status().isOk());
+        mockMvc.perform(asUser(get("/maintenance"), tech))
+            .andExpect(content().string(containsString(inside.getTitle())));
+    }
+
 }
