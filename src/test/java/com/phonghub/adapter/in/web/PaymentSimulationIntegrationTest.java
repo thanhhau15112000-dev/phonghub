@@ -129,6 +129,17 @@ class PaymentSimulationIntegrationTest {
     }
 
     @Test
+    void unrelatedOwnerReceivesForbiddenJsonFromInvoiceStatus() throws Exception {
+        Invoice invoice = issueRent();
+        mockMvc.perform(as(get("/invoices/" + invoice.getId() + "/status"),
+                LocalDemoAuthenticationAdapter.OWNER_2_ID.toString()))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.status").value(403))
+            .andExpect(jsonPath("$.title").value("Unauthorized Property Access"))
+            .andExpect(jsonPath("$.paid").doesNotExist());
+    }
+
+    @Test
     @DisplayName("Simulated payment of a repair fee completes the ticket exactly like a real webhook")
     void simulatedFeeCompletesTicket() throws Exception {
         mockMvc.perform(as(post("/maintenance"), TENANT)
