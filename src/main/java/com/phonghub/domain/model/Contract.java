@@ -219,6 +219,15 @@ public class Contract {
             ));
         }
         this.status = ContractStatus.TERMINATED;
+
+        LocalDate today = LocalDate.now();
+        for (int i = 0; i < this.occupants.size(); i++) {
+            ContractOccupant o = this.occupants.get(i);
+            if (o.checkOutDate() == null) {
+                this.occupants.set(i, o.withCheckOutDate(today));
+            }
+        }
+
         this.updatedAt = Instant.now();
     }
 
