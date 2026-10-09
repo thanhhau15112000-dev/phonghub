@@ -448,3 +448,12 @@ docker build -t phonghub:local .
 - **Tiêu thụ = mới - cũ.** Số mới nhỏ hơn số cũ bị chặn (`400`) trừ khi khai báo thay đồng hồ (`replacement`: chỉ số cuối đồng hồ cũ, chỉ số bắt đầu đồng hồ mới, ghi chú bắt buộc); khi đó tiêu thụ = (cuối đồng hồ cũ - kỳ trước) + (mới - bắt đầu đồng hồ mới).
 - Ảnh đồng hồ (jpeg/png/webp) lưu private như các file khác, xem qua signed URL hết hạn sau 10 phút. Đơn giá dịch vụ cấu hình theo nhà trọ, chỉ owner của nhà trọ hoặc admin tạo/sửa, tên dịch vụ không trùng trong cùng nhà trọ. Audit: `METER_READING_RECORDED`, `METER_PHOTO_ATTACHED`, `SERVICE_RATE_CREATED/UPDATED`.
 - Chưa làm: màn hình nhập chỉ số (mới có API), đưa tiền điện nước vào hóa đơn (#66), OCR đọc ảnh (#67).
+
+## Điện, nước và dịch vụ trên hóa đơn tháng
+
+- Migration V21 thêm `reading_id`, `rate_id` vào `invoice_items` để biết mỗi dòng được tính từ chỉ số và đơn giá nào. `invoices.utility_amount` giờ ghi tổng các dòng này, `other_amount` là phần còn lại (phí sửa chữa).
+- **Điện/nước** tính theo chỉ số cùng kỳ với hóa đơn (kỳ ghi chỉ số = tháng của ngày ghi): tiêu thụ x đơn giá, làm tròn đến đồng; mỗi đơn giá `PER_KWH` / `PER_M3` của nhà trọ là một dòng. Tiêu thụ bằng 0 hoặc đơn giá 0 thì không có dòng. Chỉ số gắn với hợp đồng khác của cùng phòng (khách trước) bị bỏ qua.
+- **Dịch vụ cố định** (`PER_ROOM_FLAT`, `PER_PERSON` x số người đang ở, tối thiểu 1) chỉ tính lúc phát hành hóa đơn, nên đơn giá thêm sau đó không làm đổi hóa đơn người thuê đã nhận.
+- **Thiếu chỉ số không chặn hóa đơn tiền thuê.** Hóa đơn vẫn phát hành chỉ với tiền thuê; trang hợp đồng và trang thanh toán hiện cảnh báo (chưa có chỉ số điện/nước kỳ này, chưa cấu hình đơn giá, hoặc chỉ số ghi sau khi hóa đơn đã có thanh toán). Nhà trọ không cấu hình đơn giá nước thì không bị cảnh báo thiếu nước.
+- **Scheduler** (mỗi giờ và lúc khởi động) thêm dòng điện/nước cho hóa đơn tháng hiện tại và tháng trước khi chỉ số được ghi sau lúc phát hành. Chỉ thêm vào hóa đơn chưa ai trả đồng nào (đã trả một phần hoặc đã trả đủ thì giữ nguyên để không lệch số tiền người thuê đã chuyển); mỗi cặp chỉ số/đơn giá chỉ tính một lần (unique ở DB), dòng được khóa theo hóa đơn nên không ghi đè khoản webhook vừa cộng.
+- Chưa làm: sửa chỉ số đã ghi rồi tính lại hóa đơn, xử lý thanh toán vượt số tiền sau khi tổng đổi (#81).

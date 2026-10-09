@@ -5,13 +5,17 @@ import com.phonghub.application.port.in.InvoiceUseCase;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
+import com.phonghub.application.port.out.MeterReadingRepositoryPort;
+import com.phonghub.application.port.out.ServiceRateRepositoryPort;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
 import java.time.YearMonth;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class InvoiceService implements InvoiceUseCase {
@@ -21,6 +25,7 @@ public class InvoiceService implements InvoiceUseCase {
     private final ContractUseCase contractUseCase;
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
+    private final UtilityBilling utilityBilling;
 
     public InvoiceService(
         InvoiceRepositoryPort invoiceRepository,
@@ -29,8 +34,22 @@ public class InvoiceService implements InvoiceUseCase {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService
     ) {
+        this(invoiceRepository, ticketRepository, contractUseCase, currentUserPort, authorizationService, null, null);
+    }
+
+    public InvoiceService(
+        InvoiceRepositoryPort invoiceRepository,
+        MaintenanceTicketRepositoryPort ticketRepository,
+        ContractUseCase contractUseCase,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        MeterReadingRepositoryPort readingRepository,
+        ServiceRateRepositoryPort rateRepository
+    ) {
         this.invoiceRepository = invoiceRepository;
-        this.issuer = new MonthlyInvoiceIssuer(invoiceRepository, ticketRepository);
+        this.utilityBilling = readingRepository == null || rateRepository == null
+            ? UtilityBilling.none() : new UtilityBilling(readingRepository, rateRepository);
+        this.issuer = new MonthlyInvoiceIssuer(invoiceRepository, ticketRepository, utilityBilling);
         this.contractUseCase = contractUseCase;
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
@@ -52,6 +71,19 @@ public class InvoiceService implements InvoiceUseCase {
         // getContract áp dụng quy tắc xem hợp đồng (người thuê chỉ xem hợp đồng của mình).
         contractUseCase.getContract(invoice.getContractId());
         return invoice;
+    }
+
+    @Override
+    public Map<UUID, List<String>> utilityWarnings(UUID contractId) {
+        Contract contract = contractUseCase.getContract(contractId);
+        Map<UUID, List<String>> warnings = new HashMap<>();
+        for (Invoice invoice : invoiceRepository.findByContractId(contractId)) {
+            List<String> found = utilityBilling.warnings(invoice, contract);
+            if (!found.isEmpty()) {
+                warnings.put(invoice.getId(), found);
+            }
+        }
+        return warnings;
     }
 
     @Override

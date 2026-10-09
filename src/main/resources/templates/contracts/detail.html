@@ -292,6 +292,8 @@
                             <li th:each="item : ${inv.getItems()}"
                                 th:text="${item.name() + ': ' + #numbers.formatDecimal(item.totalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">Mục</li>
                         </ul>
+                        <div th:each="warning : ${invoiceWarnings.get(inv.getId())}"
+                             style="margin-top: 4px; font-size: 12px; color: var(--warning, #b45309);" th:text="'⚠ ' + ${warning}">Cảnh báo</div>
                     </td>
                     <td th:text="${#numbers.formatDecimal(inv.getTotalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
                     <td th:text="${#numbers.formatDecimal(inv.getPaidAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</td>

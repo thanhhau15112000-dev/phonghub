@@ -15,4 +15,13 @@ public interface MonthlyInvoiceUseCase {
 
     /** Tạo hóa đơn tháng cho một hợp đồng; trả về false nếu đã có sẵn hoặc hợp đồng không còn đủ điều kiện. */
     boolean issueForContract(UUID contractId, YearMonth period);
+
+    /**
+     * Hợp đồng có hóa đơn tiền thuê tháng {@code period} còn sửa được (chưa ai trả đồng nào) và đã có chỉ số
+     * điện/nước chưa được tính vào hóa đơn.
+     */
+    List<UUID> findContractsNeedingUtilityCharges(YearMonth period);
+
+    /** Thêm dòng điện/nước đã có chỉ số vào hóa đơn tháng; trả về false nếu không có gì để thêm. */
+    boolean attachUtilityCharges(UUID contractId, YearMonth period);
 }

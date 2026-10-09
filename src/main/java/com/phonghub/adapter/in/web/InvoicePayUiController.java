@@ -11,6 +11,7 @@ import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.InvoiceType;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Controller;
@@ -66,6 +67,8 @@ public class InvoicePayUiController {
 
             model.addAttribute("currentUser", currentUserPort.getCurrentUser());
             model.addAttribute("invoice", invoice);
+            model.addAttribute("utilityWarnings",
+                invoiceUseCase.utilityWarnings(invoice.getContractId()).getOrDefault(invoice.getId(), List.of()));
             model.addAttribute("ticketTitle", ticketTitle);
             model.addAttribute("today", LocalDate.now());
             model.addAttribute("returnUrl", returnUrl(invoice));

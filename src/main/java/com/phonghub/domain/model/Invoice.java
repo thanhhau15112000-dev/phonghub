@@ -23,7 +23,7 @@ public class Invoice {
     private final int month;
     private final int year;
     private final BigDecimal rentAmount;
-    private final BigDecimal totalAmount;
+    private BigDecimal totalAmount;
     private BigDecimal paidAmount;
     private final LocalDate dueDate;
     private InvoiceStatus status;
@@ -200,6 +200,50 @@ public class Invoice {
             rolledFees.forEach(rolled -> rolled.fee().consolidateInto(invoiceId));
         }
         return invoice;
+    }
+
+    /**
+     * Còn thêm được dòng điện/nước/dịch vụ: hóa đơn tiền thuê chưa ai trả đồng nào (tổng tiền chưa bị người thuê
+     * chuyển khoản theo), chưa gộp, chưa hủy.
+     */
+    public boolean canAddCharges() {
+        return type == InvoiceType.RENT
+            && consolidatedIntoInvoiceId == null
+            && paidAmount.signum() == 0
+            && (status == InvoiceStatus.ISSUED || status == InvoiceStatus.OVERDUE);
+    }
+
+    /** Đã có dòng tính từ chỉ số {@code readingId} theo đơn giá {@code rateId}. */
+    public boolean hasCharge(UUID readingId, UUID rateId) {
+        return items.stream().anyMatch(item -> rateId.equals(item.rateId())
+            && java.util.Objects.equals(readingId, item.readingId()));
+    }
+
+    /** Tổng tiền điện, nước, dịch vụ (các dòng tính theo đơn giá). */
+    public BigDecimal utilityAmount() {
+        return items.stream().filter(InvoiceItem::isUtilityCharge).map(InvoiceItem::totalAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Thêm các dòng điện/nước/dịch vụ và cộng vào tổng tiền. Dòng đã có (cùng chỉ số, cùng đơn giá) bị bỏ qua nên
+     * gọi lặp lại không tính tiền hai lần. Trả về số dòng thực sự được thêm.
+     */
+    public int addCharges(List<InvoiceItem> charges) {
+        List<InvoiceItem> fresh = charges.stream().filter(InvoiceItem::isUtilityCharge)
+            .filter(item -> !hasCharge(item.readingId(), item.rateId())).toList();
+        if (fresh.isEmpty()) {
+            return 0;
+        }
+        if (!canAddCharges()) {
+            throw new DomainException("Hóa đơn đã có thanh toán hoặc đã đóng, không thể thêm khoản mới.");
+        }
+        for (InvoiceItem item : fresh) {
+            items.add(item);
+            totalAmount = totalAmount.add(item.totalAmount());
+        }
+        this.updatedAt = Instant.now();
+        return fresh.size();
     }
 
     /** Khoản phí sửa chữa chưa trả đồng nào và chưa được gộp: đủ điều kiện gộp vào hóa đơn tháng. */

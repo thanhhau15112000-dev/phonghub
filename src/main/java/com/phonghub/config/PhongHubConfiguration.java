@@ -297,10 +297,13 @@ public class PhongHubConfiguration {
     public MonthlyInvoiceUseCase monthlyInvoiceUseCase(
         ContractRepositoryPort contractRepository,
         InvoiceRepositoryPort invoiceRepository,
-        MaintenanceTicketRepositoryPort ticketRepository
+        MaintenanceTicketRepositoryPort ticketRepository,
+        MeterReadingRepositoryPort meterReadingRepository,
+        ServiceRateRepositoryPort serviceRateRepository
     ) {
         return new TransactionalMonthlyInvoiceUseCase(
-            new MonthlyInvoiceService(contractRepository, invoiceRepository, ticketRepository)
+            new MonthlyInvoiceService(contractRepository, invoiceRepository, ticketRepository,
+                meterReadingRepository, serviceRateRepository)
         );
     }
 
@@ -310,10 +313,13 @@ public class PhongHubConfiguration {
         MaintenanceTicketRepositoryPort ticketRepository,
         ContractUseCase contractUseCase,
         CurrentUserPort currentUserPort,
-        AuthorizationService authorizationService
+        AuthorizationService authorizationService,
+        MeterReadingRepositoryPort meterReadingRepository,
+        ServiceRateRepositoryPort serviceRateRepository
     ) {
         InvoiceService service = new InvoiceService(
-            invoiceRepository, ticketRepository, contractUseCase, currentUserPort, authorizationService
+            invoiceRepository, ticketRepository, contractUseCase, currentUserPort, authorizationService,
+            meterReadingRepository, serviceRateRepository
         );
         return new TransactionalInvoiceUseCase(service);
     }
