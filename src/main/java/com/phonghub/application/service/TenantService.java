@@ -47,12 +47,15 @@ public class TenantService implements TenantUseCase {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         authorizationService.assertCanUpdateTenant(currentUser, tenant.id());
 
-        String newIdCard = command.identityCardNumber().trim();
+        String newIdCard = command.identityCardNumber() == null || command.identityCardNumber().isBlank()
+            || command.identityCardNumber().startsWith("****")
+            ? tenant.identityCardNumber()
+            : command.identityCardNumber().trim();
         Optional<Tenant> duplicateCccd = tenantRepository.findByIdentityCardNumber(newIdCard);
         if (duplicateCccd.isPresent() && !duplicateCccd.get().id().equals(tenant.id())) {
             throw new DuplicateIdentityCardException(String.format(
-                "Số CCCD '%s' đã được sử dụng bởi người thuê khác ('%s').",
-                newIdCard, duplicateCccd.get().fullName()
+                "Số CCCD đã được sử dụng bởi người thuê khác ('%s').",
+                duplicateCccd.get().fullName()
             ));
         }
 
@@ -69,7 +72,7 @@ public class TenantService implements TenantUseCase {
         Map<String, Object> details = new HashMap<>();
         details.put("tenantId", saved.id().toString());
         details.put("fullName", saved.fullName());
-        details.put("identityCardNumber", saved.identityCardNumber());
+        details.put("identityCardNumber", saved.maskedIdentityCardNumber());
         details.put("phone", saved.phone());
         details.put("email", saved.email());
         details.put("permanentAddress", saved.permanentAddress());

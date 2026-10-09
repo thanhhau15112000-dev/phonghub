@@ -480,7 +480,7 @@ class PhongHubUiIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Trần Thị Cẩm")))
-            .andExpect(content().string(containsString("079200007777")));
+            .andExpect(content().string(containsString("****7777")));
     }
 
     @Test

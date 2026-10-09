@@ -33,16 +33,19 @@ import com.phonghub.application.port.in.SepayWebhookUseCase;
 import com.phonghub.application.port.out.PaymentRepositoryPort;
 import com.phonghub.application.service.SepayPaymentService;
 import com.phonghub.application.port.in.InvoiceUseCase;
+import com.phonghub.application.port.in.FileStorageUseCase;
+import com.phonghub.application.port.out.FileStoragePort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.application.port.in.MonthlyInvoiceUseCase;
 import com.phonghub.application.service.InvoiceService;
+import com.phonghub.application.service.PrivateFileStorageService;
 import com.phonghub.application.service.MonthlyInvoiceService;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties(SepayProperties.class)
+@EnableConfigurationProperties({SepayProperties.class, TenantDataProtectionProperties.class})
 public class PhongHubConfiguration {
 
     @Bean
@@ -216,5 +219,20 @@ public class PhongHubConfiguration {
             invoiceRepository, ticketRepository, contractUseCase, currentUserPort, authorizationService
         );
         return new TransactionalInvoiceUseCase(service);
+    }
+
+    @Bean
+    public FileStorageUseCase fileStorageUseCase(
+        FileStoragePort storagePort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        StorageProperties storageProperties
+    ) {
+        return new PrivateFileStorageService(
+            storagePort,
+            currentUserPort,
+            authorizationService,
+            storageProperties.getMaxFileSizeBytes()
+        );
     }
 }

@@ -62,7 +62,10 @@ import org.springframework.test.web.servlet.MockMvc;
     "supabase.jwt-audience=authenticated",
     "spring.datasource.url=jdbc:postgresql://localhost:5432/mock",
     "spring.datasource.username=mock",
-    "spring.datasource.password=mock"
+    "spring.datasource.password=mock",
+    "phonghub.security.tenant-data.key-id=v1",
+    "phonghub.security.tenant-data.encryption-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "phonghub.security.tenant-data.hmac-key=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="
 })
 class ProductionAuthSecurityTest {
 
@@ -593,6 +596,15 @@ class ProductionAuthSecurityTest {
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/account/profile"))
             .andExpect(flash().attribute("errorMessage", "Số điện thoại không hợp lệ (phải gồm 10 chữ số bắt đầu bằng 0)"));
+    }
+
+    @Test
+    void fileStorageEndpointsRequireBearerTokenInProd() throws Exception {
+        String files = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/files";
+        mockMvc.perform(get(files + "/signed-url").param("objectKey", "x"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(delete(files).param("objectKey", "x"))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test

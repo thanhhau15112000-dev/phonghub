@@ -15,6 +15,8 @@ tập trung vào các nghiệp vụ property, room, contract và maintenance tic
 - Profile `prod` dùng PostgreSQL bên ngoài, phù hợp với database của Supabase.
 - React SPA không thuộc scope hiện tại; UI chính được server-render bằng
   Thymeleaf, còn REST API vẫn giữ contract cho client tích hợp.
+- Đã có tích hợp thanh toán SePay (webhook) và hóa đơn phí sửa chữa
+  (migration V10-V12).
 - Snapshot này không được gọi là release-ready. Việc deploy thật, CORS, URL
   runtime và dữ liệu Supabase cần được xác minh riêng.
 
@@ -212,11 +214,26 @@ Migration dùng chung:
 - `V2__align_roles_remove_password_hash_and_add_active_contract_constraint.sql`:
   đồng bộ role, tách password sang Supabase Auth và thêm invariant contract.
 - `V3__align_phone_and_add_audit_log.sql`: điều chỉnh phone và tạo audit log.
+- `V6__unique_lower_email_and_username.sql`: email và username duy nhất không
+  phân biệt hoa thường.
+- `V7__add_owner_role_and_property_approval_status.sql`: thêm role OWNER và
+  trạng thái duyệt property.
+- `V9__standardize_property_verification_status.sql`: chuẩn hóa trạng thái xác
+  minh property.
+- `V10__add_sepay_transactions_table.sql`: bảng giao dịch SePay.
+- `V11__link_invoices_to_sepay_payments.sql`: liên kết hóa đơn với thanh toán
+  SePay.
+- `V12__maintenance_repair_fee_invoices.sql`: hóa đơn phí sửa chữa bảo trì.
 
-Fixture local:
+Số V4, V5, V8 thuộc fixture local nên migration dùng chung có khoảng trống;
+migration dùng chung mới tiếp tục từ V13.
 
-- `V4__local_demo_fixture.sql` chỉ nằm trong Flyway location của profile
-  `docker`.
+Fixture local (chỉ nằm trong Flyway location của profile `docker`,
+`db/seed/docker`):
+
+- `V4__local_demo_fixture.sql`
+- `V5__local_vietnamese_fixture_text.sql`
+- `V8__local_demo_owner_fixture.sql`
 - Profile `prod` không quét thư mục fixture này.
 - Fixture hiện mô phỏng cùng kịch bản MVP đang dùng trong test; đây không phải
   bản export đã xác minh từ database Supabase remote.
@@ -242,6 +259,18 @@ Fixture local:
 - `POST /api/maintenance`
 - `POST /api/maintenance/{ticketId}/accept`
 - `POST /api/maintenance/{ticketId}/resolve`
+- `GET /api/maintenance/{id}`
+- `GET /api/contracts/{id}`, `GET /api/contracts/my-active`
+- `POST /api/contracts/{id}/occupants`
+- `POST /api/contracts/{contractId}/occupants/{tenantId}/check-out`
+- `GET /api/properties/{id}`
+- `POST /api/properties/{propertyId}/rooms`
+- `GET`, `PUT /api/rooms/{id}`; `PUT /api/rooms/{id}/status`
+- `GET`, `PUT /api/tenants/{id}`
+- `POST /api/admin/properties/{propertyId}/verify`
+- `POST /api/admin/properties/{propertyId}/reject`
+- `POST /api/v1/payments/sepay/webhook`
+- `GET /api/v1/payments/transactions`, `GET /api/v1/payments/transactions/{id}`
 
 Chi tiết request/response được định nghĩa trong controller và DTO tương ứng.
 Frontend nên dùng API contract đó thay vì phụ thuộc vào fixture local.
@@ -268,6 +297,15 @@ SUPABASE_SERVICE_ROLE_KEY
 SUPABASE_JWKS_URI
 SUPABASE_JWT_ISSUER
 SUPABASE_JWT_AUDIENCE
+```
+
+Biến cho thanh toán SePay (mặc định rỗng, cần đặt khi dùng thanh toán thật):
+
+```text
+SEPAY_WEBHOOK_API_KEY
+SEPAY_BANK_CODE
+SEPAY_BANK_ACCOUNT_NUMBER
+SEPAY_BANK_ACCOUNT_NAME
 ```
 
 Không đặt giá trị thật trong `application-*.yml`, `.env` đã commit hoặc bundle
@@ -340,3 +378,11 @@ docker build -t phonghub:local .
   `phonghub_pgdata`.
 - Không bật profile `prod` để chạy local. Profile đó yêu cầu đầy đủ biến
   Supabase/JDBC và dùng authentication production.
+
+## Private storage và mã hóa dữ liệu tenant
+
+- Tạo bucket Supabase Storage tên `private-files` (hoặc đặt `SUPABASE_STORAGE_BUCKET`) và giữ bucket ở chế độ private.
+- File upload chỉ nhận JPEG, PNG, WebP và PDF; giới hạn mặc định 10 MiB. Ứng dụng chỉ trả signed URL tối đa 10 phút.
+- Tạo riêng hai khóa 32 byte bằng `openssl rand -base64 32`, rồi đặt `TENANT_DATA_ENCRYPTION_KEY` và `TENANT_DATA_HMAC_KEY`.
+- Đặt `TENANT_DATA_KEY_ID` (ví dụ `v1`). Không đổi hoặc xóa khóa đang dùng trước khi re-encrypt dữ liệu sang key id mới.
+- Migration `V14` mã hóa CCCD cũ bằng AES-256-GCM, tạo HMAC để kiểm tra trùng, rồi xóa cột plaintext. Thiếu key sẽ làm migration dừng an toàn.

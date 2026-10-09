@@ -25,9 +25,6 @@ public interface TenantUseCase {
             if (fullName == null || fullName.isBlank()) {
                 throw new IllegalArgumentException("Họ và tên không được để trống");
             }
-            if (identityCardNumber == null || identityCardNumber.isBlank()) {
-                throw new IllegalArgumentException("Số CCCD không được để trống");
-            }
             if (phone == null || phone.isBlank()) {
                 throw new IllegalArgumentException("Số điện thoại không được để trống");
             }

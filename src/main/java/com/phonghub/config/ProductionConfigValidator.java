@@ -27,7 +27,10 @@ public class ProductionConfigValidator {
             "supabase.service-role-key",
             "supabase.jwks-uri",
             "supabase.jwt-issuer",
-            "supabase.jwt-audience"
+            "supabase.jwt-audience",
+            "phonghub.security.tenant-data.key-id",
+            "phonghub.security.tenant-data.encryption-key",
+            "phonghub.security.tenant-data.hmac-key"
         );
 
         for (String prop : requiredProperties) {

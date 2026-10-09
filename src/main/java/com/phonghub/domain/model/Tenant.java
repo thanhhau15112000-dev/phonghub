@@ -88,4 +88,12 @@ public record Tenant(
             Instant.now()
         );
     }
+
+    public String maskedIdentityCardNumber() {
+        String normalized = identityCardNumber.trim();
+        if (normalized.length() <= 4) {
+            return "****";
+        }
+        return "****" + normalized.substring(normalized.length() - 4);
+    }
 }

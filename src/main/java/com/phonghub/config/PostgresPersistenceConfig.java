@@ -12,6 +12,7 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresStaffPropertyAssign
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresUserRepository;
 import com.phonghub.adapter.out.supabase.auth.SupabaseIdentityProviderAdapter;
+import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
@@ -23,6 +24,7 @@ import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.application.port.out.TenantDataProtectionPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -93,8 +95,22 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
-    public TenantRepositoryPort tenantRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        return new PostgresTenantRepository(jdbcTemplate);
+    public TenantRepositoryPort tenantRepository(
+        NamedParameterJdbcTemplate jdbcTemplate,
+        TenantDataProtectionPort tenantDataProtection
+    ) {
+        return new PostgresTenantRepository(jdbcTemplate, tenantDataProtection);
+    }
+
+    @Bean
+    public TenantDataProtectionPort tenantDataProtection(
+        TenantDataProtectionProperties properties
+    ) {
+        return new AesGcmTenantDataProtector(
+            properties.getKeyId(),
+            properties.getEncryptionKey(),
+            properties.getHmacKey()
+        );
     }
 
     @Bean
