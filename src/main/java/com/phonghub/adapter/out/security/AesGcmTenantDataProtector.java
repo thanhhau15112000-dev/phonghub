@@ -1,6 +1,7 @@
 package com.phonghub.adapter.out.security;
 
 import com.phonghub.application.port.out.TenantDataProtectionPort;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
@@ -15,6 +16,8 @@ import javax.crypto.spec.SecretKeySpec;
 public class AesGcmTenantDataProtector implements TenantDataProtectionPort {
 
     private static final byte[] AAD = "phonghub:tenant:identity-card:v1".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] DOCUMENT_AAD = "phonghub:tenant:document-image:v1".getBytes(StandardCharsets.UTF_8);
+    private static final byte BLOB_VERSION = 1;
     private static final int NONCE_BYTES = 12;
     private static final int GCM_TAG_BITS = 128;
 
@@ -92,6 +95,53 @@ public class AesGcmTenantDataProtector implements TenantDataProtectionPort {
             return new String(decrypted, StandardCharsets.UTF_8);
         } catch (GeneralSecurityException | IllegalArgumentException ex) {
             throw new IllegalStateException("Unable to decrypt tenant identity data", ex);
+        }
+    }
+
+    @Override
+    public byte[] encryptBytes(byte[] plaintext) {
+        if (plaintext == null || plaintext.length == 0) {
+            throw new IllegalArgumentException("Data to encrypt cannot be empty");
+        }
+        byte[] nonce = new byte[NONCE_BYTES];
+        secureRandom.nextBytes(nonce);
+        byte[] keyIdBytes = keyId.getBytes(StandardCharsets.UTF_8);
+        try {
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.ENCRYPT_MODE, encryptionKey, new GCMParameterSpec(GCM_TAG_BITS, nonce));
+            cipher.updateAAD(DOCUMENT_AAD);
+            byte[] encrypted = cipher.doFinal(plaintext);
+            ByteBuffer blob = ByteBuffer.allocate(2 + keyIdBytes.length + NONCE_BYTES + encrypted.length);
+            blob.put(BLOB_VERSION).put((byte) keyIdBytes.length).put(keyIdBytes).put(nonce).put(encrypted);
+            return blob.array();
+        } catch (GeneralSecurityException ex) {
+            throw new IllegalStateException("Unable to encrypt document data", ex);
+        }
+    }
+
+    @Override
+    public byte[] decryptBytes(byte[] protectedBytes) {
+        try {
+            ByteBuffer blob = ByteBuffer.wrap(protectedBytes);
+            if (blob.get() != BLOB_VERSION) {
+                throw new IllegalStateException("Unsupported encrypted document format");
+            }
+            byte[] storedKeyId = new byte[blob.get() & 0xff];
+            blob.get(storedKeyId);
+            if (!keyId.equals(new String(storedKeyId, StandardCharsets.UTF_8))) {
+                throw new IllegalStateException("No encryption key configured for key id "
+                    + new String(storedKeyId, StandardCharsets.UTF_8));
+            }
+            byte[] nonce = new byte[NONCE_BYTES];
+            blob.get(nonce);
+            byte[] encrypted = new byte[blob.remaining()];
+            blob.get(encrypted);
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.DECRYPT_MODE, encryptionKey, new GCMParameterSpec(GCM_TAG_BITS, nonce));
+            cipher.updateAAD(DOCUMENT_AAD);
+            return cipher.doFinal(encrypted);
+        } catch (GeneralSecurityException | java.nio.BufferUnderflowException ex) {
+            throw new IllegalStateException("Unable to decrypt document data", ex);
         }
     }
 

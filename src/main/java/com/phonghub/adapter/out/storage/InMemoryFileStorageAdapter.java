@@ -31,6 +31,15 @@ public class InMemoryFileStorageAdapter implements FileStoragePort {
     }
 
     @Override
+    public byte[] get(String objectKey) {
+        StoredObject stored = objects.get(objectKey);
+        if (stored == null) {
+            throw new IllegalArgumentException("Stored object not found: " + objectKey);
+        }
+        return Arrays.copyOf(stored.content(), stored.content().length);
+    }
+
+    @Override
     public URI createSignedUrl(String objectKey, Duration ttl) {
         if (!objects.containsKey(objectKey)) {
             throw new IllegalArgumentException("Stored object not found: " + objectKey);

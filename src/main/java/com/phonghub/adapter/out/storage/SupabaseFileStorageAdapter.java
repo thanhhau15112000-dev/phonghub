@@ -40,6 +40,20 @@ public class SupabaseFileStorageAdapter implements FileStoragePort {
     }
 
     @Override
+    public byte[] get(String objectKey) {
+        byte[] content = restClient.get()
+            .uri(supabaseUrl + "/storage/v1/object/" + bucket + "/" + objectKey)
+            .header("apikey", serviceRoleKey)
+            .header("Authorization", "Bearer " + serviceRoleKey)
+            .retrieve()
+            .body(byte[].class);
+        if (content == null) {
+            throw new IllegalStateException("Supabase Storage returned no content for " + objectKey);
+        }
+        return content;
+    }
+
+    @Override
     public URI createSignedUrl(String objectKey, Duration ttl) {
         SignedUrlResponse response = restClient.post()
             .uri(supabaseUrl + "/storage/v1/object/sign/" + bucket + "/" + objectKey)
