@@ -4,6 +4,8 @@ import com.phonghub.application.port.in.RoomAssetUseCase;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.FileStoragePort;
+import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetEventRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
@@ -15,6 +17,8 @@ import com.phonghub.domain.model.AssetStatus;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomAsset;
 import com.phonghub.domain.model.RoomAssetEvent;
+import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +28,7 @@ import java.util.UUID;
 
 public class RoomAssetService implements RoomAssetUseCase {
 
+    private static final Duration SIGNED_URL_TTL = Duration.ofMinutes(10);
     private static final List<TemplateItem> BASIC_TEMPLATE = List.of(
         new TemplateItem("Giường", 1),
         new TemplateItem("Nệm", 1),
@@ -48,6 +53,8 @@ public class RoomAssetService implements RoomAssetUseCase {
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
     private final AuditPort auditPort;
+    private final MaintenanceTicketRepositoryPort ticketRepository;
+    private final FileStoragePort fileStoragePort;
 
     public RoomAssetService(
         RoomAssetRepositoryPort assetRepository,
@@ -55,7 +62,9 @@ public class RoomAssetService implements RoomAssetUseCase {
         RoomRepositoryPort roomRepository,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
-        AuditPort auditPort
+        AuditPort auditPort,
+        MaintenanceTicketRepositoryPort ticketRepository,
+        FileStoragePort fileStoragePort
     ) {
         this.assetRepository = assetRepository;
         this.eventRepository = eventRepository;
@@ -63,6 +72,8 @@ public class RoomAssetService implements RoomAssetUseCase {
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
         this.auditPort = auditPort;
+        this.ticketRepository = ticketRepository;
+        this.fileStoragePort = fileStoragePort;
     }
 
     @Override
@@ -144,6 +155,7 @@ public class RoomAssetService implements RoomAssetUseCase {
         CurrentUser user = currentUserPort.getCurrentUser();
         RoomAsset asset = findActiveAsset(command.assetId());
         authorizationService.assertCanManageProperty(user, propertyOf(asset));
+        assertTicketBelongsToAssetRoom(command.maintenanceTicketId(), asset);
 
         RoomAssetEvent event = new RoomAssetEvent(UUID.randomUUID(), asset.id(), command.type(),
             command.description(), command.cost(), command.maintenanceTicketId(), Instant.now(), user.id());
@@ -163,6 +175,32 @@ public class RoomAssetService implements RoomAssetUseCase {
         RoomAsset asset = findActiveAsset(assetId);
         assertCanView(user, findRoom(asset.roomId()));
         return eventRepository.findByAssetId(assetId);
+    }
+
+    @Override
+    public URI imageSignedUrl(UUID assetId) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        RoomAsset asset = findActiveAsset(assetId);
+        assertCanView(user, findRoom(asset.roomId()));
+        String image = asset.imageUrl();
+        if (image == null || image.isBlank()) {
+            return null;
+        }
+        if (image.startsWith("http://") || image.startsWith("https://")) {
+            return URI.create(image);
+        }
+        return fileStoragePort.createSignedUrl(image, SIGNED_URL_TTL);
+    }
+
+    private void assertTicketBelongsToAssetRoom(UUID ticketId, RoomAsset asset) {
+        if (ticketId == null) {
+            return;
+        }
+        var ticket = ticketRepository.findById(ticketId)
+            .orElseThrow(() -> new IllegalArgumentException("Maintenance ticket not found: " + ticketId));
+        if (!ticket.getRoomId().equals(asset.roomId())) {
+            throw new IllegalArgumentException("Maintenance ticket does not belong to the room of this asset");
+        }
     }
 
     private void assertCanView(CurrentUser user, Room room) {

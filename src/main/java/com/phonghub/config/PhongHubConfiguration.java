@@ -94,10 +94,13 @@ public class PhongHubConfiguration {
         RoomRepositoryPort roomRepo,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
-        AuditPort auditPort
+        AuditPort auditPort,
+        MaintenanceTicketRepositoryPort ticketRepo,
+        FileStoragePort fileStoragePort
     ) {
         RoomAssetService service = new RoomAssetService(
-            assetRepo, eventRepo, roomRepo, currentUserPort, authorizationService, auditPort
+            assetRepo, eventRepo, roomRepo, currentUserPort, authorizationService, auditPort,
+            ticketRepo, fileStoragePort
         );
         return new TransactionalRoomAssetUseCase(service);
     }

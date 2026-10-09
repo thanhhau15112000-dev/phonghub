@@ -1,6 +1,7 @@
 package com.phonghub.adapter.in.web;
 
 import com.phonghub.application.port.in.ContractUseCase;
+import com.phonghub.application.port.in.FileStorageUseCase;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomAssetUseCase;
@@ -26,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -34,6 +36,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 @Controller
@@ -46,6 +49,7 @@ public class RoomUiController {
     private final MaintenanceUseCase maintenanceUseCase;
     private final CurrentUserPort currentUserPort;
     private final RoomAssetUseCase roomAssetUseCase;
+    private final FileStorageUseCase fileStorageUseCase;
 
     public RoomUiController(
         RoomUseCase roomUseCase,
@@ -53,7 +57,8 @@ public class RoomUiController {
         ContractRepositoryPort contractRepository,
         MaintenanceUseCase maintenanceUseCase,
         CurrentUserPort currentUserPort,
-        RoomAssetUseCase roomAssetUseCase
+        RoomAssetUseCase roomAssetUseCase,
+        FileStorageUseCase fileStorageUseCase
     ) {
         this.roomUseCase = roomUseCase;
         this.propertyUseCase = propertyUseCase;
@@ -61,6 +66,7 @@ public class RoomUiController {
         this.maintenanceUseCase = maintenanceUseCase;
         this.currentUserPort = currentUserPort;
         this.roomAssetUseCase = roomAssetUseCase;
+        this.fileStorageUseCase = fileStorageUseCase;
     }
 
     @GetMapping("/{id}")
@@ -157,13 +163,20 @@ public class RoomUiController {
         @RequestParam(defaultValue = "1") int quantity,
         @RequestParam(required = false) String note,
         @RequestParam(required = false) String imageUrl,
+        @RequestParam(required = false) MultipartFile imageFile,
         @RequestParam(required = false) BigDecimal estimatedValue,
         RedirectAttributes redirectAttributes
     ) {
-        return handle(id, redirectAttributes, "Đã thêm tài sản " + name.trim() + ".", () ->
-            roomAssetUseCase.create(new RoomAssetUseCase.CreateAssetCommand(
-                id, null, name, blankToNull(serialNumber), quantity, blankToNull(note), blankToNull(imageUrl),
-                estimatedValue)));
+        return handle(id, redirectAttributes, "Đã thêm tài sản " + name.trim() + ".", () -> {
+            String image = resolveImage(id, imageFile, imageUrl);
+            try {
+                roomAssetUseCase.create(new RoomAssetUseCase.CreateAssetCommand(
+                    id, null, name, blankToNull(serialNumber), quantity, blankToNull(note), image, estimatedValue));
+            } catch (RuntimeException ex) {
+                discardUploaded(id, imageFile, image);
+                throw ex;
+            }
+        });
     }
 
     @PostMapping("/{id}/assets/template")
@@ -185,13 +198,20 @@ public class RoomUiController {
         @RequestParam(defaultValue = "1") int quantity,
         @RequestParam(required = false) String note,
         @RequestParam(required = false) String imageUrl,
+        @RequestParam(required = false) MultipartFile imageFile,
         @RequestParam(required = false) BigDecimal estimatedValue,
         RedirectAttributes redirectAttributes
     ) {
-        return handle(id, redirectAttributes, "Đã cập nhật tài sản " + name.trim() + ".", () ->
-            roomAssetUseCase.update(new RoomAssetUseCase.UpdateAssetCommand(
-                assetId, name, blankToNull(serialNumber), quantity, blankToNull(note), blankToNull(imageUrl),
-                estimatedValue)));
+        return handle(id, redirectAttributes, "Đã cập nhật tài sản " + name.trim() + ".", () -> {
+            String image = resolveImage(id, imageFile, imageUrl);
+            try {
+                roomAssetUseCase.update(new RoomAssetUseCase.UpdateAssetCommand(
+                    assetId, name, blankToNull(serialNumber), quantity, blankToNull(note), image, estimatedValue));
+            } catch (RuntimeException ex) {
+                discardUploaded(id, imageFile, image);
+                throw ex;
+            }
+        });
     }
 
     @PostMapping("/{id}/assets/{assetId}/delete")
@@ -228,6 +248,45 @@ public class RoomUiController {
             return ResponseEntity.notFound().build();
         }
         return AssetQr.response(asset, request);
+    }
+
+    @GetMapping("/{id}/assets/{assetId}/image")
+    public ResponseEntity<Void> assetImage(@PathVariable UUID id, @PathVariable UUID assetId) {
+        RoomAsset asset = roomAssetUseCase.get(assetId);
+        if (!asset.roomId().equals(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        java.net.URI target = roomAssetUseCase.imageSignedUrl(assetId);
+        if (target == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.status(302).header(HttpHeaders.LOCATION, target.toString())
+            .header(HttpHeaders.CACHE_CONTROL, "no-store").build();
+    }
+
+    private String resolveImage(UUID roomId, MultipartFile imageFile, String imageUrl) {
+        if (imageFile == null || imageFile.isEmpty()) {
+            return blankToNull(imageUrl);
+        }
+        Room room = roomUseCase.getRoom(roomId);
+        try {
+            return fileStorageUseCase.upload(new FileStorageUseCase.UploadFileCommand(
+                room.getPropertyId(), "assets", imageFile.getOriginalFilename(), imageFile.getContentType(),
+                imageFile.getBytes())).objectKey();
+        } catch (java.io.IOException ex) {
+            throw new IllegalArgumentException("Không đọc được tệp ảnh", ex);
+        }
+    }
+
+    private void discardUploaded(UUID roomId, MultipartFile imageFile, String objectKey) {
+        if (imageFile == null || imageFile.isEmpty() || objectKey == null) {
+            return;
+        }
+        try {
+            fileStorageUseCase.delete(roomUseCase.getRoom(roomId).getPropertyId(), objectKey);
+        } catch (RuntimeException ignored) {
+            // best effort: the original failure is reported to the user
+        }
     }
 
     private String handle(UUID roomId, RedirectAttributes redirectAttributes, String successMessage, Runnable action) {

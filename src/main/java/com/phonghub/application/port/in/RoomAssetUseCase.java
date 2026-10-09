@@ -4,6 +4,7 @@ import com.phonghub.domain.model.AssetEventType;
 import com.phonghub.domain.model.RoomAsset;
 import com.phonghub.domain.model.RoomAssetEvent;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,6 +25,9 @@ public interface RoomAssetUseCase {
     RoomAssetEvent recordEvent(RecordEventCommand command);
 
     List<RoomAssetEvent> history(UUID assetId);
+
+    /** Link ký có hạn tới ảnh tài sản lưu trong kho riêng tư; null nếu tài sản không có ảnh. */
+    URI imageSignedUrl(UUID assetId);
 
     record CreateAssetCommand(
         UUID roomId,

@@ -163,7 +163,7 @@
                             <strong th:text="${a.name()}">Giường</strong>
                             <div th:if="${a.serialNumber() != null}" style="font-size: 11px; color: var(--text-secondary);" th:text="'Số seri: ' + ${a.serialNumber()}"></div>
                             <div th:if="${a.note() != null and !a.note().isBlank()}" style="font-size: 11px; color: var(--text-secondary);" th:text="${a.note()}"></div>
-                            <a th:if="${a.imageUrl() != null}" th:href="${a.imageUrl()}" target="_blank" rel="noopener noreferrer" style="font-size: 11px;">Xem ảnh</a>
+                            <a th:if="${a.imageUrl() != null}" th:href="${a.imageUrl().startsWith('http') ? a.imageUrl() : '/rooms/' + room.getId() + '/assets/' + a.id() + '/image'}" target="_blank" rel="noopener noreferrer" style="font-size: 11px;">Xem ảnh</a>
                         </td>
                         <td th:text="${a.quantity()}">1</td>
                         <td>
@@ -212,7 +212,7 @@
     <!-- Hộp thoại thêm tài sản -->
     <dialog th:if="${canManageAssets}" id="addAssetModal" class="modal-dialog" style="max-width: 480px;">
         <h3 style="margin-top: 0;">Thêm tài sản</h3>
-        <form th:action="@{'/rooms/' + ${room.getId()} + '/assets'}" method="post">
+        <form th:action="@{'/rooms/' + ${room.getId()} + '/assets'}" method="post" enctype="multipart/form-data">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="form-group">
                 <label class="form-label" for="addAssetName">Tên tài sản *</label>
@@ -240,6 +240,10 @@
                 <label class="form-label" for="addAssetImage">Liên kết ảnh</label>
                 <input type="url" id="addAssetImage" name="imageUrl" class="form-control" placeholder="https://...">
             </div>
+            <div class="form-group">
+                <label class="form-label" for="addAssetFile">Hoặc tải ảnh lên (jpeg, png, webp)</label>
+                <input type="file" id="addAssetFile" name="imageFile" class="form-control" accept="image/jpeg,image/png,image/webp">
+            </div>
             <div style="display: flex; justify-content: flex-end; gap: 8px;">
                 <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('addAssetModal').close()">Hủy</button>
                 <button type="submit" class="btn btn-sm btn-primary">Thêm</button>
@@ -251,7 +255,7 @@
     <th:block th:if="${canManageAssets}" th:each="a : ${assets}">
         <dialog th:id="'editAsset-' + ${a.id()}" class="modal-dialog" style="max-width: 480px;">
             <h3 style="margin-top: 0;">Sửa tài sản <span th:text="${a.assetCode()}"></span></h3>
-            <form th:action="@{'/rooms/' + ${room.getId()} + '/assets/' + ${a.id()} + '/edit'}" method="post">
+            <form th:action="@{'/rooms/' + ${room.getId()} + '/assets/' + ${a.id()} + '/edit'}" method="post" enctype="multipart/form-data">
                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                 <div class="form-group">
                     <label class="form-label">Tên tài sản *</label>
@@ -277,7 +281,11 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Liên kết ảnh</label>
-                    <input type="url" name="imageUrl" class="form-control" th:value="${a.imageUrl()}" placeholder="https://...">
+                    <input type="url" name="imageUrl" class="form-control" th:value="${a.imageUrl() != null and a.imageUrl().startsWith('http') ? a.imageUrl() : ''}" placeholder="https://...">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Hoặc tải ảnh mới lên (thay ảnh hiện tại)</label>
+                    <input type="file" name="imageFile" class="form-control" accept="image/jpeg,image/png,image/webp">
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 8px;">
                     <button type="button" class="btn btn-sm btn-secondary" th:attr="onclick=|document.getElementById('editAsset-${a.id()}').close()|">Hủy</button>

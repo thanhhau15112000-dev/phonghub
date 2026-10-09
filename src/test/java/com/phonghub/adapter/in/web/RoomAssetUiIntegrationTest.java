@@ -118,6 +118,50 @@ class RoomAssetUiIntegrationTest {
             .andExpect(content().string(not(containsString(name))));
     }
 
+    private static final byte[] TINY_PNG = java.util.Base64.getDecoder().decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
+    @Test
+    @DisplayName("Uploaded image is stored privately and served only through a short-lived redirect")
+    void imageUploadIsServedThroughSignedRedirect() throws Exception {
+        String name = "Tủ ảnh " + UUID.randomUUID().toString().substring(0, 6);
+        org.springframework.mock.web.MockMultipartFile png = new org.springframework.mock.web.MockMultipartFile(
+            "imageFile", "tu.png", "image/png", TINY_PNG);
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart(ROOM + "/assets")
+                .file(png).header("X-User-Id", OWNER_1).param("name", name).param("quantity", "1"))
+            .andExpect(flash().attributeExists("successMessage"));
+
+        UUID assetId = latestAssetId(name);
+        MvcResult page = mockMvc.perform(get(ROOM).header("X-User-Id", OWNER_1)).andReturn();
+        String html = page.getResponse().getContentAsString();
+        assertEquals(true, html.contains("/assets/" + assetId + "/image"));
+        assertEquals(false, html.contains("properties/" + DataSeeder.PROP_1_ID + "/assets/"));
+
+        mockMvc.perform(get(ROOM + "/assets/" + assetId + "/image").header("X-User-Id", OWNER_1))
+            .andExpect(status().isFound())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                .header().string("Location", containsString("memory://")));
+        mockMvc.perform(get(ROOM + "/assets/" + assetId + "/image").header("X-User-Id", TENANT_1))
+            .andExpect(status().isFound());
+        mockMvc.perform(get(ROOM + "/assets/" + assetId + "/image").header("X-User-Id", OWNER_2))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                .header().string("Location", not(containsString("memory://"))));
+    }
+
+    @Test
+    @DisplayName("A non-image file renamed to png is rejected and no asset is created")
+    void fakeImageIsRejected() throws Exception {
+        String name = "Giả ảnh " + UUID.randomUUID().toString().substring(0, 6);
+        org.springframework.mock.web.MockMultipartFile fake = new org.springframework.mock.web.MockMultipartFile(
+            "imageFile", "fake.png", "image/png", "not an image".getBytes());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart(ROOM + "/assets")
+                .file(fake).header("X-User-Id", OWNER_1).param("name", name).param("quantity", "1"))
+            .andExpect(flash().attributeExists("errorMessage"));
+        mockMvc.perform(get(ROOM).header("X-User-Id", OWNER_1))
+            .andExpect(content().string(not(containsString(name))));
+    }
+
     @Test
     @DisplayName("Web QR endpoint returns a PNG and rejects an asset of a different room")
     void webQr() throws Exception {

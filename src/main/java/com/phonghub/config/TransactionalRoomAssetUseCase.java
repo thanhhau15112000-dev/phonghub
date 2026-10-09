@@ -3,6 +3,7 @@ package com.phonghub.config;
 import com.phonghub.application.port.in.RoomAssetUseCase;
 import com.phonghub.domain.model.RoomAsset;
 import com.phonghub.domain.model.RoomAssetEvent;
+import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,5 +62,11 @@ public class TransactionalRoomAssetUseCase implements RoomAssetUseCase {
     @Transactional(readOnly = true)
     public List<RoomAssetEvent> history(UUID assetId) {
         return delegate.history(assetId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public URI imageSignedUrl(UUID assetId) {
+        return delegate.imageSignedUrl(assetId);
     }
 }
