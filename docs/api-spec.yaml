@@ -346,7 +346,10 @@ paths:
           $ref: '#/components/responses/NotFound'
     patch:
       tags: [Properties]
-      summary: Cập nhật thông tin nhà trọ
+      summary: Cập nhật thông tin nhà trọ (owner của nhà trọ hoặc admin)
+      description: >
+        Owner đổi tên hoặc địa chỉ của nhà trọ đã duyệt thì nhà trọ quay về PENDING chờ duyệt lại (không tạo được phòng
+        hoặc hợp đồng mới cho đến khi được duyệt); nhà trọ bị từ chối được gửi duyệt lại khi owner sửa. Admin sửa không đổi trạng thái.
       requestBody:
         required: true
         content:
@@ -362,6 +365,10 @@ paths:
                 $ref: '#/components/schemas/Property'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -3380,6 +3387,9 @@ components:
           type: string
         description:
           type: string
+        totalRooms:
+          type: integer
+          minimum: 0
 
     Room:
       type: object

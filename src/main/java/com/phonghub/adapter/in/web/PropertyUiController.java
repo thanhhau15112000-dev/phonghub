@@ -137,6 +137,30 @@ public class PropertyUiController {
         }
     }
 
+    @PostMapping("/{id}/edit")
+    public String updateProperty(
+        @PathVariable UUID id,
+        @RequestParam String name,
+        @RequestParam String address,
+        @RequestParam(required = false) String description,
+        @RequestParam(required = false) Integer totalRooms,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            Property before = propertyUseCase.getProperty(id);
+            Property saved = propertyUseCase.updateProperty(
+                new PropertyUseCase.UpdatePropertyCommand(id, name, address, description, totalRooms));
+            boolean resubmitted = before.approvalStatus() != saved.approvalStatus()
+                && saved.approvalStatus() == com.phonghub.domain.model.PropertyApprovalStatus.PENDING;
+            redirectAttributes.addFlashAttribute("successMessage", resubmitted
+                ? "Đã cập nhật. Thay đổi tên hoặc địa chỉ cần được quản trị viên duyệt lại."
+                : "Đã cập nhật thông tin nhà trọ.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/properties/" + id;
+    }
+
     @PostMapping("/{id}/rooms")
     public String createRoom(
         @PathVariable UUID id,

@@ -432,3 +432,10 @@ docker build -t phonghub:local .
 - **Duyệt check-out chỉ dành cho owner hoặc admin** (owner chốt khoản khấu trừ, mặc định bằng tổng đề xuất). Trong một transaction: biên bản `APPROVED`, hợp đồng `TERMINATED`, phòng về `AVAILABLE` hoặc `MAINTENANCE` nếu có tài sản hỏng hoặc mất. Nếu bất kỳ bước nào lỗi (kể cả ghi audit) thì hoàn tác toàn bộ; đã có test trên PostgreSQL thật.
 - API `/api/contracts/{id}/check-out...` và trang `/contracts/{id}/check-out`. Nút kết thúc hợp đồng trực tiếp (`/terminate`) vẫn còn cho các trường hợp không có biên bản.
 - Chưa làm: tính tiền cọc và quyết toán (ngoài phạm vi issue); so sánh check-in/check-out và xuất PDF thuộc #72.
+
+## Sửa thông tin nhà trọ
+
+- `PATCH /api/properties/{id}` và nút "Sửa thông tin" ở trang nhà trọ, dành cho owner của nhà trọ và admin; staff, kỹ thuật viên, owner nhà khác và người thuê nhận `403`.
+- **Duyệt lại:** tên và địa chỉ là thông tin định danh. Owner đổi một trong hai trên nhà trọ đã duyệt thì nhà trọ quay về `PENDING`; trong lúc chờ duyệt không tạo được phòng hoặc hợp đồng mới (hợp đồng đang hiệu lực không bị ảnh hưởng). Nhà trọ bị từ chối (`REJECTED`) được gửi duyệt lại khi owner sửa và lý do từ chối bị xóa. Sửa mô tả hoặc tổng số phòng không cần duyệt lại. Admin sửa không đổi trạng thái.
+- Audit `PROPERTY_UPDATED` chỉ ghi tên các trường đã đổi và trạng thái trước/sau, không ghi giá trị. Gửi dữ liệu không đổi không tạo audit.
+- Chưa làm: kiểm tra tổng số phòng không nhỏ hơn số phòng đang có.
