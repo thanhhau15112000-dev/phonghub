@@ -7,6 +7,8 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresMaintenanceTicketRe
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPaymentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetEventRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantRepository;
@@ -21,6 +23,8 @@ import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
+import com.phonghub.application.port.out.RoomAssetEventRepositoryPort;
+import com.phonghub.application.port.out.RoomAssetRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
@@ -87,6 +91,16 @@ public class PostgresPersistenceConfig {
     @Bean
     public RoomRepositoryPort roomRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         return new PostgresRoomRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public RoomAssetRepositoryPort roomAssetRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresRoomAssetRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public RoomAssetEventRepositoryPort roomAssetEventRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresRoomAssetEventRepository(jdbcTemplate);
     }
 
     @Bean

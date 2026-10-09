@@ -272,6 +272,11 @@ public class AuthorizationService {
             .anyMatch(c -> c.isActive() && c.getRoomId().equals(roomId));
     }
 
+    /** Người thuê chỉ xem được dữ liệu của phòng mình đang ở (hợp đồng ACTIVE, người thuê chính hoặc người ở cùng). */
+    public boolean canTenantViewRoom(CurrentUser user, UUID roomId) {
+        return canTenantViewTicket(user, roomId, null);
+    }
+
     /** Xem hóa đơn: người thuê của hợp đồng (chính hoặc ở cùng), hoặc người có quyền với nhà trọ. */
     public void assertCanViewInvoice(CurrentUser user, com.phonghub.domain.model.Invoice invoice) {
         Contract contract = contractRepositoryPort.findById(invoice.getContractId())

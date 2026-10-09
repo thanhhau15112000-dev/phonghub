@@ -3,6 +3,7 @@ package com.phonghub.adapter.in.web;
 import com.phonghub.domain.exception.ContractNotFoundException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
+import com.phonghub.domain.exception.DuplicateAssetCodeException;
 import com.phonghub.domain.exception.DuplicateEmailException;
 import com.phonghub.domain.exception.DuplicateIdentityCardException;
 import com.phonghub.domain.exception.DuplicateRoomNumberException;
@@ -14,6 +15,7 @@ import com.phonghub.domain.exception.MaintenanceTicketException;
 import com.phonghub.domain.exception.PasswordChangeRequiredException;
 import com.phonghub.domain.exception.PrimaryOccupantRemovalException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
+import com.phonghub.domain.exception.RoomAssetNotFoundException;
 import com.phonghub.domain.exception.RoomNotFoundException;
 import com.phonghub.domain.exception.TenantNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
@@ -100,7 +102,8 @@ public class RestExceptionHandler {
 
     @ExceptionHandler({
         DuplicateEmailException.class,
-        DuplicateUsernameException.class
+        DuplicateUsernameException.class,
+        DuplicateAssetCodeException.class
     })
     public ProblemDetail handleDuplicateAccountConflict(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
@@ -158,6 +161,7 @@ public class RestExceptionHandler {
     @ExceptionHandler({
         PropertyNotFoundException.class,
         RoomNotFoundException.class,
+        RoomAssetNotFoundException.class,
         ContractNotFoundException.class,
         UserNotFoundException.class,
         TenantNotFoundException.class

@@ -7,6 +7,8 @@ import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomAssetEventRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomAssetRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
@@ -67,6 +69,16 @@ public class InMemoryPersistenceConfig {
     @Bean
     public InMemoryRoomRepository roomRepository() {
         return new InMemoryRoomRepository();
+    }
+
+    @Bean
+    public InMemoryRoomAssetRepository roomAssetRepository() {
+        return new InMemoryRoomAssetRepository();
+    }
+
+    @Bean
+    public InMemoryRoomAssetEventRepository roomAssetEventRepository() {
+        return new InMemoryRoomAssetEventRepository();
     }
 
     @Bean

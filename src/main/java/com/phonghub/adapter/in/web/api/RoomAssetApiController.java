@@ -1,0 +1,179 @@
+package com.phonghub.adapter.in.web.api;
+
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
+import com.phonghub.application.port.in.RoomAssetUseCase;
+import com.phonghub.domain.model.AssetEventType;
+import com.phonghub.domain.model.RoomAsset;
+import com.phonghub.domain.model.RoomAssetEvent;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.net.URI;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+@RestController
+@RequestMapping("/api")
+public class RoomAssetApiController {
+
+    private static final int QR_SIZE = 256;
+
+    private final RoomAssetUseCase useCase;
+
+    public RoomAssetApiController(RoomAssetUseCase useCase) {
+        this.useCase = useCase;
+    }
+
+    @GetMapping("/rooms/{roomId}/assets")
+    public List<AssetResponse> list(@PathVariable UUID roomId) {
+        return useCase.list(roomId).stream().map(AssetResponse::from).toList();
+    }
+
+    @PostMapping("/rooms/{roomId}/assets")
+    public ResponseEntity<AssetResponse> create(@PathVariable UUID roomId, @Valid @RequestBody AssetRequest request) {
+        RoomAsset asset = useCase.create(new RoomAssetUseCase.CreateAssetCommand(
+            roomId, request.assetCode(), request.name(), request.serialNumber(), request.quantity(),
+            request.note(), request.imageUrl(), request.estimatedValue()
+        ));
+        return ResponseEntity.created(URI.create("/api/room-assets/" + asset.id())).body(AssetResponse.from(asset));
+    }
+
+    @PostMapping("/rooms/{roomId}/assets/from-template")
+    public ResponseEntity<List<AssetResponse>> createFromTemplate(
+        @PathVariable UUID roomId,
+        @RequestParam String template
+    ) {
+        List<AssetResponse> created = useCase.createFromTemplate(roomId, template).stream()
+            .map(AssetResponse::from).toList();
+        return ResponseEntity.status(201).body(created);
+    }
+
+    @GetMapping("/room-assets/{assetId}")
+    public AssetResponse get(@PathVariable UUID assetId) {
+        return AssetResponse.from(useCase.get(assetId));
+    }
+
+    @PutMapping("/room-assets/{assetId}")
+    public AssetResponse update(@PathVariable UUID assetId, @Valid @RequestBody AssetRequest request) {
+        return AssetResponse.from(useCase.update(new RoomAssetUseCase.UpdateAssetCommand(
+            assetId, request.name(), request.serialNumber(), request.quantity(),
+            request.note(), request.imageUrl(), request.estimatedValue()
+        )));
+    }
+
+    @DeleteMapping("/room-assets/{assetId}")
+    public ResponseEntity<Void> delete(@PathVariable UUID assetId) {
+        useCase.delete(assetId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/room-assets/{assetId}/events")
+    public List<EventResponse> history(@PathVariable UUID assetId) {
+        return useCase.history(assetId).stream().map(EventResponse::from).toList();
+    }
+
+    @PostMapping("/room-assets/{assetId}/events")
+    public ResponseEntity<EventResponse> recordEvent(
+        @PathVariable UUID assetId,
+        @Valid @RequestBody EventRequest request
+    ) {
+        RoomAssetEvent event = useCase.recordEvent(new RoomAssetUseCase.RecordEventCommand(
+            assetId, request.type(), request.description(), request.cost(), request.maintenanceTicketId()
+        ));
+        return ResponseEntity.status(201).body(EventResponse.from(event));
+    }
+
+    @GetMapping(value = "/room-assets/{assetId}/qr", produces = MediaType.IMAGE_PNG_VALUE)
+    public ResponseEntity<byte[]> qr(@PathVariable UUID assetId) throws IOException {
+        RoomAsset asset = useCase.get(assetId);
+        String target = ServletUriComponentsBuilder.fromCurrentContextPath()
+            .path("/api/room-assets/{id}").buildAndExpand(asset.id()).toUriString();
+        try {
+            BitMatrix matrix = new QRCodeWriter().encode(target, BarcodeFormat.QR_CODE, QR_SIZE, QR_SIZE);
+            ByteArrayOutputStream png = new ByteArrayOutputStream();
+            MatrixToImageWriter.writeToStream(matrix, "PNG", png);
+            return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .contentType(MediaType.IMAGE_PNG)
+                .body(png.toByteArray());
+        } catch (com.google.zxing.WriterException ex) {
+            throw new IllegalStateException("Unable to generate QR code", ex);
+        }
+    }
+
+    public record AssetRequest(
+        @Size(max = 40) String assetCode,
+        @NotBlank @Size(max = 150) String name,
+        @Size(max = 100) String serialNumber,
+        @Min(1) int quantity,
+        @Size(max = 255) String note,
+        String imageUrl,
+        @DecimalMin("0") BigDecimal estimatedValue
+    ) {}
+
+    public record EventRequest(
+        @NotNull AssetEventType type,
+        @NotBlank String description,
+        @DecimalMin("0") BigDecimal cost,
+        UUID maintenanceTicketId
+    ) {}
+
+    public record AssetResponse(
+        UUID id,
+        UUID roomId,
+        String assetCode,
+        String name,
+        String serialNumber,
+        int quantity,
+        String status,
+        String note,
+        String imageUrl,
+        BigDecimal estimatedValue,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
+        static AssetResponse from(RoomAsset asset) {
+            return new AssetResponse(asset.id(), asset.roomId(), asset.assetCode(), asset.name(),
+                asset.serialNumber(), asset.quantity(), asset.status().name(), asset.note(), asset.imageUrl(),
+                asset.estimatedValue(), asset.createdAt(), asset.updatedAt());
+        }
+    }
+
+    public record EventResponse(
+        UUID id,
+        UUID assetId,
+        String type,
+        String description,
+        BigDecimal cost,
+        UUID maintenanceTicketId,
+        Instant createdAt
+    ) {
+        static EventResponse from(RoomAssetEvent event) {
+            return new EventResponse(event.id(), event.assetId(), event.type().name(), event.description(),
+                event.cost(), event.maintenanceTicketId(), event.createdAt());
+        }
+    }
+}

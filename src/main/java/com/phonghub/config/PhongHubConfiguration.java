@@ -4,6 +4,7 @@ import com.phonghub.application.port.in.AuthUseCase;
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
+import com.phonghub.application.port.in.RoomAssetUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.in.TenantUseCase;
 import com.phonghub.application.port.in.UserUseCase;
@@ -14,6 +15,8 @@ import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
+import com.phonghub.application.port.out.RoomAssetEventRepositoryPort;
+import com.phonghub.application.port.out.RoomAssetRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
@@ -23,6 +26,7 @@ import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.application.service.ContractService;
 import com.phonghub.application.service.MaintenanceService;
 import com.phonghub.application.service.PropertyService;
+import com.phonghub.application.service.RoomAssetService;
 import com.phonghub.application.service.RoomService;
 import com.phonghub.application.service.UserService;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository;
@@ -81,6 +85,21 @@ public class PhongHubConfiguration {
         return new RoomService(
             roomRepo, propertyRepo, ticketRepo, contractRepo, tenantRepo, currentUserPort, authorizationService
         );
+    }
+
+    @Bean
+    public RoomAssetUseCase roomAssetUseCase(
+        RoomAssetRepositoryPort assetRepo,
+        RoomAssetEventRepositoryPort eventRepo,
+        RoomRepositoryPort roomRepo,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort
+    ) {
+        RoomAssetService service = new RoomAssetService(
+            assetRepo, eventRepo, roomRepo, currentUserPort, authorizationService, auditPort
+        );
+        return new TransactionalRoomAssetUseCase(service);
     }
 
     @Bean
