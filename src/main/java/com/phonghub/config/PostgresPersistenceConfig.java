@@ -9,6 +9,8 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresPaymentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetEventRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverItemRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresMeterReadingRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresServiceRateRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverPhotoRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyHouseRulesRepository;
@@ -30,6 +32,8 @@ import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetEventRepositoryPort;
 import com.phonghub.application.port.out.HandoverItemRepositoryPort;
+import com.phonghub.application.port.out.MeterReadingRepositoryPort;
+import com.phonghub.application.port.out.ServiceRateRepositoryPort;
 import com.phonghub.application.port.out.HandoverPhotoRepositoryPort;
 import com.phonghub.application.port.out.HandoverRepositoryPort;
 import com.phonghub.application.port.out.PropertyHouseRulesRepositoryPort;
@@ -101,6 +105,16 @@ public class PostgresPersistenceConfig {
     @Bean
     public RoomRepositoryPort roomRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         return new PostgresRoomRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public MeterReadingRepositoryPort meterReadingRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresMeterReadingRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public ServiceRateRepositoryPort serviceRateRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresServiceRateRepository(jdbcTemplate);
     }
 
     @Bean

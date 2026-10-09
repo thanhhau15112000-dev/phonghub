@@ -7,6 +7,7 @@ import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.HandoverUseCase;
 import com.phonghub.application.port.in.RoomAssetUseCase;
 import com.phonghub.application.port.in.TenantDocumentUseCase;
+import com.phonghub.application.port.in.UtilityUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.in.TenantUseCase;
 import com.phonghub.application.port.in.UserUseCase;
@@ -19,6 +20,8 @@ import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetEventRepositoryPort;
 import com.phonghub.application.port.out.HandoverItemRepositoryPort;
+import com.phonghub.application.port.out.MeterReadingRepositoryPort;
+import com.phonghub.application.port.out.ServiceRateRepositoryPort;
 import com.phonghub.application.port.out.HandoverPhotoRepositoryPort;
 import com.phonghub.application.port.out.HandoverRepositoryPort;
 import com.phonghub.application.port.out.PropertyHouseRulesRepositoryPort;
@@ -37,6 +40,7 @@ import com.phonghub.application.service.PropertyService;
 import com.phonghub.application.service.HandoverService;
 import com.phonghub.application.service.RoomAssetService;
 import com.phonghub.application.service.TenantDocumentService;
+import com.phonghub.application.service.UtilityService;
 import com.phonghub.application.service.RoomService;
 import com.phonghub.application.service.UserService;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository;
@@ -113,6 +117,24 @@ public class PhongHubConfiguration {
             ticketRepo, fileStoragePort
         );
         return new TransactionalRoomAssetUseCase(service);
+    }
+
+    @Bean
+    public UtilityUseCase utilityUseCase(
+        MeterReadingRepositoryPort meterRepo,
+        ServiceRateRepositoryPort rateRepo,
+        RoomRepositoryPort roomRepo,
+        ContractRepositoryPort contractRepo,
+        HandoverRepositoryPort handoverRepo,
+        FileStoragePort fileStoragePort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        StorageProperties storageProperties
+    ) {
+        UtilityService service = new UtilityService(meterRepo, rateRepo, roomRepo, contractRepo, handoverRepo,
+            fileStoragePort, currentUserPort, authorizationService, auditPort, storageProperties.getMaxFileSizeBytes());
+        return new TransactionalUtilityUseCase(service);
     }
 
     @Bean

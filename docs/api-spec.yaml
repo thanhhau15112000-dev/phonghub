@@ -2229,7 +2229,7 @@ paths:
           $ref: '#/components/responses/Unauthorized'
     post:
       tags: [Meters]
-      summary: Thiết lập loại phí và đơn giá dịch vụ
+      summary: Thiết lập loại phí và đơn giá dịch vụ (owner của nhà trọ hoặc admin; tên không trùng trong nhà trọ)
       requestBody:
         required: true
         content:
@@ -2256,6 +2256,10 @@ paths:
                 $ref: '#/components/schemas/ServiceRate'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /api/service-rates/{rateId}:
     parameters:
@@ -2267,14 +2271,20 @@ paths:
           format: uuid
     patch:
       tags: [Meters]
-      summary: Cập nhật đơn giá dịch vụ
+      summary: Cập nhật dịch vụ và đơn giá (owner của nhà trọ hoặc admin)
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [serviceName, chargeType, pricePerUnit]
               properties:
+                serviceName:
+                  type: string
+                chargeType:
+                  type: string
+                  enum: [PER_KWH, PER_M3, PER_PERSON, PER_ROOM_FLAT]
                 pricePerUnit:
                   type: number
       responses:
@@ -2286,6 +2296,12 @@ paths:
                 $ref: '#/components/schemas/ServiceRate'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /api/rooms/{roomId}/meter-readings:
     parameters:
@@ -2297,37 +2313,36 @@ paths:
           format: uuid
     get:
       tags: [Meters]
-      summary: Lịch sử ghi nhận chỉ số điện/nước của phòng
-      parameters:
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/LimitParam'
+      summary: Lịch sử chỉ số điện/nước của phòng (kỳ mới nhất trước)
+      description: Owner/staff/kỹ thuật viên của nhà trọ và tenant đang ở phòng được xem; người khác nhận 403.
       responses:
         '200':
           description: Danh sách chỉ số
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/PaginatedMeta'
-                  - type: object
-                    properties:
-                      data:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/MeterReading'
+                type: array
+                items:
+                  $ref: '#/components/schemas/MeterReading'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [Meters]
-      summary: Chốt chỉ số điện/nước hàng tháng
-      description: Tự động tính toán lượng tiêu thụ (consumption = currentValue - previousValue).
+      summary: Ghi chỉ số điện/nước theo kỳ (owner hoặc staff của nhà trọ)
+      description: >
+        Kỳ là tháng của readingDate (mặc định hôm nay, không được ở tương lai). Mỗi phòng/loại/kỳ chỉ một bản ghi và chỉ ghi được
+        kỳ sau kỳ gần nhất (409 nếu trùng hoặc cũ hơn). Chỉ số kỳ trước lấy từ bản ghi gần nhất hoặc biên bản check-in đã duyệt;
+        nếu chưa có thì phải gửi baselineValue. consumption = currentValue - previousValue; currentValue nhỏ hơn previousValue
+        chỉ hợp lệ khi thay đồng hồ (replacement kèm ghi chú), khi đó consumption = (oldFinalValue - previous) + (current - newStartValue).
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [meterType, currentValue, readingDate]
+              required: [meterType, currentValue]
               properties:
                 meterType:
                   type: string
@@ -2338,9 +2353,19 @@ paths:
                 readingDate:
                   type: string
                   format: date
-                photoUrl:
-                  type: string
-                  format: uri
+                baselineValue:
+                  type: number
+                  description: Chỉ số gốc, chỉ dùng cho lần ghi đầu khi chưa có kỳ trước hay check-in.
+                replacement:
+                  type: object
+                  required: [oldFinalValue, newStartValue, note]
+                  properties:
+                    oldFinalValue:
+                      type: number
+                    newStartValue:
+                      type: number
+                    note:
+                      type: string
       responses:
         '201':
           description: Đã lưu chỉ số công tơ
@@ -2348,10 +2373,62 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MeterReading'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+
+  /api/meter-readings/{readingId}/photo:
+    parameters:
+      - name: readingId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Meters]
+      summary: Đính kèm ảnh đồng hồ (jpeg/png/webp, lưu private)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Đã đính kèm ảnh
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeterReading'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    get:
+      tags: [Meters]
+      summary: Xem ảnh đồng hồ (chuyển hướng 302 tới URL ký có hạn)
+      responses:
+        '302':
+          description: Redirect tới signed URL
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   # ==========================================
   # 7. BILLING & INVOICES (CORE)
@@ -3854,7 +3931,7 @@ components:
 
     MeterReading:
       type: object
-      required: [id, roomId, meterType, previousValue, currentValue, consumption, readingDate]
+      required: [id, roomId, meterType, periodYear, periodMonth, previousValue, currentValue, consumption, replaced, readingDate, hasPhoto]
       properties:
         id:
           type: string
@@ -3865,6 +3942,12 @@ components:
         meterType:
           type: string
           enum: [ELECTRIC, WATER]
+        periodYear:
+          type: integer
+        periodMonth:
+          type: integer
+          minimum: 1
+          maximum: 12
         previousValue:
           type: number
           example: 1420.5
@@ -3874,12 +3957,25 @@ components:
         consumption:
           type: number
           example: 79.5
+        replaced:
+          type: boolean
+        oldMeterFinalValue:
+          type: number
+          nullable: true
+        newMeterStartValue:
+          type: number
+          nullable: true
+        replacementNote:
+          type: string
+          nullable: true
         readingDate:
           type: string
           format: date
-        photoUrl:
+        hasPhoto:
+          type: boolean
+        createdAt:
           type: string
-          format: uri
+          format: date-time
 
     ServiceRate:
       type: object

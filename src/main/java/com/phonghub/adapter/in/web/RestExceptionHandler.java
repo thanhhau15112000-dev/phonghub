@@ -5,6 +5,9 @@ import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
 import com.phonghub.domain.exception.DocumentRevealDeniedException;
 import com.phonghub.domain.exception.DuplicateAssetCodeException;
+import com.phonghub.domain.exception.DuplicateServiceRateException;
+import com.phonghub.domain.exception.MeterReadingConflictException;
+import com.phonghub.domain.exception.UtilityNotFoundException;
 import com.phonghub.domain.exception.HandoverAlreadyExistsException;
 import com.phonghub.domain.exception.HandoverNotFoundException;
 import com.phonghub.domain.exception.InvalidHandoverStateException;
@@ -112,7 +115,9 @@ public class RestExceptionHandler {
         DuplicateAssetCodeException.class,
         DuplicateDocumentNumberException.class,
         InvalidHandoverStateException.class,
-        HandoverAlreadyExistsException.class
+        HandoverAlreadyExistsException.class,
+        MeterReadingConflictException.class,
+        DuplicateServiceRateException.class
     })
     public ProblemDetail handleDuplicateAccountConflict(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
@@ -173,6 +178,7 @@ public class RestExceptionHandler {
         RoomAssetNotFoundException.class,
         TenantDocumentNotFoundException.class,
         HandoverNotFoundException.class,
+        UtilityNotFoundException.class,
         ContractNotFoundException.class,
         UserNotFoundException.class,
         TenantNotFoundException.class
@@ -233,6 +239,17 @@ public class RestExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
         problem.setTitle("Too Many Requests");
         problem.setType(URI.create("https://phonghub.local/errors/too-many-requests"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    /** Vi phạm ràng buộc duy nhất ở tầng cơ sở dữ liệu (ví dụ hai yêu cầu cùng lúc) được trả về là xung đột. */
+    @ExceptionHandler(org.springframework.dao.DuplicateKeyException.class)
+    public ProblemDetail handleDuplicateKey(org.springframework.dao.DuplicateKeyException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+            "Dữ liệu đã tồn tại hoặc vừa được cập nhật bởi một yêu cầu khác");
+        problem.setTitle("Conflict");
+        problem.setType(URI.create("https://phonghub.local/errors/conflict"));
         problem.setProperty("timestamp", Instant.now());
         return problem;
     }

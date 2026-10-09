@@ -9,6 +9,8 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRe
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomAssetEventRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverItemRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryMeterReadingRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryServiceRateRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverPhotoRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyHouseRulesRepository;
@@ -74,6 +76,16 @@ public class InMemoryPersistenceConfig {
     @Bean
     public InMemoryRoomRepository roomRepository() {
         return new InMemoryRoomRepository();
+    }
+
+    @Bean
+    public InMemoryMeterReadingRepository meterReadingRepository() {
+        return new InMemoryMeterReadingRepository();
+    }
+
+    @Bean
+    public InMemoryServiceRateRepository serviceRateRepository() {
+        return new InMemoryServiceRateRepository();
     }
 
     @Bean

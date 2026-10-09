@@ -439,3 +439,12 @@ docker build -t phonghub:local .
 - **Duyệt lại:** tên và địa chỉ là thông tin định danh. Owner đổi một trong hai trên nhà trọ đã duyệt thì nhà trọ quay về `PENDING`; trong lúc chờ duyệt không tạo được phòng hoặc hợp đồng mới (hợp đồng đang hiệu lực không bị ảnh hưởng). Nhà trọ bị từ chối (`REJECTED`) được gửi duyệt lại khi owner sửa và lý do từ chối bị xóa. Sửa mô tả hoặc tổng số phòng không cần duyệt lại. Admin sửa không đổi trạng thái.
 - Audit `PROPERTY_UPDATED` chỉ ghi tên các trường đã đổi và trạng thái trước/sau, không ghi giá trị. Gửi dữ liệu không đổi không tạo audit.
 - Chưa làm: kiểm tra tổng số phòng không nhỏ hơn số phòng đang có.
+
+## Chỉ số điện nước theo kỳ
+
+- `GET/POST /api/rooms/{id}/meter-readings`, `POST|GET /api/meter-readings/{id}/photo`, `GET/POST /api/properties/{id}/service-rates` và `PATCH /api/service-rates/{id}` (migration V20). Ghi chỉ số dành cho owner/staff của nhà trọ; xem cho cả kỹ thuật viên và tenant đang ở phòng; người ngoài nhà trọ nhận `403`.
+- **Kỳ = tháng của ngày ghi**; mỗi phòng/loại (điện, nước)/kỳ chỉ một bản ghi (unique ở DB). Trùng kỳ hoặc ghi kỳ cũ hơn kỳ gần nhất nhận `409`; không ghi ngày ở tương lai.
+- **Chỉ số kỳ trước** lấy từ bản ghi gần nhất, nếu chưa có thì từ biên bản check-in đã duyệt; nếu cả hai đều chưa có thì phải gửi `baselineValue`. Không cho nhập tay đè lên giá trị đã suy ra.
+- **Tiêu thụ = mới - cũ.** Số mới nhỏ hơn số cũ bị chặn (`400`) trừ khi khai báo thay đồng hồ (`replacement`: chỉ số cuối đồng hồ cũ, chỉ số bắt đầu đồng hồ mới, ghi chú bắt buộc); khi đó tiêu thụ = (cuối đồng hồ cũ - kỳ trước) + (mới - bắt đầu đồng hồ mới).
+- Ảnh đồng hồ (jpeg/png/webp) lưu private như các file khác, xem qua signed URL hết hạn sau 10 phút. Đơn giá dịch vụ cấu hình theo nhà trọ, chỉ owner của nhà trọ hoặc admin tạo/sửa, tên dịch vụ không trùng trong cùng nhà trọ. Audit: `METER_READING_RECORDED`, `METER_PHOTO_ATTACHED`, `SERVICE_RATE_CREATED/UPDATED`.
+- Chưa làm: màn hình nhập chỉ số (mới có API), đưa tiền điện nước vào hóa đơn (#66), OCR đọc ảnh (#67).
