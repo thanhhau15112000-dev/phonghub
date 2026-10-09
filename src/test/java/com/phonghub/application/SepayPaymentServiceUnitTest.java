@@ -1,6 +1,7 @@
 package com.phonghub.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -28,6 +29,7 @@ import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.InvoiceStatus;
 import com.phonghub.domain.model.Notification;
 import com.phonghub.domain.model.NotificationType;
+import com.phonghub.domain.model.PaymentReviewReason;
 import com.phonghub.domain.model.PaymentStatus;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyApprovalStatus;
@@ -337,5 +339,104 @@ class SepayPaymentServiceUnitTest {
         currentUserPort.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_TENANT_1);
         assertThrows(UnauthorizedPropertyAccessException.class, () -> service.getAllTransactions());
         assertThrows(UnauthorizedPropertyAccessException.class, () -> service.getTransactionById(UUID.randomUUID()));
+    }
+
+    private static BigDecimal vnd(String amount) {
+        return new BigDecimal(amount);
+    }
+
+    @Test
+    @DisplayName("Overpayment: the invoice is capped at its total, the excess is recorded and the transaction needs review")
+    void testOverpaymentIsSplit() {
+        Contract contract = saveActiveContract(UUID.randomUUID(), vnd("3000000"));
+        Invoice invoice = saveInvoice(contract, "PHOVERPAY2");
+
+        var tx = service.processWebhook(null,
+            createCommand(9101L, "PHOVERPAY2", "tien phong", "in", vnd("3500000"))).transaction();
+
+        Invoice stored = invoiceRepo.findById(invoice.getId()).orElseThrow();
+        assertEquals(InvoiceStatus.PAID, stored.getStatus());
+        assertEquals(0, vnd("3000000").compareTo(stored.getPaidAmount()));
+        assertEquals(0, vnd("3000000").compareTo(tx.appliedAmount()));
+        assertEquals(0, vnd("500000").compareTo(tx.excessAmount()));
+        assertEquals(PaymentReviewReason.OVERPAID, tx.reviewReason());
+        assertTrue(tx.needsReview());
+        assertTrue(notifRepo.findAll().stream().anyMatch(n -> n.message().contains("chuyển dư")));
+    }
+
+    @Test
+    @DisplayName("Overpaying the remainder of a partly paid invoice only credits what is owed")
+    void testOverpaymentAfterPartial() {
+        Contract contract = saveActiveContract(UUID.randomUUID(), vnd("3000000"));
+        Invoice invoice = saveInvoice(contract, "PHPARTOVER");
+        service.processWebhook(null, createCommand(9201L, "PHPARTOVER", "dot 1", "in", vnd("1000000")));
+
+        var tx = service.processWebhook(null,
+            createCommand(9202L, "PHPARTOVER", "dot 2", "in", vnd("2500000"))).transaction();
+
+        assertEquals(0, vnd("2000000").compareTo(tx.appliedAmount()));
+        assertEquals(0, vnd("500000").compareTo(tx.excessAmount()));
+        Invoice stored = invoiceRepo.findById(invoice.getId()).orElseThrow();
+        assertEquals(InvoiceStatus.PAID, stored.getStatus());
+        assertEquals(0, vnd("3000000").compareTo(stored.getPaidAmount()));
+    }
+
+    @Test
+    @DisplayName("Underpayment and exact payment need no review")
+    void testUnderAndExactNeedNoReview() {
+        Contract contract = saveActiveContract(UUID.randomUUID(), vnd("3000000"));
+        saveInvoice(contract, "PHUNDER234");
+
+        var under = service.processWebhook(null,
+            createCommand(9301L, "PHUNDER234", "thieu", "in", vnd("1000000"))).transaction();
+        var exact = service.processWebhook(null,
+            createCommand(9302L, "PHUNDER234", "du", "in", vnd("2000000"))).transaction();
+
+        assertEquals(0, under.excessAmount().signum());
+        assertEquals(0, vnd("1000000").compareTo(under.appliedAmount()));
+        assertEquals(0, exact.excessAmount().signum());
+        assertFalse(under.needsReview() || exact.needsReview());
+    }
+
+    @Test
+    @DisplayName("A second transfer to an invoice that is already paid is recorded as unapplied and flagged")
+    void testPaymentToSettledInvoiceIsFlagged() {
+        Contract contract = saveActiveContract(UUID.randomUUID(), vnd("3000000"));
+        Invoice invoice = saveInvoice(contract, "PHSETTLED2");
+        service.processWebhook(null, createCommand(9401L, "PHSETTLED2", "du", "in", vnd("3000000")));
+
+        var tx = service.processWebhook(null,
+            createCommand(9402L, "PHSETTLED2", "chuyen nham lan 2", "in", vnd("3000000"))).transaction();
+
+        assertEquals(PaymentReviewReason.INVOICE_NOT_PAYABLE, tx.reviewReason());
+        assertEquals(0, tx.appliedAmount().signum());
+        assertEquals(0, vnd("3000000").compareTo(tx.excessAmount()));
+        assertEquals(0, vnd("3000000").compareTo(invoiceRepo.findById(invoice.getId()).orElseThrow().getPaidAmount()));
+    }
+
+    @Test
+    @DisplayName("A transfer matching no invoice is kept, flagged as unmatched and credits nothing")
+    void testUnmatchedTransferIsFlagged() {
+        var tx = service.processWebhook(null,
+            createCommand(9501L, null, "chuyen khoan khong ma", "in", vnd("700000"))).transaction();
+
+        assertEquals(PaymentReviewReason.UNMATCHED, tx.reviewReason());
+        assertEquals(0, vnd("700000").compareTo(tx.excessAmount()));
+        assertEquals(PaymentStatus.SUCCESS, tx.status());
+    }
+
+    @Test
+    @DisplayName("A redelivered overpayment webhook is neither applied nor recorded a second time")
+    void testDuplicateOverpaymentNotRepeated() {
+        Contract contract = saveActiveContract(UUID.randomUUID(), vnd("3000000"));
+        Invoice invoice = saveInvoice(contract, "PHDUPOVER2");
+        var command = createCommand(9601L, "PHDUPOVER2", "du", "in", vnd("4000000"));
+
+        service.processWebhook(null, command);
+        var again = service.processWebhook(null, command);
+
+        assertEquals(1, paymentRepo.findAll().size());
+        assertEquals(0, vnd("1000000").compareTo(again.transaction().excessAmount()));
+        assertEquals(0, vnd("3000000").compareTo(invoiceRepo.findById(invoice.getId()).orElseThrow().getPaidAmount()));
     }
 }

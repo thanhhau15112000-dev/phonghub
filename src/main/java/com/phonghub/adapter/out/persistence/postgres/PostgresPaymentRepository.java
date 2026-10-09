@@ -3,6 +3,7 @@ package com.phonghub.adapter.out.persistence.postgres;
 import com.phonghub.adapter.out.security.PersonalDataFields;
 import com.phonghub.application.port.out.PaymentRepositoryPort;
 import com.phonghub.application.port.out.TenantDataProtectionPort;
+import com.phonghub.domain.model.PaymentReviewReason;
 import com.phonghub.domain.model.PaymentStatus;
 import com.phonghub.domain.model.PaymentTransaction;
 import java.sql.ResultSet;
@@ -54,7 +55,10 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
             PaymentStatus.valueOf(rs.getString("status")),
             contractId,
             invoiceId,
-            toInstant(rs.getTimestamp("created_at"))
+            toInstant(rs.getTimestamp("created_at")),
+            rs.getBigDecimal("applied_amount"),
+            rs.getBigDecimal("excess_amount"),
+            rs.getString("review_reason") != null ? PaymentReviewReason.valueOf(rs.getString("review_reason")) : null
         );
     }
 
@@ -64,11 +68,13 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
             INSERT INTO sepay_transactions (
                 id, sepay_id, gateway, transaction_date, account_number, sub_account,
                 transfer_type, transfer_amount, accumulated, code, content,
-                reference_code, description, status, contract_id, invoice_id, created_at
+                reference_code, description, status, contract_id, invoice_id, created_at,
+                applied_amount, excess_amount, review_reason
             ) VALUES (
                 :id, :sepayId, :gateway, :transactionDate, :accountNumber, :subAccount,
                 :transferType, :transferAmount, :accumulated, :code, :content,
-                :referenceCode, :description, :status, :contractId, :invoiceId, :createdAt
+                :referenceCode, :description, :status, :contractId, :invoiceId, :createdAt,
+                :appliedAmount, :excessAmount, :reviewReason
             )
             ON CONFLICT (sepay_id) DO NOTHING
             """;
@@ -90,7 +96,10 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
             .addValue("status", tx.status().name())
             .addValue("contractId", tx.contractId())
             .addValue("invoiceId", tx.invoiceId())
-            .addValue("createdAt", Timestamp.from(tx.createdAt()));
+            .addValue("createdAt", Timestamp.from(tx.createdAt()))
+            .addValue("appliedAmount", tx.appliedAmount())
+            .addValue("excessAmount", tx.excessAmount())
+            .addValue("reviewReason", tx.reviewReason() != null ? tx.reviewReason().name() : null);
 
         return jdbcTemplate.update(sql, params) == 1;
     }

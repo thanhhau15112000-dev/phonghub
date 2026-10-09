@@ -341,6 +341,9 @@ public class Invoice {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Payment amount must be greater than zero");
         }
+        if (amount.compareTo(remainingAmount()) > 0) {
+            throw new DomainException("Số tiền vượt quá số còn nợ của hóa đơn; phần dư phải được tách ra trước khi ghi nhận.");
+        }
         Instant at = receivedAt != null ? receivedAt : Instant.now();
         this.paidAmount = this.paidAmount.add(amount);
         if (this.paidAmount.compareTo(totalAmount) >= 0) {

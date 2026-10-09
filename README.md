@@ -457,3 +457,12 @@ docker build -t phonghub:local .
 - **Thiếu chỉ số không chặn hóa đơn tiền thuê.** Hóa đơn vẫn phát hành chỉ với tiền thuê; trang hợp đồng và trang thanh toán hiện cảnh báo (chưa có chỉ số điện/nước kỳ này, chưa cấu hình đơn giá, hoặc chỉ số ghi sau khi hóa đơn đã có thanh toán). Nhà trọ không cấu hình đơn giá nước thì không bị cảnh báo thiếu nước.
 - **Scheduler** (mỗi giờ và lúc khởi động) thêm dòng điện/nước cho hóa đơn tháng hiện tại và tháng trước khi chỉ số được ghi sau lúc phát hành. Chỉ thêm vào hóa đơn chưa ai trả đồng nào (đã trả một phần hoặc đã trả đủ thì giữ nguyên để không lệch số tiền người thuê đã chuyển); mỗi cặp chỉ số/đơn giá chỉ tính một lần (unique ở DB), dòng được khóa theo hóa đơn nên không ghi đè khoản webhook vừa cộng.
 - Chưa làm: sửa chỉ số đã ghi rồi tính lại hóa đơn, xử lý thanh toán vượt số tiền sau khi tổng đổi (#81).
+
+## Thanh toán dư và giao dịch cần xem xét
+
+- Migration V22 thêm vào `sepay_transactions` ba cột: `applied_amount` (đã cộng vào hóa đơn), `excess_amount` (phần dư chưa ghi nhận) và `review_reason` (khác NULL nghĩa là cần xem xét). Giao dịch cũ đã khớp hóa đơn được coi là đã cộng đủ.
+- Khi webhook về, số tiền được chia trước khi cộng: chỉ cộng tối đa **số còn nợ** của hóa đơn (hóa đơn đã khóa dòng nên số còn nợ không đổi giữa lúc tính và lúc cộng); phần còn lại là phần dư. `Invoice.applyPayment` giờ từ chối số tiền lớn hơn số còn nợ, không còn cộng quá tổng.
+- Ba lý do cần xem xét: `OVERPAID` (chuyển dư so với số còn nợ), `INVOICE_NOT_PAYABLE` (hóa đơn đã trả đủ, đã hủy hoặc đã gộp vào hóa đơn tháng nên không nhận thêm; cả số tiền là phần dư) và `UNMATCHED` (không khớp hóa đơn nào theo nội dung chuyển khoản). Trả thiếu chỉ làm hóa đơn `PARTIALLY_PAID`, không cần xem xét.
+- Thông báo cho owner (hoặc admin nếu không khớp được hợp đồng) nêu rõ số tiền dư và việc cần làm. Admin xem được `appliedAmount`, `excessAmount`, `reviewReason` ở `GET /api/v1/payments/transactions`.
+- Webhook gửi lại cùng `sepay_id` vẫn được bỏ qua (không cộng và không ghi dư lần hai).
+- Chưa làm: màn hình xử lý giao dịch cần xem xét (đánh dấu đã hoàn tiền/cấn trừ), tự cấn trừ phần dư vào kỳ sau, biên lai và đối soát (#82).
