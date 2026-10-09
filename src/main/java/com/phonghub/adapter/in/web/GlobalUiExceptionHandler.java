@@ -20,9 +20,11 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
     AuthUiController.class,
     ContractUiController.class,
     DashboardUiController.class,
+    HandoverUiController.class,
     MaintenanceUiController.class,
     PropertyUiController.class,
     RoomUiController.class,
+    TenantDocumentUiController.class,
     UserSwitchUiController.class
 })
 public class GlobalUiExceptionHandler {

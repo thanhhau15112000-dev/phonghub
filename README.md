@@ -414,3 +414,13 @@ docker build -t phonghub:local .
 - Nhật ký audit chỉ ghi id, vai trò, tên các trường đã đổi và số đã che; không ghi họ tên, số điện thoại, email, username hay địa chỉ. Thông báo trùng CCCD không còn nêu tên người đang giữ số đó.
 - Dùng chung khóa `TENANT_DATA_*` với CCCD. **Trước khi deploy phiên bản có `V17`:** sao lưu khóa ở nơi độc lập với DB, chạy `pg_dump` của database, và chắc chắn cả ba biến `TENANT_DATA_*` đã đặt trên môi trường chạy migration. Migration không đảo ngược được nếu mất khóa. Muốn xoay khóa cần tác vụ mã hóa lại dữ liệu (chưa có).
 - Supabase Auth vẫn lưu email của tài khoản ở hệ thống ngoài, không nằm trong phạm vi mã hóa này. `properties.address` là địa chỉ kinh doanh nên giữ nguyên dạng thường.
+
+## Biên bản check-in
+
+- Migration `V18` mở rộng `handovers` (trạng thái, mã băm điều khoản, bản chụp nội quy, người duyệt, cột kiểm toán), đổi ràng buộc duy nhất thành `(contract_id, type)` để mỗi hợp đồng chỉ có một biên bản check-in và còn chỗ cho check-out (#63), và thêm `handover_photos`, `handover_items`, `property_house_rules`. Dòng `handovers` có từ trước V18 được giữ ở trạng thái `APPROVED`.
+- **Thứ tự nghiệp vụ: kích hoạt hợp đồng trước, check-in sau.** Biên bản chỉ tạo được cho hợp đồng `ACTIVE`; duyệt biên bản không đổi trạng thái hợp đồng hay phòng, vì hai thứ đó đã đổi lúc kích hoạt.
+- Luồng: `DRAFT` (owner/staff nhập chỉ số điện nước, tình trạng phòng, chìa khóa, ảnh) -> `PENDING_TENANT` (đã gửi; hệ thống chụp danh sách tài sản của phòng, nội quy và mã băm điều khoản) -> `PENDING_APPROVAL` (người thuê chính xác nhận, cần đã tải CCCD) -> `APPROVED` hoặc `REJECTED` (từ chối phải có lý do; owner/staff mở lại về `DRAFT` để sửa và gửi lại, vẫn là một biên bản).
+- Gửi biên bản cần ít nhất một ảnh phòng, một ảnh đồng hồ điện và một ảnh đồng hồ nước. Chỉ sửa nội dung và ảnh khi ở `DRAFT`. Duyệt khóa dòng trong cơ sở dữ liệu nên hai lần duyệt đồng thời chỉ một lần thành công, lần còn lại trả `409`; lỗi giữa chừng khi duyệt hoàn tác toàn bộ.
+- Nội quy chung lưu ở `property_house_rules` (`PUT /api/properties/{id}/house-rules` hoặc ô nhập ở trang biên bản); mỗi lần sửa tăng phiên bản, biên bản đã gửi giữ bản chụp và mã băm cũ.
+- Quyền: tạo, sửa, gửi, duyệt, từ chối, mở lại thuộc admin và owner/staff của nhà trọ; chỉ người thuê chính xác nhận; người thuê của hợp đồng được xem. Kỹ thuật viên, owner nhà khác và người thuê khác nhận `403`. Mỗi bước ghi một sự kiện audit không chứa dữ liệu cá nhân.
+- Ảnh bàn giao (phòng, đồng hồ) không phải dữ liệu cá nhân nên được làm sạch EXIF và lưu ở kho riêng tư, xem qua link ký có hạn; ảnh giấy tờ của người thuê vẫn được mã hóa theo mục "Hồ sơ giấy tờ".

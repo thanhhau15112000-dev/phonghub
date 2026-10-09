@@ -5,6 +5,9 @@ import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
 import com.phonghub.domain.exception.DocumentRevealDeniedException;
 import com.phonghub.domain.exception.DuplicateAssetCodeException;
+import com.phonghub.domain.exception.HandoverAlreadyExistsException;
+import com.phonghub.domain.exception.HandoverNotFoundException;
+import com.phonghub.domain.exception.InvalidHandoverStateException;
 import com.phonghub.domain.exception.DuplicateDocumentNumberException;
 import com.phonghub.domain.exception.DuplicateEmailException;
 import com.phonghub.domain.exception.DuplicateIdentityCardException;
@@ -107,7 +110,9 @@ public class RestExceptionHandler {
         DuplicateEmailException.class,
         DuplicateUsernameException.class,
         DuplicateAssetCodeException.class,
-        DuplicateDocumentNumberException.class
+        DuplicateDocumentNumberException.class,
+        InvalidHandoverStateException.class,
+        HandoverAlreadyExistsException.class
     })
     public ProblemDetail handleDuplicateAccountConflict(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
@@ -167,6 +172,7 @@ public class RestExceptionHandler {
         RoomNotFoundException.class,
         RoomAssetNotFoundException.class,
         TenantDocumentNotFoundException.class,
+        HandoverNotFoundException.class,
         ContractNotFoundException.class,
         UserNotFoundException.class,
         TenantNotFoundException.class

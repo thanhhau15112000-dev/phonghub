@@ -4,6 +4,7 @@ import com.phonghub.application.port.in.AuthUseCase;
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
+import com.phonghub.application.port.in.HandoverUseCase;
 import com.phonghub.application.port.in.RoomAssetUseCase;
 import com.phonghub.application.port.in.TenantDocumentUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
@@ -17,6 +18,10 @@ import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetEventRepositoryPort;
+import com.phonghub.application.port.out.HandoverItemRepositoryPort;
+import com.phonghub.application.port.out.HandoverPhotoRepositoryPort;
+import com.phonghub.application.port.out.HandoverRepositoryPort;
+import com.phonghub.application.port.out.PropertyHouseRulesRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetRepositoryPort;
 import com.phonghub.application.port.out.TenantDataProtectionPort;
 import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
@@ -29,6 +34,7 @@ import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.application.service.ContractService;
 import com.phonghub.application.service.MaintenanceService;
 import com.phonghub.application.service.PropertyService;
+import com.phonghub.application.service.HandoverService;
 import com.phonghub.application.service.RoomAssetService;
 import com.phonghub.application.service.TenantDocumentService;
 import com.phonghub.application.service.RoomService;
@@ -107,6 +113,29 @@ public class PhongHubConfiguration {
             ticketRepo, fileStoragePort
         );
         return new TransactionalRoomAssetUseCase(service);
+    }
+
+    @Bean
+    public HandoverUseCase handoverUseCase(
+        HandoverRepositoryPort handoverRepo,
+        HandoverPhotoRepositoryPort photoRepo,
+        HandoverItemRepositoryPort itemRepo,
+        PropertyHouseRulesRepositoryPort rulesRepo,
+        ContractRepositoryPort contractRepo,
+        RoomAssetRepositoryPort assetRepo,
+        TenantRepositoryPort tenantRepo,
+        TenantDocumentRepositoryPort documentRepo,
+        FileStoragePort fileStoragePort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        StorageProperties storageProperties
+    ) {
+        HandoverService service = new HandoverService(
+            handoverRepo, photoRepo, itemRepo, rulesRepo, contractRepo, assetRepo, tenantRepo, documentRepo,
+            fileStoragePort, currentUserPort, authorizationService, auditPort, storageProperties.getMaxFileSizeBytes()
+        );
+        return new TransactionalHandoverUseCase(service);
     }
 
     @Bean

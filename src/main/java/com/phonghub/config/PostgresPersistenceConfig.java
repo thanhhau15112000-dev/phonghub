@@ -8,6 +8,10 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPaymentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetEventRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverItemRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverPhotoRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyHouseRulesRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantDocumentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
@@ -25,6 +29,10 @@ import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetEventRepositoryPort;
+import com.phonghub.application.port.out.HandoverItemRepositoryPort;
+import com.phonghub.application.port.out.HandoverPhotoRepositoryPort;
+import com.phonghub.application.port.out.HandoverRepositoryPort;
+import com.phonghub.application.port.out.PropertyHouseRulesRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetRepositoryPort;
 import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
@@ -93,6 +101,26 @@ public class PostgresPersistenceConfig {
     @Bean
     public RoomRepositoryPort roomRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         return new PostgresRoomRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public HandoverRepositoryPort handoverRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresHandoverRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public HandoverPhotoRepositoryPort handoverPhotoRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresHandoverPhotoRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public HandoverItemRepositoryPort handoverItemRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresHandoverItemRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public PropertyHouseRulesRepositoryPort propertyHouseRulesRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresPropertyHouseRulesRepository(jdbcTemplate);
     }
 
     @Bean

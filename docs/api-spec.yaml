@@ -1488,42 +1488,34 @@ paths:
           type: string
           format: uuid
     post:
-      tags: [Handover]
-      summary: Tạo biên bản bàn giao phòng khi khách dọn vào
+      tags: [Contracts]
+      summary: Tạo biên bản check-in (bản nháp) cho hợp đồng đang hiệu lực
+      description: >
+        Check-in diễn ra sau khi hợp đồng đã ACTIVE (kích hoạt hợp đồng trước). Mỗi hợp đồng chỉ có một biên bản
+        check-in; tạo lần hai trả 409. Chỉ owner/staff của nhà trọ và admin được tạo.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [initialElectricMeter, initialWaterMeter, roomCondition]
-              properties:
-                initialElectricMeter:
-                  type: number
-                  example: 1420.5
-                initialWaterMeter:
-                  type: number
-                  example: 35.0
-                roomCondition:
-                  type: string
-                  example: Phòng sạch sẽ, tài sản bàn giao nguyên vẹn
-                keysProvided:
-                  type: string
-                  example: 2 chìa khóa phòng, 1 thẻ từ cửa cuốn
-                photoUrls:
-                  type: array
-                  items:
-                    type: string
-                    format: uri
+              $ref: '#/components/schemas/HandoverInput'
       responses:
         '201':
-          description: Biên bản bàn giao đã lập
+          description: Đã tạo biên bản ở trạng thái DRAFT
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /api/contracts/{contractId}/handover:
     parameters:
@@ -1534,19 +1526,164 @@ paths:
           type: string
           format: uuid
     get:
-      tags: [Handover]
-      summary: Xem biên bản bàn giao phòng hiện tại
+      tags: [Contracts]
+      summary: Xem biên bản check-in (owner/staff của nhà trọ, hoặc người thuê của hợp đồng)
       responses:
         '200':
-          description: OK
+          description: Biên bản kèm ảnh và danh sách tài sản đã chụp
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    patch:
+      tags: [Contracts]
+      summary: Sửa chỉ số và tình trạng phòng (chỉ khi biên bản ở trạng thái DRAFT)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandoverInput'
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/handover/photos:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Tải ảnh phòng hoặc ảnh đồng hồ (jpeg, png, webp; tối đa 20 ảnh; chỉ khi DRAFT)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, file]
+              properties:
+                kind:
+                  type: string
+                  enum: [ROOM, METER_ELECTRIC, METER_WATER]
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Đã lưu ảnh
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  kind:
+                    type: string
+                  contentType:
+                    type: string
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/handover/photos/{photoId}:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: photoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags: [Contracts]
+      summary: Xóa ảnh (chỉ khi DRAFT)
+      responses:
+        '204':
+          description: Đã xóa
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/handover/send:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Gửi biên bản cho khách - DRAFT thành PENDING_TENANT
+      description: >
+        Cần ít nhất một ảnh mỗi loại ROOM, METER_ELECTRIC, METER_WATER. Khi gửi hệ thống chụp danh sách tài sản của phòng, nội quy hiện hành và mã băm SHA-256 của điều khoản hợp đồng và nội quy.
+      responses:
+        '200':
+          description: Biên bản sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /api/contracts/{contractId}/handover/confirm:
     parameters:
@@ -1557,25 +1694,186 @@ paths:
           type: string
           format: uuid
     post:
-      tags: [Handover]
-      summary: Khách thuê xác nhận chấp thuận biên bản bàn giao
+      tags: [Contracts]
+      summary: Người thuê chính xác nhận - PENDING_TENANT thành PENDING_APPROVAL
+      description: >
+        Chỉ người thuê chính của hợp đồng; cần đã tải giấy tờ CCCD (xem API giấy tờ).
       responses:
         '200':
-          description: Biên bản bàn giao đã được ký xác nhận
+          description: Biên bản sau khi chuyển trạng thái
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
-  # ==========================================
-  # 6. METERS & SERVICE RATES
-  # ==========================================
+  /api/contracts/{contractId}/handover/approve:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Duyệt biên bản - PENDING_APPROVAL thành APPROVED
+      description: >
+        Không thay đổi trạng thái hợp đồng hay phòng (đã đổi lúc kích hoạt). Duyệt hai lần trả 409.
+      responses:
+        '200':
+          description: Biên bản sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/handover/reject:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Từ chối biên bản kèm lý do - PENDING_APPROVAL thành REJECTED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Biên bản sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/handover/reopen:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Mở lại biên bản bị từ chối để chỉnh sửa - REJECTED thành DRAFT
+      responses:
+        '200':
+          description: Biên bản sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/properties/{propertyId}/house-rules:
+    parameters:
+      - name: propertyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Properties]
+      summary: Nội quy chung hiện hành của nhà trọ
+      responses:
+        '200':
+          description: Nội quy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseRules'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    put:
+      tags: [Properties]
+      summary: Lưu nội quy chung (tăng phiên bản); biên bản đã gửi giữ bản chụp cũ
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+      responses:
+        '200':
+          description: Đã lưu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseRules'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
   /api/properties/{propertyId}/service-rates:
     parameters:
       - name: propertyId
@@ -3085,36 +3383,125 @@ components:
           type: integer
           default: 5
 
-    HandoverRecord:
+    HandoverInput:
       type: object
-      required: [contractId, initialElectricMeter, initialWaterMeter, roomCondition, isConfirmedByTenant]
+      required: [initialElectricMeter, initialWaterMeter, roomCondition]
       properties:
-        contractId:
-          type: string
-          format: uuid
         initialElectricMeter:
           type: number
+          minimum: 0
           example: 1420.5
         initialWaterMeter:
           type: number
+          minimum: 0
           example: 35.0
         roomCondition:
           type: string
-          example: Phòng sơn mới, đèn quạt hoạt động tốt
+          example: Phòng sạch sẽ, tài sản bàn giao nguyên vẹn
         keysProvided:
           type: string
-          example: 2 chìa khóa cơ, 1 thẻ từ
-        photoUrls:
-          type: array
-          items:
-            type: string
-            format: uri
+          example: 2 chìa khóa phòng, 1 thẻ từ cửa cuốn
+
+    HouseRules:
+      type: object
+      required: [propertyId, content, version, updatedAt]
+      properties:
+        propertyId:
+          type: string
+          format: uuid
+        content:
+          type: string
+        version:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time
+
+    HandoverRecord:
+      type: object
+      required: [id, contractId, status, initialElectricMeter, initialWaterMeter, roomCondition, isConfirmedByTenant]
+      properties:
+        id:
+          type: string
+          format: uuid
+        contractId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [DRAFT, PENDING_TENANT, PENDING_APPROVAL, APPROVED, REJECTED]
+        initialElectricMeter:
+          type: number
+        initialWaterMeter:
+          type: number
+        roomCondition:
+          type: string
+        keysProvided:
+          type: string
+          nullable: true
+        contractTermsHash:
+          type: string
+          nullable: true
+          description: SHA-256 của điều khoản chính của hợp đồng tại thời điểm gửi
+        houseRulesText:
+          type: string
+          nullable: true
+        houseRulesHash:
+          type: string
+          nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+        sentAt:
+          type: string
+          format: date-time
+          nullable: true
         isConfirmedByTenant:
           type: boolean
-          example: true
         confirmedAt:
           type: string
           format: date-time
+          nullable: true
+        approvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        photos:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              kind:
+                type: string
+                enum: [ROOM, METER_ELECTRIC, METER_WATER]
+              contentType:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+        items:
+          type: array
+          description: Bản chụp tài sản của phòng tại thời điểm gửi
+          items:
+            type: object
+            properties:
+              assetId:
+                type: string
+                format: uuid
+                nullable: true
+              assetName:
+                type: string
+              quantity:
+                type: integer
+              status:
+                type: string
+                enum: [GOOD, DAMAGED, LOST, RETIRED]
+              conditionNote:
+                type: string
+                nullable: true
 
     MeterReading:
       type: object
