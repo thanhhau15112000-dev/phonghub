@@ -122,6 +122,196 @@
         </div>
     </div>
 
+    <!-- Tài sản trong phòng -->
+    <div class="card" id="room-assets">
+        <div class="flex-between" style="margin-bottom: 12px;">
+            <h2>Tài sản trong phòng</h2>
+            <div th:if="${canManageAssets}" style="display: flex; gap: 8px; align-items: center;">
+                <form th:action="@{'/rooms/' + ${room.getId()} + '/assets/template'}" method="post" style="display: flex; gap: 6px; align-items: center; margin: 0;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <select name="template" class="form-control" style="width: auto;">
+                        <option value="BASIC">Mẫu cơ bản (5 món)</option>
+                        <option value="FULL">Mẫu đầy đủ (9 món)</option>
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-secondary">Thêm từ mẫu</button>
+                </form>
+                <button type="button" class="btn btn-sm btn-primary" onclick="document.getElementById('addAssetModal').showModal()">+ Thêm tài sản</button>
+            </div>
+        </div>
+
+        <div th:if="${#lists.isEmpty(assets)}" class="empty-state">
+            <p>Chưa có tài sản nào được ghi nhận cho phòng này.</p>
+        </div>
+
+        <table th:if="${!#lists.isEmpty(assets)}" class="data-table">
+            <thead>
+                <tr>
+                    <th>Mã</th>
+                    <th>Tên tài sản</th>
+                    <th>Số lượng</th>
+                    <th>Tình trạng</th>
+                    <th>Giá trị ước tính</th>
+                    <th>QR</th>
+                    <th th:if="${canManageAssets}">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                <th:block th:each="a : ${assets}">
+                    <tr th:id="'asset-' + ${a.assetCode()}">
+                        <td th:text="${a.assetCode()}">TS-0001</td>
+                        <td>
+                            <strong th:text="${a.name()}">Giường</strong>
+                            <div th:if="${a.serialNumber() != null}" style="font-size: 11px; color: var(--text-secondary);" th:text="'Số seri: ' + ${a.serialNumber()}"></div>
+                            <div th:if="${a.note() != null and !a.note().isBlank()}" style="font-size: 11px; color: var(--text-secondary);" th:text="${a.note()}"></div>
+                            <a th:if="${a.imageUrl() != null}" th:href="${a.imageUrl()}" target="_blank" rel="noopener noreferrer" style="font-size: 11px;">Xem ảnh</a>
+                        </td>
+                        <td th:text="${a.quantity()}">1</td>
+                        <td>
+                            <span class="badge"
+                                  th:classappend="${a.status().name() == 'GOOD'} ? 'badge-ACTIVE' : (${a.status().name() == 'DAMAGED'} ? 'badge-REPORTED' : 'badge-REJECTED')"
+                                  th:text="${uiText.assetStatus(a.status())}">Tốt</span>
+                        </td>
+                        <td th:text="${#numbers.formatDecimal(a.estimatedValue(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</td>
+                        <td>
+                            <a th:href="@{'/rooms/' + ${room.getId()} + '/assets/' + ${a.id()} + '/qr'}" target="_blank" class="btn btn-sm">Mã QR</a>
+                        </td>
+                        <td th:if="${canManageAssets}">
+                            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-sm btn-secondary"
+                                        th:attr="onclick=|document.getElementById('editAsset-${a.id()}').showModal()|">Sửa</button>
+                                <button type="button" class="btn btn-sm btn-secondary"
+                                        th:attr="onclick=|document.getElementById('eventAsset-${a.id()}').showModal()|">Ghi nhận</button>
+                                <form th:action="@{'/rooms/' + ${room.getId()} + '/assets/' + ${a.id()} + '/delete'}" method="post" style="margin: 0;"
+                                      onsubmit="return confirm('Xóa tài sản này khỏi phòng?');">
+                                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                    <button type="submit" class="btn btn-sm btn-danger">Xóa</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr th:if="${canManageAssets and !#lists.isEmpty(assetHistory.get(a.id()))}">
+                        <td colspan="7" style="background: var(--bg-subtle, #f9fafb);">
+                            <details>
+                                <summary style="cursor: pointer; font-size: 12px;" th:text="'Lịch sử hư hỏng / sửa chữa (' + ${#lists.size(assetHistory.get(a.id()))} + ')'">Lịch sử</summary>
+                                <ul style="margin: 8px 0 0 16px; font-size: 12px;">
+                                    <li th:each="e : ${assetHistory.get(a.id())}">
+                                        <strong th:text="${uiText.assetEventType(e.type())}">Hư hỏng</strong>
+                                        — <span th:text="${e.description()}">Mô tả</span>
+                                        <span th:if="${e.cost().signum() > 0}" th:text="'(' + ${#numbers.formatDecimal(e.cost(), 0, 'COMMA', 0, 'POINT')} + ' đ)'"></span>
+                                        <span style="color: var(--text-secondary);" th:text="${#temporals.format(e.createdAt(), 'dd/MM/yyyy HH:mm')}"></span>
+                                    </li>
+                                </ul>
+                            </details>
+                        </td>
+                    </tr>
+                </th:block>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Hộp thoại thêm tài sản -->
+    <dialog th:if="${canManageAssets}" id="addAssetModal" class="modal-dialog" style="max-width: 480px;">
+        <h3 style="margin-top: 0;">Thêm tài sản</h3>
+        <form th:action="@{'/rooms/' + ${room.getId()} + '/assets'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group">
+                <label class="form-label" for="addAssetName">Tên tài sản *</label>
+                <input type="text" id="addAssetName" name="name" class="form-control" required maxlength="150">
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="form-group">
+                    <label class="form-label" for="addAssetQuantity">Số lượng *</label>
+                    <input type="number" id="addAssetQuantity" name="quantity" class="form-control" min="1" value="1" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="addAssetValue">Giá trị ước tính (đ)</label>
+                    <input type="number" id="addAssetValue" name="estimatedValue" class="form-control" min="0" step="1000">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="addAssetSerial">Số seri</label>
+                <input type="text" id="addAssetSerial" name="serialNumber" class="form-control" maxlength="100">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="addAssetNote">Ghi chú tình trạng</label>
+                <input type="text" id="addAssetNote" name="note" class="form-control" maxlength="255">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="addAssetImage">Liên kết ảnh</label>
+                <input type="url" id="addAssetImage" name="imageUrl" class="form-control" placeholder="https://...">
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('addAssetModal').close()">Hủy</button>
+                <button type="submit" class="btn btn-sm btn-primary">Thêm</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Hộp thoại sửa và ghi nhận sự kiện cho từng tài sản -->
+    <th:block th:if="${canManageAssets}" th:each="a : ${assets}">
+        <dialog th:id="'editAsset-' + ${a.id()}" class="modal-dialog" style="max-width: 480px;">
+            <h3 style="margin-top: 0;">Sửa tài sản <span th:text="${a.assetCode()}"></span></h3>
+            <form th:action="@{'/rooms/' + ${room.getId()} + '/assets/' + ${a.id()} + '/edit'}" method="post">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <div class="form-group">
+                    <label class="form-label">Tên tài sản *</label>
+                    <input type="text" name="name" class="form-control" th:value="${a.name()}" required maxlength="150">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label class="form-label">Số lượng *</label>
+                        <input type="number" name="quantity" class="form-control" min="1" th:value="${a.quantity()}" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Giá trị ước tính (đ)</label>
+                        <input type="number" name="estimatedValue" class="form-control" min="0" step="1000" th:value="${a.estimatedValue()}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Số seri</label>
+                    <input type="text" name="serialNumber" class="form-control" th:value="${a.serialNumber()}" maxlength="100">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Ghi chú tình trạng</label>
+                    <input type="text" name="note" class="form-control" th:value="${a.note()}" maxlength="255">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Liên kết ảnh</label>
+                    <input type="url" name="imageUrl" class="form-control" th:value="${a.imageUrl()}" placeholder="https://...">
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                    <button type="button" class="btn btn-sm btn-secondary" th:attr="onclick=|document.getElementById('editAsset-${a.id()}').close()|">Hủy</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Lưu</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog th:id="'eventAsset-' + ${a.id()}" class="modal-dialog" style="max-width: 480px;">
+            <h3 style="margin-top: 0;">Ghi nhận cho <span th:text="${a.name()}"></span></h3>
+            <form th:action="@{'/rooms/' + ${room.getId()} + '/assets/' + ${a.id()} + '/events'}" method="post">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <div class="form-group">
+                    <label class="form-label">Loại sự kiện *</label>
+                    <select name="type" class="form-control" required>
+                        <option th:each="t : ${assetEventTypes}" th:value="${t}" th:text="${uiText.assetEventType(t)}"></option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Mô tả *</label>
+                    <input type="text" name="description" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Chi phí (đ)</label>
+                    <input type="number" name="cost" class="form-control" min="0" step="1000" value="0">
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                    <button type="button" class="btn btn-sm btn-secondary" th:attr="onclick=|document.getElementById('eventAsset-${a.id()}').close()|">Hủy</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Ghi nhận</button>
+                </div>
+            </form>
+        </dialog>
+    </th:block>
+
     <!-- Yêu cầu bảo trì của phòng -->
     <div class="card">
         <div class="flex-between" style="margin-bottom: 12px;">

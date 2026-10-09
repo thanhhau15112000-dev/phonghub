@@ -70,6 +70,16 @@ class RoomAssetApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("Created asset appears in the room list")
+    void createdAssetAppearsInList() throws Exception {
+        UUID assetId = createAsset(OWNER_1, null, "Kệ sách danh sách");
+
+        MvcResult list = mockMvc.perform(get(ROOM_ASSETS).header("X-User-Id", OWNER_1))
+            .andExpect(status().isOk()).andReturn();
+        assertTrue(list.getResponse().getContentAsString().contains(assetId.toString()));
+    }
+
+    @Test
     @DisplayName("Owner of another property gets 403 on every asset operation")
     void foreignOwnerGets403() throws Exception {
         UUID assetId = createAsset(OWNER_1, null, "Bàn học");

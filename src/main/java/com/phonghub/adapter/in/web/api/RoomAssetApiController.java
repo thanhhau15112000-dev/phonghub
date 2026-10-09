@@ -1,27 +1,22 @@
 package com.phonghub.adapter.in.web.api;
 
-import com.google.zxing.BarcodeFormat;
-import com.google.zxing.client.j2se.MatrixToImageWriter;
-import com.google.zxing.common.BitMatrix;
-import com.google.zxing.qrcode.QRCodeWriter;
 import com.phonghub.application.port.in.RoomAssetUseCase;
 import com.phonghub.domain.model.AssetEventType;
 import com.phonghub.domain.model.RoomAsset;
 import com.phonghub.domain.model.RoomAssetEvent;
+import com.phonghub.adapter.in.web.AssetQr;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -33,13 +28,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 @RestController
 @RequestMapping("/api")
 public class RoomAssetApiController {
-
-    private static final int QR_SIZE = 256;
 
     private final RoomAssetUseCase useCase;
 
@@ -107,21 +99,8 @@ public class RoomAssetApiController {
     }
 
     @GetMapping(value = "/room-assets/{assetId}/qr", produces = MediaType.IMAGE_PNG_VALUE)
-    public ResponseEntity<byte[]> qr(@PathVariable UUID assetId) throws IOException {
-        RoomAsset asset = useCase.get(assetId);
-        String target = ServletUriComponentsBuilder.fromCurrentContextPath()
-            .path("/api/room-assets/{id}").buildAndExpand(asset.id()).toUriString();
-        try {
-            BitMatrix matrix = new QRCodeWriter().encode(target, BarcodeFormat.QR_CODE, QR_SIZE, QR_SIZE);
-            ByteArrayOutputStream png = new ByteArrayOutputStream();
-            MatrixToImageWriter.writeToStream(matrix, "PNG", png);
-            return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .contentType(MediaType.IMAGE_PNG)
-                .body(png.toByteArray());
-        } catch (com.google.zxing.WriterException ex) {
-            throw new IllegalStateException("Unable to generate QR code", ex);
-        }
+    public ResponseEntity<byte[]> qr(@PathVariable UUID assetId, HttpServletRequest request) {
+        return AssetQr.response(useCase.get(assetId), request);
     }
 
     public record AssetRequest(
