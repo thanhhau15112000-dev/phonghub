@@ -405,3 +405,12 @@ docker build -t phonghub:local .
 - Xem thường chỉ trả loại giấy tờ và số che (`****1234`), không trả ảnh. Xem đầy đủ (`POST .../documents/{type}/reveal`, hoặc nút "Xem đầy đủ" ở trang `/properties/{propertyId}/tenants/{tenantId}/documents`) yêu cầu nhập lại mật khẩu của chính người xem. Sai mật khẩu trả 403 và được ghi nhật ký; 5 lần sai trong 10 phút trả 429.
 - Mỗi lần xem (danh sách, một giấy tờ, xem đầy đủ, xem thất bại, tải lên, xóa) ghi đúng một sự kiện audit; nhật ký không chứa số giấy tờ hay mật khẩu. Phản hồi xem đầy đủ có `Cache-Control: no-store`.
 - Giới hạn đã biết: bộ đếm lần nhập sai nằm trong bộ nhớ của từng instance (sẽ được thay bằng rate limit chung ở #77); xác nhận mật khẩu dùng đăng nhập của nhà cung cấp danh tính nên mỗi lần kiểm tra tạo thêm một phiên đăng nhập phía nhà cung cấp.
+
+## Mã hóa thông tin cá nhân khi lưu
+
+- Migration Java `V17` mã hóa các cột sau bằng AES-256-GCM (định dạng `enc1.<key id>.<nonce>.<ciphertext>`, mỗi cột có ngữ cảnh riêng nên không thể dán ciphertext sang cột khác): `users` (email, username, họ tên, số điện thoại), `tenants` (họ tên, số điện thoại, email, địa chỉ thường trú), `sepay_transactions` (số tài khoản, tài khoản phụ, nội dung, mô tả) và `audit_logs.details`.
+- Email, username và số điện thoại của `users` có cột chỉ mục mù `*_hmac` (HMAC-SHA256 của giá trị đã chuẩn hóa: bỏ khoảng trắng, chữ thường, bỏ ký tự phân tách số điện thoại). Đăng nhập, tra cứu và ràng buộc duy nhất dùng chỉ mục này nên vẫn không phân biệt hoa thường; các ràng buộc duy nhất trên dữ liệu thường đã bị gỡ. Số điện thoại tenant có `phone_hmac` để tìm khớp chính xác.
+- Họ tên và địa chỉ không còn tìm hoặc sắp xếp được trong SQL; việc lọc phải làm trong ứng dụng. Tìm theo một phần số điện thoại hoặc tên không còn được hỗ trợ ở tầng dữ liệu.
+- Nhật ký audit chỉ ghi id, vai trò, tên các trường đã đổi và số đã che; không ghi họ tên, số điện thoại, email, username hay địa chỉ. Thông báo trùng CCCD không còn nêu tên người đang giữ số đó.
+- Dùng chung khóa `TENANT_DATA_*` với CCCD. **Trước khi deploy phiên bản có `V17`:** sao lưu khóa ở nơi độc lập với DB, chạy `pg_dump` của database, và chắc chắn cả ba biến `TENANT_DATA_*` đã đặt trên môi trường chạy migration. Migration không đảo ngược được nếu mất khóa. Muốn xoay khóa cần tác vụ mã hóa lại dữ liệu (chưa có).
+- Supabase Auth vẫn lưu email của tài khoản ở hệ thống ngoài, không nằm trong phạm vi mã hóa này. `properties.address` là địa chỉ kinh doanh nên giữ nguyên dạng thường.

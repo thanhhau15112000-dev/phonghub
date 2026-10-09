@@ -1,5 +1,6 @@
 package com.phonghub.adapter.out.persistence.postgres;
 
+import com.phonghub.adapter.out.security.PersonalDataFields;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.application.port.out.TenantDataProtectionPort;
 import com.phonghub.domain.model.Tenant;
@@ -40,11 +41,11 @@ public class PostgresTenantRepository implements TenantRepositoryPort {
         return new Tenant(
             UUID.fromString(rs.getString("id")),
             userId,
-            rs.getString("full_name"),
+            dataProtection.decryptField(PersonalDataFields.TENANTS_FULL_NAME, rs.getString("full_name")),
             identityCardNumber,
-            rs.getString("phone"),
-            rs.getString("email"),
-            rs.getString("permanent_address"),
+            dataProtection.decryptField(PersonalDataFields.TENANTS_PHONE, rs.getString("phone")),
+            dataProtection.decryptField(PersonalDataFields.TENANTS_EMAIL, rs.getString("email")),
+            dataProtection.decryptField(PersonalDataFields.TENANTS_ADDRESS, rs.getString("permanent_address")),
             toInstant(rs.getTimestamp("created_at"))
         );
     }
@@ -59,11 +60,11 @@ public class PostgresTenantRepository implements TenantRepositoryPort {
         String sql = """
             INSERT INTO tenants (
                 id, user_id, full_name, identity_card_ciphertext, identity_card_nonce,
-                identity_card_hmac, identity_card_key_id, phone, email, permanent_address, created_at
+                identity_card_hmac, identity_card_key_id, phone, phone_hmac, email, permanent_address, created_at
             )
             VALUES (
                 :id, :userId, :fullName, :identityCardCiphertext, :identityCardNonce,
-                :identityCardHmac, :identityCardKeyId, :phone, :email, :permanentAddress, :createdAt
+                :identityCardHmac, :identityCardKeyId, :phone, :phoneHmac, :email, :permanentAddress, :createdAt
             )
             ON CONFLICT (id) DO UPDATE SET
                 user_id = EXCLUDED.user_id,
@@ -73,6 +74,7 @@ public class PostgresTenantRepository implements TenantRepositoryPort {
                 identity_card_hmac = EXCLUDED.identity_card_hmac,
                 identity_card_key_id = EXCLUDED.identity_card_key_id,
                 phone = EXCLUDED.phone,
+                phone_hmac = EXCLUDED.phone_hmac,
                 email = EXCLUDED.email,
                 permanent_address = EXCLUDED.permanent_address
             """;
@@ -80,14 +82,17 @@ public class PostgresTenantRepository implements TenantRepositoryPort {
         MapSqlParameterSource params = new MapSqlParameterSource()
             .addValue("id", tenant.id())
             .addValue("userId", tenant.userId())
-            .addValue("fullName", tenant.fullName())
+            .addValue("fullName", dataProtection.encryptField(PersonalDataFields.TENANTS_FULL_NAME, tenant.fullName()))
             .addValue("identityCardCiphertext", identity.ciphertext())
             .addValue("identityCardNonce", identity.nonce())
             .addValue("identityCardHmac", identity.fingerprint())
             .addValue("identityCardKeyId", identity.keyId())
-            .addValue("phone", tenant.phone())
-            .addValue("email", tenant.email())
-            .addValue("permanentAddress", tenant.permanentAddress())
+            .addValue("phone", dataProtection.encryptField(PersonalDataFields.TENANTS_PHONE, tenant.phone()))
+            .addValue("phoneHmac", dataProtection.blindIndex(PersonalDataFields.TENANTS_PHONE,
+                PersonalDataFields.normalizePhone(tenant.phone())))
+            .addValue("email", dataProtection.encryptField(PersonalDataFields.TENANTS_EMAIL, tenant.email()))
+            .addValue("permanentAddress", dataProtection.encryptField(PersonalDataFields.TENANTS_ADDRESS,
+                tenant.permanentAddress()))
             .addValue("createdAt", Timestamp.from(tenant.createdAt()));
 
         jdbcTemplate.update(sql, params);

@@ -32,6 +32,27 @@ public class TenantService implements TenantUseCase {
         this.auditPort = auditPort != null ? auditPort : event -> {};
     }
 
+    /** Chỉ ghi tên các trường thay đổi, không ghi giá trị cá nhân vào nhật ký audit. */
+    private static java.util.List<String> changedFields(Tenant before, Tenant after) {
+        java.util.List<String> changed = new java.util.ArrayList<>();
+        if (!java.util.Objects.equals(before.fullName(), after.fullName())) {
+            changed.add("fullName");
+        }
+        if (!java.util.Objects.equals(before.identityCardNumber(), after.identityCardNumber())) {
+            changed.add("identityCardNumber");
+        }
+        if (!java.util.Objects.equals(before.phone(), after.phone())) {
+            changed.add("phone");
+        }
+        if (!java.util.Objects.equals(before.email(), after.email())) {
+            changed.add("email");
+        }
+        if (!java.util.Objects.equals(before.permanentAddress(), after.permanentAddress())) {
+            changed.add("permanentAddress");
+        }
+        return changed;
+    }
+
     @Override
     public Optional<Tenant> getTenant(UUID tenantId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
@@ -53,10 +74,7 @@ public class TenantService implements TenantUseCase {
             : command.identityCardNumber().trim();
         Optional<Tenant> duplicateCccd = tenantRepository.findByIdentityCardNumber(newIdCard);
         if (duplicateCccd.isPresent() && !duplicateCccd.get().id().equals(tenant.id())) {
-            throw new DuplicateIdentityCardException(String.format(
-                "Số CCCD đã được sử dụng bởi người thuê khác ('%s').",
-                duplicateCccd.get().fullName()
-            ));
+            throw new DuplicateIdentityCardException("Số CCCD đã được sử dụng bởi một người thuê khác.");
         }
 
         Tenant updated = tenant.updateInfo(
@@ -71,11 +89,8 @@ public class TenantService implements TenantUseCase {
 
         Map<String, Object> details = new HashMap<>();
         details.put("tenantId", saved.id().toString());
-        details.put("fullName", saved.fullName());
         details.put("identityCardNumber", saved.maskedIdentityCardNumber());
-        details.put("phone", saved.phone());
-        details.put("email", saved.email());
-        details.put("permanentAddress", saved.permanentAddress());
+        details.put("changedFields", changedFields(tenant, saved));
 
         auditPort.recordEvent(AuditPort.AuditEvent.of(
             "TENANT_UPDATE",

@@ -1,6 +1,8 @@
 package com.phonghub.adapter.out.persistence.postgres;
 
+import com.phonghub.adapter.out.security.PersonalDataFields;
 import com.phonghub.application.port.out.PaymentRepositoryPort;
+import com.phonghub.application.port.out.TenantDataProtectionPort;
 import com.phonghub.domain.model.PaymentStatus;
 import com.phonghub.domain.model.PaymentTransaction;
 import java.sql.ResultSet;
@@ -18,9 +20,11 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 public class PostgresPaymentRepository implements PaymentRepositoryPort {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final TenantDataProtectionPort protector;
 
-    public PostgresPaymentRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+    public PostgresPaymentRepository(NamedParameterJdbcTemplate jdbcTemplate, TenantDataProtectionPort protector) {
         this.jdbcTemplate = jdbcTemplate;
+        this.protector = protector;
     }
 
     private static Instant toInstant(Timestamp ts) {
@@ -38,15 +42,15 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
             rs.getLong("sepay_id"),
             rs.getString("gateway"),
             rs.getString("transaction_date"),
-            rs.getString("account_number"),
-            rs.getString("sub_account"),
+            protector.decryptField(PersonalDataFields.SEPAY_ACCOUNT_NUMBER, rs.getString("account_number")),
+            protector.decryptField(PersonalDataFields.SEPAY_SUB_ACCOUNT, rs.getString("sub_account")),
             rs.getString("transfer_type"),
             rs.getBigDecimal("transfer_amount"),
             rs.getBigDecimal("accumulated"),
             rs.getString("code"),
-            rs.getString("content"),
+            protector.decryptField(PersonalDataFields.SEPAY_CONTENT, rs.getString("content")),
             rs.getString("reference_code"),
-            rs.getString("description"),
+            protector.decryptField(PersonalDataFields.SEPAY_DESCRIPTION, rs.getString("description")),
             PaymentStatus.valueOf(rs.getString("status")),
             contractId,
             invoiceId,
@@ -74,15 +78,15 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
             .addValue("sepayId", tx.sepayId())
             .addValue("gateway", tx.gateway())
             .addValue("transactionDate", tx.transactionDate())
-            .addValue("accountNumber", tx.accountNumber())
-            .addValue("subAccount", tx.subAccount())
+            .addValue("accountNumber", protector.encryptField(PersonalDataFields.SEPAY_ACCOUNT_NUMBER, tx.accountNumber()))
+            .addValue("subAccount", protector.encryptField(PersonalDataFields.SEPAY_SUB_ACCOUNT, tx.subAccount()))
             .addValue("transferType", tx.transferType())
             .addValue("transferAmount", tx.transferAmount())
             .addValue("accumulated", tx.accumulated())
             .addValue("code", tx.code())
-            .addValue("content", tx.content())
+            .addValue("content", protector.encryptField(PersonalDataFields.SEPAY_CONTENT, tx.content()))
             .addValue("referenceCode", tx.referenceCode())
-            .addValue("description", tx.description())
+            .addValue("description", protector.encryptField(PersonalDataFields.SEPAY_DESCRIPTION, tx.description()))
             .addValue("status", tx.status().name())
             .addValue("contractId", tx.contractId())
             .addValue("invoiceId", tx.invoiceId())

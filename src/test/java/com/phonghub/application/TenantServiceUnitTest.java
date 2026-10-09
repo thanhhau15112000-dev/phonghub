@@ -140,7 +140,9 @@ class TenantServiceUnitTest {
         assertEquals("TENANT", audit.targetType());
         assertEquals(tenant1.id().toString(), audit.targetId());
         assertEquals(LocalDemoAuthenticationAdapter.OWNER_1_ID, audit.actorId());
-        assertEquals("Nguyễn Văn An Updated", audit.details().get("fullName"));
+        assertTrue(((java.util.List<?>) audit.details().get("changedFields")).contains("fullName"));
+        assertFalse(audit.details().toString().contains("Nguyễn Văn An Updated"),
+            "audit details must not carry personal values");
     }
 
     @Test

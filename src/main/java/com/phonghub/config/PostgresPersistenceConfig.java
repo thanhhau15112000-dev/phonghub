@@ -140,8 +140,11 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
-    public UserRepositoryPort userRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        return new PostgresUserRepository(jdbcTemplate);
+    public UserRepositoryPort userRepository(
+        NamedParameterJdbcTemplate jdbcTemplate,
+        TenantDataProtectionPort tenantDataProtection
+    ) {
+        return new PostgresUserRepository(jdbcTemplate, tenantDataProtection);
     }
 
     @Bean
@@ -150,8 +153,11 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
-    public PaymentRepositoryPort paymentRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        return new PostgresPaymentRepository(jdbcTemplate);
+    public PaymentRepositoryPort paymentRepository(
+        NamedParameterJdbcTemplate jdbcTemplate,
+        TenantDataProtectionPort tenantDataProtection
+    ) {
+        return new PostgresPaymentRepository(jdbcTemplate, tenantDataProtection);
     }
 
     @Bean
@@ -160,8 +166,11 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
-    public AuditPort auditPort(NamedParameterJdbcTemplate jdbcTemplate) {
-        return new PostgresAuditAdapter(jdbcTemplate, new ObjectMapper());
+    public AuditPort auditPort(
+        NamedParameterJdbcTemplate jdbcTemplate,
+        TenantDataProtectionPort tenantDataProtection
+    ) {
+        return new PostgresAuditAdapter(jdbcTemplate, new ObjectMapper(), tenantDataProtection);
     }
 
     @Bean

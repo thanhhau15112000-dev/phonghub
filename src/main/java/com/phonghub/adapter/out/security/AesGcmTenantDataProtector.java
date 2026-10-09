@@ -18,6 +18,7 @@ public class AesGcmTenantDataProtector implements TenantDataProtectionPort {
     private static final byte[] AAD = "phonghub:tenant:identity-card:v1".getBytes(StandardCharsets.UTF_8);
     private static final byte[] DOCUMENT_AAD = "phonghub:tenant:document-image:v1".getBytes(StandardCharsets.UTF_8);
     private static final byte BLOB_VERSION = 1;
+    private static final String FIELD_PREFIX = "enc1.";
     private static final int NONCE_BYTES = 12;
     private static final int GCM_TAG_BITS = 128;
 
@@ -143,6 +144,76 @@ public class AesGcmTenantDataProtector implements TenantDataProtectionPort {
         } catch (GeneralSecurityException | java.nio.BufferUnderflowException ex) {
             throw new IllegalStateException("Unable to decrypt document data", ex);
         }
+    }
+
+    @Override
+    public String encryptField(String purpose, String plaintext) {
+        if (plaintext == null) {
+            return null;
+        }
+        byte[] nonce = new byte[NONCE_BYTES];
+        secureRandom.nextBytes(nonce);
+        try {
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.ENCRYPT_MODE, encryptionKey, new GCMParameterSpec(GCM_TAG_BITS, nonce));
+            cipher.updateAAD(fieldAad(purpose));
+            byte[] encrypted = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+            Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
+            return FIELD_PREFIX + encoder.encodeToString(keyId.getBytes(StandardCharsets.UTF_8))
+                + "." + encoder.encodeToString(nonce) + "." + encoder.encodeToString(encrypted);
+        } catch (GeneralSecurityException ex) {
+            throw new IllegalStateException("Unable to encrypt personal data field " + purpose, ex);
+        }
+    }
+
+    @Override
+    public String decryptField(String purpose, String stored) {
+        if (stored == null) {
+            return null;
+        }
+        if (!stored.startsWith(FIELD_PREFIX)) {
+            throw new IllegalStateException("Personal data field " + purpose + " is not encrypted");
+        }
+        String[] parts = stored.substring(FIELD_PREFIX.length()).split("\\.");
+        if (parts.length != 3) {
+            throw new IllegalStateException("Malformed encrypted personal data field " + purpose);
+        }
+        try {
+            Base64.Decoder decoder = Base64.getUrlDecoder();
+            String storedKeyId = new String(decoder.decode(parts[0]), StandardCharsets.UTF_8);
+            if (!keyId.equals(storedKeyId)) {
+                throw new IllegalStateException("No encryption key configured for key id " + storedKeyId);
+            }
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.DECRYPT_MODE, encryptionKey,
+                new GCMParameterSpec(GCM_TAG_BITS, decoder.decode(parts[1])));
+            cipher.updateAAD(fieldAad(purpose));
+            return new String(cipher.doFinal(decoder.decode(parts[2])), StandardCharsets.UTF_8);
+        } catch (GeneralSecurityException | IllegalArgumentException ex) {
+            throw new IllegalStateException("Unable to decrypt personal data field " + purpose, ex);
+        }
+    }
+
+    @Override
+    public String blindIndex(String purpose, String normalizedValue) {
+        if (normalizedValue == null) {
+            return null;
+        }
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(hmacKey);
+            mac.update(("phonghub:blind:" + purpose + ":").getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(mac.doFinal(normalizedValue.getBytes(StandardCharsets.UTF_8)));
+        } catch (GeneralSecurityException ex) {
+            throw new IllegalStateException("Unable to compute blind index for " + purpose, ex);
+        }
+    }
+
+    private static byte[] fieldAad(String purpose) {
+        if (purpose == null || purpose.isBlank()) {
+            throw new IllegalArgumentException("Encryption purpose is required");
+        }
+        return ("phonghub:pii:" + purpose + ":v1").getBytes(StandardCharsets.UTF_8);
     }
 
     @Override
