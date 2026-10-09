@@ -5,6 +5,7 @@ import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomAssetUseCase;
+import com.phonghub.application.port.in.TenantDocumentUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.in.TenantUseCase;
 import com.phonghub.application.port.in.UserUseCase;
@@ -17,6 +18,8 @@ import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetEventRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetRepositoryPort;
+import com.phonghub.application.port.out.TenantDataProtectionPort;
+import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
@@ -27,6 +30,7 @@ import com.phonghub.application.service.ContractService;
 import com.phonghub.application.service.MaintenanceService;
 import com.phonghub.application.service.PropertyService;
 import com.phonghub.application.service.RoomAssetService;
+import com.phonghub.application.service.TenantDocumentService;
 import com.phonghub.application.service.RoomService;
 import com.phonghub.application.service.UserService;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository;
@@ -103,6 +107,25 @@ public class PhongHubConfiguration {
             ticketRepo, fileStoragePort
         );
         return new TransactionalRoomAssetUseCase(service);
+    }
+
+    @Bean
+    public TenantDocumentUseCase tenantDocumentUseCase(
+        TenantDocumentRepositoryPort documentRepo,
+        TenantRepositoryPort tenantRepo,
+        TenantDataProtectionPort protector,
+        FileStoragePort fileStoragePort,
+        IdentityProviderPort identityProvider,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        StorageProperties storageProperties
+    ) {
+        TenantDocumentService service = new TenantDocumentService(
+            documentRepo, tenantRepo, protector, fileStoragePort, identityProvider, currentUserPort,
+            authorizationService, auditPort, storageProperties.getMaxFileSizeBytes(), java.time.Clock.systemUTC()
+        );
+        return new TransactionalTenantDocumentUseCase(service);
     }
 
     @Bean

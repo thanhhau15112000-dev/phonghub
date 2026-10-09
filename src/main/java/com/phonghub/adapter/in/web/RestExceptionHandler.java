@@ -3,7 +3,9 @@ package com.phonghub.adapter.in.web;
 import com.phonghub.domain.exception.ContractNotFoundException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
+import com.phonghub.domain.exception.DocumentRevealDeniedException;
 import com.phonghub.domain.exception.DuplicateAssetCodeException;
+import com.phonghub.domain.exception.DuplicateDocumentNumberException;
 import com.phonghub.domain.exception.DuplicateEmailException;
 import com.phonghub.domain.exception.DuplicateIdentityCardException;
 import com.phonghub.domain.exception.DuplicateRoomNumberException;
@@ -16,6 +18,8 @@ import com.phonghub.domain.exception.PasswordChangeRequiredException;
 import com.phonghub.domain.exception.PrimaryOccupantRemovalException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.RoomAssetNotFoundException;
+import com.phonghub.domain.exception.TenantDocumentNotFoundException;
+import com.phonghub.domain.exception.TooManyRevealAttemptsException;
 import com.phonghub.domain.exception.RoomNotFoundException;
 import com.phonghub.domain.exception.TenantNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
@@ -102,7 +106,8 @@ public class RestExceptionHandler {
     @ExceptionHandler({
         DuplicateEmailException.class,
         DuplicateUsernameException.class,
-        DuplicateAssetCodeException.class
+        DuplicateAssetCodeException.class,
+        DuplicateDocumentNumberException.class
     })
     public ProblemDetail handleDuplicateAccountConflict(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
@@ -161,6 +166,7 @@ public class RestExceptionHandler {
         PropertyNotFoundException.class,
         RoomNotFoundException.class,
         RoomAssetNotFoundException.class,
+        TenantDocumentNotFoundException.class,
         ContractNotFoundException.class,
         UserNotFoundException.class,
         TenantNotFoundException.class
@@ -204,6 +210,24 @@ public class RestExceptionHandler {
             sb.append(fieldError.getField()).append(": ").append(fieldError.getDefaultMessage());
         }
         problem.setProperty("errors", sb.toString());
+        return problem;
+    }
+
+    @ExceptionHandler(DocumentRevealDeniedException.class)
+    public ProblemDetail handleRevealDenied(DocumentRevealDeniedException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        problem.setTitle("Reveal Denied");
+        problem.setType(URI.create("https://phonghub.local/errors/reveal-denied"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(TooManyRevealAttemptsException.class)
+    public ProblemDetail handleTooManyReveals(TooManyRevealAttemptsException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+        problem.setTitle("Too Many Requests");
+        problem.setType(URI.create("https://phonghub.local/errors/too-many-requests"));
+        problem.setProperty("timestamp", Instant.now());
         return problem;
     }
 

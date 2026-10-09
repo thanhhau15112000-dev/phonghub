@@ -9,6 +9,7 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRe
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomAssetEventRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomAssetRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantDocumentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
@@ -69,6 +70,23 @@ public class InMemoryPersistenceConfig {
     @Bean
     public InMemoryRoomRepository roomRepository() {
         return new InMemoryRoomRepository();
+    }
+
+    @Bean
+    public InMemoryTenantDocumentRepository tenantDocumentRepository() {
+        return new InMemoryTenantDocumentRepository();
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.TenantDataProtectionPort tenantDataProtection() {
+        // Khóa cố định chỉ dùng cho profile test, không bao giờ dùng ở môi trường thật.
+        java.util.Base64.Encoder base64 = java.util.Base64.getEncoder();
+        byte[] encryptionKey = new byte[32];
+        byte[] hmacKey = new byte[32];
+        java.util.Arrays.fill(encryptionKey, (byte) 3);
+        java.util.Arrays.fill(hmacKey, (byte) 5);
+        return new com.phonghub.adapter.out.security.AesGcmTenantDataProtector(
+            "test", base64.encodeToString(encryptionKey), base64.encodeToString(hmacKey));
     }
 
     @Bean

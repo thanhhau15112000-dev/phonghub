@@ -616,6 +616,16 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void tenantDocumentEndpointsRequireBearerTokenInProd() throws Exception {
+        String base = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/tenants/44444444-0000-0000-0000-444444444441/documents";
+        mockMvc.perform(get(base)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get(base + "/GPLX")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post(base + "/GPLX/reveal").contentType("application/json").content("{\"password\":\"x\"}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(delete(base + "/GPLX")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void protectedEndpointRequiresBearerTokenInProd() throws Exception {
         mockMvc.perform(get("/api/properties"))
             .andExpect(status().isUnauthorized());

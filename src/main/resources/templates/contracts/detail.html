@@ -86,7 +86,12 @@
         <!-- Bên phải: Thông tin người thuê chính -->
         <div class="card">
             <div class="flex-between" style="margin-bottom: 8px;">
-                <h2 style="margin: 0;">Thông tin người thuê chính</h2>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <h2 style="margin: 0;">Thông tin người thuê chính</h2>
+                    <a th:if="${primaryTenant != null and currentUser != null and currentUser.role().name() != 'TECHNICIAN'}"
+                       th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${primaryTenant.id()} + '/documents'}"
+                       class="btn btn-sm btn-secondary">Giấy tờ</a>
+                </div>
                 <button th:if="${primaryTenant != null and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                         type="button"
                         id="editPrimaryTenantBtn"
@@ -173,6 +178,9 @@
                             <span th:if="${occ.checkOutDate() != null}" class="badge badge-TERMINATED" style="font-size: 11px; padding: 2px 6px;" th:text="'Đã rời ' + ${occ.checkOutDate()}">Đã rời</span>
                         </td>
                         <td th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" style="display: flex; gap: 4px; align-items: center;">
+                            <a th:if="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId())}"
+                               th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${occ.tenantId()} + '/documents'}"
+                               class="btn btn-sm btn-secondary" style="padding: 2px 8px; font-size: 11px;">Giấy tờ</a>
                             <button th:if="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId())}"
                                     type="button"
                                     class="btn btn-sm btn-secondary edit-occupant-btn"

@@ -396,3 +396,12 @@ docker build -t phonghub:local .
 - Ảnh tài sản có thể là liên kết ngoài hoặc tệp tải lên kho riêng tư; tệp chỉ được xem qua link ký có hạn.
 - Mã QR được sinh khi gọi (`GET /api/assets/{assetId}/qr` hoặc nút "Mã QR" ở trang phòng) và không được lưu; nội dung QR là đường dẫn trang phòng nên người quét phải đăng nhập.
 - Áp dụng mẫu hàng loạt hai lần sẽ tạo trùng tài sản; kiểm tra danh sách phòng trước khi áp dụng.
+
+## Hồ sơ giấy tờ người thuê (CCCD, GPLX)
+
+- Migration `V16` tạo `tenant_documents`: mỗi người thuê có tối đa một dòng cho mỗi loại giấy tờ. Số CCCD vẫn ở bảng `tenants` (đã mã hóa ở `V14`); số GPLX được mã hóa AES-256-GCM kèm HMAC để chặn trùng giữa các người thuê.
+- Ảnh giấy tờ (jpeg/png/webp) được kiểm tra bằng magic bytes, xóa metadata, **mã hóa AES-256-GCM rồi mới lưu** vào kho riêng tư (phần mở rộng `.enc`). Dùng chung khóa `TENANT_DATA_*` với số CCCD, nên mất khóa là mất khả năng đọc ảnh; hãy sao lưu khóa an toàn và chỉ xoay khóa sau khi mã hóa lại dữ liệu.
+- Quyền: admin, owner/staff của nhà trọ và chính người thuê (phải có hợp đồng tại nhà trọ đó) được xem và tải lên; chỉ owner/staff/admin được xóa. Kỹ thuật viên và owner nhà khác nhận 403.
+- Xem thường chỉ trả loại giấy tờ và số che (`****1234`), không trả ảnh. Xem đầy đủ (`POST .../documents/{type}/reveal`, hoặc nút "Xem đầy đủ" ở trang `/properties/{propertyId}/tenants/{tenantId}/documents`) yêu cầu nhập lại mật khẩu của chính người xem. Sai mật khẩu trả 403 và được ghi nhật ký; 5 lần sai trong 10 phút trả 429.
+- Mỗi lần xem (danh sách, một giấy tờ, xem đầy đủ, xem thất bại, tải lên, xóa) ghi đúng một sự kiện audit; nhật ký không chứa số giấy tờ hay mật khẩu. Phản hồi xem đầy đủ có `Cache-Control: no-store`.
+- Giới hạn đã biết: bộ đếm lần nhập sai nằm trong bộ nhớ của từng instance (sẽ được thay bằng rate limit chung ở #77); xác nhận mật khẩu dùng đăng nhập của nhà cung cấp danh tính nên mỗi lần kiểm tra tạo thêm một phiên đăng nhập phía nhà cung cấp.

@@ -272,6 +272,49 @@ public class AuthorizationService {
             .anyMatch(c -> c.isActive() && c.getRoomId().equals(roomId));
     }
 
+    /**
+     * Hồ sơ giấy tờ: admin; owner/staff của nhà trọ; hoặc chính người thuê đó. Người thuê phải có hợp đồng
+     * (kể cả DRAFT) hoặc là người ở cùng tại nhà trọ trong đường dẫn. Kỹ thuật viên không có quyền.
+     */
+    public void assertCanAccessTenantDocuments(CurrentUser user, UUID propertyId, UUID tenantId) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (propertyId == null || tenantId == null) {
+            throw new IllegalArgumentException("Property and tenant are required");
+        }
+        switch (user.role()) {
+            case ADMIN -> { }
+            case OWNER, STAFF -> assertCanManageProperty(user, propertyId);
+            case TENANT -> {
+                Tenant self = tenantRepositoryPort.findByUserId(user.id()).orElse(null);
+                if (self == null || !self.id().equals(tenantId)) {
+                    throw new UnauthorizedPropertyAccessException("Tenant can only access their own documents");
+                }
+            }
+            default -> throw new UnauthorizedPropertyAccessException(
+                "Role " + user.role() + " cannot access tenant documents");
+        }
+        if (!isTenantLinkedToProperty(tenantId, propertyId)) {
+            throw new UnauthorizedPropertyAccessException("Tenant has no contract at property " + propertyId);
+        }
+    }
+
+    /** Xóa hồ sơ giấy tờ chỉ dành cho người quản lý nhà trọ; người thuê không tự xóa. */
+    public void assertCanDeleteTenantDocuments(CurrentUser user, UUID propertyId, UUID tenantId) {
+        if (user != null && user.role() == UserRole.TENANT) {
+            throw new UnauthorizedPropertyAccessException("Tenant cannot delete documents");
+        }
+        assertCanAccessTenantDocuments(user, propertyId, tenantId);
+    }
+
+    private boolean isTenantLinkedToProperty(UUID tenantId, UUID propertyId) {
+        return java.util.stream.Stream.concat(
+                contractRepositoryPort.findByPrimaryTenantId(tenantId).stream(),
+                contractRepositoryPort.findByOccupantTenantId(tenantId).stream())
+            .anyMatch(contract -> propertyId.equals(contract.getPropertyId()));
+    }
+
     /** Người thuê chỉ xem được dữ liệu của phòng mình đang ở (hợp đồng ACTIVE, người thuê chính hoặc người ở cùng). */
     public boolean canTenantViewRoom(CurrentUser user, UUID roomId) {
         return canTenantViewTicket(user, roomId, null);

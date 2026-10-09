@@ -907,6 +907,192 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /api/properties/{propertyId}/tenants/{tenantId}/documents:
+    parameters:
+      - name: propertyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: tenantId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Tenants]
+      summary: Danh sách giấy tờ của người thuê (che số, không kèm ảnh); mỗi lần gọi ghi một sự kiện audit
+      description: >
+        Chỉ admin, owner/staff của nhà trọ hoặc chính người thuê (người thuê phải có hợp đồng tại nhà trọ).
+        Kỹ thuật viên không có quyền. Phản hồi luôn có Cache-Control no-store.
+      responses:
+        '200':
+          description: Danh sách giấy tờ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TenantDocumentSummary'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/properties/{propertyId}/tenants/{tenantId}/documents/{type}:
+    parameters:
+      - name: propertyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: tenantId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [CCCD, GPLX]
+    get:
+      tags: [Tenants]
+      summary: Xem một giấy tờ ở dạng che số; ghi một sự kiện audit
+      responses:
+        '200':
+          description: Thông tin giấy tờ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDocumentSummary'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Tenants]
+      summary: Tải lên hoặc thay giấy tờ (ảnh được xóa metadata rồi mã hóa AES-256-GCM trước khi lưu)
+      description: >
+        Ảnh chỉ nhận jpeg, png, webp. GPLX bắt buộc có số giấy tờ; số GPLX trùng với người thuê khác trả 409.
+        Số CCCD lấy từ hồ sơ người thuê (đã mã hóa ở V14).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [front]
+              properties:
+                number:
+                  type: string
+                  description: Bắt buộc với GPLX, bị bỏ qua với CCCD
+                front:
+                  type: string
+                  format: binary
+                back:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Đã lưu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDocumentSummary'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Tenants]
+      summary: Xóa giấy tờ và ảnh đã mã hóa (owner/staff/admin; người thuê không tự xóa)
+      responses:
+        '204':
+          description: Đã xóa
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/properties/{propertyId}/tenants/{tenantId}/documents/{type}/reveal:
+    parameters:
+      - name: propertyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: tenantId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [CCCD, GPLX]
+    post:
+      tags: [Tenants]
+      summary: Xem đầy đủ số và ảnh sau khi nhập lại mật khẩu của chính người xem
+      description: >
+        Mật khẩu sai trả 403 và được ghi audit; sau 5 lần sai trong 10 phút trả 429. Phản hồi có Cache-Control
+        no-store và không bao giờ được ghi vào nhật ký. Ảnh trả dạng base64 đã giải mã.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Thông tin đầy đủ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDocumentReveal'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          description: Nhập sai mật khẩu quá nhiều lần
+
   /api/tenants/{tenantId}/residencies:
     parameters:
       - name: tenantId
@@ -2744,6 +2930,50 @@ components:
         size:
           type: integer
           format: int64
+
+    TenantDocumentSummary:
+      type: object
+      required: [type, hasFrontImage, hasBackImage, updatedAt]
+      properties:
+        type:
+          type: string
+          enum: [CCCD, GPLX]
+        maskedNumber:
+          type: string
+          example: '****1111'
+        hasFrontImage:
+          type: boolean
+        hasBackImage:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+
+    TenantDocumentImage:
+      type: object
+      required: [contentType, base64]
+      properties:
+        contentType:
+          type: string
+          example: image/png
+        base64:
+          type: string
+          format: byte
+
+    TenantDocumentReveal:
+      type: object
+      required: [type, number, front]
+      properties:
+        type:
+          type: string
+          enum: [CCCD, GPLX]
+        number:
+          type: string
+        front:
+          $ref: '#/components/schemas/TenantDocumentImage'
+        back:
+          $ref: '#/components/schemas/TenantDocumentImage'
+          nullable: true
 
     Tenant:
       type: object
