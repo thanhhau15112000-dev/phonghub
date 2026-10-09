@@ -386,3 +386,13 @@ docker build -t phonghub:local .
 - Tạo riêng hai khóa 32 byte bằng `openssl rand -base64 32`, rồi đặt `TENANT_DATA_ENCRYPTION_KEY` và `TENANT_DATA_HMAC_KEY`.
 - Đặt `TENANT_DATA_KEY_ID` (ví dụ `v1`). Không đổi hoặc xóa khóa đang dùng trước khi re-encrypt dữ liệu sang key id mới.
 - Migration `V14` mã hóa CCCD cũ bằng AES-256-GCM, tạo HMAC để kiểm tra trùng, rồi xóa cột plaintext. Thiếu key sẽ làm migration dừng an toàn.
+- Tệp vượt giới hạn trả `400`. Ảnh JPEG/PNG được mã hóa lại và WebP bị bỏ EXIF/XMP để xóa dữ liệu vị trí; PDF được lưu nguyên, không xóa metadata.
+- Endpoint: `POST /api/properties/{propertyId}/files`, `GET .../files/signed-url`, `DELETE .../files` (chi tiết trong `docs/api-spec.yaml`).
+
+## Tài sản trong phòng
+
+- Migration `V15` mở rộng `room_assets` (mã tài sản duy nhất, trạng thái GOOD/DAMAGED/LOST/RETIRED, xóa mềm, cột kiểm toán `created_by/updated_at/updated_by`) và thêm `room_asset_events` để lưu lịch sử hư hỏng, sửa chữa, thay mới kèm chi phí.
+- Owner và staff của nhà trọ thêm, sửa, xóa mềm, thêm hàng loạt từ mẫu `BASIC` (5 món) hoặc `FULL` (9 món) và ghi nhận sự kiện. Người thuê của phòng chỉ xem. Sự kiện có thể gắn phiếu bảo trì nhưng phiếu phải thuộc cùng phòng.
+- Ảnh tài sản có thể là liên kết ngoài hoặc tệp tải lên kho riêng tư; tệp chỉ được xem qua link ký có hạn.
+- Mã QR được sinh khi gọi (`GET /api/assets/{assetId}/qr` hoặc nút "Mã QR" ở trang phòng) và không được lưu; nội dung QR là đường dẫn trang phòng nên người quét phải đăng nhập.
+- Áp dụng mẫu hàng loạt hai lần sẽ tạo trùng tài sản; kiểm tra danh sách phòng trước khi áp dụng.

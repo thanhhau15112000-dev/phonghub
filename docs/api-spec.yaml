@@ -24,6 +24,8 @@ servers:
     description: Local Development
 
 tags:
+  - name: Storage
+    description: Kho tệp riêng tư (ảnh, giấy tờ) với link ký có hạn
   - name: Auth
     description: Xác thực, phiên đăng nhập và quản lý mật khẩu
   - name: Me
@@ -486,6 +488,10 @@ paths:
                   $ref: '#/components/schemas/Asset'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       tags: [Rooms]
       summary: Thêm tài sản mới vào phòng
@@ -502,8 +508,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Asset'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/rooms/{roomId}/assets/from-template:
+    parameters:
+      - name: roomId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Rooms]
+      summary: Thêm hàng loạt tài sản từ mẫu (BASIC 5 món, FULL 9 món)
+      parameters:
+        - name: template
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [BASIC, FULL]
+      responses:
+        '201':
+          description: Danh sách tài sản đã tạo
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/assets/{assetId}:
     parameters:
@@ -513,9 +563,27 @@ paths:
         schema:
           type: string
           format: uuid
+    get:
+      tags: [Rooms]
+      summary: Chi tiết tài sản (owner/staff của nhà trọ, hoặc người thuê phòng đang ở)
+      responses:
+        '200':
+          description: Chi tiết tài sản
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     patch:
       tags: [Rooms]
-      summary: Cập nhật hiện trạng tài sản (hỏng hóc, sửa chữa, thay mới)
+      summary: Cập nhật thông tin tài sản (owner/staff của nhà trọ)
       requestBody:
         required: true
         content:
@@ -529,8 +597,220 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Asset'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Rooms]
+      summary: Xóa mềm tài sản (dữ liệu và lịch sử vẫn được giữ)
+      responses:
+        '204':
+          description: Đã xóa
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/assets/{assetId}/events:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Rooms]
+      summary: Lịch sử hư hỏng, sửa chữa, thay mới của tài sản (mới nhất trước)
+      responses:
+        '200':
+          description: Danh sách sự kiện
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AssetEvent'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Rooms]
+      summary: Ghi nhận sự kiện tài sản; trạng thái tài sản tự cập nhật theo loại sự kiện
+      description: >
+        DAMAGED chuyển tài sản sang DAMAGED; REPAIRED và REPLACED chuyển sang GOOD; LOST_REPORTED chuyển sang LOST.
+        Nếu có maintenanceTicketId thì phiếu phải thuộc cùng phòng với tài sản.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetEventInput'
+      responses:
+        '201':
+          description: Đã ghi nhận
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetEvent'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/assets/{assetId}/qr:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Rooms]
+      summary: Ảnh QR PNG của tài sản, sinh khi gọi và không lưu; nội dung là đường dẫn trang phòng (cần đăng nhập)
+      responses:
+        '200':
+          description: Ảnh QR
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/properties/{propertyId}/files:
+    parameters:
+      - name: propertyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Storage]
+      summary: Tải tệp lên kho riêng tư (jpeg, png, webp, pdf)
+      description: >
+        Kiểm tra loại tệp bằng magic bytes, giới hạn dung lượng theo STORAGE_MAX_FILE_SIZE_BYTES (vượt mức trả 400),
+        loại bỏ EXIF/GPS của ảnh, đặt tên ngẫu nhiên. Chỉ owner/staff của nhà trọ được tải lên.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [category, file]
+              properties:
+                category:
+                  type: string
+                  pattern: '^[a-z0-9][a-z0-9-]{0,39}$'
+                  example: documents
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Đã lưu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoredFile'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Storage]
+      summary: Xóa tệp khỏi kho riêng tư
+      parameters:
+        - name: objectKey
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Đã xóa
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/properties/{propertyId}/files/signed-url:
+    parameters:
+      - name: propertyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Storage]
+      summary: Link ký có hạn tới tệp (tối đa 10 phút)
+      parameters:
+        - name: objectKey
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: ttlSeconds
+          in: query
+          schema:
+            type: integer
+            default: 600
+            maximum: 600
+      responses:
+        '200':
+          description: Link ký
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   # ==========================================
   # 3. TENANTS
@@ -2341,7 +2621,7 @@ components:
 
     Asset:
       type: object
-      required: [id, roomId, name, quantity, condition]
+      required: [id, roomId, assetCode, name, quantity, status]
       properties:
         id:
           type: string
@@ -2349,36 +2629,121 @@ components:
         roomId:
           type: string
           format: uuid
+        assetCode:
+          type: string
+          description: Mã duy nhất dùng cho QR
+          example: TS-1A2B3C4D
         name:
           type: string
           example: Máy lạnh Daikin 1.5 HP
         serialNumber:
           type: string
+          nullable: true
           example: DK-892182
         quantity:
           type: integer
           example: 1
+        status:
+          type: string
+          enum: [GOOD, DAMAGED, LOST, RETIRED]
         condition:
           type: string
+          nullable: true
           example: Mới 98%, hoạt động tốt
+        imageUrl:
+          type: string
+          nullable: true
+          description: Liên kết ảnh hoặc khóa tệp trong kho riêng tư (xem qua link ký có hạn)
         estimatedValue:
           type: number
           example: 8000000
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
 
     AssetInput:
       type: object
-      required: [name, quantity, condition]
+      required: [name, quantity]
       properties:
+        assetCode:
+          type: string
+          maxLength: 40
+          description: Tùy chọn khi tạo; để trống thì hệ thống tự sinh. Trùng mã trả 409.
         name:
           type: string
+          maxLength: 150
         serialNumber:
           type: string
+          maxLength: 100
         quantity:
           type: integer
+          minimum: 1
         condition:
+          type: string
+          maxLength: 255
+        imageUrl:
           type: string
         estimatedValue:
           type: number
+          minimum: 0
+
+    AssetEventInput:
+      type: object
+      required: [type, description]
+      properties:
+        type:
+          type: string
+          enum: [DAMAGED, REPAIRED, REPLACED, LOST_REPORTED]
+        description:
+          type: string
+        cost:
+          type: number
+          minimum: 0
+        maintenanceTicketId:
+          type: string
+          format: uuid
+          nullable: true
+
+    AssetEvent:
+      type: object
+      required: [id, assetId, type, description, cost, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        assetId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [DAMAGED, REPAIRED, REPLACED, LOST_REPORTED]
+        description:
+          type: string
+        cost:
+          type: number
+        maintenanceTicketId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    StoredFile:
+      type: object
+      required: [objectKey, contentType, size]
+      properties:
+        objectKey:
+          type: string
+          example: properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/documents/6f1c2d3e-0000-0000-0000-000000000000.pdf
+        contentType:
+          type: string
+        size:
+          type: integer
+          format: int64
 
     Tenant:
       type: object

@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -88,18 +88,18 @@ class RoomAssetApiIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON).content(assetJson(null, "Trộm", 1)))
             .andExpect(status().isForbidden());
         mockMvc.perform(get(ROOM_ASSETS).header("X-User-Id", OWNER_2)).andExpect(status().isForbidden());
-        mockMvc.perform(get("/api/room-assets/" + assetId).header("X-User-Id", OWNER_2))
+        mockMvc.perform(get("/api/assets/" + assetId).header("X-User-Id", OWNER_2))
             .andExpect(status().isForbidden());
-        mockMvc.perform(put("/api/room-assets/" + assetId).header("X-User-Id", OWNER_2)
+        mockMvc.perform(patch("/api/assets/" + assetId).header("X-User-Id", OWNER_2)
                 .contentType(MediaType.APPLICATION_JSON).content(assetJson(null, "Sửa", 1)))
             .andExpect(status().isForbidden());
-        mockMvc.perform(delete("/api/room-assets/" + assetId).header("X-User-Id", OWNER_2))
+        mockMvc.perform(delete("/api/assets/" + assetId).header("X-User-Id", OWNER_2))
             .andExpect(status().isForbidden());
-        mockMvc.perform(post("/api/room-assets/" + assetId + "/events").header("X-User-Id", OWNER_2)
+        mockMvc.perform(post("/api/assets/" + assetId + "/events").header("X-User-Id", OWNER_2)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"type\":\"DAMAGED\",\"description\":\"hỏng\"}"))
             .andExpect(status().isForbidden());
-        mockMvc.perform(get("/api/room-assets/" + assetId + "/qr").header("X-User-Id", OWNER_2))
+        mockMvc.perform(get("/api/assets/" + assetId + "/qr").header("X-User-Id", OWNER_2))
             .andExpect(status().isForbidden());
     }
 
@@ -109,12 +109,12 @@ class RoomAssetApiIntegrationTest {
         UUID assetId = createAsset(OWNER_1, null, "Điều hòa");
 
         mockMvc.perform(get(ROOM_ASSETS).header("X-User-Id", TENANT_1)).andExpect(status().isOk());
-        mockMvc.perform(get("/api/room-assets/" + assetId).header("X-User-Id", TENANT_1))
+        mockMvc.perform(get("/api/assets/" + assetId).header("X-User-Id", TENANT_1))
             .andExpect(status().isOk());
         mockMvc.perform(post(ROOM_ASSETS).header("X-User-Id", TENANT_1)
                 .contentType(MediaType.APPLICATION_JSON).content(assetJson(null, "Tự thêm", 1)))
             .andExpect(status().isForbidden());
-        mockMvc.perform(delete("/api/room-assets/" + assetId).header("X-User-Id", TENANT_1))
+        mockMvc.perform(delete("/api/assets/" + assetId).header("X-User-Id", TENANT_1))
             .andExpect(status().isForbidden());
     }
 
@@ -140,7 +140,7 @@ class RoomAssetApiIntegrationTest {
         mockMvc.perform(post(ROOM_ASSETS).header("X-User-Id", OWNER_1)
                 .contentType(MediaType.APPLICATION_JSON).content(assetJson(null, " ", 1)))
             .andExpect(status().isBadRequest());
-        mockMvc.perform(get("/api/room-assets/" + UUID.randomUUID()).header("X-User-Id", OWNER_1))
+        mockMvc.perform(get("/api/assets/" + UUID.randomUUID()).header("X-User-Id", OWNER_1))
             .andExpect(status().isNotFound());
     }
 
@@ -164,25 +164,25 @@ class RoomAssetApiIntegrationTest {
     void eventsUpdateStatusAndHistory() throws Exception {
         UUID assetId = createAsset(OWNER_1, null, "Máy nước nóng");
 
-        mockMvc.perform(post("/api/room-assets/" + assetId + "/events").header("X-User-Id", OWNER_1)
+        mockMvc.perform(post("/api/assets/" + assetId + "/events").header("X-User-Id", OWNER_1)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"type\":\"DAMAGED\",\"description\":\"Không nóng\",\"cost\":0}"))
             .andExpect(status().isCreated());
-        mockMvc.perform(get("/api/room-assets/" + assetId).header("X-User-Id", OWNER_1))
+        mockMvc.perform(get("/api/assets/" + assetId).header("X-User-Id", OWNER_1))
             .andExpect(jsonPath("$.status").value("DAMAGED"));
 
-        mockMvc.perform(post("/api/room-assets/" + assetId + "/events").header("X-User-Id", OWNER_1)
+        mockMvc.perform(post("/api/assets/" + assetId + "/events").header("X-User-Id", OWNER_1)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"type\":\"REPAIRED\",\"description\":\"Thay điện trở\",\"cost\":250000}"))
             .andExpect(status().isCreated());
-        mockMvc.perform(get("/api/room-assets/" + assetId).header("X-User-Id", OWNER_1))
+        mockMvc.perform(get("/api/assets/" + assetId).header("X-User-Id", OWNER_1))
             .andExpect(jsonPath("$.status").value("GOOD"));
 
-        mockMvc.perform(get("/api/room-assets/" + assetId + "/events").header("X-User-Id", OWNER_1))
+        mockMvc.perform(get("/api/assets/" + assetId + "/events").header("X-User-Id", OWNER_1))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.length()").value(2));
 
-        mockMvc.perform(post("/api/room-assets/" + assetId + "/events").header("X-User-Id", OWNER_1)
+        mockMvc.perform(post("/api/assets/" + assetId + "/events").header("X-User-Id", OWNER_1)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"type\":\"REPAIRED\",\"description\":\"Âm\",\"cost\":-1}"))
             .andExpect(status().isBadRequest());
@@ -193,9 +193,9 @@ class RoomAssetApiIntegrationTest {
     void softDelete() throws Exception {
         UUID assetId = createAsset(OWNER_1, null, "Ghế cũ");
 
-        mockMvc.perform(delete("/api/room-assets/" + assetId).header("X-User-Id", OWNER_1))
+        mockMvc.perform(delete("/api/assets/" + assetId).header("X-User-Id", OWNER_1))
             .andExpect(status().isNoContent());
-        mockMvc.perform(get("/api/room-assets/" + assetId).header("X-User-Id", OWNER_1))
+        mockMvc.perform(get("/api/assets/" + assetId).header("X-User-Id", OWNER_1))
             .andExpect(status().isNotFound());
         MvcResult list = mockMvc.perform(get(ROOM_ASSETS).header("X-User-Id", OWNER_1))
             .andExpect(status().isOk()).andReturn();
@@ -207,7 +207,7 @@ class RoomAssetApiIntegrationTest {
     void qrIsGeneratedOnDemand() throws Exception {
         UUID assetId = createAsset(OWNER_1, null, "Tủ quần áo");
 
-        MvcResult result = mockMvc.perform(get("/api/room-assets/" + assetId + "/qr").header("X-User-Id", OWNER_1))
+        MvcResult result = mockMvc.perform(get("/api/assets/" + assetId + "/qr").header("X-User-Id", OWNER_1))
             .andExpect(status().isOk())
             .andReturn();
         byte[] png = result.getResponse().getContentAsByteArray();

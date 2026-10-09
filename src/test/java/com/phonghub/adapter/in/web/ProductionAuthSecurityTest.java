@@ -611,8 +611,8 @@ class ProductionAuthSecurityTest {
     void roomAssetEndpointsRequireBearerTokenInProd() throws Exception {
         String roomId = "10101010-1010-1010-1010-101010101010";
         mockMvc.perform(get("/api/rooms/" + roomId + "/assets")).andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/api/room-assets/" + roomId)).andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/api/room-assets/" + roomId + "/qr")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/assets/" + roomId)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/assets/" + roomId + "/qr")).andExpect(status().isUnauthorized());
     }
 
     @Test
