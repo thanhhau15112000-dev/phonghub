@@ -31,7 +31,6 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice(basePackages = "com.phonghub.adapter.in.web.api")
@@ -205,15 +204,6 @@ public class RestExceptionHandler {
             sb.append(fieldError.getField()).append(": ").append(fieldError.getDefaultMessage());
         }
         problem.setProperty("errors", sb.toString());
-        return problem;
-    }
-
-    @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ProblemDetail handleUploadTooLarge(MaxUploadSizeExceededException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "File exceeds the configured size limit");
-        problem.setTitle("Invalid Argument");
-        problem.setType(URI.create("https://phonghub.local/errors/invalid-argument"));
-        problem.setProperty("timestamp", Instant.now());
         return problem;
     }
 
