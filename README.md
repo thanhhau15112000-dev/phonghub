@@ -424,3 +424,11 @@ docker build -t phonghub:local .
 - Nội quy chung lưu ở `property_house_rules` (`PUT /api/properties/{id}/house-rules` hoặc ô nhập ở trang biên bản); mỗi lần sửa tăng phiên bản, biên bản đã gửi giữ bản chụp và mã băm cũ.
 - Quyền: tạo, sửa, gửi, duyệt, từ chối, mở lại thuộc admin và owner/staff của nhà trọ; chỉ người thuê chính xác nhận; người thuê của hợp đồng được xem. Kỹ thuật viên, owner nhà khác và người thuê khác nhận `403`. Mỗi bước ghi một sự kiện audit không chứa dữ liệu cá nhân.
 - Ảnh bàn giao (phòng, đồng hồ) không phải dữ liệu cá nhân nên được làm sạch EXIF và lưu ở kho riêng tư, xem qua link ký có hạn; ảnh giấy tờ của người thuê vẫn được mã hóa theo mục "Hồ sơ giấy tờ".
+
+## Biên bản check-out
+
+- Migration `V19` thêm `handovers.final_deduction` và `handover_items.deduction_amount`; check-out dùng chung bảng và luồng trạng thái với check-in (`type = CHECK_OUT`), nên một hợp đồng có tối đa một check-in và một check-out.
+- Chỉ lập check-out cho hợp đồng `ACTIVE` đã có biên bản check-in được duyệt. Danh sách tài sản khởi tạo từ bản chụp check-in; nhân viên cập nhật tình trạng lúc trả (`GOOD`, `DAMAGED`, `LOST`) và khoản khấu trừ đề xuất cho từng tài sản (tài sản còn tốt không được đề xuất khấu trừ). Chỉ số điện nước nhập là chỉ số cuối kỳ; cần đủ ảnh phòng và ảnh hai đồng hồ trước khi gửi.
+- **Duyệt check-out chỉ dành cho owner hoặc admin** (owner chốt khoản khấu trừ, mặc định bằng tổng đề xuất). Trong một transaction: biên bản `APPROVED`, hợp đồng `TERMINATED`, phòng về `AVAILABLE` hoặc `MAINTENANCE` nếu có tài sản hỏng hoặc mất. Nếu bất kỳ bước nào lỗi (kể cả ghi audit) thì hoàn tác toàn bộ; đã có test trên PostgreSQL thật.
+- API `/api/contracts/{id}/check-out...` và trang `/contracts/{id}/check-out`. Nút kết thúc hợp đồng trực tiếp (`/terminate`) vẫn còn cho các trường hợp không có biên bản.
+- Chưa làm: tính tiền cọc và quyết toán (ngoài phạm vi issue); so sánh check-in/check-out và xuất PDF thuộc #72.

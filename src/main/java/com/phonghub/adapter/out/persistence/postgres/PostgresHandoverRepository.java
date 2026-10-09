@@ -3,6 +3,7 @@ package com.phonghub.adapter.out.persistence.postgres;
 import com.phonghub.application.port.out.HandoverRepositoryPort;
 import com.phonghub.domain.model.Handover;
 import com.phonghub.domain.model.HandoverStatus;
+import com.phonghub.domain.model.HandoverType;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -38,6 +39,7 @@ public class PostgresHandoverRepository implements HandoverRepositoryPort {
         return new Handover(
             rs.getObject("id", UUID.class),
             rs.getObject("contract_id", UUID.class),
+            HandoverType.valueOf(rs.getString("type")),
             HandoverStatus.valueOf(rs.getString("status")),
             rs.getBigDecimal("initial_electric_meter"),
             rs.getBigDecimal("initial_water_meter"),
@@ -52,6 +54,7 @@ public class PostgresHandoverRepository implements HandoverRepositoryPort {
             instant(rs.getTimestamp("confirmed_at")),
             rs.getObject("approved_by", UUID.class),
             instant(rs.getTimestamp("approved_at")),
+            rs.getBigDecimal("final_deduction"),
             instant(rs.getTimestamp("created_at")),
             rs.getObject("created_by", UUID.class),
             instant(rs.getTimestamp("updated_at")),
@@ -65,10 +68,10 @@ public class PostgresHandoverRepository implements HandoverRepositoryPort {
             INSERT INTO handovers (id, contract_id, type, status, initial_electric_meter, initial_water_meter,
                 room_condition, keys_provided, contract_terms_hash, house_rules_text, house_rules_hash,
                 rejection_reason, sent_at, is_confirmed_by_tenant, confirmed_at, approved_by, approved_at,
-                created_at, created_by, updated_at, updated_by)
-            VALUES (:id, :contractId, 'CHECK_IN', :status, :electric, :water, :roomCondition, :keys, :termsHash,
+                final_deduction, created_at, created_by, updated_at, updated_by)
+            VALUES (:id, :contractId, :type, :status, :electric, :water, :roomCondition, :keys, :termsHash,
                 :rulesText, :rulesHash, :reason, :sentAt, :confirmed, :confirmedAt, :approvedBy, :approvedAt,
-                :createdAt, :createdBy, :updatedAt, :updatedBy)
+                :finalDeduction, :createdAt, :createdBy, :updatedAt, :updatedBy)
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 initial_electric_meter = EXCLUDED.initial_electric_meter,
@@ -84,12 +87,14 @@ public class PostgresHandoverRepository implements HandoverRepositoryPort {
                 confirmed_at = EXCLUDED.confirmed_at,
                 approved_by = EXCLUDED.approved_by,
                 approved_at = EXCLUDED.approved_at,
+                final_deduction = EXCLUDED.final_deduction,
                 updated_at = EXCLUDED.updated_at,
                 updated_by = EXCLUDED.updated_by
             """;
         MapSqlParameterSource params = new MapSqlParameterSource()
             .addValue("id", handover.id())
             .addValue("contractId", handover.contractId())
+            .addValue("type", handover.type().name())
             .addValue("status", handover.status().name())
             .addValue("electric", handover.initialElectricMeter())
             .addValue("water", handover.initialWaterMeter())
@@ -104,6 +109,7 @@ public class PostgresHandoverRepository implements HandoverRepositoryPort {
             .addValue("confirmedAt", timestamp(handover.confirmedAt()))
             .addValue("approvedBy", handover.approvedBy())
             .addValue("approvedAt", timestamp(handover.approvedAt()))
+            .addValue("finalDeduction", handover.finalDeduction())
             .addValue("createdAt", timestamp(handover.createdAt()))
             .addValue("createdBy", handover.createdBy())
             .addValue("updatedAt", timestamp(handover.updatedAt()))
@@ -113,18 +119,18 @@ public class PostgresHandoverRepository implements HandoverRepositoryPort {
     }
 
     @Override
-    public Optional<Handover> findByContractId(UUID contractId) {
+    public Optional<Handover> find(UUID contractId, HandoverType type) {
         List<Handover> rows = jdbcTemplate.query(
-            "SELECT * FROM handovers WHERE contract_id = :contractId AND type = 'CHECK_IN'",
-            Map.of("contractId", contractId), this::map);
+            "SELECT * FROM handovers WHERE contract_id = :contractId AND type = :type",
+            Map.of("contractId", contractId, "type", type.name()), this::map);
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
     }
 
     @Override
-    public Optional<Handover> findByContractIdForUpdate(UUID contractId) {
+    public Optional<Handover> findForUpdate(UUID contractId, HandoverType type) {
         List<Handover> rows = jdbcTemplate.query(
-            "SELECT * FROM handovers WHERE contract_id = :contractId AND type = 'CHECK_IN' FOR UPDATE",
-            Map.of("contractId", contractId), this::map);
+            "SELECT * FROM handovers WHERE contract_id = :contractId AND type = :type FOR UPDATE",
+            Map.of("contractId", contractId, "type", type.name()), this::map);
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
     }
 }

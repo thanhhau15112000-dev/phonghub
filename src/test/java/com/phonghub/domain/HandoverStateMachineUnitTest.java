@@ -3,6 +3,7 @@ package com.phonghub.domain;
 import com.phonghub.domain.exception.InvalidHandoverStateException;
 import com.phonghub.domain.model.Handover;
 import com.phonghub.domain.model.HandoverStatus;
+import com.phonghub.domain.model.HandoverType;
 import java.math.BigDecimal;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,7 @@ class HandoverStateMachineUnitTest {
     private final UUID actor = UUID.randomUUID();
 
     private Handover draft() {
-        return Handover.draft(UUID.randomUUID(), new BigDecimal("1420.5"), new BigDecimal("35"),
+        return Handover.draft(UUID.randomUUID(), HandoverType.CHECK_IN, new BigDecimal("1420.5"), new BigDecimal("35"),
             "Phòng sạch", "2 chìa khóa", actor);
     }
 
@@ -102,10 +103,10 @@ class HandoverStateMachineUnitTest {
     void invalidInputIsRejected() {
         UUID contract = UUID.randomUUID();
         assertThrows(IllegalArgumentException.class,
-            () -> Handover.draft(contract, new BigDecimal("-1"), BigDecimal.ONE, "x", null, actor));
+            () -> Handover.draft(contract, HandoverType.CHECK_IN, new BigDecimal("-1"), BigDecimal.ONE, "x", null, actor));
         assertThrows(IllegalArgumentException.class,
-            () -> Handover.draft(contract, BigDecimal.ONE, null, "x", null, actor));
+            () -> Handover.draft(contract, HandoverType.CHECK_IN, BigDecimal.ONE, null, "x", null, actor));
         assertThrows(IllegalArgumentException.class,
-            () -> Handover.draft(contract, BigDecimal.ONE, BigDecimal.ONE, " ", null, actor));
+            () -> Handover.draft(contract, HandoverType.CHECK_IN, BigDecimal.ONE, BigDecimal.ONE, " ", null, actor));
     }
 }

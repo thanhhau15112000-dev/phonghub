@@ -125,6 +125,7 @@ public class PhongHubConfiguration {
         RoomAssetRepositoryPort assetRepo,
         TenantRepositoryPort tenantRepo,
         TenantDocumentRepositoryPort documentRepo,
+        ContractUseCase contractUseCase,
         FileStoragePort fileStoragePort,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
@@ -133,7 +134,7 @@ public class PhongHubConfiguration {
     ) {
         HandoverService service = new HandoverService(
             handoverRepo, photoRepo, itemRepo, rulesRepo, contractRepo, assetRepo, tenantRepo, documentRepo,
-            fileStoragePort, currentUserPort, authorizationService, auditPort, storageProperties.getMaxFileSizeBytes()
+            contractUseCase, fileStoragePort, currentUserPort, authorizationService, auditPort, storageProperties.getMaxFileSizeBytes()
         );
         return new TransactionalHandoverUseCase(service);
     }

@@ -7,8 +7,10 @@ import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.model.AssetStatus;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.HandoverPhotoKind;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyHouseRules;
 import com.phonghub.domain.model.Tenant;
@@ -29,8 +31,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+/** Trang biên bản bàn giao: {@code kind} là "handover" (check-in) hoặc "check-out". */
 @Controller
-@RequestMapping("/contracts/{contractId}/handover")
+@RequestMapping("/contracts/{contractId}/{kind:handover|check-out}")
 public class HandoverUiController {
 
     private final HandoverUseCase handoverUseCase;
@@ -53,13 +56,25 @@ public class HandoverUiController {
         this.currentUserPort = currentUserPort;
     }
 
+    private static HandoverType typeOf(String kind) {
+        return "check-out".equals(kind) ? HandoverType.CHECK_OUT : HandoverType.CHECK_IN;
+    }
+
     @GetMapping
-    public String page(@PathVariable UUID contractId, Model model, RedirectAttributes redirectAttributes) {
+    public String page(
+        @PathVariable UUID contractId,
+        @PathVariable String kind,
+        Model model,
+        RedirectAttributes redirectAttributes
+    ) {
         CurrentUser user = currentUserPort.getCurrentUser();
+        HandoverType type = typeOf(kind);
         try {
             Contract contract = contractUseCase.getContract(contractId);
             Property property = propertyUseCase.getProperty(contract.getPropertyId());
             boolean canManage = user != null && (user.role() == UserRole.ADMIN || user.role() == UserRole.STAFF
+                || (user.role() == UserRole.OWNER && user.id().equals(property.ownerId())));
+            boolean ownerOrAdmin = user != null && (user.role() == UserRole.ADMIN
                 || (user.role() == UserRole.OWNER && user.id().equals(property.ownerId())));
             boolean primaryTenant = false;
             if (user != null && user.role() == UserRole.TENANT) {
@@ -68,7 +83,7 @@ public class HandoverUiController {
             }
             HandoverUseCase.HandoverDetails details = null;
             try {
-                details = handoverUseCase.get(contractId);
+                details = handoverUseCase.get(type, contractId);
             } catch (com.phonghub.domain.exception.HandoverNotFoundException ignored) {
                 // chưa có biên bản: hiển thị form tạo cho người quản lý
             }
@@ -80,9 +95,14 @@ public class HandoverUiController {
             model.addAttribute("property", property);
             model.addAttribute("details", details);
             model.addAttribute("canManage", canManage);
+            model.addAttribute("ownerOrAdmin", ownerOrAdmin);
             model.addAttribute("primaryTenant", primaryTenant);
             model.addAttribute("houseRules", rules);
             model.addAttribute("photoKinds", HandoverPhotoKind.values());
+            model.addAttribute("assetStatuses", AssetStatus.values());
+            model.addAttribute("kind", kind);
+            model.addAttribute("checkOut", type == HandoverType.CHECK_OUT);
+            model.addAttribute("base", "/contracts/" + contractId + "/" + kind);
             return "contracts/handover";
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
@@ -93,41 +113,44 @@ public class HandoverUiController {
     @PostMapping
     public String create(
         @PathVariable UUID contractId,
+        @PathVariable String kind,
         @RequestParam BigDecimal initialElectricMeter,
         @RequestParam BigDecimal initialWaterMeter,
         @RequestParam String roomCondition,
         @RequestParam(required = false) String keysProvided,
         RedirectAttributes redirectAttributes
     ) {
-        return handle(contractId, redirectAttributes, "Đã tạo biên bản check-in (bản nháp).", () ->
-            handoverUseCase.create(new HandoverUseCase.HandoverCommand(contractId, initialElectricMeter,
-                initialWaterMeter, roomCondition, keysProvided)));
+        return handle(contractId, kind, redirectAttributes, "Đã tạo biên bản (bản nháp).", () ->
+            handoverUseCase.create(typeOf(kind), new HandoverUseCase.HandoverCommand(contractId,
+                initialElectricMeter, initialWaterMeter, roomCondition, keysProvided)));
     }
 
     @PostMapping("/update")
     public String update(
         @PathVariable UUID contractId,
+        @PathVariable String kind,
         @RequestParam BigDecimal initialElectricMeter,
         @RequestParam BigDecimal initialWaterMeter,
         @RequestParam String roomCondition,
         @RequestParam(required = false) String keysProvided,
         RedirectAttributes redirectAttributes
     ) {
-        return handle(contractId, redirectAttributes, "Đã cập nhật biên bản.", () ->
-            handoverUseCase.update(new HandoverUseCase.HandoverCommand(contractId, initialElectricMeter,
-                initialWaterMeter, roomCondition, keysProvided)));
+        return handle(contractId, kind, redirectAttributes, "Đã cập nhật biên bản.", () ->
+            handoverUseCase.update(typeOf(kind), new HandoverUseCase.HandoverCommand(contractId,
+                initialElectricMeter, initialWaterMeter, roomCondition, keysProvided)));
     }
 
     @PostMapping("/photos")
     public String addPhoto(
         @PathVariable UUID contractId,
-        @RequestParam HandoverPhotoKind kind,
+        @PathVariable String kind,
+        @RequestParam("kind") HandoverPhotoKind photoKind,
         @RequestParam("file") MultipartFile file,
         RedirectAttributes redirectAttributes
     ) {
-        return handle(contractId, redirectAttributes, "Đã thêm ảnh.", () -> {
+        return handle(contractId, kind, redirectAttributes, "Đã thêm ảnh.", () -> {
             try {
-                handoverUseCase.addPhoto(contractId, kind, file.getContentType(), file.getBytes());
+                handoverUseCase.addPhoto(typeOf(kind), contractId, photoKind, file.getContentType(), file.getBytes());
             } catch (IOException ex) {
                 throw new IllegalArgumentException("Không đọc được tệp ảnh", ex);
             }
@@ -137,73 +160,103 @@ public class HandoverUiController {
     @PostMapping("/photos/{photoId}/delete")
     public String removePhoto(
         @PathVariable UUID contractId,
+        @PathVariable String kind,
         @PathVariable UUID photoId,
         RedirectAttributes redirectAttributes
     ) {
-        return handle(contractId, redirectAttributes, "Đã xóa ảnh.", () ->
-            handoverUseCase.removePhoto(contractId, photoId));
+        return handle(contractId, kind, redirectAttributes, "Đã xóa ảnh.", () ->
+            handoverUseCase.removePhoto(typeOf(kind), contractId, photoId));
     }
 
     @GetMapping("/photos/{photoId}")
-    public ResponseEntity<Void> photo(@PathVariable UUID contractId, @PathVariable UUID photoId) {
-        URI target = handoverUseCase.photoSignedUrl(contractId, photoId);
+    public ResponseEntity<Void> photo(
+        @PathVariable UUID contractId,
+        @PathVariable String kind,
+        @PathVariable UUID photoId
+    ) {
+        URI target = handoverUseCase.photoSignedUrl(typeOf(kind), contractId, photoId);
         return ResponseEntity.status(302).header(HttpHeaders.LOCATION, target.toString())
             .header(HttpHeaders.CACHE_CONTROL, "no-store").build();
     }
 
+    @PostMapping("/items/{itemId}")
+    public String updateItem(
+        @PathVariable UUID contractId,
+        @PathVariable String kind,
+        @PathVariable UUID itemId,
+        @RequestParam AssetStatus status,
+        @RequestParam(required = false) String conditionNote,
+        @RequestParam(required = false) BigDecimal deductionAmount,
+        RedirectAttributes redirectAttributes
+    ) {
+        return handle(contractId, kind, redirectAttributes, "Đã cập nhật tình trạng tài sản.", () ->
+            handoverUseCase.updateItem(typeOf(kind), contractId, itemId,
+                new HandoverUseCase.ItemCommand(status, conditionNote, deductionAmount)));
+    }
+
     @PostMapping("/send")
-    public String send(@PathVariable UUID contractId, RedirectAttributes redirectAttributes) {
-        return handle(contractId, redirectAttributes, "Đã gửi biên bản cho khách thuê.", () ->
-            handoverUseCase.send(contractId));
+    public String send(@PathVariable UUID contractId, @PathVariable String kind, RedirectAttributes ra) {
+        return handle(contractId, kind, ra, "Đã gửi biên bản cho khách thuê.", () ->
+            handoverUseCase.send(typeOf(kind), contractId));
     }
 
     @PostMapping("/confirm")
-    public String confirm(@PathVariable UUID contractId, RedirectAttributes redirectAttributes) {
-        return handle(contractId, redirectAttributes, "Đã xác nhận biên bản. Chờ chủ trọ duyệt.", () ->
-            handoverUseCase.confirm(contractId));
+    public String confirm(@PathVariable UUID contractId, @PathVariable String kind, RedirectAttributes ra) {
+        return handle(contractId, kind, ra, "Đã xác nhận biên bản. Chờ chủ trọ duyệt.", () ->
+            handoverUseCase.confirm(typeOf(kind), contractId));
     }
 
     @PostMapping("/approve")
-    public String approve(@PathVariable UUID contractId, RedirectAttributes redirectAttributes) {
-        return handle(contractId, redirectAttributes, "Đã duyệt biên bản check-in.", () ->
-            handoverUseCase.approve(contractId));
+    public String approve(
+        @PathVariable UUID contractId,
+        @PathVariable String kind,
+        @RequestParam(required = false) BigDecimal finalDeduction,
+        RedirectAttributes ra
+    ) {
+        String message = typeOf(kind) == HandoverType.CHECK_OUT
+            ? "Đã duyệt check-out: hợp đồng đã kết thúc và phòng đã được trả." : "Đã duyệt biên bản check-in.";
+        return handle(contractId, kind, ra, message, () ->
+            handoverUseCase.approve(typeOf(kind), contractId, finalDeduction));
     }
 
     @PostMapping("/reject")
     public String reject(
         @PathVariable UUID contractId,
+        @PathVariable String kind,
         @RequestParam String reason,
-        RedirectAttributes redirectAttributes
+        RedirectAttributes ra
     ) {
-        return handle(contractId, redirectAttributes, "Đã từ chối biên bản.", () ->
-            handoverUseCase.reject(contractId, reason));
+        return handle(contractId, kind, ra, "Đã từ chối biên bản.", () ->
+            handoverUseCase.reject(typeOf(kind), contractId, reason));
     }
 
     @PostMapping("/reopen")
-    public String reopen(@PathVariable UUID contractId, RedirectAttributes redirectAttributes) {
-        return handle(contractId, redirectAttributes, "Đã mở lại biên bản để chỉnh sửa.", () ->
-            handoverUseCase.reopen(contractId));
+    public String reopen(@PathVariable UUID contractId, @PathVariable String kind, RedirectAttributes ra) {
+        return handle(contractId, kind, ra, "Đã mở lại biên bản để chỉnh sửa.", () ->
+            handoverUseCase.reopen(typeOf(kind), contractId));
     }
 
     @PostMapping("/house-rules")
     public String saveHouseRules(
         @PathVariable UUID contractId,
+        @PathVariable String kind,
         @RequestParam String content,
-        RedirectAttributes redirectAttributes
+        RedirectAttributes ra
     ) {
-        return handle(contractId, redirectAttributes, "Đã lưu nội quy của nhà trọ.", () -> {
+        return handle(contractId, kind, ra, "Đã lưu nội quy của nhà trọ.", () -> {
             Contract contract = contractUseCase.getContract(contractId);
             handoverUseCase.saveHouseRules(contract.getPropertyId(), content);
         });
     }
 
-    private String handle(UUID contractId, RedirectAttributes redirectAttributes, String success, Runnable action) {
+    private String handle(UUID contractId, String kind, RedirectAttributes redirectAttributes, String success,
+                          Runnable action) {
         try {
             action.run();
             redirectAttributes.addFlashAttribute("successMessage", success);
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }
-        return "redirect:/contracts/" + contractId + "/handover";
+        return "redirect:/contracts/" + contractId + "/" + kind;
     }
 }

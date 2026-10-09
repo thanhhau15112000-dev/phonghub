@@ -6,13 +6,15 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Biên bản bàn giao check-in của một hợp đồng đang hiệu lực.
+ * Biên bản bàn giao của một hợp đồng: check-in (sau khi hợp đồng ACTIVE) hoặc check-out (trước khi trả phòng).
  * DRAFT -> PENDING_TENANT -> PENDING_APPROVAL -> APPROVED | REJECTED (REJECTED có thể mở lại về DRAFT).
+ * Với check-out, chỉ số đồng hồ là chỉ số cuối kỳ và finalDeduction là khoản khấu trừ do owner chốt khi duyệt.
  * Mọi chuyển trạng thái đi qua các phương thức dưới đây nên không thể bỏ qua bước.
  */
 public record Handover(
     UUID id,
     UUID contractId,
+    HandoverType type,
     HandoverStatus status,
     BigDecimal initialElectricMeter,
     BigDecimal initialWaterMeter,
@@ -27,6 +29,7 @@ public record Handover(
     Instant confirmedAt,
     UUID approvedBy,
     Instant approvedAt,
+    BigDecimal finalDeduction,
     Instant createdAt,
     UUID createdBy,
     Instant updatedAt,
@@ -36,15 +39,21 @@ public record Handover(
         if (id == null || contractId == null) {
             throw new IllegalArgumentException("Handover id and contract id are required");
         }
+        if (type == null) {
+            type = HandoverType.CHECK_IN;
+        }
         if (status == null) {
             status = HandoverStatus.DRAFT;
         }
         if (initialElectricMeter == null || initialElectricMeter.signum() < 0
             || initialWaterMeter == null || initialWaterMeter.signum() < 0) {
-            throw new IllegalArgumentException("Initial electric and water meter readings must be zero or more");
+            throw new IllegalArgumentException("Meter readings must be zero or more");
         }
         if (roomCondition == null || roomCondition.isBlank()) {
             throw new IllegalArgumentException("Room condition cannot be blank");
+        }
+        if (finalDeduction != null && finalDeduction.signum() < 0) {
+            throw new IllegalArgumentException("Final deduction cannot be negative");
         }
         roomCondition = roomCondition.trim();
         if (createdAt == null) {
@@ -57,6 +66,7 @@ public record Handover(
 
     public static Handover draft(
         UUID contractId,
+        HandoverType type,
         BigDecimal electric,
         BigDecimal water,
         String roomCondition,
@@ -64,38 +74,46 @@ public record Handover(
         UUID actorId
     ) {
         Instant now = Instant.now();
-        return new Handover(UUID.randomUUID(), contractId, HandoverStatus.DRAFT, electric, water, roomCondition,
-            blankToNull(keysProvided), null, null, null, null, null, false, null, null, null, now, actorId, now,
-            actorId);
+        return new Handover(UUID.randomUUID(), contractId, type, HandoverStatus.DRAFT, electric, water,
+            roomCondition, blankToNull(keysProvided), null, null, null, null, null, false, null, null, null, null,
+            now, actorId, now, actorId);
     }
 
     public Handover edit(BigDecimal electric, BigDecimal water, String roomCondition, String keysProvided,
                          UUID actorId) {
         requireStatus(HandoverStatus.DRAFT, "chỉnh sửa");
-        return new Handover(id, contractId, status, electric, water, roomCondition, blankToNull(keysProvided),
+        return new Handover(id, contractId, type, status, electric, water, roomCondition, blankToNull(keysProvided),
             contractTermsHash, houseRulesText, houseRulesHash, rejectionReason, sentAt, confirmedByTenant,
-            confirmedAt, approvedBy, approvedAt, createdAt, createdBy, Instant.now(), actorId);
+            confirmedAt, approvedBy, approvedAt, finalDeduction, createdAt, createdBy, Instant.now(), actorId);
     }
 
     public Handover send(String termsHash, String rulesText, String rulesHash, UUID actorId) {
         requireStatus(HandoverStatus.DRAFT, "gửi cho khách");
         Instant now = Instant.now();
         return copy(HandoverStatus.PENDING_TENANT, termsHash, rulesText, rulesHash, null, now, false, null, null,
-            null, now, actorId);
+            null, null, now, actorId);
     }
 
     public Handover tenantConfirm(UUID actorId) {
         requireStatus(HandoverStatus.PENDING_TENANT, "xác nhận");
         Instant now = Instant.now();
         return copy(HandoverStatus.PENDING_APPROVAL, contractTermsHash, houseRulesText, houseRulesHash, null,
-            sentAt, true, now, null, null, now, actorId);
+            sentAt, true, now, null, null, null, now, actorId);
     }
 
     public Handover approve(UUID actorId) {
+        return approve(actorId, null);
+    }
+
+    /** Duyệt; với check-out, finalDeduction là khoản khấu trừ owner chốt. */
+    public Handover approve(UUID actorId, BigDecimal deduction) {
         requireStatus(HandoverStatus.PENDING_APPROVAL, "duyệt");
+        if (deduction != null && deduction.signum() < 0) {
+            throw new IllegalArgumentException("Final deduction cannot be negative");
+        }
         Instant now = Instant.now();
         return copy(HandoverStatus.APPROVED, contractTermsHash, houseRulesText, houseRulesHash, null, sentAt,
-            confirmedByTenant, confirmedAt, actorId, now, now, actorId);
+            confirmedByTenant, confirmedAt, actorId, now, deduction, now, actorId);
     }
 
     public Handover reject(String reason, UUID actorId) {
@@ -104,23 +122,23 @@ public record Handover(
             throw new IllegalArgumentException("Rejection reason is required");
         }
         return copy(HandoverStatus.REJECTED, contractTermsHash, houseRulesText, houseRulesHash, reason.trim(),
-            sentAt, confirmedByTenant, confirmedAt, null, null, Instant.now(), actorId);
+            sentAt, confirmedByTenant, confirmedAt, null, null, null, Instant.now(), actorId);
     }
 
     public Handover reopen(UUID actorId) {
         requireStatus(HandoverStatus.REJECTED, "mở lại");
-        return copy(HandoverStatus.DRAFT, null, null, null, null, null, false, null, null, null, Instant.now(),
-            actorId);
+        return copy(HandoverStatus.DRAFT, null, null, null, null, null, false, null, null, null, null,
+            Instant.now(), actorId);
     }
 
     private Handover copy(
         HandoverStatus newStatus, String termsHash, String rulesText, String rulesHash, String reason,
         Instant newSentAt, boolean confirmed, Instant newConfirmedAt, UUID newApprovedBy, Instant newApprovedAt,
-        Instant now, UUID actorId
+        BigDecimal deduction, Instant now, UUID actorId
     ) {
-        return new Handover(id, contractId, newStatus, initialElectricMeter, initialWaterMeter, roomCondition,
+        return new Handover(id, contractId, type, newStatus, initialElectricMeter, initialWaterMeter, roomCondition,
             keysProvided, termsHash, rulesText, rulesHash, reason, newSentAt, confirmed, newConfirmedAt,
-            newApprovedBy, newApprovedAt, createdAt, createdBy, now, actorId);
+            newApprovedBy, newApprovedAt, deduction, createdAt, createdBy, now, actorId);
     }
 
     private void requireStatus(HandoverStatus expected, String action) {

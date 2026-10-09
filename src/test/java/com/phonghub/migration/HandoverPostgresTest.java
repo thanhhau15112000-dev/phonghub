@@ -19,6 +19,7 @@ import com.phonghub.domain.exception.InvalidHandoverStateException;
 import com.phonghub.domain.model.Handover;
 import com.phonghub.domain.model.HandoverPhotoKind;
 import com.phonghub.domain.model.HandoverStatus;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -121,16 +122,17 @@ class HandoverPostgresTest {
         HandoverService service = new HandoverService(handovers, photos, new PostgresHandoverItemRepository(jdbc),
             new PostgresPropertyHouseRulesRepository(jdbc), new PostgresContractRepository(jdbc),
             new PostgresRoomAssetRepository(jdbc), new PostgresTenantRepository(jdbc, protector),
-            new PostgresTenantDocumentRepository(jdbc), new InMemoryFileStorageAdapter(), currentUser,
+            new PostgresTenantDocumentRepository(jdbc), mock(com.phonghub.application.port.in.ContractUseCase.class),
+            new InMemoryFileStorageAdapter(), currentUser,
             authorization, failingAudit, 1024 * 1024);
         TransactionTemplate tx = new TransactionTemplate(new DataSourceTransactionManager(ds));
 
-        Handover draft = tx.execute(status -> service.create(new com.phonghub.application.port.in.HandoverUseCase
+        Handover draft = tx.execute(status -> service.create(HandoverType.CHECK_IN, new com.phonghub.application.port.in.HandoverUseCase
             .HandoverCommand(contractId, new BigDecimal("12.5"), new BigDecimal("3"), "Sạch", "1 chìa")));
         for (HandoverPhotoKind kind : HandoverPhotoKind.values()) {
-            tx.executeWithoutResult(status -> service.addPhoto(contractId, kind, "image/png", PNG));
+            tx.executeWithoutResult(status -> service.addPhoto(HandoverType.CHECK_IN, contractId, kind, "image/png", PNG));
         }
-        Handover sent = tx.execute(status -> service.send(contractId));
+        Handover sent = tx.execute(status -> service.send(HandoverType.CHECK_IN, contractId));
         assertEquals(HandoverStatus.PENDING_TENANT, sent.status());
         assertTrue(sent.contractTermsHash().matches("[0-9a-f]{64}"));
         // advance to PENDING_APPROVAL as the tenant step needs a tenant login; the domain method is what the service uses
@@ -138,8 +140,8 @@ class HandoverPostgresTest {
 
         // 1) a failure while approving rolls back everything in the same transaction
         auditFailures.set(1);
-        assertThrows(IllegalStateException.class, () -> tx.execute(status -> service.approve(contractId)));
-        Handover afterRollback = handovers.findByContractId(contractId).orElseThrow();
+        assertThrows(IllegalStateException.class, () -> tx.execute(status -> service.approve(HandoverType.CHECK_IN, contractId, null)));
+        Handover afterRollback = handovers.find(contractId, HandoverType.CHECK_IN).orElseThrow();
         assertEquals(HandoverStatus.PENDING_APPROVAL, afterRollback.status());
         assertNull(afterRollback.approvedAt());
         assertNull(afterRollback.approvedBy());
@@ -150,7 +152,7 @@ class HandoverPostgresTest {
         Callable<String> attempt = () -> {
             start.await();
             try {
-                tx.execute(status -> service.approve(contractId));
+                tx.execute(status -> service.approve(HandoverType.CHECK_IN, contractId, null));
                 return "ok";
             } catch (InvalidHandoverStateException ex) {
                 return "conflict";
@@ -164,7 +166,7 @@ class HandoverPostgresTest {
         pool.shutdown();
         assertEquals(1, java.util.stream.Stream.of(a, b).filter("ok"::equals).count(), a + "/" + b);
         assertEquals(1, java.util.stream.Stream.of(a, b).filter("conflict"::equals).count(), a + "/" + b);
-        Handover approved = handovers.findByContractId(contractId).orElseThrow();
+        Handover approved = handovers.find(contractId, HandoverType.CHECK_IN).orElseThrow();
         assertEquals(HandoverStatus.APPROVED, approved.status());
         assertEquals(userId, approved.approvedBy());
 

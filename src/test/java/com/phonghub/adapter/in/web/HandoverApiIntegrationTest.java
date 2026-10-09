@@ -39,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class HandoverApiIntegrationTest {
+class HandoverApiIntegrationTest extends SeededWebTest {
 
     private static final String OWNER_1 = LocalDemoAuthenticationAdapter.OWNER_1_ID.toString();
     private static final String OWNER_2 = LocalDemoAuthenticationAdapter.OWNER_2_ID.toString();

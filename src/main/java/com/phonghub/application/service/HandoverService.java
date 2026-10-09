@@ -1,5 +1,6 @@
 package com.phonghub.application.service;
 
+import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.HandoverUseCase;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
@@ -18,6 +19,7 @@ import com.phonghub.domain.exception.HandoverAlreadyExistsException;
 import com.phonghub.domain.exception.HandoverNotFoundException;
 import com.phonghub.domain.exception.InvalidHandoverStateException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
+import com.phonghub.domain.model.AssetStatus;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
 import com.phonghub.domain.model.ContractStatus;
@@ -27,9 +29,11 @@ import com.phonghub.domain.model.HandoverItem;
 import com.phonghub.domain.model.HandoverPhoto;
 import com.phonghub.domain.model.HandoverPhotoKind;
 import com.phonghub.domain.model.HandoverStatus;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.PropertyHouseRules;
 import com.phonghub.domain.model.RoomAsset;
 import com.phonghub.domain.model.Tenant;
+import java.math.BigDecimal;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -56,6 +60,7 @@ public class HandoverService implements HandoverUseCase {
     private final RoomAssetRepositoryPort assetRepository;
     private final TenantRepositoryPort tenantRepository;
     private final TenantDocumentRepositoryPort documentRepository;
+    private final ContractUseCase contractUseCase;
     private final FileStoragePort storagePort;
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
@@ -71,6 +76,7 @@ public class HandoverService implements HandoverUseCase {
         RoomAssetRepositoryPort assetRepository,
         TenantRepositoryPort tenantRepository,
         TenantDocumentRepositoryPort documentRepository,
+        ContractUseCase contractUseCase,
         FileStoragePort storagePort,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
@@ -85,6 +91,7 @@ public class HandoverService implements HandoverUseCase {
         this.assetRepository = assetRepository;
         this.tenantRepository = tenantRepository;
         this.documentRepository = documentRepository;
+        this.contractUseCase = contractUseCase;
         this.storagePort = storagePort;
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
@@ -93,41 +100,57 @@ public class HandoverService implements HandoverUseCase {
     }
 
     @Override
-    public Handover create(HandoverCommand command) {
+    public Handover create(HandoverType type, HandoverCommand command) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(command.contractId());
         authorizationService.assertCanManageContracts(user, contract.getPropertyId());
         if (contract.getStatus() != ContractStatus.ACTIVE) {
             throw new InvalidHandoverStateException(String.format(
-                "Chỉ check-in cho hợp đồng đang hiệu lực (ACTIVE). Trạng thái hiện tại: %s.", contract.getStatus()));
+                "Chỉ lập biên bản cho hợp đồng đang hiệu lực (ACTIVE). Trạng thái hiện tại: %s.",
+                contract.getStatus()));
         }
-        if (handoverRepository.findByContractId(contract.getId()).isPresent()) {
+        Handover checkIn = handoverRepository.find(contract.getId(), HandoverType.CHECK_IN).orElse(null);
+        if (type == HandoverType.CHECK_OUT
+            && (checkIn == null || checkIn.status() != HandoverStatus.APPROVED)) {
+            throw new InvalidHandoverStateException(
+                "Cần có biên bản check-in đã được duyệt trước khi check-out.");
+        }
+        if (handoverRepository.find(contract.getId(), type).isPresent()) {
             throw new HandoverAlreadyExistsException();
         }
-        Handover saved = handoverRepository.save(Handover.draft(contract.getId(), command.initialElectricMeter(),
-            command.initialWaterMeter(), command.roomCondition(), command.keysProvided(), user.id()));
-        audit("HANDOVER_CREATED", user, saved, Map.of());
+        Handover saved = handoverRepository.save(Handover.draft(contract.getId(), type,
+            command.initialElectricMeter(), command.initialWaterMeter(), command.roomCondition(),
+            command.keysProvided(), user.id()));
+        if (type == HandoverType.CHECK_OUT) {
+            List<HandoverItem> start = itemRepository.findByHandoverId(checkIn.id()).stream()
+                .map(item -> new HandoverItem(UUID.randomUUID(), saved.id(), item.assetId(), item.assetName(),
+                    item.quantity(), item.status(), null, BigDecimal.ZERO))
+                .toList();
+            itemRepository.replaceAll(saved.id(), start, user.id());
+        }
+        audit(type, "CREATED", user, saved, Map.of());
         return saved;
     }
 
     @Override
-    public Handover update(HandoverCommand command) {
+    public Handover update(HandoverType type, HandoverCommand command) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(command.contractId());
         authorizationService.assertCanManageContracts(user, contract.getPropertyId());
-        Handover handover = findHandover(contract.getId());
+        Handover handover = findHandover(contract.getId(), type);
         Handover saved = handoverRepository.save(handover.edit(command.initialElectricMeter(),
             command.initialWaterMeter(), command.roomCondition(), command.keysProvided(), user.id()));
-        audit("HANDOVER_UPDATED", user, saved, Map.of());
+        audit(type, "UPDATED", user, saved, Map.of());
         return saved;
     }
 
     @Override
-    public HandoverPhoto addPhoto(UUID contractId, HandoverPhotoKind kind, String contentType, byte[] content) {
+    public HandoverPhoto addPhoto(HandoverType type, UUID contractId, HandoverPhotoKind kind, String contentType,
+                                  byte[] content) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(contractId);
         authorizationService.assertCanManageContracts(user, contract.getPropertyId());
-        Handover handover = findHandover(contractId);
+        Handover handover = findHandover(contractId, type);
         if (handover.status() != HandoverStatus.DRAFT) {
             throw new InvalidHandoverStateException("Chỉ thêm ảnh khi biên bản ở trạng thái DRAFT.");
         }
@@ -151,16 +174,16 @@ public class HandoverService implements HandoverUseCase {
             deleteQuietly(key);
             throw ex;
         }
-        audit("HANDOVER_PHOTO_ADDED", user, handover, Map.of("kind", kind.name()));
+        audit(type, "PHOTO_ADDED", user, handover, Map.of("kind", kind.name()));
         return saved;
     }
 
     @Override
-    public void removePhoto(UUID contractId, UUID photoId) {
+    public void removePhoto(HandoverType type, UUID contractId, UUID photoId) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(contractId);
         authorizationService.assertCanManageContracts(user, contract.getPropertyId());
-        Handover handover = findHandover(contractId);
+        Handover handover = findHandover(contractId, type);
         if (handover.status() != HandoverStatus.DRAFT) {
             throw new InvalidHandoverStateException("Chỉ xóa ảnh khi biên bản ở trạng thái DRAFT.");
         }
@@ -169,15 +192,45 @@ public class HandoverService implements HandoverUseCase {
             .orElseThrow(() -> new HandoverNotFoundException("Handover photo not found: " + photoId));
         photoRepository.delete(photo.id());
         deleteQuietly(photo.imageKey());
-        audit("HANDOVER_PHOTO_REMOVED", user, handover, Map.of("kind", photo.kind().name()));
+        audit(type, "PHOTO_REMOVED", user, handover, Map.of("kind", photo.kind().name()));
     }
 
     @Override
-    public Handover send(UUID contractId) {
+    public HandoverItem updateItem(HandoverType type, UUID contractId, UUID itemId, ItemCommand command) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(contractId);
         authorizationService.assertCanManageContracts(user, contract.getPropertyId());
-        Handover handover = handoverRepository.findByContractIdForUpdate(contractId)
+        if (type != HandoverType.CHECK_OUT) {
+            throw new InvalidHandoverStateException("Chỉ cập nhật tình trạng tài sản trong biên bản check-out.");
+        }
+        Handover handover = findHandover(contractId, type);
+        if (handover.status() != HandoverStatus.DRAFT) {
+            throw new InvalidHandoverStateException("Chỉ cập nhật tài sản khi biên bản ở trạng thái DRAFT.");
+        }
+        HandoverItem item = itemRepository.findById(itemId)
+            .filter(found -> found.handoverId().equals(handover.id()))
+            .orElseThrow(() -> new HandoverNotFoundException("Handover item not found: " + itemId));
+        if (command.status() == null) {
+            throw new IllegalArgumentException("Asset status is required");
+        }
+        BigDecimal deduction = command.deductionAmount() == null ? BigDecimal.ZERO : command.deductionAmount();
+        if (deduction.signum() > 0 && command.status() == AssetStatus.GOOD) {
+            throw new IllegalArgumentException("Tài sản còn tốt thì không thể đề xuất khấu trừ");
+        }
+        HandoverItem saved = itemRepository.save(item.withCondition(command.status(),
+            command.conditionNote() == null || command.conditionNote().isBlank() ? null : command.conditionNote().trim(),
+            deduction), user.id());
+        audit(type, "ITEM_UPDATED", user, handover,
+            Map.of("status", saved.status().name(), "deduction", saved.deductionAmount().toPlainString()));
+        return saved;
+    }
+
+    @Override
+    public Handover send(HandoverType type, UUID contractId) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        Contract contract = findContract(contractId);
+        authorizationService.assertCanManageContracts(user, contract.getPropertyId());
+        Handover handover = handoverRepository.findForUpdate(contractId, type)
             .orElseThrow(() -> new HandoverNotFoundException("Handover not found for contract " + contractId));
         if (handover.status() != HandoverStatus.DRAFT) {
             throw new InvalidHandoverStateException("Chỉ gửi biên bản ở trạng thái DRAFT.");
@@ -189,92 +242,119 @@ public class HandoverService implements HandoverUseCase {
             }
         }
 
-        List<HandoverItem> items = assetRepository.findActiveByRoomId(contract.getRoomId()).stream()
-            .map(asset -> snapshot(handover.id(), asset)).toList();
-        itemRepository.replaceAll(handover.id(), items, user.id());
+        int itemCount;
+        if (type == HandoverType.CHECK_IN) {
+            List<HandoverItem> items = assetRepository.findActiveByRoomId(contract.getRoomId()).stream()
+                .map(asset -> snapshot(handover.id(), asset)).toList();
+            itemRepository.replaceAll(handover.id(), items, user.id());
+            itemCount = items.size();
+        } else {
+            itemCount = itemRepository.findByHandoverId(handover.id()).size();
+        }
         PropertyHouseRules rules = rulesRepository.findByPropertyId(contract.getPropertyId()).orElse(null);
 
-        Handover sent = handover.send(
+        Handover saved = handoverRepository.save(handover.send(
             termsHash(contract),
             rules == null ? null : rules.content(),
             rules == null ? null : sha256(rules.content()),
-            user.id());
-        Handover saved = handoverRepository.save(sent);
-        audit("HANDOVER_SENT", user, saved, Map.of("items", items.size(), "photos", photos.size()));
+            user.id()));
+        audit(type, "SENT", user, saved, Map.of("items", itemCount, "photos", photos.size()));
         return saved;
     }
 
     @Override
-    public Handover confirm(UUID contractId) {
+    public Handover confirm(HandoverType type, UUID contractId) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(contractId);
         Tenant tenant = requirePrimaryTenant(user, contract);
-        Handover handover = handoverRepository.findByContractIdForUpdate(contractId)
+        Handover handover = handoverRepository.findForUpdate(contractId, type)
             .orElseThrow(() -> new HandoverNotFoundException("Handover not found for contract " + contractId));
         if (handover.status() != HandoverStatus.PENDING_TENANT) {
             throw new InvalidHandoverStateException(String.format(
                 "Không thể xác nhận biên bản ở trạng thái %s (cần PENDING_TENANT).", handover.status()));
         }
-        if (documentRepository.findByTenantIdAndType(tenant.id(), DocumentType.CCCD).isEmpty()) {
+        if (type == HandoverType.CHECK_IN
+            && documentRepository.findByTenantIdAndType(tenant.id(), DocumentType.CCCD).isEmpty()) {
             throw new IllegalArgumentException("Vui lòng tải ảnh CCCD trước khi xác nhận biên bản");
         }
         Handover saved = handoverRepository.save(handover.tenantConfirm(user.id()));
-        audit("HANDOVER_TENANT_CONFIRMED", user, saved, Map.of());
+        audit(type, "TENANT_CONFIRMED", user, saved, Map.of());
         return saved;
     }
 
     @Override
-    public Handover approve(UUID contractId) {
+    public Handover approve(HandoverType type, UUID contractId, BigDecimal finalDeduction) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(contractId);
-        authorizationService.assertCanManageContracts(user, contract.getPropertyId());
-        Handover handover = handoverRepository.findByContractIdForUpdate(contractId)
+        if (type == HandoverType.CHECK_OUT) {
+            authorizationService.assertOwnerOrAdmin(user, contract.getPropertyId());
+        } else {
+            authorizationService.assertCanManageContracts(user, contract.getPropertyId());
+        }
+        Handover handover = handoverRepository.findForUpdate(contractId, type)
             .orElseThrow(() -> new HandoverNotFoundException("Handover not found for contract " + contractId));
-        Handover saved = handoverRepository.save(handover.approve(user.id()));
-        audit("HANDOVER_APPROVED", user, saved, Map.of());
+
+        if (type == HandoverType.CHECK_IN) {
+            Handover saved = handoverRepository.save(handover.approve(user.id()));
+            audit(type, "APPROVED", user, saved, Map.of());
+            return saved;
+        }
+
+        List<HandoverItem> items = itemRepository.findByHandoverId(handover.id());
+        BigDecimal proposed = items.stream().map(HandoverItem::deductionAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal deduction = finalDeduction == null ? proposed : finalDeduction;
+        Handover saved = handoverRepository.save(handover.approve(user.id(), deduction));
+        boolean needsRepair = items.stream().anyMatch(HandoverItem::needsRepair);
+        // Cùng một transaction: nếu kết thúc hợp đồng thất bại thì biên bản vẫn ở trạng thái chờ duyệt.
+        contractUseCase.terminateContract(contractId, needsRepair);
+        audit(type, "APPROVED", user, saved, Map.of(
+            "finalDeduction", deduction.toPlainString(),
+            "proposedDeduction", proposed.toPlainString(),
+            "roomNeedsRepair", needsRepair));
         return saved;
     }
 
     @Override
-    public Handover reject(UUID contractId, String reason) {
+    public Handover reject(HandoverType type, UUID contractId, String reason) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(contractId);
         authorizationService.assertCanManageContracts(user, contract.getPropertyId());
-        Handover handover = handoverRepository.findByContractIdForUpdate(contractId)
+        Handover handover = handoverRepository.findForUpdate(contractId, type)
             .orElseThrow(() -> new HandoverNotFoundException("Handover not found for contract " + contractId));
         Handover saved = handoverRepository.save(handover.reject(reason, user.id()));
-        audit("HANDOVER_REJECTED", user, saved, Map.of());
+        audit(type, "REJECTED", user, saved, Map.of());
         return saved;
     }
 
     @Override
-    public Handover reopen(UUID contractId) {
+    public Handover reopen(HandoverType type, UUID contractId) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(contractId);
         authorizationService.assertCanManageContracts(user, contract.getPropertyId());
-        Handover handover = handoverRepository.findByContractIdForUpdate(contractId)
+        Handover handover = handoverRepository.findForUpdate(contractId, type)
             .orElseThrow(() -> new HandoverNotFoundException("Handover not found for contract " + contractId));
         Handover saved = handoverRepository.save(handover.reopen(user.id()));
-        audit("HANDOVER_REOPENED", user, saved, Map.of());
+        audit(type, "REOPENED", user, saved, Map.of());
         return saved;
     }
 
     @Override
-    public HandoverDetails get(UUID contractId) {
+    public HandoverDetails get(HandoverType type, UUID contractId) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(contractId);
         assertCanView(user, contract);
-        Handover handover = findHandover(contractId);
+        Handover handover = findHandover(contractId, type);
         return new HandoverDetails(handover, photoRepository.findByHandoverId(handover.id()),
             itemRepository.findByHandoverId(handover.id()));
     }
 
     @Override
-    public URI photoSignedUrl(UUID contractId, UUID photoId) {
+    public URI photoSignedUrl(HandoverType type, UUID contractId, UUID photoId) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(contractId);
         assertCanView(user, contract);
-        Handover handover = findHandover(contractId);
+        Handover handover = findHandover(contractId, type);
         HandoverPhoto photo = photoRepository.findById(photoId)
             .filter(found -> found.handoverId().equals(handover.id()))
             .orElseThrow(() -> new HandoverNotFoundException("Handover photo not found: " + photoId));
@@ -337,8 +417,8 @@ public class HandoverService implements HandoverUseCase {
             .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
     }
 
-    private Handover findHandover(UUID contractId) {
-        return handoverRepository.findByContractId(contractId)
+    private Handover findHandover(UUID contractId, HandoverType type) {
+        return handoverRepository.find(contractId, type)
             .orElseThrow(() -> new HandoverNotFoundException("Handover not found for contract " + contractId));
     }
 
@@ -350,11 +430,14 @@ public class HandoverService implements HandoverUseCase {
         }
     }
 
-    private void audit(String action, CurrentUser user, Handover handover, Map<String, Object> extra) {
+    private void audit(HandoverType type, String step, CurrentUser user, Handover handover,
+                       Map<String, Object> extra) {
         Map<String, Object> details = new HashMap<>(extra);
         details.put("contractId", handover.contractId().toString());
         details.put("status", handover.status().name());
-        auditPort.recordEvent(AuditPort.AuditEvent.of(action, user.id(), "HANDOVER", handover.id().toString(),
+        details.put("type", type.name());
+        String prefix = type == HandoverType.CHECK_IN ? "HANDOVER_" : "CHECKOUT_";
+        auditPort.recordEvent(AuditPort.AuditEvent.of(prefix + step, user.id(), "HANDOVER", handover.id().toString(),
             details));
     }
 

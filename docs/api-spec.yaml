@@ -1815,6 +1815,330 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
 
+  /api/contracts/{contractId}/check-out:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Tạo biên bản check-out (nháp) khi khách trả phòng
+      description: >
+        Chỉ cho hợp đồng ACTIVE đã có biên bản check-in được duyệt. Danh sách tài sản khởi tạo từ bản chụp check-in;
+        nhân viên cập nhật tình trạng lúc trả và khoản khấu trừ đề xuất cho từng tài sản. Chỉ số điện nước là chỉ số cuối kỳ.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandoverInput'
+      responses:
+        '201':
+          description: Đã tạo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      tags: [Contracts]
+      summary: Xem biên bản check-out
+      responses:
+        '200':
+          description: Biên bản check-out sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    patch:
+      tags: [Contracts]
+      summary: Sửa chỉ số cuối kỳ và tình trạng phòng (chỉ khi DRAFT)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandoverInput'
+      responses:
+        '200':
+          description: Biên bản check-out sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out/items/{itemId}:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Contracts]
+      summary: Cập nhật tình trạng một tài sản lúc trả phòng và khoản khấu trừ đề xuất (chỉ khi DRAFT)
+      description: Tài sản còn tốt (GOOD) không được đề xuất khấu trừ.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [GOOD, DAMAGED, LOST, RETIRED]
+                conditionNote:
+                  type: string
+                deductionAmount:
+                  type: number
+                  minimum: 0
+      responses:
+        '200':
+          description: Đã cập nhật
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out/photos:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Tải ảnh phòng và đồng hồ lúc trả (cùng quy tắc với check-in; cần đủ ba loại ảnh trước khi gửi)
+      responses:
+        '201':
+          description: Đã lưu ảnh
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out/send:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Gửi biên bản check-out cho khách - DRAFT thành PENDING_TENANT
+      responses:
+        '200':
+          description: Biên bản check-out sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out/confirm:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Người thuê chính xác nhận biên bản check-out
+      responses:
+        '200':
+          description: Biên bản check-out sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out/approve:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Duyệt check-out - chỉ owner hoặc admin
+      description: >
+        Owner chốt khoản khấu trừ (mặc định bằng tổng đề xuất). Trong một transaction: biên bản APPROVED, hợp đồng TERMINATED và phòng chuyển AVAILABLE, hoặc MAINTENANCE nếu có tài sản hỏng hoặc mất. Lỗi bất kỳ thì hoàn tác tất cả.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                finalDeduction:
+                  type: number
+                  minimum: 0
+      responses:
+        '200':
+          description: Biên bản check-out sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out/reject:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Từ chối biên bản check-out kèm lý do
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Biên bản check-out sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out/reopen:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Mở lại biên bản check-out bị từ chối để chỉnh sửa
+      responses:
+        '200':
+          description: Biên bản check-out sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
   /api/properties/{propertyId}/house-rules:
     parameters:
       - name: propertyId
@@ -3427,6 +3751,9 @@ components:
         contractId:
           type: string
           format: uuid
+        type:
+          type: string
+          enum: [CHECK_IN, CHECK_OUT]
         status:
           type: string
           enum: [DRAFT, PENDING_TENANT, PENDING_APPROVAL, APPROVED, REJECTED]
@@ -3466,6 +3793,13 @@ components:
           type: string
           format: date-time
           nullable: true
+        proposedDeduction:
+          type: number
+          description: Tổng khấu trừ nhân viên đề xuất trên từng tài sản (check-out)
+        finalDeduction:
+          type: number
+          nullable: true
+          description: Khoản khấu trừ owner chốt khi duyệt check-out
         photos:
           type: array
           items:
@@ -3488,6 +3822,11 @@ components:
           items:
             type: object
             properties:
+              id:
+                type: string
+                format: uuid
+              deductionAmount:
+                type: number
               assetId:
                 type: string
                 format: uuid
