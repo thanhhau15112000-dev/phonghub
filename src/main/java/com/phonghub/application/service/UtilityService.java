@@ -7,6 +7,7 @@ import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.FileStoragePort;
 import com.phonghub.application.port.out.HandoverRepositoryPort;
+import com.phonghub.application.port.out.MeterOcrPort;
 import com.phonghub.application.port.out.MeterReadingRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.ServiceRateRepositoryPort;
@@ -47,6 +48,8 @@ public class UtilityService implements UtilityUseCase {
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
     private final AuditPort auditPort;
+    private final MeterOcrPort ocrPort;
+    private final BigDecimal ocrMinConfidence;
     private final long maxFileSizeBytes;
 
     public UtilityService(
@@ -59,6 +62,8 @@ public class UtilityService implements UtilityUseCase {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
         AuditPort auditPort,
+        MeterOcrPort ocrPort,
+        BigDecimal ocrMinConfidence,
         long maxFileSizeBytes
     ) {
         this.meterRepository = meterRepository;
@@ -70,6 +75,8 @@ public class UtilityService implements UtilityUseCase {
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
         this.auditPort = auditPort;
+        this.ocrPort = ocrPort;
+        this.ocrMinConfidence = ocrMinConfidence;
         this.maxFileSizeBytes = maxFileSizeBytes;
     }
 
@@ -101,13 +108,52 @@ public class UtilityService implements UtilityUseCase {
         MeterReading.ReplacementInfo replacement = command.replacement() == null ? null
             : new MeterReading.ReplacementInfo(command.replacement().oldFinalValue(),
                 command.replacement().newStartValue(), command.replacement().note());
+        assertOcrAcceptable(command);
         MeterReading reading = MeterReading.record(room.getId(), contract == null ? null : contract.getId(),
-            command.meterType(), date, previous, command.currentValue(), replacement, user.id());
+            command.meterType(), date, previous, command.currentValue(), replacement,
+            command.ocrValue(), command.ocrConfidence(), user.id());
         MeterReading saved = meterRepository.save(reading);
         auditPort.recordEvent(AuditPort.AuditEvent.of("METER_READING_RECORDED", user.id(), "ROOM",
             room.getId().toString(), Map.of("meterType", saved.meterType().name(), "period", saved.period().toString(),
-                "consumption", saved.consumption().toPlainString(), "replaced", saved.replaced())));
+                "consumption", saved.consumption().toPlainString(), "replaced", saved.replaced(),
+                "ocr", saved.ocrValue() != null, "ocrCorrected", saved.ocrCorrected())));
         return saved;
+    }
+
+    @Override
+    public OcrSuggestion readMeterPhoto(UUID roomId, MeterType meterType, String contentType, byte[] content) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        Room room = findRoom(roomId);
+        authorizationService.assertCanManageProperty(user, room.getPropertyId());
+        if (meterType == null) {
+            throw new IllegalArgumentException("Meter type is required");
+        }
+        if (!FileSanitizer.isImage(contentType)) {
+            throw new IllegalArgumentException("Meter photos must be jpeg, png or webp");
+        }
+        FileSanitizer.SanitizedFile file = FileSanitizer.sanitize(contentType, content, maxFileSizeBytes);
+        MeterOcrPort.OcrResult result = ocrPort.read(meterType, file.contentType(), file.content());
+        BigDecimal confidence = result.confidence() == null ? BigDecimal.ZERO : result.confidence();
+        boolean manual = result.value() == null || result.value().signum() < 0
+            || confidence.compareTo(ocrMinConfidence) < 0;
+        auditPort.recordEvent(AuditPort.AuditEvent.of("METER_OCR_REQUESTED", user.id(), "ROOM",
+            room.getId().toString(), Map.of("meterType", meterType.name(), "engine", result.engine(),
+                "confidence", confidence.toPlainString(), "manualEntry", manual)));
+        return new OcrSuggestion(manual ? null : result.value(), confidence, manual, result.engine());
+    }
+
+    /** Giá trị OCR phải đi cùng độ tin cậy đạt ngưỡng; dưới ngưỡng thì chỉ được nhập tay (không gửi trường OCR). */
+    private void assertOcrAcceptable(RecordReadingCommand command) {
+        if (command.ocrValue() == null && command.ocrConfidence() == null) {
+            return;
+        }
+        if (command.ocrValue() == null || command.ocrConfidence() == null) {
+            throw new IllegalArgumentException("ocrValue và ocrConfidence phải đi cùng nhau");
+        }
+        if (command.ocrConfidence().compareTo(ocrMinConfidence) < 0) {
+            throw new IllegalArgumentException(
+                "Độ tin cậy OCR thấp hơn ngưỡng " + ocrMinConfidence.toPlainString() + "; hãy nhập tay chỉ số");
+        }
     }
 
     private BigDecimal resolvePrevious(RecordReadingCommand command, MeterReading latest, Contract contract) {

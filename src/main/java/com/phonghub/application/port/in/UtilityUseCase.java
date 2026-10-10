@@ -21,6 +21,9 @@ public interface UtilityUseCase {
 
     List<MeterReading> listReadings(UUID roomId);
 
+    /** Đọc chỉ số từ ảnh đồng hồ; chỉ gợi ý, không lưu gì. Độ tin cậy thấp thì không trả giá trị, buộc nhập tay. */
+    OcrSuggestion readMeterPhoto(UUID roomId, MeterType meterType, String contentType, byte[] content);
+
     MeterReading attachPhoto(UUID readingId, String contentType, byte[] content);
 
     URI photoSignedUrl(UUID readingId);
@@ -37,8 +40,12 @@ public interface UtilityUseCase {
         BigDecimal currentValue,
         LocalDate readingDate,
         BigDecimal baselineValue,
-        Replacement replacement
+        Replacement replacement,
+        BigDecimal ocrValue,
+        BigDecimal ocrConfidence
     ) {}
+
+    record OcrSuggestion(BigDecimal value, BigDecimal confidence, boolean requiresManualEntry, String engine) {}
 
     record Replacement(BigDecimal oldFinalValue, BigDecimal newStartValue, String note) {}
 

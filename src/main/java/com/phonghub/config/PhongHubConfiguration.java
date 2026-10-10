@@ -20,6 +20,7 @@ import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetEventRepositoryPort;
 import com.phonghub.application.port.out.HandoverItemRepositoryPort;
+import com.phonghub.application.port.out.MeterOcrPort;
 import com.phonghub.application.port.out.MeterReadingRepositoryPort;
 import com.phonghub.application.port.out.ServiceRateRepositoryPort;
 import com.phonghub.application.port.out.HandoverPhotoRepositoryPort;
@@ -120,6 +121,12 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(MeterOcrPort.class)
+    public MeterOcrPort meterOcrPort() {
+        return new com.phonghub.adapter.out.ocr.DisabledMeterOcrAdapter();
+    }
+
+    @Bean
     public UtilityUseCase utilityUseCase(
         MeterReadingRepositoryPort meterRepo,
         ServiceRateRepositoryPort rateRepo,
@@ -130,10 +137,14 @@ public class PhongHubConfiguration {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
         AuditPort auditPort,
+        MeterOcrPort meterOcrPort,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.ocr.min-confidence:0.85}")
+        java.math.BigDecimal ocrMinConfidence,
         StorageProperties storageProperties
     ) {
         UtilityService service = new UtilityService(meterRepo, rateRepo, roomRepo, contractRepo, handoverRepo,
-            fileStoragePort, currentUserPort, authorizationService, auditPort, storageProperties.getMaxFileSizeBytes());
+            fileStoragePort, currentUserPort, authorizationService, auditPort, meterOcrPort, ocrMinConfidence,
+            storageProperties.getMaxFileSizeBytes());
         return new TransactionalUtilityUseCase(service);
     }
 

@@ -6,6 +6,7 @@ import com.phonghub.domain.model.MeterReading;
 import com.phonghub.domain.model.MeterType;
 import com.phonghub.domain.model.ServiceRate;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -52,9 +53,21 @@ public class UtilityApiController {
             : new UtilityUseCase.Replacement(request.replacement().oldFinalValue(),
                 request.replacement().newStartValue(), request.replacement().note());
         MeterReading reading = useCase.recordReading(new UtilityUseCase.RecordReadingCommand(roomId,
-            request.meterType(), request.currentValue(), request.readingDate(), request.baselineValue(), replacement));
+            request.meterType(), request.currentValue(), request.readingDate(), request.baselineValue(), replacement, request.ocrValue(), request.ocrConfidence()));
         return ResponseEntity.created(URI.create("/api/rooms/" + roomId + "/meter-readings"))
             .body(ReadingResponse.from(reading));
+    }
+
+    @PostMapping("/rooms/{roomId}/meter-readings/ocr")
+    public OcrResponse readPhoto(
+        @PathVariable UUID roomId,
+        @RequestParam("meterType") MeterType meterType,
+        @RequestParam("file") MultipartFile file
+    ) throws IOException {
+        UtilityUseCase.OcrSuggestion suggestion = useCase.readMeterPhoto(roomId, meterType, file.getContentType(),
+            file.getBytes());
+        return new OcrResponse(suggestion.value(), suggestion.confidence(), suggestion.requiresManualEntry(),
+            suggestion.engine());
     }
 
     @PostMapping("/meter-readings/{readingId}/photo")
@@ -104,8 +117,12 @@ public class UtilityApiController {
         @NotNull @DecimalMin("0") BigDecimal currentValue,
         LocalDate readingDate,
         @DecimalMin("0") BigDecimal baselineValue,
-        @Valid ReplacementRequest replacement
+        @Valid ReplacementRequest replacement,
+        @DecimalMin("0") BigDecimal ocrValue,
+        @DecimalMin("0") @DecimalMax("1") BigDecimal ocrConfidence
     ) {}
+
+    public record OcrResponse(BigDecimal value, BigDecimal confidence, boolean requiresManualEntry, String engine) {}
 
     public record RateRequest(
         @NotBlank String serviceName,
@@ -128,6 +145,9 @@ public class UtilityApiController {
         String replacementNote,
         LocalDate readingDate,
         boolean hasPhoto,
+        BigDecimal ocrValue,
+        BigDecimal ocrConfidence,
+        boolean ocrCorrected,
         Instant createdAt
     ) {
         static ReadingResponse from(MeterReading reading) {
@@ -135,7 +155,8 @@ public class UtilityApiController {
                 reading.periodYear(), reading.periodMonth(), reading.previousValue(), reading.currentValue(),
                 reading.consumption(), reading.replaced(), reading.oldMeterFinalValue(),
                 reading.newMeterStartValue(), reading.replacementNote(), reading.readingDate(),
-                reading.photoKey() != null, reading.createdAt());
+                reading.photoKey() != null, reading.ocrValue(), reading.ocrConfidence(), reading.ocrCorrected(),
+                reading.createdAt());
         }
     }
 

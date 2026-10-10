@@ -29,6 +29,13 @@ public class TransactionalUtilityUseCase implements UtilityUseCase {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public OcrSuggestion readMeterPhoto(UUID roomId, com.phonghub.domain.model.MeterType meterType,
+                                        String contentType, byte[] content) {
+        return delegate.readMeterPhoto(roomId, meterType, contentType, content);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public MeterReading attachPhoto(UUID readingId, String contentType, byte[] content) {
         return delegate.attachPhoto(readingId, contentType, content);

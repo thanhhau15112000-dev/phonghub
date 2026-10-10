@@ -27,6 +27,8 @@ public record MeterReading(
     BigDecimal consumption,
     LocalDate readingDate,
     String photoKey,
+    BigDecimal ocrValue,
+    BigDecimal ocrConfidence,
     Instant createdAt,
     UUID createdBy,
     Instant updatedAt,
@@ -44,6 +46,13 @@ public record MeterReading(
         }
         if (consumption == null || consumption.signum() < 0) {
             throw new IllegalArgumentException("Consumption cannot be negative");
+        }
+        if ((ocrValue == null) != (ocrConfidence == null)) {
+            throw new IllegalArgumentException("OCR value and confidence must be stored together");
+        }
+        if (ocrValue != null && (ocrValue.signum() < 0 || ocrConfidence.signum() < 0
+            || ocrConfidence.compareTo(BigDecimal.ONE) > 0)) {
+            throw new IllegalArgumentException("OCR value must be zero or more and confidence between 0 and 1");
         }
         if (createdAt == null) {
             createdAt = Instant.now();
@@ -66,6 +75,22 @@ public record MeterReading(
         BigDecimal previous,
         BigDecimal current,
         ReplacementInfo replacement,
+        UUID actorId
+    ) {
+        return record(roomId, contractId, type, readingDate, previous, current, replacement, null, null, actorId);
+    }
+
+    /** Như trên, kèm giá trị OCR gợi ý và độ tin cậy; {@code current} là giá trị người dùng đã xác nhận/sửa. */
+    public static MeterReading record(
+        UUID roomId,
+        UUID contractId,
+        MeterType type,
+        LocalDate readingDate,
+        BigDecimal previous,
+        BigDecimal current,
+        ReplacementInfo replacement,
+        BigDecimal ocrValue,
+        BigDecimal ocrConfidence,
         UUID actorId
     ) {
         if (previous == null || current == null) {
@@ -100,13 +125,18 @@ public record MeterReading(
         return new MeterReading(UUID.randomUUID(), roomId, contractId, type, period.getYear(),
             period.getMonthValue(), previous, current, replaced,
             replaced ? replacement.oldFinalValue() : null, replaced ? replacement.newStartValue() : null,
-            replaced ? replacement.note().trim() : null, consumption, readingDate, null, now, actorId, now, actorId);
+            replaced ? replacement.note().trim() : null, consumption, readingDate, null, ocrValue, ocrConfidence, now, actorId, now, actorId);
     }
 
     public MeterReading withPhoto(String key, UUID actorId) {
         return new MeterReading(id, roomId, contractId, meterType, periodYear, periodMonth, previousValue,
             currentValue, replaced, oldMeterFinalValue, newMeterStartValue, replacementNote, consumption,
-            readingDate, key, createdAt, createdBy, Instant.now(), actorId);
+            readingDate, key, ocrValue, ocrConfidence, createdAt, createdBy, Instant.now(), actorId);
+    }
+
+    /** Giá trị đã xác nhận khác giá trị OCR gợi ý (người dùng đã sửa tay). */
+    public boolean ocrCorrected() {
+        return ocrValue != null && ocrValue.compareTo(currentValue) != 0;
     }
 
     public record ReplacementInfo(BigDecimal oldFinalValue, BigDecimal newStartValue, String note) {}

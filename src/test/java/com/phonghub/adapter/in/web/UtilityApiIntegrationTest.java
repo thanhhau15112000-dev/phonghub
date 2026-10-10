@@ -165,4 +165,46 @@ class UtilityApiIntegrationTest extends SeededWebTest {
         mockMvc.perform(get(RATES).header("X-User-Id", STAFF_1))
             .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
     }
+
+    @Test
+    @DisplayName("OCR: engine not wired yet -> manual entry required; only managers may call it (403)")
+    void ocrSuggestionWithoutEngine() throws Exception {
+        String path = READINGS + "/ocr";
+        mockMvc.perform(multipart(path).file(new MockMultipartFile("file", "m.png", "image/png", PNG))
+                .param("meterType", "ELECTRIC").header("X-User-Id", OWNER_1))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.requiresManualEntry").value(true))
+            .andExpect(jsonPath("$.value").doesNotExist());
+        mockMvc.perform(multipart(path).file(new MockMultipartFile("file", "m.png", "image/png", PNG))
+            .param("meterType", "ELECTRIC").header("X-User-Id", OWNER_2)).andExpect(status().isForbidden());
+        mockMvc.perform(multipart(path).file(new MockMultipartFile("file", "a.txt", "text/plain", "x".getBytes()))
+            .param("meterType", "ELECTRIC").header("X-User-Id", OWNER_1)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Stores both the OCR value and the confirmed value; low confidence must be typed by hand")
+    void ocrValueStoredAlongsideConfirmed() throws Exception {
+        String lowConfidence = "{\"meterType\":\"ELECTRIC\",\"currentValue\":120,\"readingDate\":\"" + month(2)
+            + "\",\"baselineValue\":100,\"ocrValue\":120,\"ocrConfidence\":0.40}";
+        record(lowConfidence, OWNER_1, 400);
+        String half = "{\"meterType\":\"ELECTRIC\",\"currentValue\":120,\"readingDate\":\"" + month(2)
+            + "\",\"baselineValue\":100,\"ocrValue\":120}";
+        record(half, OWNER_1, 400);
+
+        String corrected = "{\"meterType\":\"ELECTRIC\",\"currentValue\":121,\"readingDate\":\"" + month(2)
+            + "\",\"baselineValue\":100,\"ocrValue\":120,\"ocrConfidence\":0.93}";
+        mockMvc.perform(post(READINGS).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
+                .content(corrected))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.currentValue").value(121))
+            .andExpect(jsonPath("$.ocrValue").value(120))
+            .andExpect(jsonPath("$.ocrConfidence").value(0.93))
+            .andExpect(jsonPath("$.ocrCorrected").value(true));
+
+        mockMvc.perform(post(READINGS).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
+                .content(body("WATER", "15", month(2), "10")))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.ocrValue").doesNotExist())
+            .andExpect(jsonPath("$.ocrCorrected").value(false));
+    }
 }

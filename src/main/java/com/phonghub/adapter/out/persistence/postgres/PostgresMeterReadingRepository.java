@@ -35,6 +35,8 @@ public class PostgresMeterReadingRepository implements MeterReadingRepositoryPor
         rs.getBigDecimal("consumption"),
         rs.getDate("reading_date").toLocalDate(),
         rs.getString("photo_url"),
+        rs.getBigDecimal("ocr_value"),
+        rs.getBigDecimal("ocr_confidence"),
         instant(rs.getTimestamp("created_at")),
         rs.getObject("created_by", UUID.class),
         instant(rs.getTimestamp("updated_at")),
@@ -52,9 +54,9 @@ public class PostgresMeterReadingRepository implements MeterReadingRepositoryPor
         jdbcTemplate.update("""
             INSERT INTO meter_readings (id, room_id, contract_id, meter_type, period_year, period_month,
                 previous_value, current_value, replaced, old_meter_final_value, new_meter_start_value,
-                replacement_note, consumption, reading_date, photo_url, created_at, created_by, updated_at, updated_by)
+                replacement_note, consumption, reading_date, photo_url, ocr_value, ocr_confidence, created_at, created_by, updated_at, updated_by)
             VALUES (:id, :roomId, :contractId, :type, :year, :month, :previous, :current, :replaced, :oldFinal,
-                :newStart, :note, :consumption, :date, :photo, :createdAt, :createdBy, :updatedAt, :updatedBy)
+                :newStart, :note, :consumption, :date, :photo, :ocrValue, :ocrConfidence, :createdAt, :createdBy, :updatedAt, :updatedBy)
             ON CONFLICT (id) DO UPDATE SET
                 photo_url = EXCLUDED.photo_url,
                 updated_at = EXCLUDED.updated_at,
@@ -75,6 +77,8 @@ public class PostgresMeterReadingRepository implements MeterReadingRepositoryPor
             .addValue("consumption", reading.consumption())
             .addValue("date", java.sql.Date.valueOf(reading.readingDate()))
             .addValue("photo", reading.photoKey())
+            .addValue("ocrValue", reading.ocrValue())
+            .addValue("ocrConfidence", reading.ocrConfidence())
             .addValue("createdAt", Timestamp.from(reading.createdAt()))
             .addValue("createdBy", reading.createdBy())
             .addValue("updatedAt", Timestamp.from(reading.updatedAt()))
