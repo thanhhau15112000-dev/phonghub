@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
@@ -82,6 +83,14 @@ public class PostgresStaffPropertyAssignmentRepository implements StaffPropertyA
         String sql = "SELECT COUNT(*) FROM staff_property_assignments WHERE staff_user_id = :userId AND property_id = :propertyId";
         Integer count = jdbcTemplate.queryForObject(sql, Map.of("userId", userId, "propertyId", propertyId), Integer.class);
         return count != null && count > 0;
+    }
+
+    @Override
+    public Optional<StaffPropertyAssignment> find(UUID userId, UUID propertyId) {
+        List<StaffPropertyAssignment> rows = jdbcTemplate.query(
+            "SELECT * FROM staff_property_assignments WHERE staff_user_id = :userId AND property_id = :propertyId",
+            Map.of("userId", userId, "propertyId", propertyId), ROW_MAPPER);
+        return rows.stream().findFirst();
     }
 
     @Override

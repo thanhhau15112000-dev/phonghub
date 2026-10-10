@@ -345,8 +345,24 @@ public class AuthorizationService {
         assertCanAccessProperty(user, contract.getPropertyId());
     }
 
+    /** Hợp đồng, bàn giao, phát hành hóa đơn: staff cần được owner cấp quyền can_manage_contracts. */
     public void assertCanManageContracts(CurrentUser user, UUID propertyId) {
         assertCanManageProperty(user, propertyId);
+        if (user.role() == UserRole.STAFF && !assignmentPort.find(user.id(), propertyId)
+            .map(assignment -> assignment.canManageContracts()).orElse(false)) {
+            throw new UnauthorizedPropertyAccessException(String.format(
+                "Staff %s chưa được cấp quyền quản lý hợp đồng tại nhà trọ %s", user.fullName(), propertyId));
+        }
+    }
+
+    /** Thu tiền: staff cần quyền can_collect_payment. */
+    public void assertCanCollectPayment(CurrentUser user, UUID propertyId) {
+        assertCanManageProperty(user, propertyId);
+        if (user.role() == UserRole.STAFF && !assignmentPort.find(user.id(), propertyId)
+            .map(assignment -> assignment.canCollectPayment()).orElse(false)) {
+            throw new UnauthorizedPropertyAccessException(String.format(
+                "Staff %s chưa được cấp quyền thu tiền tại nhà trọ %s", user.fullName(), propertyId));
+        }
     }
 
     public void assertTechnicianCanWorkOnProperty(CurrentUser user, UUID propertyId) {

@@ -4,6 +4,7 @@ import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.domain.model.StaffPropertyAssignment;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,6 +16,9 @@ public class InMemoryStaffPropertyAssignmentRepository implements StaffPropertyA
 
     @Override
     public StaffPropertyAssignment save(StaffPropertyAssignment assignment) {
+        // Giống bảng thật: mỗi (staff, nhà trọ) chỉ một dòng, lưu lại thì cập nhật quyền.
+        store.values().removeIf(a -> a.staffUserId().equals(assignment.staffUserId())
+            && a.propertyId().equals(assignment.propertyId()));
         store.put(assignment.id(), assignment);
         return assignment;
     }
@@ -45,6 +49,13 @@ public class InMemoryStaffPropertyAssignmentRepository implements StaffPropertyA
     public boolean isUserAssignedToProperty(UUID userId, UUID propertyId) {
         return store.values().stream()
             .anyMatch(a -> a.staffUserId().equals(userId) && a.propertyId().equals(propertyId));
+    }
+
+    @Override
+    public Optional<StaffPropertyAssignment> find(UUID userId, UUID propertyId) {
+        return store.values().stream()
+            .filter(a -> a.staffUserId().equals(userId) && a.propertyId().equals(propertyId))
+            .findFirst();
     }
 
     @Override

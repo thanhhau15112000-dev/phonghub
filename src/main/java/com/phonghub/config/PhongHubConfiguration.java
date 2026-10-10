@@ -231,6 +231,19 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.PropertyStaffUseCase propertyStaffUseCase(
+        StaffPropertyAssignmentPort assignmentRepo,
+        UserRepositoryPort userRepo,
+        MaintenanceTicketRepositoryPort ticketRepo,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort
+    ) {
+        return new TransactionalPropertyStaffUseCase(new com.phonghub.application.service.PropertyStaffService(
+            assignmentRepo, userRepo, ticketRepo, currentUserPort, authorizationService, auditPort));
+    }
+
+    @Bean
     public UserUseCase userUseCase(
         UserRepositoryPort userRepo,
         StaffPropertyAssignmentPort assignmentRepo,

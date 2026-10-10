@@ -12,5 +12,6 @@ public interface StaffPropertyAssignmentPort {
     List<StaffPropertyAssignment> findByUserId(UUID userId);
     List<StaffPropertyAssignment> findByPropertyId(UUID propertyId);
     boolean isUserAssignedToProperty(UUID userId, UUID propertyId);
+    Optional<StaffPropertyAssignment> find(UUID userId, UUID propertyId);
     void deleteByUserIdAndPropertyId(UUID userId, UUID propertyId);
 }

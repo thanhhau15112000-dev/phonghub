@@ -38,6 +38,8 @@
                     onclick="document.getElementById('editPropertyModal').showModal()">Sửa thông tin</button>
             <a th:if="${currentUser != null and currentUser.role().name() != 'TENANT' and currentUser.role().name() != 'TECHNICIAN'}"
                th:href="@{'/properties/' + ${property.id()} + '/tenants'}" class="btn btn-sm btn-secondary">Người thuê</a>
+            <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+               th:href="@{'/properties/' + ${property.id()} + '/staff'}" class="btn btn-sm btn-secondary">Nhân sự</a>
             <a th:href="@{/properties}" class="btn btn-sm">&larr; Quay lại danh sách nhà trọ</a>
         </div>
     </div>
