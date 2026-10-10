@@ -173,6 +173,32 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.out.HandoverPdfPort handoverPdfPort() {
+        return new com.phonghub.adapter.out.pdf.OpenPdfHandoverRenderer();
+    }
+
+    @Bean
+    public com.phonghub.application.port.in.HandoverReportUseCase handoverReportUseCase(
+        HandoverRepositoryPort handoverRepo,
+        HandoverItemRepositoryPort itemRepo,
+        HandoverPhotoRepositoryPort photoRepo,
+        ContractRepositoryPort contractRepo,
+        RoomRepositoryPort roomRepo,
+        PropertyRepositoryPort propertyRepo,
+        TenantRepositoryPort tenantRepo,
+        UserRepositoryPort userRepo,
+        FileStoragePort fileStoragePort,
+        com.phonghub.application.port.out.HandoverPdfPort pdfPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort
+    ) {
+        return new TransactionalHandoverReportUseCase(new com.phonghub.application.service.HandoverReportService(
+            handoverRepo, itemRepo, photoRepo, contractRepo, roomRepo, propertyRepo, tenantRepo, userRepo,
+            fileStoragePort, pdfPort, currentUserPort, authorizationService, auditPort));
+    }
+
+    @Bean
     public com.phonghub.application.service.TenantLockPolicy tenantLockPolicy(
         ContractRepositoryPort contractRepo,
         @org.springframework.beans.factory.annotation.Value("${phonghub.privacy.retention-days:90}") long retentionDays

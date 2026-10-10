@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Đối chiếu bàn giao')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Đối chiếu nhận phòng / trả phòng</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">
+                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Dòng tô đậm là tài sản có tình trạng hoặc ghi chú khác với lúc nhận phòng.
+            </p>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <a th:if="${comparison.checkIn().status().name() == 'APPROVED'}"
+               th:href="@{'/contracts/' + ${contract.getId()} + '/handover-report/check-in/pdf'}" class="btn btn-secondary">PDF nhận phòng</a>
+            <a th:if="${comparison.checkOut() != null and comparison.checkOut().status().name() == 'APPROVED'}"
+               th:href="@{'/contracts/' + ${contract.getId()} + '/handover-report/check-out/pdf'}" class="btn btn-secondary">PDF trả phòng</a>
+            <a th:href="@{'/contracts/' + ${contract.getId()}}" class="btn">&larr; Quay lại hợp đồng</a>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <h2>Trạng thái biên bản</h2>
+        <table class="table">
+            <thead><tr><th></th><th>Nhận phòng</th><th>Trả phòng</th></tr></thead>
+            <tbody>
+                <tr><td>Trạng thái</td>
+                    <td th:text="${comparison.checkIn().status()}">APPROVED</td>
+                    <td th:text="${comparison.checkOut() != null} ? ${comparison.checkOut().status()} : 'Chưa tạo'">Chưa tạo</td></tr>
+                <tr><td>Người thuê xác nhận lúc</td>
+                    <td th:text="${comparison.checkIn().confirmedAt() != null} ? ${#temporals.format(comparison.checkIn().confirmedAt(), 'dd/MM/yyyy HH:mm')} : '—'">—</td>
+                    <td th:text="${comparison.checkOut() != null and comparison.checkOut().confirmedAt() != null} ? ${#temporals.format(comparison.checkOut().confirmedAt(), 'dd/MM/yyyy HH:mm')} : '—'">—</td></tr>
+                <tr><td>Duyệt lúc</td>
+                    <td th:text="${comparison.checkIn().approvedAt() != null} ? ${#temporals.format(comparison.checkIn().approvedAt(), 'dd/MM/yyyy HH:mm')} : '—'">—</td>
+                    <td th:text="${comparison.checkOut() != null and comparison.checkOut().approvedAt() != null} ? ${#temporals.format(comparison.checkOut().approvedAt(), 'dd/MM/yyyy HH:mm')} : '—'">—</td></tr>
+                <tr><td>Chỉ số điện</td>
+                    <td th:text="${comparison.checkIn().initialElectricMeter()}">0</td>
+                    <td th:text="${comparison.checkOut() != null} ? ${comparison.checkOut().initialElectricMeter()} + ' (tiêu thụ ' + ${comparison.electricConsumption()} + ')' : '—'">—</td></tr>
+                <tr><td>Chỉ số nước</td>
+                    <td th:text="${comparison.checkIn().initialWaterMeter()}">0</td>
+                    <td th:text="${comparison.checkOut() != null} ? ${comparison.checkOut().initialWaterMeter()} + ' (tiêu thụ ' + ${comparison.waterConsumption()} + ')' : '—'">—</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <h2>Tài sản</h2>
+        <p th:if="${comparison.rows().isEmpty()}" style="color: var(--text-secondary);">Phòng không có tài sản nào trong biên bản.</p>
+        <table th:if="${!comparison.rows().isEmpty()}" class="table">
+            <thead><tr><th>Tài sản</th><th>SL</th><th>Lúc nhận</th><th>Lúc trả</th><th>Khấu trừ đề xuất</th></tr></thead>
+            <tbody>
+                <tr th:each="row : ${comparison.rows()}" th:style="${row.changed()} ? 'font-weight: 600; background: rgba(239, 68, 68, 0.08);'">
+                    <td th:text="${row.assetName()}">Giường</td>
+                    <td th:text="${row.quantity()}">1</td>
+                    <td><span th:text="${row.checkInStatus() != null} ? ${uiText.assetStatus(row.checkInStatus())} : '—'">Tốt</span>
+                        <span th:if="${row.checkInNote() != null and !row.checkInNote().isBlank()}" th:text="'(' + ${row.checkInNote()} + ')'"></span></td>
+                    <td><span th:text="${row.checkOutStatus() != null} ? ${uiText.assetStatus(row.checkOutStatus())} : '—'">Hư hỏng</span>
+                        <span th:if="${row.checkOutNote() != null and !row.checkOutNote().isBlank()}" th:text="'(' + ${row.checkOutNote()} + ')'"></span></td>
+                    <td th:text="${#numbers.formatInteger(row.deduction(), 0, 'POINT')} + ' đ'">0 đ</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Ảnh phòng cạnh nhau</h2>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div>
+                <h3 style="font-size: 14px;">Lúc nhận phòng</h3>
+                <p th:if="${comparison.checkInPhotos().isEmpty()}" style="color: var(--text-secondary); font-size: 13px;">Không có ảnh.</p>
+                <div th:each="photo : ${comparison.checkInPhotos()}" style="margin-bottom: 8px;">
+                    <img th:src="@{'/contracts/' + ${contract.getId()} + '/handover/photos/' + ${photo.id()}}" alt="Ảnh phòng lúc nhận" style="max-width: 100%; border: 1px solid var(--border-color);">
+                </div>
+            </div>
+            <div>
+                <h3 style="font-size: 14px;">Lúc trả phòng</h3>
+                <p th:if="${comparison.checkOutPhotos().isEmpty()}" style="color: var(--text-secondary); font-size: 13px;">Không có ảnh.</p>
+                <div th:each="photo : ${comparison.checkOutPhotos()}" style="margin-bottom: 8px;">
+                    <img th:src="@{'/contracts/' + ${contract.getId()} + '/check-out/photos/' + ${photo.id()}}" alt="Ảnh phòng lúc trả" style="max-width: 100%; border: 1px solid var(--border-color);">
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
