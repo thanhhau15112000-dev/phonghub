@@ -40,6 +40,33 @@ public final class FileSanitizer {
         return new SanitizedFile(declaredType, fileType.extension(), clean(fileType.kind(), content));
     }
 
+    /** Video ngắn: mp4/quicktime (hộp ftyp) hoặc webm (EBML). Chỉ kiểm tra chữ ký; không xử lý lại nội dung. */
+    public static SanitizedFile sanitizeVideo(String declaredContentType, byte[] content, long maxFileSizeBytes) {
+        if (content == null || content.length == 0) {
+            throw new IllegalArgumentException("File cannot be empty");
+        }
+        if (content.length > maxFileSizeBytes) {
+            throw new IllegalArgumentException("Video exceeds the configured size limit");
+        }
+        String type = normalizeContentType(declaredContentType);
+        boolean ok = switch (type) {
+            case "video/mp4", "video/quicktime" -> content.length >= 12
+                && Arrays.equals(Arrays.copyOfRange(content, 4, 8), "ftyp".getBytes(StandardCharsets.US_ASCII));
+            case "video/webm" -> startsWith(content, new byte[]{0x1a, 0x45, (byte) 0xdf, (byte) 0xa3});
+            default -> false;
+        };
+        if (!ok) {
+            throw new IllegalArgumentException("Video content does not match an allowed mp4/webm/quicktime type");
+        }
+        String extension = type.equals("video/webm") ? "webm" : type.equals("video/quicktime") ? "mov" : "mp4";
+        return new SanitizedFile(type, extension, content);
+    }
+
+    public static boolean isVideo(String contentType) {
+        String type = normalizeContentType(contentType);
+        return type.equals("video/mp4") || type.equals("video/webm") || type.equals("video/quicktime");
+    }
+
     public static boolean isImage(String contentType) {
         String type = normalizeContentType(contentType);
         return type.equals("image/jpeg") || type.equals("image/png") || type.equals("image/webp");

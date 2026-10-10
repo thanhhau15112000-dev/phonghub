@@ -1,6 +1,7 @@
 package com.phonghub.adapter.in.web;
 
 import com.phonghub.application.port.in.InvoiceUseCase;
+import com.phonghub.application.port.in.MaintenanceAttachmentUseCase;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
@@ -22,7 +23,10 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -42,6 +46,7 @@ public class MaintenanceUiController {
     private final InvoiceUseCase invoiceUseCase;
     private final UserRepositoryPort userRepository;
     private final StaffPropertyAssignmentPort assignmentPort;
+    private final MaintenanceAttachmentUseCase attachmentUseCase;
 
     public MaintenanceUiController(
         MaintenanceUseCase maintenanceUseCase,
@@ -50,8 +55,10 @@ public class MaintenanceUiController {
         CurrentUserPort currentUserPort,
         InvoiceUseCase invoiceUseCase,
         UserRepositoryPort userRepository,
-        StaffPropertyAssignmentPort assignmentPort
+        StaffPropertyAssignmentPort assignmentPort,
+        MaintenanceAttachmentUseCase attachmentUseCase
     ) {
+        this.attachmentUseCase = attachmentUseCase;
         this.assignmentPort = assignmentPort;
         this.invoiceUseCase = invoiceUseCase;
         this.userRepository = userRepository;
@@ -194,6 +201,7 @@ public class MaintenanceUiController {
                 .map(assignment -> userRepository.findById(assignment.staffUserId()).orElse(null))
                 .filter(user -> user != null && user.role() == UserRole.TECHNICIAN)
                 .toList());
+            model.addAttribute("attachments", attachmentUseCase.list(id));
             model.addAttribute("liableParties", LiableParty.values());
             model.addAttribute("today", LocalDate.now());
             model.addAttribute("feeInvoice", invoiceUseCase.findFeeInvoiceForTicket(id).orElse(null));
@@ -215,6 +223,43 @@ public class MaintenanceUiController {
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
                 ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
+                : ex.getMessage());
+        }
+        return "redirect:/maintenance/" + id;
+    }
+
+    @PostMapping("/{id}/attachments")
+    public String uploadAttachment(
+        @PathVariable UUID id,
+        @RequestParam("file") MultipartFile file,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            attachmentUseCase.upload(id, file.getContentType(), file.getBytes());
+            redirectAttributes.addFlashAttribute("successMessage", "Đã đính kèm tệp.");
+        } catch (DomainException | IllegalArgumentException | java.io.IOException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
+                ? "Bạn chưa được cấp quyền thao tác với phiếu này."
+                : ex.getMessage());
+        }
+        return "redirect:/maintenance/" + id;
+    }
+
+    @GetMapping("/{id}/attachments/{attachmentId}")
+    public ResponseEntity<Void> downloadAttachment(@PathVariable UUID id, @PathVariable UUID attachmentId) {
+        java.net.URI target = attachmentUseCase.signedUrl(id, attachmentId);
+        return ResponseEntity.status(302).header(HttpHeaders.LOCATION, target.toString())
+            .header(HttpHeaders.CACHE_CONTROL, "no-store").build();
+    }
+
+    @PostMapping("/{id}/attachments/{attachmentId}/delete")
+    public String deleteAttachment(@PathVariable UUID id, @PathVariable UUID attachmentId, RedirectAttributes redirectAttributes) {
+        try {
+            attachmentUseCase.delete(id, attachmentId);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã xóa tệp đính kèm.");
+        } catch (DomainException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
+                ? "Bạn chưa được cấp quyền thao tác với phiếu này."
                 : ex.getMessage());
         }
         return "redirect:/maintenance/" + id;

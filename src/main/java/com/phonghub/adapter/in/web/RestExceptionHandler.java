@@ -27,6 +27,7 @@ import com.phonghub.domain.exception.RoomAssetNotFoundException;
 import com.phonghub.domain.exception.TenantDocumentNotFoundException;
 import com.phonghub.domain.exception.TooManyRevealAttemptsException;
 import com.phonghub.domain.exception.RoomNotFoundException;
+import com.phonghub.domain.exception.AttachmentLimitException;
 import com.phonghub.domain.exception.StaffAssignmentConflictException;
 import com.phonghub.domain.exception.TenantProfileLockedException;
 import com.phonghub.domain.exception.TenantHasActiveContractException;
@@ -123,7 +124,8 @@ public class RestExceptionHandler {
         DuplicateServiceRateException.class,
         TenantHasActiveContractException.class,
         StaffAssignmentConflictException.class,
-        TenantProfileLockedException.class
+        TenantProfileLockedException.class,
+        AttachmentLimitException.class
     })
     public ProblemDetail handleDuplicateAccountConflict(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());

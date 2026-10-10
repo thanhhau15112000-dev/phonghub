@@ -125,6 +125,33 @@
         </div>
     </div>
 
+    <!-- Ảnh / video đính kèm -->
+    <div class="card" style="margin-bottom: 20px;">
+        <h2>Ảnh và video đính kèm</h2>
+        <p th:if="${attachments.isEmpty()}" style="color: var(--text-secondary); font-size: 13px;">Chưa có tệp đính kèm.</p>
+        <ul th:if="${!attachments.isEmpty()}" style="list-style: none; padding: 0; margin: 0 0 12px 0;">
+            <li th:each="a : ${attachments}" style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
+                <a th:href="@{'/maintenance/' + ${ticket.getId()} + '/attachments/' + ${a.id()}}" target="_blank" rel="noopener noreferrer"
+                   th:text="${a.kind().name() == 'VIDEO' ? 'Video' : 'Ảnh'} + ' · ' + ${#numbers.formatDecimal(a.sizeBytes() / 1024.0, 0, 0)} + ' KB · ' + ${#temporals.format(a.createdAt(), 'dd/MM/yyyy HH:mm')}">Ảnh</a>
+                <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/attachments/' + ${a.id()} + '/delete'}" method="post"
+                      style="margin: 0;" onsubmit="return confirm('Xóa tệp này?');">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <button type="submit" class="btn btn-sm btn-danger"
+                            th:if="${currentUser.role().name() != 'TECHNICIAN' and (currentUser.id() == a.uploadedBy() or currentUser.role().name() != 'TENANT')}">Xóa</button>
+                </form>
+            </li>
+        </ul>
+        <form th:if="${currentUser.role().name() != 'TECHNICIAN' and !ticket.isWorkFinished()}"
+              th:action="@{'/maintenance/' + ${ticket.getId()} + '/attachments'}" method="post" enctype="multipart/form-data"
+              style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <input type="file" name="file" class="form-control" style="max-width: 320px;" required
+                   accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime">
+            <button type="submit" class="btn btn-secondary">Đính kèm</button>
+            <span style="font-size: 12px; color: var(--text-secondary);">Tối đa 5 ảnh và 1 video ngắn (≤ 10 MB mỗi tệp).</span>
+        </form>
+    </div>
+
     <!-- Owner/staff: giao kỹ thuật viên hoặc từ chối phiếu chưa xử lý -->
     <div th:if="${(currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED')}" class="card" style="margin-bottom: 20px;">
         <h2>Phân công và từ chối</h2>

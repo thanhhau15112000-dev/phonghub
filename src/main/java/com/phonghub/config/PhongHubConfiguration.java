@@ -199,6 +199,25 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.MaintenanceAttachmentUseCase maintenanceAttachmentUseCase(
+        com.phonghub.application.port.out.MaintenanceAttachmentRepositoryPort attachmentRepo,
+        MaintenanceTicketRepositoryPort ticketRepo,
+        TenantRepositoryPort tenantRepo,
+        FileStoragePort fileStoragePort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        StorageProperties storageProperties,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.maintenance.max-images:5}") int maxImages,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.maintenance.max-video-bytes:10485760}") long maxVideoBytes
+    ) {
+        return new TransactionalMaintenanceAttachmentUseCase(
+            new com.phonghub.application.service.MaintenanceAttachmentService(attachmentRepo, ticketRepo, tenantRepo,
+                fileStoragePort, currentUserPort, authorizationService, auditPort, maxImages,
+                storageProperties.getMaxFileSizeBytes(), Math.min(maxVideoBytes, storageProperties.getMaxFileSizeBytes())));
+    }
+
+    @Bean
     public com.phonghub.application.service.TenantLockPolicy tenantLockPolicy(
         ContractRepositoryPort contractRepo,
         @org.springframework.beans.factory.annotation.Value("${phonghub.privacy.retention-days:90}") long retentionDays
