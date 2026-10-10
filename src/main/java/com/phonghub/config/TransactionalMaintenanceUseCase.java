@@ -28,6 +28,18 @@ public class TransactionalMaintenanceUseCase implements MaintenanceUseCase {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket assignTechnician(UUID ticketId, UUID technicianId) {
+        return delegate.assignTechnician(ticketId, technicianId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket rejectTicket(UUID ticketId, String reason) {
+        return delegate.rejectTicket(ticketId, reason);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public MaintenanceTicket resolveTicket(ResolveMaintenanceTicketCommand command) {
         return delegate.resolveTicket(command);
     }

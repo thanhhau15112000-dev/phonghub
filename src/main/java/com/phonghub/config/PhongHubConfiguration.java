@@ -218,11 +218,14 @@ public class PhongHubConfiguration {
         InvoiceRepositoryPort invoiceRepo,
         AuditPort auditPort,
         CurrentUserPort currentUserPort,
-        AuthorizationService authorizationService
+        AuthorizationService authorizationService,
+        UserRepositoryPort userRepo,
+        StaffPropertyAssignmentPort assignmentRepo,
+        NotificationRepositoryPort notificationRepo
     ) {
         MaintenanceService service = new MaintenanceService(
             ticketRepo, roomRepo, tenantRepo, contractRepo, invoiceRepo, auditPort,
-            currentUserPort, authorizationService
+            currentUserPort, authorizationService, userRepo, assignmentRepo, notificationRepo
         );
         return new TransactionalMaintenanceUseCase(service);
     }

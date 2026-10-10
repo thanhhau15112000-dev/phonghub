@@ -6,6 +6,7 @@ import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.exception.DomainException;
@@ -40,6 +41,7 @@ public class MaintenanceUiController {
     private final CurrentUserPort currentUserPort;
     private final InvoiceUseCase invoiceUseCase;
     private final UserRepositoryPort userRepository;
+    private final StaffPropertyAssignmentPort assignmentPort;
 
     public MaintenanceUiController(
         MaintenanceUseCase maintenanceUseCase,
@@ -47,8 +49,10 @@ public class MaintenanceUiController {
         RoomUseCase roomUseCase,
         CurrentUserPort currentUserPort,
         InvoiceUseCase invoiceUseCase,
-        UserRepositoryPort userRepository
+        UserRepositoryPort userRepository,
+        StaffPropertyAssignmentPort assignmentPort
     ) {
+        this.assignmentPort = assignmentPort;
         this.invoiceUseCase = invoiceUseCase;
         this.userRepository = userRepository;
         this.maintenanceUseCase = maintenanceUseCase;
@@ -71,16 +75,8 @@ public class MaintenanceUiController {
         List<MaintenanceTicket> tickets = new ArrayList<>();
 
         if (currentUser.role() == UserRole.TECHNICIAN) {
+            // Kỹ thuật viên chỉ thấy phiếu được giao cho mình
             tickets.addAll(maintenanceUseCase.listAssignedTicketsForTechnician(currentUser.id()));
-            // Also include unassigned tickets in technician's assigned properties
-            List<Property> properties = propertyUseCase.listAccessibleProperties();
-            for (Property p : properties) {
-                for (MaintenanceTicket t : maintenanceUseCase.listTicketsForProperty(p.id())) {
-                    if (!tickets.contains(t)) {
-                        tickets.add(t);
-                    }
-                }
-            }
         } else {
             List<Property> properties = propertyUseCase.listAccessibleProperties();
             for (Property p : properties) {
@@ -194,6 +190,10 @@ public class MaintenanceUiController {
                     .map(com.phonghub.domain.model.User::fullName).orElse("Không tìm thấy tài khoản"));
             model.addAttribute("room", room);
             model.addAttribute("property", property);
+            model.addAttribute("technicians", assignmentPort.findByPropertyId(ticket.getPropertyId()).stream()
+                .map(assignment -> userRepository.findById(assignment.staffUserId()).orElse(null))
+                .filter(user -> user != null && user.role() == UserRole.TECHNICIAN)
+                .toList());
             model.addAttribute("liableParties", LiableParty.values());
             model.addAttribute("today", LocalDate.now());
             model.addAttribute("feeInvoice", invoiceUseCase.findFeeInvoiceForTicket(id).orElse(null));
@@ -213,6 +213,40 @@ public class MaintenanceUiController {
             maintenanceUseCase.acceptTicket(id);
             redirectAttributes.addFlashAttribute("successMessage", "Đã tiếp nhận yêu cầu và chuyển sang trạng thái đang xử lý.");
         } catch (DomainException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
+                ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
+                : ex.getMessage());
+        }
+        return "redirect:/maintenance/" + id;
+    }
+
+    @PostMapping("/{id}/assign")
+    public String assignTechnician(
+        @PathVariable UUID id,
+        @RequestParam UUID technicianId,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            maintenanceUseCase.assignTechnician(id, technicianId);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã giao yêu cầu cho kỹ thuật viên.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
+                ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
+                : ex.getMessage());
+        }
+        return "redirect:/maintenance/" + id;
+    }
+
+    @PostMapping("/{id}/reject")
+    public String rejectTicket(
+        @PathVariable UUID id,
+        @RequestParam String reason,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            maintenanceUseCase.rejectTicket(id, reason);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã từ chối yêu cầu và thông báo cho người thuê.");
+        } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
                 ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
                 : ex.getMessage());

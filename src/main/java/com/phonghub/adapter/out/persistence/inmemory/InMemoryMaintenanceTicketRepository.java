@@ -30,6 +30,7 @@ public class InMemoryMaintenanceTicketRepository implements MaintenanceTicketRep
             t.getResolutionNotes(),
             t.getCauseCategory(),
             t.getLiableParty(),
+            t.getRejectionReason(),
             t.getCreatedAt(),
             t.getUpdatedAt()
         );

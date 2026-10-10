@@ -19,6 +19,7 @@ public record MaintenanceTicketResponse(
     MaintenanceStatus status,
     BigDecimal repairCost,
     String resolutionNotes,
+    String rejectionReason,
     Instant createdAt,
     Instant updatedAt
 ) {
@@ -35,6 +36,7 @@ public record MaintenanceTicketResponse(
             ticket.getStatus(),
             ticket.getRepairCost(),
             ticket.getResolutionNotes(),
+            ticket.getRejectionReason(),
             ticket.getCreatedAt(),
             ticket.getUpdatedAt()
         );

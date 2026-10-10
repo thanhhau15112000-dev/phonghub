@@ -57,6 +57,24 @@ public class MaintenanceApiController {
         return ResponseEntity.ok(MaintenanceTicketResponse.from(ticket));
     }
 
+    @PostMapping("/maintenance/{id}/assign")
+    public ResponseEntity<MaintenanceTicketResponse> assignTicket(
+        @PathVariable UUID id,
+        @Valid @RequestBody AssignTicketRequest request
+    ) {
+        return ResponseEntity.ok(MaintenanceTicketResponse.from(
+            maintenanceUseCase.assignTechnician(id, request.technicianId())));
+    }
+
+    @PostMapping("/maintenance/{id}/reject")
+    public ResponseEntity<MaintenanceTicketResponse> rejectTicket(
+        @PathVariable UUID id,
+        @Valid @RequestBody RejectTicketRequest request
+    ) {
+        return ResponseEntity.ok(MaintenanceTicketResponse.from(
+            maintenanceUseCase.rejectTicket(id, request.reason())));
+    }
+
     @PostMapping("/maintenance/{id}/resolve")
     public ResponseEntity<MaintenanceTicketResponse> resolveTicket(
         @PathVariable UUID id,
@@ -91,6 +109,10 @@ public class MaintenanceApiController {
 
         boolean setRoomMaintenance
     ) {}
+
+    public record AssignTicketRequest(@NotNull(message = "Technician ID is required") UUID technicianId) {}
+
+    public record RejectTicketRequest(@NotBlank(message = "Reason is required") String reason) {}
 
     public record ResolveTicketRequest(
         @NotBlank(message = "Resolution notes are required")

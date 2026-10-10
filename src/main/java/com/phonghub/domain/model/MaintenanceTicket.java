@@ -20,6 +20,7 @@ public class MaintenanceTicket {
     private String resolutionNotes;
     private final MaintenanceCause causeCategory;
     private LiableParty liableParty;
+    private String rejectionReason;
     private final Instant createdAt;
     private Instant updatedAt;
 
@@ -60,6 +61,28 @@ public class MaintenanceTicket {
         Instant createdAt,
         Instant updatedAt
     ) {
+        this(id, roomId, propertyId, requestedByTenantId, assignedTechnicianId, title, description,
+            priority, status, repairCost, resolutionNotes, causeCategory, liableParty, null, createdAt, updatedAt);
+    }
+
+    public MaintenanceTicket(
+        UUID id,
+        UUID roomId,
+        UUID propertyId,
+        UUID requestedByTenantId,
+        UUID assignedTechnicianId,
+        String title,
+        String description,
+        MaintenancePriority priority,
+        MaintenanceStatus status,
+        BigDecimal repairCost,
+        String resolutionNotes,
+        MaintenanceCause causeCategory,
+        LiableParty liableParty,
+        String rejectionReason,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
         if (id == null) {
             throw new IllegalArgumentException("Ticket id cannot be null");
         }
@@ -89,6 +112,7 @@ public class MaintenanceTicket {
         this.resolutionNotes = resolutionNotes;
         this.causeCategory = causeCategory;
         this.liableParty = liableParty != null ? liableParty : LiableParty.OWNER;
+        this.rejectionReason = rejectionReason;
         this.createdAt = createdAt != null ? createdAt : Instant.now();
         this.updatedAt = updatedAt != null ? updatedAt : this.createdAt;
     }
@@ -144,6 +168,32 @@ public class MaintenanceTicket {
         }
         this.assignedTechnicianId = technicianId;
         this.status = MaintenanceStatus.ASSIGNED;
+        this.updatedAt = Instant.now();
+    }
+
+    /** Quản lý giao (hoặc giao lại) phiếu cho kỹ thuật viên khi chưa bắt đầu xử lý. */
+    public void assign(UUID technicianId) {
+        if (technicianId == null) {
+            throw new IllegalArgumentException("Technician id cannot be null");
+        }
+        if (this.status != MaintenanceStatus.REPORTED && this.status != MaintenanceStatus.ASSIGNED) {
+            throw new MaintenanceTicketException("Chỉ giao được phiếu chưa xử lý (REPORTED/ASSIGNED), phiếu hiện ở " + status);
+        }
+        this.assignedTechnicianId = technicianId;
+        this.status = MaintenanceStatus.ASSIGNED;
+        this.updatedAt = Instant.now();
+    }
+
+    /** Từ chối phiếu chưa xử lý; bắt buộc có lý do để người thuê biết. */
+    public void reject(String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Lý do từ chối không được để trống");
+        }
+        if (this.status != MaintenanceStatus.REPORTED && this.status != MaintenanceStatus.ASSIGNED) {
+            throw new MaintenanceTicketException("Chỉ từ chối được phiếu chưa xử lý (REPORTED/ASSIGNED), phiếu hiện ở " + status);
+        }
+        this.rejectionReason = reason.trim();
+        this.status = MaintenanceStatus.REJECTED;
         this.updatedAt = Instant.now();
     }
 
@@ -279,6 +329,10 @@ public class MaintenanceTicket {
 
     public LiableParty getLiableParty() {
         return liableParty;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
     }
 
     public Instant getCreatedAt() {

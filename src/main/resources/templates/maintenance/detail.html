@@ -30,7 +30,7 @@
             </div>
 
             <!-- Thao tác của kỹ thuật viên: tiếp nhận yêu cầu -->
-            <div th:if="${(currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED')}">
+            <div th:if="${((currentUser.role().name() == 'TECHNICIAN' and ticket.getAssignedTechnicianId() == currentUser.id()) or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED')}">
                 <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/accept'}" method="post">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <button type="submit" class="btn btn-primary">Tiếp nhận và bắt đầu xử lý</button>
@@ -125,8 +125,38 @@
         </div>
     </div>
 
+    <!-- Owner/staff: giao kỹ thuật viên hoặc từ chối phiếu chưa xử lý -->
+    <div th:if="${(currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED')}" class="card" style="margin-bottom: 20px;">
+        <h2>Phân công và từ chối</h2>
+        <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/assign'}" method="post" style="margin-bottom: 16px;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <label class="form-label" for="technicianId">Giao cho kỹ thuật viên</label>
+            <div style="display: flex; gap: 8px;">
+                <select id="technicianId" name="technicianId" class="form-control" required>
+                    <option value="" disabled selected>Chọn kỹ thuật viên của nhà trọ</option>
+                    <option th:each="tech : ${technicians}" th:value="${tech.id()}" th:text="${tech.fullName()}"
+                            th:selected="${tech.id() == ticket.getAssignedTechnicianId()}">Kỹ thuật viên</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Giao việc</button>
+            </div>
+        </form>
+        <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/reject'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <label class="form-label" for="rejectReason">Từ chối yêu cầu (người thuê sẽ nhận được lý do)</label>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="rejectReason" name="reason" class="form-control" placeholder="Lý do từ chối" required>
+                <button type="submit" class="btn">Từ chối</button>
+            </div>
+        </form>
+    </div>
+
+    <div th:if="${ticket.getStatus().name() == 'REJECTED'}" class="card" style="margin-bottom: 20px;">
+        <h2>Yêu cầu đã bị từ chối</h2>
+        <p th:text="${ticket.getRejectionReason()}">Lý do</p>
+    </div>
+
     <!-- Biểu mẫu hoàn tất xử lý -->
-    <div th:if="${!ticket.isResolved() and ticket.getStatus().name() != 'AWAITING_PAYMENT' and (currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" class="card">
+    <div th:if="${!ticket.isResolved() and ticket.getStatus().name() != 'AWAITING_PAYMENT' and ticket.getStatus().name() != 'REJECTED' and (currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" class="card">
         <h2>Xử lý yêu cầu bảo trì</h2>
         <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 16px;">
             Gửi báo cáo này sẽ hoàn tất yêu cầu và tùy chọn đưa phòng từ trạng thái BẢO TRÌ về trạng thái TRỐNG.

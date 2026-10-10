@@ -11,6 +11,10 @@ import java.util.UUID;
 public interface MaintenanceUseCase {
     MaintenanceTicket createTicket(CreateMaintenanceTicketCommand command);
     MaintenanceTicket acceptTicket(UUID ticketId);
+    /** Owner/staff giao phiếu cho kỹ thuật viên đã được phân công vào nhà trọ của phiếu. */
+    MaintenanceTicket assignTechnician(UUID ticketId, UUID technicianId);
+    /** Owner/staff từ chối phiếu chưa xử lý; bắt buộc có lý do, người thuê được thông báo. */
+    MaintenanceTicket rejectTicket(UUID ticketId, String reason);
     MaintenanceTicket resolveTicket(ResolveMaintenanceTicketCommand command);
     /** Quản lý miễn khoản phí đang chờ thanh toán: hủy hóa đơn, chủ trọ chịu phí, phiếu hoàn tất. */
     MaintenanceTicket waiveRepairFee(UUID ticketId, String reason);
