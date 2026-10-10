@@ -109,6 +109,11 @@ public class InMemoryPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantPrivacyRepository tenantPrivacyRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantPrivacyRepository();
+    }
+
+    @Bean
     public InMemoryTenantDocumentRepository tenantDocumentRepository() {
         return new InMemoryTenantDocumentRepository();
     }

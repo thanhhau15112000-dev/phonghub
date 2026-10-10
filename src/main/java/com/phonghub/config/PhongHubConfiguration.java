@@ -173,6 +173,32 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.service.TenantLockPolicy tenantLockPolicy(
+        ContractRepositoryPort contractRepo,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.privacy.retention-days:90}") long retentionDays
+    ) {
+        return new com.phonghub.application.service.TenantLockPolicy(contractRepo,
+            java.time.Duration.ofDays(Math.max(retentionDays, 1)));
+    }
+
+    @Bean
+    public com.phonghub.application.port.in.TenantPrivacyUseCase tenantPrivacyUseCase(
+        com.phonghub.application.port.out.TenantPrivacyRepositoryPort privacyRepo,
+        TenantRepositoryPort tenantRepo,
+        TenantDocumentRepositoryPort documentRepo,
+        ContractRepositoryPort contractRepo,
+        FileStoragePort fileStoragePort,
+        com.phonghub.application.service.TenantLockPolicy tenantLockPolicy,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort
+    ) {
+        return new TransactionalTenantPrivacyUseCase(new com.phonghub.application.service.TenantPrivacyService(
+            privacyRepo, tenantRepo, documentRepo, contractRepo, fileStoragePort, tenantLockPolicy, currentUserPort,
+            authorizationService, auditPort, java.time.Clock.systemUTC()));
+    }
+
+    @Bean
     public TenantDocumentUseCase tenantDocumentUseCase(
         TenantDocumentRepositoryPort documentRepo,
         TenantRepositoryPort tenantRepo,
@@ -182,11 +208,13 @@ public class PhongHubConfiguration {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
         AuditPort auditPort,
-        StorageProperties storageProperties
+        StorageProperties storageProperties,
+        com.phonghub.application.service.TenantLockPolicy tenantLockPolicy
     ) {
         TenantDocumentService service = new TenantDocumentService(
             documentRepo, tenantRepo, protector, fileStoragePort, identityProvider, currentUserPort,
-            authorizationService, auditPort, storageProperties.getMaxFileSizeBytes(), java.time.Clock.systemUTC()
+            authorizationService, auditPort, storageProperties.getMaxFileSizeBytes(), java.time.Clock.systemUTC(),
+            tenantLockPolicy
         );
         return new TransactionalTenantDocumentUseCase(service);
     }
@@ -272,10 +300,11 @@ public class PhongHubConfiguration {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
         AuditPort auditPort,
-        ContractRepositoryPort contractRepo
+        ContractRepositoryPort contractRepo,
+        com.phonghub.application.service.TenantLockPolicy tenantLockPolicy
     ) {
         TenantService service = new TenantService(tenantRepo, currentUserPort, authorizationService, auditPort,
-            contractRepo);
+            contractRepo, tenantLockPolicy);
         return new TransactionalTenantUseCase(service);
     }
 

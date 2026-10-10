@@ -138,6 +138,13 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.application.port.out.TenantPrivacyRepositoryPort tenantPrivacyRepository(
+        NamedParameterJdbcTemplate jdbcTemplate
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresTenantPrivacyRepository(jdbcTemplate);
+    }
+
+    @Bean
     public TenantDocumentRepositoryPort tenantDocumentRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         return new PostgresTenantDocumentRepository(jdbcTemplate);
     }

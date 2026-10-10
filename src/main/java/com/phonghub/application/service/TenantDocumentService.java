@@ -46,6 +46,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
     private final AuditPort auditPort;
     private final long maxFileSizeBytes;
     private final Clock clock;
+    private final TenantLockPolicy lockPolicy;
     private final Map<UUID, Deque<Instant>> failedReveals = new ConcurrentHashMap<>();
 
     public TenantDocumentService(
@@ -60,6 +61,24 @@ public class TenantDocumentService implements TenantDocumentUseCase {
         long maxFileSizeBytes,
         Clock clock
     ) {
+        this(documentRepository, tenantRepository, protector, storagePort, identityProvider, currentUserPort,
+            authorizationService, auditPort, maxFileSizeBytes, clock, null);
+    }
+
+    public TenantDocumentService(
+        TenantDocumentRepositoryPort documentRepository,
+        TenantRepositoryPort tenantRepository,
+        TenantDataProtectionPort protector,
+        FileStoragePort storagePort,
+        IdentityProviderPort identityProvider,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        long maxFileSizeBytes,
+        Clock clock,
+        TenantLockPolicy lockPolicy
+    ) {
+        this.lockPolicy = lockPolicy;
         this.documentRepository = documentRepository;
         this.tenantRepository = tenantRepository;
         this.protector = protector;
@@ -102,6 +121,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
         }
         CurrentUser user = currentUserPort.getCurrentUser();
         authorizationService.assertCanAccessTenantDocuments(user, command.propertyId(), command.tenantId());
+        assertNotLocked(command.tenantId());
         Tenant tenant = findTenant(command.tenantId());
 
         Prepared front = prepareImage(command.front(), true);
@@ -179,11 +199,18 @@ public class TenantDocumentService implements TenantDocumentUseCase {
     public void delete(UUID propertyId, UUID tenantId, DocumentType type) {
         CurrentUser user = currentUserPort.getCurrentUser();
         authorizationService.assertCanDeleteTenantDocuments(user, propertyId, tenantId);
+        assertNotLocked(tenantId);
         TenantDocument document = findDocument(tenantId, type);
         documentRepository.delete(tenantId, type);
         deleteQuietly(document.frontImageKey());
         deleteQuietly(document.backImageKey());
         audit("TENANT_DOCUMENT_DELETED", user, tenantId, Map.of("type", type.name()));
+    }
+
+    private void assertNotLocked(UUID tenantId) {
+        if (lockPolicy != null) {
+            lockPolicy.assertNotLocked(tenantId);
+        }
     }
 
     private boolean passwordMatches(CurrentUser user, String password) {

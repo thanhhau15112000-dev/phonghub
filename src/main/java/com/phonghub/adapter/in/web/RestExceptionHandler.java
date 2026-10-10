@@ -28,6 +28,7 @@ import com.phonghub.domain.exception.TenantDocumentNotFoundException;
 import com.phonghub.domain.exception.TooManyRevealAttemptsException;
 import com.phonghub.domain.exception.RoomNotFoundException;
 import com.phonghub.domain.exception.StaffAssignmentConflictException;
+import com.phonghub.domain.exception.TenantProfileLockedException;
 import com.phonghub.domain.exception.TenantHasActiveContractException;
 import com.phonghub.domain.exception.TenantNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
@@ -121,7 +122,8 @@ public class RestExceptionHandler {
         MeterReadingConflictException.class,
         DuplicateServiceRateException.class,
         TenantHasActiveContractException.class,
-        StaffAssignmentConflictException.class
+        StaffAssignmentConflictException.class,
+        TenantProfileLockedException.class
     })
     public ProblemDetail handleDuplicateAccountConflict(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());

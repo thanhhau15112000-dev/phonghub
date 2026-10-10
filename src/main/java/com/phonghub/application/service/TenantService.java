@@ -30,6 +30,7 @@ public class TenantService implements TenantUseCase {
     private final AuthorizationService authorizationService;
     private final AuditPort auditPort;
     private final ContractRepositoryPort contractRepository;
+    private final TenantLockPolicy lockPolicy;
 
     public TenantService(
         TenantRepositoryPort tenantRepository,
@@ -47,6 +48,18 @@ public class TenantService implements TenantUseCase {
         AuditPort auditPort,
         ContractRepositoryPort contractRepository
     ) {
+        this(tenantRepository, currentUserPort, authorizationService, auditPort, contractRepository, null);
+    }
+
+    public TenantService(
+        TenantRepositoryPort tenantRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        ContractRepositoryPort contractRepository,
+        TenantLockPolicy lockPolicy
+    ) {
+        this.lockPolicy = lockPolicy;
         this.contractRepository = contractRepository;
         this.tenantRepository = tenantRepository;
         this.currentUserPort = currentUserPort;
@@ -244,6 +257,9 @@ public class TenantService implements TenantUseCase {
 
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         authorizationService.assertCanUpdateTenant(currentUser, tenant.id());
+        if (lockPolicy != null) {
+            lockPolicy.assertNotLocked(tenant.id());
+        }
 
         String newIdCard = command.identityCardNumber() == null || command.identityCardNumber().isBlank()
             || command.identityCardNumber().startsWith("****")
