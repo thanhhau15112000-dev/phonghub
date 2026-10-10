@@ -11,6 +11,7 @@ import com.phonghub.domain.exception.TenantHasActiveContractException;
 import com.phonghub.domain.exception.TenantNotFoundException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
+import com.phonghub.domain.model.ContractStatus;
 import com.phonghub.domain.model.Tenant;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -195,7 +196,7 @@ public class TenantService implements TenantUseCase {
         authorizationService.assertCanManageProperty(currentUser, propertyId);
         PropertyTenantView view = getPropertyTenant(propertyId, tenantId);
         if (view.hasActiveContract()) {
-            throw new TenantHasActiveContractException("Không thể ẩn người thuê đang có hợp đồng ACTIVE tại nhà trọ này.");
+            throw new TenantHasActiveContractException("Không thể ẩn người thuê đang có hợp đồng nháp hoặc đang hiệu lực tại nhà trọ này.");
         }
         tenantRepository.setHidden(tenantId, propertyId, Instant.now(), currentUser.id());
         audit("TENANT_HIDDEN", currentUser, view.tenant(), Map.of("propertyId", propertyId.toString()));
@@ -218,13 +219,15 @@ public class TenantService implements TenantUseCase {
         Set<UUID> activeIds = new HashSet<>();
         if (contractRepository != null) {
             for (Contract contract : contractRepository.findByPropertyId(propertyId)) {
+                // Hợp đồng nháp cũng tính là đang mở: cùng quy tắc với khóa hồ sơ (TenantLockPolicy).
+                boolean open = contract.getStatus() == ContractStatus.DRAFT || contract.getStatus() == ContractStatus.ACTIVE;
                 ids.add(contract.getPrimaryTenantId());
-                if (contract.isActive()) {
+                if (open) {
                     activeIds.add(contract.getPrimaryTenantId());
                 }
                 for (ContractOccupant occupant : contract.getOccupants()) {
                     ids.add(occupant.tenantId());
-                    if (contract.isActive() && occupant.checkOutDate() == null) {
+                    if (open && occupant.checkOutDate() == null) {
                         activeIds.add(occupant.tenantId());
                     }
                 }
