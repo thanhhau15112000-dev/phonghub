@@ -27,6 +27,7 @@ import com.phonghub.domain.exception.RoomAssetNotFoundException;
 import com.phonghub.domain.exception.TenantDocumentNotFoundException;
 import com.phonghub.domain.exception.TooManyRevealAttemptsException;
 import com.phonghub.domain.exception.RoomNotFoundException;
+import com.phonghub.domain.exception.TenantHasActiveContractException;
 import com.phonghub.domain.exception.TenantNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.exception.UserNotFoundException;
@@ -117,7 +118,8 @@ public class RestExceptionHandler {
         InvalidHandoverStateException.class,
         HandoverAlreadyExistsException.class,
         MeterReadingConflictException.class,
-        DuplicateServiceRateException.class
+        DuplicateServiceRateException.class,
+        TenantHasActiveContractException.class
     })
     public ProblemDetail handleDuplicateAccountConflict(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());

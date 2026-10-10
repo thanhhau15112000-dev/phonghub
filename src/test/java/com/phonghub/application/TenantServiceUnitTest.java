@@ -166,8 +166,8 @@ class TenantServiceUnitTest {
     @Test
     @DisplayName("Unauthorized user (Staff or unrelated Owner) throws UnauthorizedPropertyAccessException (403)")
     void testUnauthorizedUserThrowsException() {
-        // Staff
-        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_STAFF_1);
+        // Staff phụ trách nhà trọ khác
+        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_STAFF_2);
         TenantUseCase.UpdateTenantCommand cmd = new TenantUseCase.UpdateTenantCommand(
             tenant1.id(),
             "Hacker Name",

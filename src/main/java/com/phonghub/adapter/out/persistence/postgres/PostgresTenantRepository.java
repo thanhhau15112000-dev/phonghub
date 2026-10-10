@@ -8,9 +8,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -131,6 +134,58 @@ public class PostgresTenantRepository implements TenantRepositoryPort {
             this::mapTenant
         );
         return list.isEmpty() ? Optional.empty() : Optional.of(list.getFirst());
+    }
+
+    @Override
+    public void linkToProperty(UUID tenantId, UUID propertyId, UUID actorId) {
+        jdbcTemplate.update("""
+            INSERT INTO tenant_properties (tenant_id, property_id, created_by)
+            VALUES (:tenantId, :propertyId, :actorId)
+            ON CONFLICT (tenant_id, property_id) DO NOTHING
+            """, new MapSqlParameterSource().addValue("tenantId", tenantId)
+            .addValue("propertyId", propertyId).addValue("actorId", actorId));
+    }
+
+    @Override
+    public Set<UUID> findLinkedPropertyIds(UUID tenantId) {
+        return new HashSet<>(jdbcTemplate.query(
+            "SELECT property_id FROM tenant_properties WHERE tenant_id = :tenantId",
+            Map.of("tenantId", tenantId), (rs, rowNum) -> rs.getObject("property_id", UUID.class)));
+    }
+
+    @Override
+    public List<PropertyLink> findLinks(UUID propertyId) {
+        return jdbcTemplate.query(
+            "SELECT tenant_id, hidden_at FROM tenant_properties WHERE property_id = :propertyId",
+            Map.of("propertyId", propertyId),
+            (rs, rowNum) -> new PropertyLink(rs.getObject("tenant_id", UUID.class),
+                toNullableInstant(rs.getTimestamp("hidden_at"))));
+    }
+
+    @Override
+    public void setHidden(UUID tenantId, UUID propertyId, Instant hiddenAt, UUID actorId) {
+        jdbcTemplate.update("""
+            INSERT INTO tenant_properties (tenant_id, property_id, created_by, hidden_at, hidden_by)
+            VALUES (:tenantId, :propertyId, :actorId, :hiddenAt, :hiddenBy)
+            ON CONFLICT (tenant_id, property_id) DO UPDATE SET
+                hidden_at = EXCLUDED.hidden_at,
+                hidden_by = EXCLUDED.hidden_by
+            """, new MapSqlParameterSource().addValue("tenantId", tenantId)
+            .addValue("propertyId", propertyId).addValue("actorId", actorId)
+            .addValue("hiddenAt", hiddenAt == null ? null : Timestamp.from(hiddenAt))
+            .addValue("hiddenBy", hiddenAt == null ? null : actorId));
+    }
+
+    @Override
+    public List<Tenant> findAllByIds(Collection<UUID> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return jdbcTemplate.query("SELECT * FROM tenants WHERE id IN (:ids)", Map.of("ids", ids), this::mapTenant);
+    }
+
+    private static Instant toNullableInstant(Timestamp ts) {
+        return ts == null ? null : ts.toInstant();
     }
 
     @Override

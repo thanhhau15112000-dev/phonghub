@@ -258,9 +258,11 @@ public class PhongHubConfiguration {
         TenantRepositoryPort tenantRepo,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
-        AuditPort auditPort
+        AuditPort auditPort,
+        ContractRepositoryPort contractRepo
     ) {
-        TenantService service = new TenantService(tenantRepo, currentUserPort, authorizationService, auditPort);
+        TenantService service = new TenantService(tenantRepo, currentUserPort, authorizationService, auditPort,
+            contractRepo);
         return new TransactionalTenantUseCase(service);
     }
 
