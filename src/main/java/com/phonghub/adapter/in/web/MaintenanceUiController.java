@@ -123,6 +123,7 @@ public class MaintenanceUiController {
         model.addAttribute("propertyNames", propertyNames);
         model.addAttribute("priorities", MaintenancePriority.values());
         model.addAttribute("openStatuses", MaintenanceListFilter.OPEN_STATUSES);
+        model.addAttribute("now", java.time.Instant.now());
         model.addAttribute("openCount", openTickets.size());
         model.addAttribute("doneCount", common.size() - openTickets.size());
         model.addAttribute("openByStatus", openByStatus);
@@ -202,6 +203,17 @@ public class MaintenanceUiController {
                 .filter(user -> user != null && user.role() == UserRole.TECHNICIAN)
                 .toList());
             model.addAttribute("attachments", attachmentUseCase.list(id));
+            java.util.List<com.phonghub.domain.model.MaintenanceTicketEvent> timeline = maintenanceUseCase.getTimeline(id);
+            java.util.Map<UUID, String> actorNames = new java.util.HashMap<>();
+            for (com.phonghub.domain.model.MaintenanceTicketEvent event : timeline) {
+                if (event.actorId() != null && !actorNames.containsKey(event.actorId())) {
+                    actorNames.put(event.actorId(), userRepository.findById(event.actorId())
+                        .map(com.phonghub.domain.model.User::fullName).orElse("Tài khoản đã xóa"));
+                }
+            }
+            model.addAttribute("timeline", timeline);
+            model.addAttribute("actorNames", actorNames);
+            model.addAttribute("now", java.time.Instant.now());
             model.addAttribute("liableParties", LiableParty.values());
             model.addAttribute("today", LocalDate.now());
             model.addAttribute("feeInvoice", invoiceUseCase.findFeeInvoiceForTicket(id).orElse(null));

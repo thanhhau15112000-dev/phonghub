@@ -4,6 +4,7 @@ import com.phonghub.domain.model.LiableParty;
 import com.phonghub.domain.model.MaintenanceCause;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceTicket;
+import com.phonghub.domain.model.MaintenanceTicketEvent;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
@@ -19,6 +20,8 @@ public interface MaintenanceUseCase {
     /** Quản lý miễn khoản phí đang chờ thanh toán: hủy hóa đơn, chủ trọ chịu phí, phiếu hoàn tất. */
     MaintenanceTicket waiveRepairFee(UUID ticketId, String reason);
     MaintenanceTicket getTicket(UUID ticketId);
+    /** Timeline trạng thái của phiếu; cùng quy tắc xem với {@link #getTicket}. */
+    List<MaintenanceTicketEvent> getTimeline(UUID ticketId);
     List<MaintenanceTicket> listTicketsForProperty(UUID propertyId);
     List<MaintenanceTicket> listAssignedTicketsForTechnician(UUID technicianId);
     List<MaintenanceTicket> listTicketsForRoom(UUID roomId);

@@ -27,6 +27,9 @@
                 <span th:class="'badge badge-' + ${ticket.getStatus()}" style="font-size: 13px; padding: 4px 8px;" th:text="${uiText.maintenanceStatus(ticket.getStatus())}">Đã báo</span>
                 <span style="font-weight: 600; margin-left: 12px;">Mức độ:</span>
                 <span class="badge" th:text="${uiText.maintenancePriority(ticket.getPriority())}">Cao</span>
+                <span th:if="${ticket.getDueAt() != null}" style="font-weight: 600; margin-left: 12px;">Hạn xử lý:</span>
+                <span th:if="${ticket.getDueAt() != null}" th:text="${#temporals.format(ticket.getDueAt(), 'dd/MM/yyyy HH:mm')}">01/01/2026 10:00</span>
+                <span th:if="${ticket.isOverdue(now)}" class="badge badge-danger" style="background: #ef4444; color: #fff;">Quá hạn</span>
             </div>
 
             <!-- Thao tác của kỹ thuật viên: tiếp nhận yêu cầu -->
@@ -123,6 +126,20 @@
                 <strong th:text="${#numbers.formatDecimal(ticket.getRepairCost(), 0, 'COMMA', 0, 'POINT') + ' đ'}">150,000 đ</strong>
             </div>
         </div>
+    </div>
+
+    <!-- Timeline trạng thái -->
+    <div class="card" style="margin-bottom: 20px;">
+        <h2>Lịch sử xử lý</h2>
+        <p th:if="${timeline.isEmpty()}" style="color: var(--text-secondary); font-size: 13px;">Chưa có lịch sử cho phiếu này.</p>
+        <ol th:if="${!timeline.isEmpty()}" style="margin: 0; padding-left: 18px; font-size: 13px;">
+            <li th:each="e : ${timeline}" style="margin-bottom: 6px;">
+                <strong th:text="${uiText.maintenanceStatus(e.toStatus())}">Đã báo</strong>
+                <span th:text="'· ' + ${#temporals.format(e.at(), 'dd/MM/yyyy HH:mm')}">· 01/01/2026 10:00</span>
+                <span th:text="'· ' + (${e.actorId() != null} ? ${actorNames.get(e.actorId())} : 'Hệ thống')">· Hệ thống</span>
+                <span th:if="${e.note() != null}" style="color: var(--text-secondary);" th:text="'— ' + ${e.note()}">— ghi chú</span>
+            </li>
+        </ol>
     </div>
 
     <!-- Ảnh / video đính kèm -->

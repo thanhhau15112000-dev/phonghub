@@ -89,6 +89,15 @@ public class MaintenanceApiController {
         return ResponseEntity.ok(MaintenanceTicketResponse.from(ticket));
     }
 
+    /** Timeline trạng thái của phiếu: ai chuyển trạng thái nào, lúc nào. */
+    @GetMapping("/maintenance/{id}/timeline")
+    public ResponseEntity<List<TimelineEntry>> timeline(@PathVariable UUID id) {
+        return ResponseEntity.ok(maintenanceUseCase.getTimeline(id).stream()
+            .map(event -> new TimelineEntry(event.fromStatus() == null ? null : event.fromStatus().name(),
+                event.toStatus().name(), event.actorId(), event.note(), event.at()))
+            .toList());
+    }
+
     @GetMapping("/maintenance/{id}")
     public ResponseEntity<MaintenanceTicketResponse> getTicket(@PathVariable UUID id) {
         MaintenanceTicket ticket = maintenanceUseCase.getTicket(id);
@@ -109,6 +118,8 @@ public class MaintenanceApiController {
 
         boolean setRoomMaintenance
     ) {}
+
+    public record TimelineEntry(String from, String to, UUID actorId, String note, java.time.Instant at) {}
 
     public record AssignTicketRequest(@NotNull(message = "Technician ID is required") UUID technicianId) {}
 

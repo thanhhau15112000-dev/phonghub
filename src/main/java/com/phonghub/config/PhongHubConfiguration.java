@@ -283,6 +283,28 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.service.MaintenanceSlaPolicy maintenanceSlaPolicy(
+        @org.springframework.beans.factory.annotation.Value("${phonghub.maintenance.sla-hours.urgent:4}") long urgent,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.maintenance.sla-hours.high:24}") long high,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.maintenance.sla-hours.medium:72}") long medium,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.maintenance.sla-hours.low:168}") long low
+    ) {
+        return new com.phonghub.application.service.MaintenanceSlaPolicy(urgent, high, medium, low);
+    }
+
+    @Bean
+    public com.phonghub.application.service.MaintenanceSlaService maintenanceSlaService(
+        MaintenanceTicketRepositoryPort ticketRepo,
+        PropertyRepositoryPort propertyRepo,
+        UserRepositoryPort userRepo,
+        NotificationRepositoryPort notificationRepo,
+        AuditPort auditPort
+    ) {
+        return new com.phonghub.application.service.MaintenanceSlaService(
+            ticketRepo, propertyRepo, userRepo, notificationRepo, auditPort);
+    }
+
+    @Bean
     public MaintenanceUseCase maintenanceUseCase(
         MaintenanceTicketRepositoryPort ticketRepo,
         RoomRepositoryPort roomRepo,
@@ -294,11 +316,12 @@ public class PhongHubConfiguration {
         AuthorizationService authorizationService,
         UserRepositoryPort userRepo,
         StaffPropertyAssignmentPort assignmentRepo,
-        NotificationRepositoryPort notificationRepo
+        NotificationRepositoryPort notificationRepo,
+        com.phonghub.application.service.MaintenanceSlaPolicy slaPolicy
     ) {
         MaintenanceService service = new MaintenanceService(
             ticketRepo, roomRepo, tenantRepo, contractRepo, invoiceRepo, auditPort,
-            currentUserPort, authorizationService, userRepo, assignmentRepo, notificationRepo
+            currentUserPort, authorizationService, userRepo, assignmentRepo, notificationRepo, slaPolicy
         );
         return new TransactionalMaintenanceUseCase(service);
     }
