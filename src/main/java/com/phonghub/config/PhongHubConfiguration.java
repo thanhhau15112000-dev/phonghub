@@ -236,11 +236,18 @@ public class PhongHubConfiguration {
         com.phonghub.application.service.TenantLockPolicy tenantLockPolicy,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
-        AuditPort auditPort
+        AuditPort auditPort,
+        IdentityProviderPort identityProvider,
+        PropertyRepositoryPort propertyRepo,
+        UserRepositoryPort userRepo,
+        NotificationRepositoryPort notificationRepo,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.privacy.purge-mode:APPROVAL}") String purgeMode
     ) {
         return new TransactionalTenantPrivacyUseCase(new com.phonghub.application.service.TenantPrivacyService(
             privacyRepo, tenantRepo, documentRepo, contractRepo, fileStoragePort, tenantLockPolicy, currentUserPort,
-            authorizationService, auditPort, java.time.Clock.systemUTC()));
+            authorizationService, auditPort, java.time.Clock.systemUTC(),
+            com.phonghub.application.port.in.TenantPrivacyUseCase.PurgeMode.valueOf(purgeMode.trim().toUpperCase()),
+            identityProvider, propertyRepo, userRepo, notificationRepo));
     }
 
     @Bean

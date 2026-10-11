@@ -17,10 +17,24 @@ public interface TenantPrivacyUseCase {
     /** Tenant tự yêu cầu xóa sớm giấy tờ của mình; chỉ khi không còn hợp đồng hiệu lực. */
     ErasureOutcome requestErasure();
 
+    /** Tenant đã đến hạn xóa (hoặc đã yêu cầu xóa) đang chờ owner/admin xác nhận; không gồm tenant đang legal hold. */
+    java.util.List<PendingPurge> pendingPurges(UUID propertyId);
+
+    /**
+     * Owner/admin xác nhận xóa dữ liệu giấy tờ của tenant đã đến hạn. Hành động không hoàn tác nên cần nhập lại mật
+     * khẩu của chính người xác nhận; tenant chưa đến hạn hoặc đang legal hold bị từ chối (409).
+     */
+    PrivacyStatus confirmPurge(UUID propertyId, UUID tenantId, String password);
+
     /** Dành cho job định kỳ, không gắn với người dùng: xóa dữ liệu giấy tờ đã quá hạn. Trả về số tenant đã xóa. */
     int purgeExpired(Instant now);
 
-    enum ErasureOutcome { PURGED, PENDING_LEGAL_HOLD }
+    enum ErasureOutcome { PURGED, PENDING_LEGAL_HOLD, PENDING_APPROVAL }
+
+    /** AUTO: job tự xóa khi đến hạn. APPROVAL (mặc định): chỉ báo cho owner, xóa khi owner/admin xác nhận. */
+    enum PurgeMode { AUTO, APPROVAL }
+
+    record PendingPurge(UUID tenantId, String fullName, Instant endedAt, Instant dueAt, boolean erasureRequested) {}
 
     record PrivacyStatus(
         boolean locked,

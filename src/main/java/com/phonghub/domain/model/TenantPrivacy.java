@@ -11,8 +11,14 @@ public record TenantPrivacy(
     UUID legalHoldSetBy,
     Instant legalHoldSetAt,
     Instant erasureRequestedAt,
-    Instant purgedAt
+    Instant purgedAt,
+    Instant purgeNotifiedAt
 ) {
+    public TenantPrivacy(UUID tenantId, boolean legalHold, String legalHoldReason, UUID legalHoldSetBy,
+                         Instant legalHoldSetAt, Instant erasureRequestedAt, Instant purgedAt) {
+        this(tenantId, legalHold, legalHoldReason, legalHoldSetBy, legalHoldSetAt, erasureRequestedAt, purgedAt, null);
+    }
+
     public TenantPrivacy {
         if (tenantId == null) {
             throw new IllegalArgumentException("Tenant id cannot be null");
@@ -23,7 +29,7 @@ public record TenantPrivacy(
     }
 
     public static TenantPrivacy none(UUID tenantId) {
-        return new TenantPrivacy(tenantId, false, null, null, null, null, null);
+        return new TenantPrivacy(tenantId, false, null, null, null, null, null, null);
     }
 
     public boolean purged() {
@@ -31,20 +37,25 @@ public record TenantPrivacy(
     }
 
     public TenantPrivacy withLegalHold(String reason, UUID actorId, Instant now) {
-        return new TenantPrivacy(tenantId, true, reason.trim(), actorId, now, erasureRequestedAt, purgedAt);
+        return new TenantPrivacy(tenantId, true, reason.trim(), actorId, now, erasureRequestedAt, purgedAt, purgeNotifiedAt);
     }
 
     public TenantPrivacy withoutLegalHold() {
-        return new TenantPrivacy(tenantId, false, null, null, null, erasureRequestedAt, purgedAt);
+        return new TenantPrivacy(tenantId, false, null, null, null, erasureRequestedAt, purgedAt, purgeNotifiedAt);
     }
 
     public TenantPrivacy withErasureRequested(Instant now) {
         return new TenantPrivacy(tenantId, legalHold, legalHoldReason, legalHoldSetBy, legalHoldSetAt,
-            erasureRequestedAt != null ? erasureRequestedAt : now, purgedAt);
+            erasureRequestedAt != null ? erasureRequestedAt : now, purgedAt, purgeNotifiedAt);
     }
 
     public TenantPrivacy withPurged(Instant now) {
         return new TenantPrivacy(tenantId, legalHold, legalHoldReason, legalHoldSetBy, legalHoldSetAt,
-            erasureRequestedAt, now);
+            erasureRequestedAt, now, purgeNotifiedAt);
+    }
+
+    public TenantPrivacy withPurgeNotified(Instant now) {
+        return new TenantPrivacy(tenantId, legalHold, legalHoldReason, legalHoldSetBy, legalHoldSetAt,
+            erasureRequestedAt, purgedAt, now);
     }
 }

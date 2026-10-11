@@ -44,11 +44,29 @@ public class TenantPrivacyApiController {
         return useCase.clearLegalHold(propertyId, tenantId);
     }
 
+    /** Tenant đến hạn xóa đang chờ owner/admin xác nhận. */
+    @GetMapping("/properties/{propertyId}/privacy/pending-purge")
+    public java.util.List<TenantPrivacyUseCase.PendingPurge> pendingPurges(@PathVariable UUID propertyId) {
+        return useCase.pendingPurges(propertyId);
+    }
+
+    /** Owner/admin xác nhận xóa giấy tờ (không hoàn tác); cần nhập lại mật khẩu của chính mình. */
+    @PostMapping("/properties/{propertyId}/tenants/{tenantId}/privacy/purge")
+    public PrivacyStatus confirmPurge(
+        @PathVariable UUID propertyId,
+        @PathVariable UUID tenantId,
+        @Valid @RequestBody ConfirmPurgeRequest request
+    ) {
+        return useCase.confirmPurge(propertyId, tenantId, request.password());
+    }
+
     /** Người thuê tự yêu cầu xóa sớm giấy tờ của mình (phần hợp đồng, hóa đơn phải lưu theo luật vẫn được giữ). */
     @PostMapping("/tenants/me/erasure-request")
     public Map<String, String> requestErasure() {
         return Map.of("outcome", useCase.requestErasure().name());
     }
+
+    public record ConfirmPurgeRequest(@NotBlank(message = "Cần nhập mật khẩu để xác nhận") String password) {}
 
     public record LegalHoldRequest(@NotBlank(message = "Cần nêu lý do giữ pháp lý") String reason) {}
 }

@@ -6,16 +6,25 @@ import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.FileStoragePort;
+import com.phonghub.application.port.out.IdentityProviderPort;
+import com.phonghub.application.port.out.NotificationRepositoryPort;
+import com.phonghub.application.port.out.PropertyRepositoryPort;
+import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
 import com.phonghub.application.port.out.TenantPrivacyRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.domain.exception.DocumentRevealDeniedException;
+import com.phonghub.domain.exception.InvalidCredentialsException;
 import com.phonghub.domain.exception.TenantHasActiveContractException;
+import com.phonghub.domain.exception.TenantProfileLockedException;
 import com.phonghub.domain.exception.TenantNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.TenantDocument;
+import com.phonghub.domain.model.Notification;
+import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.TenantPrivacy;
 import com.phonghub.domain.model.UserRole;
 import java.time.Clock;
@@ -43,6 +52,11 @@ public class TenantPrivacyService implements TenantPrivacyUseCase {
     private final AuthorizationService authorizationService;
     private final AuditPort auditPort;
     private final Clock clock;
+    private final PurgeMode purgeMode;
+    private final IdentityProviderPort identityProvider;
+    private final PropertyRepositoryPort propertyRepository;
+    private final UserRepositoryPort userRepository;
+    private final NotificationRepositoryPort notificationRepository;
 
     public TenantPrivacyService(
         TenantPrivacyRepositoryPort privacyRepository,
@@ -54,8 +68,18 @@ public class TenantPrivacyService implements TenantPrivacyUseCase {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
         AuditPort auditPort,
-        Clock clock
+        Clock clock,
+        PurgeMode purgeMode,
+        IdentityProviderPort identityProvider,
+        PropertyRepositoryPort propertyRepository,
+        UserRepositoryPort userRepository,
+        NotificationRepositoryPort notificationRepository
     ) {
+        this.purgeMode = purgeMode;
+        this.identityProvider = identityProvider;
+        this.propertyRepository = propertyRepository;
+        this.userRepository = userRepository;
+        this.notificationRepository = notificationRepository;
         this.privacyRepository = privacyRepository;
         this.tenantRepository = tenantRepository;
         this.documentRepository = documentRepository;
@@ -121,6 +145,10 @@ public class TenantPrivacyService implements TenantPrivacyUseCase {
         if (privacy.legalHold()) {
             return ErasureOutcome.PENDING_LEGAL_HOLD;
         }
+        if (purgeMode == PurgeMode.APPROVAL) {
+            notifyOwnersOnce(tenant, privacy, "Người thuê yêu cầu xóa giấy tờ danh tính; cần chủ trọ xác nhận.");
+            return ErasureOutcome.PENDING_APPROVAL;
+        }
         purge(tenant, privacy, "ERASURE_REQUEST", user.id());
         return ErasureOutcome.PURGED;
     }
@@ -165,8 +193,100 @@ public class TenantPrivacyService implements TenantPrivacyUseCase {
         if (tenant == null) {
             return false;
         }
+        if (purgeMode == PurgeMode.APPROVAL) {
+            // Chỉ báo owner một lần; việc xóa chờ owner/admin xác nhận.
+            notifyOwnersOnce(tenant, privacy, "Giấy tờ danh tính của người thuê đã đến hạn xóa; cần chủ trọ xác nhận.");
+            return false;
+        }
         purge(tenant, privacy, privacy.erasureRequestedAt() != null ? "ERASURE_REQUEST" : "RETENTION_EXPIRED", null);
         return true;
+    }
+
+    @Override
+    public List<PendingPurge> pendingPurges(UUID propertyId) {
+        authorizationService.assertOwnerOrAdmin(currentUserPort.getCurrentUser(), propertyId);
+        Instant now = clock.instant();
+        List<PendingPurge> pending = new java.util.ArrayList<>();
+        for (UUID tenantId : tenantIdsOf(propertyId)) {
+            TenantPrivacy privacy = privacyRepository.find(tenantId).orElseGet(() -> TenantPrivacy.none(tenantId));
+            TenantLockPolicy.LockInfo info = lockPolicy.lockInfo(tenantId);
+            if (isDue(privacy, info, now)) {
+                tenantRepository.findById(tenantId).ifPresent(tenant -> pending.add(new PendingPurge(tenantId,
+                    tenant.fullName(), info.endedAt(), info.purgeDueAt(), privacy.erasureRequestedAt() != null)));
+            }
+        }
+        return pending;
+    }
+
+    @Override
+    public PrivacyStatus confirmPurge(UUID propertyId, UUID tenantId, String password) {
+        CurrentUser actor = currentUserPort.getCurrentUser();
+        authorizationService.assertOwnerOrAdmin(actor, propertyId);
+        assertTenantInProperty(propertyId, tenantId);
+        if (password == null || password.isBlank() || !passwordMatches(actor, password)) {
+            audit("TENANT_PURGE_CONFIRM_FAILED", actor.id(), tenantId, Map.of("propertyId", propertyId.toString()));
+            throw new DocumentRevealDeniedException();
+        }
+        TenantPrivacy privacy = privacyRepository.find(tenantId).orElseGet(() -> TenantPrivacy.none(tenantId));
+        if (privacy.purged()) {
+            return statusOf(tenantId);
+        }
+        if (privacy.legalHold()) {
+            throw new TenantProfileLockedException("Tenant đang bị giữ pháp lý, không thể xóa.");
+        }
+        TenantLockPolicy.LockInfo info = lockPolicy.lockInfo(tenantId);
+        if (!isDue(privacy, info, clock.instant())) {
+            throw new TenantHasActiveContractException(
+                "Tenant chưa đến hạn xóa (hoặc còn hợp đồng đang mở); chưa thể xác nhận xóa.");
+        }
+        Tenant tenant = tenantRepository.findById(tenantId)
+            .orElseThrow(() -> new TenantNotFoundException("Tenant not found: " + tenantId));
+        purge(tenant, privacy, "OWNER_CONFIRMED", actor.id());
+        return statusOf(tenantId);
+    }
+
+    private boolean isDue(TenantPrivacy privacy, TenantLockPolicy.LockInfo info, Instant now) {
+        if (privacy.purged() || privacy.legalHold() || info.live()) {
+            return false;
+        }
+        return privacy.erasureRequestedAt() != null
+            || (info.purgeDueAt() != null && !now.isBefore(info.purgeDueAt()));
+    }
+
+    private boolean passwordMatches(CurrentUser user, String password) {
+        try {
+            identityProvider.login(user.email(), password);
+            return true;
+        } catch (InvalidCredentialsException ex) {
+            return false;
+        }
+    }
+
+    private Set<UUID> tenantIdsOf(UUID propertyId) {
+        Set<UUID> ids = new LinkedHashSet<>();
+        for (Contract contract : contractRepository.findByPropertyId(propertyId)) {
+            ids.add(contract.getPrimaryTenantId());
+            contract.getOccupants().forEach(occupant -> ids.add(occupant.tenantId()));
+        }
+        tenantRepository.findLinks(propertyId).forEach(link -> ids.add(link.tenantId()));
+        return ids;
+    }
+
+    /** Báo chủ các nhà trọ liên quan một lần cho mỗi tenant (đánh dấu {@code purge_notified_at}). */
+    private void notifyOwnersOnce(Tenant tenant, TenantPrivacy privacy, String message) {
+        if (privacy.purgeNotifiedAt() != null || notificationRepository == null) {
+            return;
+        }
+        Set<UUID> ownerIds = new LinkedHashSet<>();
+        for (UUID propertyId : authorizationService.tenantPropertyIds(tenant.id())) {
+            propertyRepository.findById(propertyId).map(Property::ownerId).ifPresent(ownerIds::add);
+        }
+        for (UUID ownerId : ownerIds) {
+            userRepository.findById(ownerId).ifPresent(owner -> notificationRepository.save(
+                Notification.createGeneral("Cần xác nhận xóa giấy tờ người thuê", message,
+                    owner.id(), owner.username(), owner.fullName(), owner.role())));
+        }
+        privacyRepository.save(privacy.withPurgeNotified(clock.instant()));
     }
 
     /**

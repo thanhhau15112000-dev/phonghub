@@ -32,6 +32,8 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 
+/** Chế độ AUTO: job tự xóa khi đến hạn. Chế độ APPROVAL (mặc định) được kiểm tra ở TenantPurgeApprovalIntegrationTest. */
+@org.springframework.test.context.TestPropertySource(properties = "phonghub.privacy.purge-mode=AUTO")
 class TenantPrivacyApiIntegrationTest extends SeededWebTest {
 
     private static final String OWNER_1 = LocalDemoAuthenticationAdapter.OWNER_1_ID.toString();

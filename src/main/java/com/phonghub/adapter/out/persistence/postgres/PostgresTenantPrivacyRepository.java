@@ -21,7 +21,8 @@ public class PostgresTenantPrivacyRepository implements TenantPrivacyRepositoryP
         rs.getObject("legal_hold_set_by", UUID.class),
         instant(rs.getTimestamp("legal_hold_set_at")),
         instant(rs.getTimestamp("erasure_requested_at")),
-        instant(rs.getTimestamp("purged_at")));
+        instant(rs.getTimestamp("purged_at")),
+        instant(rs.getTimestamp("purge_notified_at")));
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -48,15 +49,16 @@ public class PostgresTenantPrivacyRepository implements TenantPrivacyRepositoryP
     public TenantPrivacy save(TenantPrivacy privacy) {
         jdbcTemplate.update("""
             INSERT INTO tenant_privacy (tenant_id, legal_hold, legal_hold_reason, legal_hold_set_by,
-                legal_hold_set_at, erasure_requested_at, purged_at)
-            VALUES (:tenantId, :legalHold, :reason, :setBy, :setAt, :erasureAt, :purgedAt)
+                legal_hold_set_at, erasure_requested_at, purged_at, purge_notified_at)
+            VALUES (:tenantId, :legalHold, :reason, :setBy, :setAt, :erasureAt, :purgedAt, :notifiedAt)
             ON CONFLICT (tenant_id) DO UPDATE SET
                 legal_hold = EXCLUDED.legal_hold,
                 legal_hold_reason = EXCLUDED.legal_hold_reason,
                 legal_hold_set_by = EXCLUDED.legal_hold_set_by,
                 legal_hold_set_at = EXCLUDED.legal_hold_set_at,
                 erasure_requested_at = EXCLUDED.erasure_requested_at,
-                purged_at = EXCLUDED.purged_at
+                purged_at = EXCLUDED.purged_at,
+                purge_notified_at = EXCLUDED.purge_notified_at
             """, new MapSqlParameterSource()
             .addValue("tenantId", privacy.tenantId())
             .addValue("legalHold", privacy.legalHold())
@@ -64,7 +66,8 @@ public class PostgresTenantPrivacyRepository implements TenantPrivacyRepositoryP
             .addValue("setBy", privacy.legalHoldSetBy())
             .addValue("setAt", ts(privacy.legalHoldSetAt()))
             .addValue("erasureAt", ts(privacy.erasureRequestedAt()))
-            .addValue("purgedAt", ts(privacy.purgedAt())));
+            .addValue("purgedAt", ts(privacy.purgedAt()))
+            .addValue("notifiedAt", ts(privacy.purgeNotifiedAt())));
         return privacy;
     }
 }

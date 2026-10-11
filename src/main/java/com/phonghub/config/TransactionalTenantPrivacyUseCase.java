@@ -38,6 +38,18 @@ public class TransactionalTenantPrivacyUseCase implements TenantPrivacyUseCase {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public java.util.List<PendingPurge> pendingPurges(UUID propertyId) {
+        return delegate.pendingPurges(propertyId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public PrivacyStatus confirmPurge(UUID propertyId, UUID tenantId, String password) {
+        return delegate.confirmPurge(propertyId, tenantId, password);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public int purgeExpired(Instant now) {
         return delegate.purgeExpired(now);
