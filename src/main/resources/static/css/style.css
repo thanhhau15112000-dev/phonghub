@@ -136,6 +136,28 @@ h2 {
   margin-bottom: 24px;
 }
 
+.responsive-grid {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.responsive-grid > * {
+  min-width: 0;
+}
+
+.responsive-grid-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.responsive-grid-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.responsive-grid-four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .metric-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
@@ -158,8 +180,16 @@ h2 {
 
 .data-table {
   width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   text-align: left;
+}
+
+.table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .data-table th {
@@ -178,6 +208,8 @@ h2 {
   border-bottom: 1px solid #f1f5f9;
   font-size: 13px;
   vertical-align: middle;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .data-table tr:hover td {
@@ -443,7 +475,8 @@ h2 {
 
 /* Action buttons container */
 .table-actions {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
@@ -889,16 +922,47 @@ dialog.modal-dialog::backdrop {
 }
 .header-account { gap: 12px; }
 
-@media (max-width: 768px) {
+@media (max-width: 1150px) {
   .header-bar { flex-direction: column; align-items: stretch; gap: 12px; padding: 12px 16px; }
-  .header-navigation { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .header-navigation { flex-direction: column; align-items: flex-start; gap: 10px; width: 100%; }
+  .header-navigation nav { width: 100%; }
   .nav-links, .header-account, .actor-switcher-box { flex-wrap: wrap; gap: 10px; }
-  .container { padding: 0 16px; }
-  .page-title-row, .flex-between { flex-wrap: wrap; gap: 12px; }
-  .form-row { flex-direction: column; }
+  .header-account { width: 100%; min-width: 0; justify-content: flex-start; }
+  .actor-switcher-box { width: 100%; max-width: 100%; min-width: 0; }
+  .actor-switcher-box .form-control { max-width: 100%; }
+  .container { width: 100%; padding: 0 16px; margin: 16px auto; }
+  .page-title-row, .flex-between { align-items: flex-start; flex-wrap: wrap; gap: 12px; }
+  .page-title-row > *, .flex-between > * { min-width: 0; max-width: 100%; }
+  .form-row { flex-direction: column; gap: 0; }
+  .form-row > .form-group { flex: 0 1 auto !important; width: 100%; max-width: none; min-width: 0; }
   .form-group { min-width: 0; }
-  .card { min-width: 0; overflow-x: auto; }
+  .card { min-width: 0; overflow: visible; }
   .card img { max-width: 100%; height: auto; }
   .btn { white-space: normal; }
-  .notif-dropdown { max-width: calc(100vw - 32px); }
+  .notif-dropdown { left: 0; right: auto; max-width: calc(100vw - 32px); }
+  .table-scroll { overscroll-behavior-x: contain; }
+  .responsive-grid-three, .responsive-grid-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filter-search-bar { align-items: stretch; }
+  .filter-search-bar .search-box-form, .filter-search-bar .search-input-wrapper { width: 100%; }
+  .inline-actions, .table-actions { flex-wrap: wrap; }
+  .pagination { max-width: 100%; flex-wrap: wrap; justify-content: center; }
+  .custom-modal-footer { flex-wrap: wrap; }
+  main form[style*="display: flex"], main form[style*="display:flex"] { flex-wrap: wrap; max-width: 100%; }
+  main form[style*="display: flex"] > .form-control,
+  main form[style*="display:flex"] > .form-control { min-width: 0; max-width: 100%; }
+}
+
+@media (max-width: 480px) {
+  .header-bar { padding: 12px; }
+  .container { padding: 0 12px; }
+  .card { padding: 12px; margin-bottom: 16px; }
+  h1 { font-size: 18px; }
+  .responsive-grid-two, .responsive-grid-three { grid-template-columns: 1fr; }
+  .responsive-grid-four { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+  .data-table th, .data-table td { padding: 9px 10px; }
+  dialog.modal-dialog { width: calc(100% - 24px); max-height: calc(100vh - 24px); padding: 16px; }
+  .custom-modal-card { padding: 18px; }
+  .custom-modal-footer > * { flex: 1 1 auto; }
+  .actor-switcher-box .form-control { max-width: 100%; }
+  .notif-dropdown { left: 0; right: auto; max-width: calc(100vw - 32px); }
 }

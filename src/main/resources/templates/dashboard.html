@@ -56,7 +56,8 @@
             <div th:if="${nextInvoice != null}">
                 <p th:if="${#lists.size(payableInvoices) > 1}" style="color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;"
                    th:text="'Có ' + ${#lists.size(payableInvoices)} + ' khoản chưa thanh toán (' + ${overdueInvoiceCount} + ' quá hạn). Hiển thị khoản cũ nhất.'">Có nhiều khoản.</p>
-                <table class="data-table">
+                <div class="table-scroll">
+                    <table class="data-table">
                     <tbody>
                         <tr>
                             <td style="color: var(--text-secondary); width: 180px;">Khoản thanh toán:</td>
@@ -78,7 +79,8 @@
                             <td style="font-family: monospace; font-weight: 700;" th:text="${nextInvoice.getPaymentCode()}">PHXXXXXXXX</td>
                         </tr>
                     </tbody>
-                </table>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -87,7 +89,8 @@
             <div th:if="${tenantProperty == null}" class="empty-state">
                 <p>Tài khoản hiện tại chưa gắn với phòng nào.</p>
             </div>
-            <table th:if="${tenantProperty != null}" class="data-table">
+            <div class="table-scroll">
+                <table th:if="${tenantProperty != null}" class="data-table">
                 <tbody>
                     <tr>
                         <td style="color: var(--text-secondary); width: 180px;">Nhà trọ:</td>
@@ -106,7 +109,8 @@
                         <td><a th:href="@{'/contracts/' + ${tenantContract.getId()}}" style="color: var(--accent);">Xem hợp đồng</a></td>
                     </tr>
                 </tbody>
-            </table>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -121,7 +125,8 @@
             <p>Tài khoản hiện tại chưa được cấp quyền truy cập nhà trọ nào.</p>
         </div>
 
-        <table th:if="${!#lists.isEmpty(properties)}" class="data-table">
+        <div class="table-scroll">
+            <table th:if="${!#lists.isEmpty(properties)}" class="data-table">
             <thead>
                 <tr>
                     <th style="min-width: 170px;">Tên nhà trọ</th>
@@ -153,7 +158,8 @@
                     </td>
                 </tr>
             </tbody>
-        </table>
+            </table>
+        </div>
     </div>
 
     <!-- Yêu cầu bảo trì gần đây -->
@@ -182,7 +188,8 @@
             <p>Chưa có yêu cầu bảo trì.</p>
         </div>
 
-        <table th:if="${!#lists.isEmpty(recentTickets)}" class="data-table">
+        <div class="table-scroll">
+            <table th:if="${!#lists.isEmpty(recentTickets)}" class="data-table">
             <thead>
                 <tr>
                     <th>Tiêu đề yêu cầu</th>
@@ -213,7 +220,8 @@
                     </td>
                 </tr>
             </tbody>
-        </table>
+            </table>
+        </div>
     </div>
 </main>
 

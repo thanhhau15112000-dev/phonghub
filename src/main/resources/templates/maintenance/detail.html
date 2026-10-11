@@ -45,7 +45,7 @@
             </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; font-size: 13px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+        <div class="responsive-grid responsive-grid-three" style="font-size: 13px; border-top: 1px solid var(--border-color); padding-top: 16px;">
             <div>
                 <span style="color: var(--text-secondary);">Trạng thái phòng hiện tại:</span>
                 <span th:class="'badge badge-' + ${room.getStatus()}" th:text="${uiText.roomStatus(room.getStatus())}">Bảo trì</span>

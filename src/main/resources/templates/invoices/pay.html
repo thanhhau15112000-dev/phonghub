@@ -41,7 +41,8 @@
         <!-- Chi tiết các mục của hóa đơn -->
         <div th:if="${!#lists.isEmpty(invoice.getItems())}" style="margin-bottom: 16px;">
             <h2 style="font-size: 14px; margin-bottom: 8px;">Chi tiết hóa đơn</h2>
-            <table class="data-table" style="font-size: 13px;">
+            <div class="table-scroll">
+                <table class="data-table" style="font-size: 13px;">
                 <thead>
                     <tr><th>Mục</th><th style="text-align: right;">Thành tiền</th></tr>
                 </thead>
@@ -55,13 +56,15 @@
                         <td style="text-align: right; font-weight: 600;" th:text="${#numbers.formatDecimal(invoice.getTotalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
                     </tr>
                 </tbody>
-            </table>
+                </table>
+            </div>
         </div>
 
         <div th:if="${invoice.isPayable()}" style="display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start;">
             <img th:if="${paymentQrUrl != null}" th:src="${paymentQrUrl}" alt="Mã QR chuyển khoản" width="220" height="220" style="border: 1px solid var(--border-color);">
             <div style="flex: 1; min-width: 280px;">
-                <table class="data-table">
+                <div class="table-scroll">
+                    <table class="data-table">
                     <tbody>
                         <tr>
                             <td style="color: var(--text-secondary); width: 170px;">Số tiền cần chuyển:</td>
@@ -95,7 +98,8 @@
                             <td th:text="${bankAccountName}">NGUYEN VAN B</td>
                         </tr>
                     </tbody>
-                </table>
+                    </table>
+                </div>
                 <form th:if="${simulationEnabled}" th:action="@{'/invoices/' + ${invoice.getId()} + '/simulate-payment'}" method="post"
                       style="margin-top: 14px; padding: 10px 12px; border: 1px dashed var(--border-color);">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">

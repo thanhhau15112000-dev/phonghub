@@ -159,7 +159,8 @@
             <p th:if="${#strings.isEmpty(q) and selectedRole == 'ALL'}">Chưa có tài khoản ứng dụng nào.</p>
             <p th:if="${#strings.isEmpty(q) and selectedRole != 'ALL'}">Không có tài khoản nào thuộc vai trò <strong th:text="${selectedRoleTitle}">vai trò</strong>.</p>
         </div>
-        <table th:if="${!#lists.isEmpty(users)}" class="data-table">
+        <div class="table-scroll">
+            <table th:if="${!#lists.isEmpty(users)}" class="data-table">
             <thead>
                 <tr>
                     <th>Tên đăng nhập</th>
@@ -202,7 +203,8 @@
                     </td>
                 </tr>
             </tbody>
-        </table>
+            </table>
+        </div>
 
         <!-- Pagination with Quick Jump Input [...] -->
         <nav th:if="${!#lists.isEmpty(users)}" class="pagination-container" aria-label="Phân trang">

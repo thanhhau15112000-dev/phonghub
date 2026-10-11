@@ -68,7 +68,8 @@
             <p>Không có thông báo nào trong danh mục này.</p>
         </div>
 
-        <table th:if="${!#lists.isEmpty(notifications)}" class="table">
+        <div class="table-scroll">
+            <table th:if="${!#lists.isEmpty(notifications)}" class="table">
             <thead>
                 <tr>
                     <th>Loại thông báo</th>
@@ -140,7 +141,8 @@
                     </td>
                 </tr>
             </tbody>
-        </table>
+            </table>
+        </div>
 
         <!-- Phân trang -->
         <div th:if="${totalPages > 1}" class="pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 20px;">

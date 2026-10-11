@@ -41,7 +41,7 @@
             </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; font-size: 13px;">
+        <div class="responsive-grid responsive-grid-four" style="font-size: 13px;">
             <div>
                 <span style="color: var(--text-secondary);">Tầng:</span>
                 <strong th:text="${room.getFloor()}">1</strong>
@@ -95,7 +95,8 @@
         </div>
 
         <div th:if="${activeContract != null}" style="font-size: 13px;">
-            <table class="data-table">
+            <div class="table-scroll">
+                <table class="data-table">
                 <thead>
                     <tr>
                         <th>Mã hợp đồng</th>
@@ -118,7 +119,8 @@
                         </td>
                     </tr>
                 </tbody>
-            </table>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -133,7 +135,8 @@
             <p>Chưa có yêu cầu bảo trì nào được ghi nhận cho phòng này.</p>
         </div>
 
-        <table th:if="${!#lists.isEmpty(tickets)}" class="data-table">
+        <div class="table-scroll">
+            <table th:if="${!#lists.isEmpty(tickets)}" class="data-table">
             <thead>
                 <tr>
                     <th>Tiêu đề</th>
@@ -152,7 +155,8 @@
                     <td><a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm">Xem</a></td>
                 </tr>
             </tbody>
-        </table>
+            </table>
+        </div>
     </div>
 
     <!-- Dialog chỉnh sửa thông tin phòng (Chủ nhà hoặc Quản trị viên) -->
@@ -179,7 +183,7 @@
         <form th:action="@{'/rooms/' + ${room.getId()} + '/edit'}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="responsive-grid responsive-grid-two" style="gap: 12px; margin-bottom: 12px;">
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="editRoomNumber">Số phòng <span style="color: var(--danger-color, #dc2626);">*</span></label>
                     <input type="text" id="editRoomNumber" name="roomNumber" th:value="${room.getRoomNumber()}" class="form-control" required placeholder="VD: 101, P202">
@@ -190,7 +194,7 @@
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="responsive-grid responsive-grid-two" style="gap: 12px; margin-bottom: 12px;">
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="editAreaSqm">Diện tích (m²)</label>
                     <input type="number" step="0.1" min="0" id="editAreaSqm" name="areaSqm" th:value="${room.getAreaSqm()}" class="form-control" placeholder="VD: 25.5">

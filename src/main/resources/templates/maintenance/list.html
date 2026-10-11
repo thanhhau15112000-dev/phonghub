@@ -87,7 +87,8 @@
             <p th:if="${filter.tab().name() == 'OPEN'}">Không có yêu cầu bảo trì đang xử lý theo bộ lọc hiện tại.</p>
         </div>
 
-        <table th:if="${!#lists.isEmpty(tickets)}" class="data-table">
+        <div class="table-scroll">
+            <table th:if="${!#lists.isEmpty(tickets)}" class="data-table">
             <thead>
                 <tr>
                     <th>Tiêu đề và mô tả</th>
@@ -130,7 +131,8 @@
                     </td>
                 </tr>
             </tbody>
-        </table>
+            </table>
+        </div>
     </div>
 </main>
 

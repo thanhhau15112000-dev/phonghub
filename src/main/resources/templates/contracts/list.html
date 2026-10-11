@@ -23,7 +23,8 @@
             <p>Không tìm thấy hợp đồng.</p>
         </div>
 
-        <table th:if="${!#lists.isEmpty(contracts)}" class="data-table">
+        <div class="table-scroll">
+            <table th:if="${!#lists.isEmpty(contracts)}" class="data-table">
             <thead>
                 <tr>
                     <th>Mã hợp đồng</th>
@@ -62,7 +63,8 @@
                     </td>
                 </tr>
             </tbody>
-        </table>
+            </table>
+        </div>
     </div>
 </main>
 
