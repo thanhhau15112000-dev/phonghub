@@ -24,6 +24,9 @@ import org.springframework.stereotype.Component;
  *       Render bản miễn phí ngủ khi không có truy cập nên một lần chạy cố định có thể bị lỡ.</li>
  * </ul>
  * Chỉ tạo hóa đơn còn thiếu nên chạy lặp lại không tạo trùng.
+ *
+ * <p>Sau khi tạo hóa đơn, mỗi lượt chạy còn thêm dòng điện/nước vào hóa đơn tháng hiện tại và tháng trước khi chỉ số
+ * của kỳ đó đã được ghi sau lúc phát hành. Chỉ hóa đơn chưa ai thanh toán mới được thêm, và mỗi chỉ số chỉ tính một lần.
  */
 @Component
 @ConditionalOnProperty(name = "phonghub.invoicing.auto-generate", havingValue = "true", matchIfMissing = true)
@@ -47,6 +50,12 @@ public class MonthlyInvoiceScheduler {
             periods.add(current.plusMonths(1));
         }
         return periods;
+    }
+
+    /** Kỳ có thể nhận chỉ số điện nước muộn: tháng hiện tại và tháng trước. */
+    public static List<YearMonth> utilityPeriods(LocalDate today) {
+        YearMonth current = YearMonth.from(today);
+        return List.of(current, current.minusMonths(1));
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -81,6 +90,32 @@ public class MonthlyInvoiceScheduler {
                 }
             }
         }
+        attachUtilityCharges(today);
         return created;
+    }
+
+    /** Trả về số hóa đơn đã được thêm dòng điện/nước. Lỗi của một hợp đồng không chặn các hợp đồng còn lại. */
+    public int attachUtilityCharges(LocalDate today) {
+        int updated = 0;
+        for (YearMonth period : utilityPeriods(today)) {
+            List<UUID> contractIds;
+            try {
+                contractIds = monthlyInvoiceUseCase.findContractsNeedingUtilityCharges(period);
+            } catch (Exception ex) {
+                log.error("Không lấy được danh sách hóa đơn cần thêm điện nước kỳ {}", period, ex);
+                continue;
+            }
+            for (UUID contractId : contractIds) {
+                try {
+                    if (monthlyInvoiceUseCase.attachUtilityCharges(contractId, period)) {
+                        updated++;
+                        log.info("Đã thêm điện nước vào hóa đơn tháng {} của hợp đồng {}", period, contractId);
+                    }
+                } catch (Exception ex) {
+                    log.error("Không thêm được điện nước kỳ {} cho hợp đồng {}", period, contractId, ex);
+                }
+            }
+        }
+        return updated;
     }
 }

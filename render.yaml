@@ -28,6 +28,12 @@ services:
         sync: false
       - key: SUPABASE_JWT_AUDIENCE
         value: authenticated
+      - key: TENANT_DATA_KEY_ID
+        sync: false
+      - key: TENANT_DATA_ENCRYPTION_KEY
+        sync: false
+      - key: TENANT_DATA_HMAC_KEY
+        sync: false
       - key: SEPAY_WEBHOOK_API_KEY
         sync: false
       - key: SEPAY_BANK_CODE

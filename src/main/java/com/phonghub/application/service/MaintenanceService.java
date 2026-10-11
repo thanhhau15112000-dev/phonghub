@@ -7,8 +7,11 @@ import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
+import com.phonghub.application.port.out.NotificationRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
+import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.exception.MaintenanceTicketException;
@@ -19,9 +22,12 @@ import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.LiableParty;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
+import com.phonghub.domain.model.MaintenanceTicketEvent;
+import com.phonghub.domain.model.Notification;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -40,6 +46,10 @@ public class MaintenanceService implements MaintenanceUseCase {
     private final ContractRepositoryPort contractRepository;
     private final InvoiceRepositoryPort invoiceRepository;
     private final AuditPort auditPort;
+    private final UserRepositoryPort userRepository;
+    private final StaffPropertyAssignmentPort assignmentPort;
+    private final NotificationRepositoryPort notificationRepository;
+    private final MaintenanceSlaPolicy slaPolicy;
 
     /** Không hỗ trợ thu phí sửa chữa: phiếu có chi phí do người thuê chịu sẽ bị từ chối khi xử lý. */
     public MaintenanceService(
@@ -63,6 +73,46 @@ public class MaintenanceService implements MaintenanceUseCase {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService
     ) {
+        this(maintenanceTicketRepository, roomRepository, tenantRepository, contractRepository, invoiceRepository,
+            auditPort, currentUserPort, authorizationService, null, null, null);
+    }
+
+    public MaintenanceService(
+        MaintenanceTicketRepositoryPort maintenanceTicketRepository,
+        RoomRepositoryPort roomRepository,
+        TenantRepositoryPort tenantRepository,
+        ContractRepositoryPort contractRepository,
+        InvoiceRepositoryPort invoiceRepository,
+        AuditPort auditPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        UserRepositoryPort userRepository,
+        StaffPropertyAssignmentPort assignmentPort,
+        NotificationRepositoryPort notificationRepository
+    ) {
+        this(maintenanceTicketRepository, roomRepository, tenantRepository, contractRepository, invoiceRepository,
+            auditPort, currentUserPort, authorizationService, userRepository, assignmentPort, notificationRepository,
+            MaintenanceSlaPolicy.defaults());
+    }
+
+    public MaintenanceService(
+        MaintenanceTicketRepositoryPort maintenanceTicketRepository,
+        RoomRepositoryPort roomRepository,
+        TenantRepositoryPort tenantRepository,
+        ContractRepositoryPort contractRepository,
+        InvoiceRepositoryPort invoiceRepository,
+        AuditPort auditPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        UserRepositoryPort userRepository,
+        StaffPropertyAssignmentPort assignmentPort,
+        NotificationRepositoryPort notificationRepository,
+        MaintenanceSlaPolicy slaPolicy
+    ) {
+        this.slaPolicy = slaPolicy;
+        this.userRepository = userRepository;
+        this.assignmentPort = assignmentPort;
+        this.notificationRepository = notificationRepository;
         this.maintenanceTicketRepository = maintenanceTicketRepository;
         this.roomRepository = roomRepository;
         this.tenantRepository = tenantRepository;
@@ -111,8 +161,10 @@ public class MaintenanceService implements MaintenanceUseCase {
             command.title(),
             command.description(),
             command.priority(),
-            command.cause()
+            command.cause(),
+            slaPolicy.forPriority(command.priority())
         );
+        ticket.attributeEventsTo(currentUser.id());
 
         return maintenanceTicketRepository.save(ticket);
     }
@@ -125,9 +177,88 @@ public class MaintenanceService implements MaintenanceUseCase {
 
         // TECHNICIAN can accept tickets only within assigned property scope
         authorizationService.assertTechnicianCanWorkOnProperty(currentUser, ticket.getPropertyId());
+        assertAssignedToTechnician(currentUser, ticket);
 
         ticket.accept(currentUser.id());
+        ticket.attributeEventsTo(currentUser.id());
         return maintenanceTicketRepository.save(ticket);
+    }
+
+    @Override
+    public MaintenanceTicket assignTechnician(UUID ticketId, UUID technicianId) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
+            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+        authorizationService.assertCanManageProperty(currentUser, ticket.getPropertyId());
+        if (technicianId == null) {
+            throw new IllegalArgumentException("Cần chọn kỹ thuật viên");
+        }
+        if (userRepository == null || assignmentPort == null) {
+            throw new DomainException("Hệ thống chưa cấu hình giao việc cho kỹ thuật viên");
+        }
+        User technician = userRepository.findById(technicianId)
+            .filter(user -> user.role() == UserRole.TECHNICIAN)
+            .orElseThrow(() -> new IllegalArgumentException("Người được giao phải là tài khoản kỹ thuật viên"));
+        if (!assignmentPort.isUserAssignedToProperty(technician.id(), ticket.getPropertyId())) {
+            throw new IllegalArgumentException("Kỹ thuật viên chưa được phân công vào nhà trọ của phiếu này");
+        }
+        UUID previous = ticket.getAssignedTechnicianId();
+        ticket.assign(technician.id());
+        ticket.attributeEventsTo(actorIdOf(currentUser));
+        MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
+        audit("MAINTENANCE_TECHNICIAN_ASSIGNED", currentUser, saved, Map.of(
+            "technicianId", technician.id().toString(), "previousTechnicianId", previous == null ? "NONE" : previous.toString()
+        ));
+        return saved;
+    }
+
+    @Override
+    public MaintenanceTicket rejectTicket(UUID ticketId, String reason) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
+            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+        authorizationService.assertCanManageProperty(currentUser, ticket.getPropertyId());
+        ticket.reject(reason);
+        ticket.attributeEventsTo(currentUser.id());
+        MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
+        audit("MAINTENANCE_TICKET_REJECTED", currentUser, saved, Map.of("reason", saved.getRejectionReason()));
+        notifyRequester(saved);
+        return saved;
+    }
+
+    private static UUID actorIdOf(CurrentUser user) {
+        return user.id();
+    }
+
+    @Override
+    public List<MaintenanceTicketEvent> getTimeline(UUID ticketId) {
+        // Cùng quy tắc xem phiếu: tenant của phiếu, owner/staff, technician được giao.
+        MaintenanceTicket ticket = getTicket(ticketId);
+        return maintenanceTicketRepository.findEvents(ticket.getId());
+    }
+
+    private void notifyRequester(MaintenanceTicket ticket) {
+        if (notificationRepository == null || userRepository == null || ticket.getRequestedByTenantId() == null) {
+            return;
+        }
+        tenantRepository.findById(ticket.getRequestedByTenantId())
+            .filter(tenant -> tenant.userId() != null)
+            .flatMap(tenant -> userRepository.findById(tenant.userId()))
+            .ifPresent(user -> notificationRepository.save(Notification.createGeneral(
+                "Yêu cầu bảo trì bị từ chối",
+                "Yêu cầu \"" + ticket.getTitle() + "\" đã bị từ chối. Lý do: " + ticket.getRejectionReason(),
+                user.id(), user.username(), user.fullName(), user.role())));
+    }
+
+    /** Kỹ thuật viên chỉ làm phiếu được giao cho chính mình (admin không bị giới hạn). */
+    private static void assertAssignedToTechnician(CurrentUser user, MaintenanceTicket ticket) {
+        if (user.role() == UserRole.TECHNICIAN && !user.id().equals(ticket.getAssignedTechnicianId())) {
+            throw new UnauthorizedPropertyAccessException("Phiếu bảo trì này chưa được giao cho bạn");
+        }
+    }
+
+    private static boolean visibleTo(CurrentUser user, MaintenanceTicket ticket) {
+        return user.role() != UserRole.TECHNICIAN || user.id().equals(ticket.getAssignedTechnicianId());
     }
 
     @Override
@@ -137,6 +268,7 @@ public class MaintenanceService implements MaintenanceUseCase {
             .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + command.ticketId()));
 
         authorizationService.assertTechnicianCanWorkOnProperty(currentUser, ticket.getPropertyId());
+        assertAssignedToTechnician(currentUser, ticket);
 
         // Kiểm tra điều kiện thu phí TRƯỚC khi thay đổi bất kỳ trạng thái nào
         LiableParty liable = command.liableParty() != null ? command.liableParty() : ticket.getLiableParty();
@@ -181,6 +313,7 @@ public class MaintenanceService implements MaintenanceUseCase {
             ));
         }
         ticket.resolve(command.resolutionNotes(), command.repairCost());
+        ticket.attributeEventsTo(currentUser.id());
         MaintenanceTicket savedTicket = maintenanceTicketRepository.save(ticket);
 
         if (feeContract != null && savedTicket.getStatus() == MaintenanceStatus.AWAITING_PAYMENT) {
@@ -227,6 +360,7 @@ public class MaintenanceService implements MaintenanceUseCase {
             invoiceRepository.save(invoice);
         });
         ticket.waiveFee();
+        ticket.attributeEventsTo(currentUser.id());
         MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
         audit("MAINTENANCE_FEE_WAIVED", currentUser, saved, Map.of("reason", reason.trim()));
         return saved;
@@ -261,6 +395,9 @@ public class MaintenanceService implements MaintenanceUseCase {
             && !authorizationService.canTenantViewTicket(currentUser, ticket.getRoomId(), ticket.getRequestedByTenantId())) {
             throw new UnauthorizedPropertyAccessException("Tenant can only view tickets of their own room");
         }
+        if (!visibleTo(currentUser, ticket)) {
+            throw new UnauthorizedPropertyAccessException("Phiếu bảo trì này chưa được giao cho bạn");
+        }
         return ticket;
     }
 
@@ -274,7 +411,7 @@ public class MaintenanceService implements MaintenanceUseCase {
                 .filter(t -> authorizationService.canTenantViewTicket(currentUser, t.getRoomId(), t.getRequestedByTenantId()))
                 .toList();
         }
-        return tickets;
+        return tickets.stream().filter(t -> visibleTo(currentUser, t)).toList();
     }
 
     @Override
@@ -303,6 +440,6 @@ public class MaintenanceService implements MaintenanceUseCase {
                 .filter(t -> authorizationService.canTenantViewTicket(currentUser, t.getRoomId(), t.getRequestedByTenantId()))
                 .toList();
         }
-        return maintenanceTicketRepository.findByRoomId(roomId);
+        return maintenanceTicketRepository.findByRoomId(roomId).stream().filter(t -> visibleTo(currentUser, t)).toList();
     }
 }

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Người thuê')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1 th:text="${tenant == null} ? 'Thêm người thuê' : 'Sửa thông tin người thuê'">Thêm người thuê</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong></p>
+        </div>
+        <div>
+            <a th:href="@{'/properties/' + ${property.id()} + '/tenants'}" class="btn">&larr; Quay lại danh sách</a>
+        </div>
+    </div>
+
+    <div class="card" style="max-width: 560px;">
+        <form th:action="${tenant == null} ? @{'/properties/' + ${property.id()} + '/tenants'} : @{'/properties/' + ${property.id()} + '/tenants/' + ${tenant.id()} + '/edit'}"
+              method="post" autocomplete="off">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group">
+                <label class="form-label" for="fullName">Họ và tên *</label>
+                <input type="text" id="fullName" name="fullName" class="form-control" required maxlength="150"
+                       th:value="${tenant != null} ? ${tenant.fullName()}">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="identityCardNumber">Số CCCD <span th:if="${tenant == null}">*</span></label>
+                <input type="text" id="identityCardNumber" name="identityCardNumber" class="form-control"
+                       th:required="${tenant == null}" pattern="\d{9}|\d{12}" inputmode="numeric"
+                       th:placeholder="${tenant != null} ? ${tenant.maskedIdentityCardNumber()} + ' (để trống nếu không đổi)' : '9 hoặc 12 chữ số'">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="phone">Số điện thoại *</label>
+                <input type="tel" id="phone" name="phone" class="form-control" required pattern="0\d{9}"
+                       th:value="${tenant != null} ? ${tenant.phone()}" placeholder="0901234567">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="email">Email</label>
+                <input type="email" id="email" name="email" class="form-control" th:value="${tenant != null} ? ${tenant.email()}">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="permanentAddress">Địa chỉ thường trú</label>
+                <input type="text" id="permanentAddress" name="permanentAddress" class="form-control"
+                       th:value="${tenant != null} ? ${tenant.permanentAddress()}">
+            </div>
+            <button type="submit" class="btn btn-primary" th:text="${tenant == null} ? 'Thêm người thuê' : 'Lưu thay đổi'">Lưu</button>
+        </form>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

@@ -12,6 +12,7 @@ import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,6 +42,16 @@ public class PropertyApiController {
         return ResponseEntity.ok(PropertyResponse.from(property));
     }
 
+    @PatchMapping("/{id}")
+    public ResponseEntity<PropertyResponse> updateProperty(
+        @PathVariable UUID id,
+        @Valid @RequestBody UpdatePropertyRequest request
+    ) {
+        Property property = propertyUseCase.updateProperty(new PropertyUseCase.UpdatePropertyCommand(
+            id, request.name(), request.address(), request.description(), request.totalRooms()));
+        return ResponseEntity.ok(PropertyResponse.from(property));
+    }
+
     @PostMapping
     public ResponseEntity<PropertyResponse> createProperty(@Valid @RequestBody CreatePropertyRequest request) {
         Property property = propertyUseCase.createProperty(new PropertyUseCase.CreatePropertyCommand(
@@ -52,6 +63,19 @@ public class PropertyApiController {
         PropertyResponse response = PropertyResponse.from(property);
         return ResponseEntity.created(URI.create("/api/properties/" + response.id())).body(response);
     }
+
+    public record UpdatePropertyRequest(
+        @NotBlank(message = "Property name is required")
+        String name,
+
+        @NotBlank(message = "Property address is required")
+        String address,
+
+        String description,
+
+        @Min(value = 0, message = "Total rooms must be non-negative")
+        Integer totalRooms
+    ) {}
 
     public record CreatePropertyRequest(
         @NotBlank(message = "Property name is required")

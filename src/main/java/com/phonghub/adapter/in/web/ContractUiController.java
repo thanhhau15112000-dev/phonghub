@@ -253,6 +253,7 @@ public class ContractUiController {
         );
 
         model.addAttribute("invoices", invoices);
+        model.addAttribute("invoiceWarnings", invoiceUseCase.utilityWarnings(contract.getId()));
         model.addAttribute("today", today);
         model.addAttribute("payableInvoice", payableInvoice);
         model.addAttribute("canIssueInvoice", canIssueInvoice);

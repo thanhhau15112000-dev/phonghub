@@ -22,7 +22,10 @@ public record PaymentTransaction(
     PaymentStatus status,
     UUID contractId,
     UUID invoiceId,
-    Instant createdAt
+    Instant createdAt,
+    BigDecimal appliedAmount,
+    BigDecimal excessAmount,
+    PaymentReviewReason reviewReason
 ) {
     public PaymentTransaction {
         Objects.requireNonNull(id, "id cannot be null");
@@ -38,5 +41,27 @@ public record PaymentTransaction(
         if (createdAt == null) {
             createdAt = Instant.now();
         }
+        if (appliedAmount == null) {
+            appliedAmount = BigDecimal.ZERO;
+        }
+        if (excessAmount == null) {
+            excessAmount = BigDecimal.ZERO;
+        }
+    }
+
+    public PaymentTransaction(
+        UUID id, Long sepayId, String gateway, String transactionDate, String accountNumber, String subAccount,
+        String transferType, BigDecimal transferAmount, BigDecimal accumulated, String code, String content,
+        String referenceCode, String description, PaymentStatus status, UUID contractId, UUID invoiceId,
+        Instant createdAt
+    ) {
+        this(id, sepayId, gateway, transactionDate, accountNumber, subAccount, transferType, transferAmount,
+            accumulated, code, content, referenceCode, description, status, contractId, invoiceId, createdAt,
+            null, null, null);
+    }
+
+    /** Cần người quản lý xem xét (trả dư, hóa đơn không còn nhận tiền hoặc không khớp hóa đơn nào). */
+    public boolean needsReview() {
+        return reviewReason != null;
     }
 }

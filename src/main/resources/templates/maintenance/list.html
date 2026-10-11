@@ -106,7 +106,8 @@
                         <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;" th:text="${t.getDescription()}">Mô tả</div>
                     </td>
                     <td th:if="${currentUser.role().name() != 'TENANT'}" th:text="${propertyNames.get(t.getPropertyId())}">Cơ sở</td>
-                    <td><span class="badge" th:text="${uiText.maintenancePriority(t.getPriority())}">Trung bình</span></td>
+                    <td><span class="badge" th:text="${uiText.maintenancePriority(t.getPriority())}">Trung bình</span>
+                        <span th:if="${t.isOverdue(now)}" class="badge" style="background: #ef4444; color: #fff;">Quá hạn</span></td>
                     <td><span th:class="'badge badge-' + ${t.getStatus()}" th:text="${uiText.maintenanceStatus(t.getStatus())}">Đã báo</span></td>
                     <td th:text="${t.getRepairCost() != null and t.getRepairCost().compareTo(T(java.math.BigDecimal).ZERO) > 0 ? #numbers.formatDecimal(t.getRepairCost(), 0, 'COMMA', 0, 'POINT') + ' đ' : '—'}">—</td>
                     <td th:text="${#temporals.format(t.getCreatedAt(), 'yyyy-MM-dd HH:mm')}">2026-09-17</td>

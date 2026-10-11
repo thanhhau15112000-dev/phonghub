@@ -14,7 +14,11 @@
                 Nhà trọ: <strong th:text="${property.name()}">Nhà trọ</strong> | Phòng: <strong th:text="${room.getRoomNumber()}">P101</strong>
             </p>
         </div>
-        <div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <a th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and currentUser.role().name() != 'TECHNICIAN'}"
+               th:href="@{'/contracts/' + ${contract.getId()} + '/handover'}" class="btn btn-secondary">Biên bản check-in</a>
+            <a th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and currentUser.role().name() != 'TECHNICIAN'}"
+               th:href="@{'/contracts/' + ${contract.getId()} + '/check-out'}" class="btn btn-secondary">Check-out</a>
             <a th:href="@{/contracts}" class="btn">&larr; Quay lại danh sách hợp đồng</a>
         </div>
     </div>
@@ -86,12 +90,17 @@
         <!-- Bên phải: Thông tin người thuê chính -->
         <div class="card">
             <div class="flex-between" style="margin-bottom: 8px;">
-                <h2 style="margin: 0;">Thông tin người thuê chính</h2>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <h2 style="margin: 0;">Thông tin người thuê chính</h2>
+                    <a th:if="${primaryTenant != null and currentUser != null and currentUser.role().name() != 'TECHNICIAN'}"
+                       th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${primaryTenant.id()} + '/documents'}"
+                       class="btn btn-sm btn-secondary">Giấy tờ</a>
+                </div>
                 <button th:if="${primaryTenant != null and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                         type="button"
                         id="editPrimaryTenantBtn"
                         class="btn btn-sm btn-secondary"
-                        th:attr="data-id=${primaryTenant.id()},data-name=${primaryTenant.fullName()},data-idcard=${primaryTenant.identityCardNumber()},data-phone=${primaryTenant.phone()},data-email=${primaryTenant.email() != null ? primaryTenant.email() : ''},data-addr=${primaryTenant.permanentAddress() != null ? primaryTenant.permanentAddress() : ''}"
+                        th:attr="data-id=${primaryTenant.id()},data-name=${primaryTenant.fullName()},data-idcard='',data-phone=${primaryTenant.phone()},data-email=${primaryTenant.email() != null ? primaryTenant.email() : ''},data-addr=${primaryTenant.permanentAddress() != null ? primaryTenant.permanentAddress() : ''}"
                         onclick="openEditTenantModalFromElement(this)"
                         style="font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -112,7 +121,7 @@
                     </tr>
                     <tr>
                         <td style="color: var(--text-secondary);">CCCD:</td>
-                        <td th:text="${primaryTenant.identityCardNumber()}">079201001111</td>
+                        <td th:text="${primaryTenant.maskedIdentityCardNumber()}">****1111</td>
                     </tr>
                     <tr>
                         <td style="color: var(--text-secondary);">Số điện thoại:</td>
@@ -165,7 +174,7 @@
                         <td style="font-weight: 600;">
                             <span th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).fullName() : 'Khách thuê'}">Họ tên</span>
                         </td>
-                        <td th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).identityCardNumber() : '—'}">CCCD</td>
+                        <td th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).maskedIdentityCardNumber() : '—'}">CCCD</td>
                         <td th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).phone() : '—'}">SĐT</td>
                         <td th:text="${occ.checkInDate()}">2026-01-01</td>
                         <td>
@@ -173,10 +182,13 @@
                             <span th:if="${occ.checkOutDate() != null}" class="badge badge-TERMINATED" style="font-size: 11px; padding: 2px 6px;" th:text="'Đã rời ' + ${occ.checkOutDate()}">Đã rời</span>
                         </td>
                         <td th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" style="display: flex; gap: 4px; align-items: center;">
+                            <a th:if="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId())}"
+                               th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${occ.tenantId()} + '/documents'}"
+                               class="btn btn-sm btn-secondary" style="padding: 2px 8px; font-size: 11px;">Giấy tờ</a>
                             <button th:if="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId())}"
                                     type="button"
                                     class="btn btn-sm btn-secondary edit-occupant-btn"
-                                    th:attr="data-id=${occupantTenants.get(occ.tenantId()).id()},data-name=${occupantTenants.get(occ.tenantId()).fullName()},data-idcard=${occupantTenants.get(occ.tenantId()).identityCardNumber()},data-phone=${occupantTenants.get(occ.tenantId()).phone()},data-email=${occupantTenants.get(occ.tenantId()).email() != null ? occupantTenants.get(occ.tenantId()).email() : ''},data-addr=${occupantTenants.get(occ.tenantId()).permanentAddress() != null ? occupantTenants.get(occ.tenantId()).permanentAddress() : ''}"
+                                    th:attr="data-id=${occupantTenants.get(occ.tenantId()).id()},data-name=${occupantTenants.get(occ.tenantId()).fullName()},data-idcard='',data-phone=${occupantTenants.get(occ.tenantId()).phone()},data-email=${occupantTenants.get(occ.tenantId()).email() != null ? occupantTenants.get(occ.tenantId()).email() : ''},data-addr=${occupantTenants.get(occ.tenantId()).permanentAddress() != null ? occupantTenants.get(occ.tenantId()).permanentAddress() : ''}"
                                     onclick="openEditTenantModalFromElement(this)"
                                     style="padding: 2px 8px; font-size: 11px;">
                                 Sửa
@@ -280,6 +292,8 @@
                             <li th:each="item : ${inv.getItems()}"
                                 th:text="${item.name() + ': ' + #numbers.formatDecimal(item.totalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">Mục</li>
                         </ul>
+                        <div th:each="warning : ${invoiceWarnings.get(inv.getId())}"
+                             style="margin-top: 4px; font-size: 12px; color: var(--warning, #b45309);" th:text="'⚠ ' + ${warning}">Cảnh báo</div>
                     </td>
                     <td th:text="${#numbers.formatDecimal(inv.getTotalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
                     <td th:text="${#numbers.formatDecimal(inv.getPaidAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</td>

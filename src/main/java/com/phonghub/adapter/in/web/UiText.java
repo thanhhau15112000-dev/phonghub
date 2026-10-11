@@ -1,5 +1,7 @@
 package com.phonghub.adapter.in.web;
 
+import com.phonghub.domain.model.AssetEventType;
+import com.phonghub.domain.model.AssetStatus;
 import com.phonghub.domain.model.ContractStatus;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.InvoiceStatus;
@@ -43,6 +45,30 @@ public final class UiText {
             case PENDING -> "Chờ duyệt";
             case VERIFIED -> "Đã duyệt";
             case REJECTED -> "Bị từ chối";
+        };
+    }
+
+    public String assetStatus(AssetStatus status) {
+        if (status == null) {
+            return "Chưa xác định";
+        }
+        return switch (status) {
+            case GOOD -> "Tốt";
+            case DAMAGED -> "Hư hỏng";
+            case LOST -> "Mất";
+            case RETIRED -> "Ngừng sử dụng";
+        };
+    }
+
+    public String assetEventType(AssetEventType type) {
+        if (type == null) {
+            return "Chưa xác định";
+        }
+        return switch (type) {
+            case DAMAGED -> "Hư hỏng";
+            case REPAIRED -> "Đã sửa";
+            case REPLACED -> "Đã thay mới";
+            case LOST_REPORTED -> "Báo mất";
         };
     }
 

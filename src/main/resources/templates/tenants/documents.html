@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Giấy tờ người thuê')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Giấy tờ của <span th:text="${tenant.fullName()}">Người thuê</span></h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">
+                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Ảnh và số giấy tờ được mã hóa khi lưu;
+                xem đầy đủ cần nhập lại mật khẩu của bạn và mỗi lần xem đều được ghi nhật ký.
+            </p>
+        </div>
+        <div>
+            <a th:href="@{'/properties/' + ${property.id()}}" class="btn">&larr; Quay lại nhà trọ</a>
+        </div>
+    </div>
+
+    <!-- Kết quả xem đầy đủ: chỉ hiển thị trong phản hồi này, không lưu cache -->
+    <div class="card" th:if="${revealed != null}" id="revealed-document">
+        <h2>Giấy tờ <span th:text="${revealed.type()}">CCCD</span> (bản đầy đủ)</h2>
+        <p>Số giấy tờ: <strong th:text="${revealed.number()}">012345678901</strong></p>
+        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+            <div th:if="${revealed.frontDataUri() != null}">
+                <div style="font-size: 12px; color: var(--text-secondary);">Mặt trước</div>
+                <img th:src="${revealed.frontDataUri()}" alt="Mặt trước giấy tờ" style="max-width: 360px; border: 1px solid var(--border-color);">
+            </div>
+            <div th:if="${revealed.backDataUri() != null}">
+                <div style="font-size: 12px; color: var(--text-secondary);">Mặt sau</div>
+                <img th:src="${revealed.backDataUri()}" alt="Mặt sau giấy tờ" style="max-width: 360px; border: 1px solid var(--border-color);">
+            </div>
+        </div>
+        <p style="font-size: 11px; color: var(--text-secondary); margin-top: 8px;">
+            Đóng hoặc tải lại trang sẽ ẩn thông tin này.
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>Danh sách giấy tờ</h2>
+        <div th:if="${#lists.isEmpty(documents)}" class="empty-state">
+            <p>Chưa có giấy tờ nào được tải lên.</p>
+        </div>
+        <table th:if="${!#lists.isEmpty(documents)}" class="data-table">
+            <thead>
+                <tr>
+                    <th>Loại</th>
+                    <th>Số giấy tờ</th>
+                    <th>Ảnh</th>
+                    <th>Cập nhật</th>
+                    <th>Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="d : ${documents}">
+                    <td><strong th:text="${d.type()}">CCCD</strong></td>
+                    <td th:text="${d.maskedNumber()}">****1111</td>
+                    <td th:text="${d.hasBackImage() ? 'Mặt trước, mặt sau' : 'Mặt trước'}">Mặt trước</td>
+                    <td th:text="${#temporals.format(d.updatedAt(), 'dd/MM/yyyy HH:mm')}">01/01/2026 10:00</td>
+                    <td>
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+                            <form th:action="@{'/properties/' + ${property.id()} + '/tenants/' + ${tenant.id()} + '/documents/' + ${d.type()} + '/reveal'}"
+                                  method="post" style="display: flex; gap: 6px; margin: 0;" autocomplete="off">
+                                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                <input type="password" name="password" class="form-control" placeholder="Mật khẩu của bạn" required autocomplete="current-password" style="width: 170px;">
+                                <button type="submit" class="btn btn-sm btn-primary">Xem đầy đủ</button>
+                            </form>
+                            <form th:if="${canDelete}"
+                                  th:action="@{'/properties/' + ${property.id()} + '/tenants/' + ${tenant.id()} + '/documents/' + ${d.type()} + '/delete'}"
+                                  method="post" style="margin: 0;" onsubmit="return confirm('Xóa giấy tờ này?');">
+                                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                <button type="submit" class="btn btn-sm btn-danger">Xóa</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Tải lên hoặc thay giấy tờ</h2>
+        <p style="font-size: 12px; color: var(--text-secondary);">
+            Chỉ nhận ảnh jpeg, png, webp. Ảnh được xóa dữ liệu vị trí rồi mã hóa trước khi lưu.
+        </p>
+        <div th:each="t : ${documentTypes}" style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+            <h3 style="font-size: 14px;" th:text="${t.name() == 'CCCD' ? 'Căn cước công dân (CCCD)' : 'Giấy phép lái xe (GPLX)'}">CCCD</h3>
+            <form th:action="@{'/properties/' + ${property.id()} + '/tenants/' + ${tenant.id()} + '/documents/' + ${t} + '/upload'}"
+                  method="post" enctype="multipart/form-data">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <div class="form-group" th:if="${t.name() == 'GPLX'}">
+                    <label class="form-label">Số GPLX *</label>
+                    <input type="text" name="number" class="form-control" required autocomplete="off" style="max-width: 280px;">
+                </div>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <div class="form-group">
+                        <label class="form-label">Ảnh mặt trước *</label>
+                        <input type="file" name="front" class="form-control" accept="image/jpeg,image/png,image/webp" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Ảnh mặt sau</label>
+                        <input type="file" name="back" class="form-control" accept="image/jpeg,image/png,image/webp">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">Lưu giấy tờ</button>
+            </form>
+        </div>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

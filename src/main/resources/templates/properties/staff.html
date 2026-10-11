@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Nhân sự nhà trọ')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Nhân sự nhà trọ</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">
+                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Nhân viên chỉ làm được các việc được cấp quyền;
+                kỹ thuật viên chỉ xử lý phiếu bảo trì được giao.
+            </p>
+        </div>
+        <div>
+            <a th:href="@{'/properties/' + ${property.id()}}" class="btn">&larr; Quay lại nhà trọ</a>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <h2>Phân công nhân sự</h2>
+        <form th:action="@{'/properties/' + ${property.id()} + '/staff'}" method="post" autocomplete="off"
+              style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <input type="text" name="usernameOrEmail" class="form-control" style="max-width: 280px;" required
+                   placeholder="Tên đăng nhập hoặc email của nhân viên / kỹ thuật viên">
+            <label style="font-size: 13px;"><input type="checkbox" name="canManageContracts" value="true"> Quản lý hợp đồng</label>
+            <label style="font-size: 13px;"><input type="checkbox" name="canCollectPayment" value="true"> Thu tiền</label>
+            <label style="font-size: 13px;"><input type="checkbox" name="canViewDocuments" value="true"> Xem giấy tờ người thuê</label>
+            <button type="submit" class="btn btn-primary">Phân công</button>
+        </form>
+        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
+            Các quyền hợp đồng, thu tiền và xem giấy tờ chỉ áp dụng cho nhân viên và mặc định tắt: nhân viên mới chỉ làm được các việc đó sau khi chủ trọ cấp quyền. Kỹ thuật viên không có các quyền này.
+        </p>
+    </div>
+
+    <div class="card">
+        <p th:if="${members.isEmpty()}" style="color: var(--text-secondary);">Chưa có nhân sự nào được phân công.</p>
+        <table th:if="${!members.isEmpty()}" class="table">
+            <thead>
+                <tr><th>Họ tên</th><th>Tài khoản</th><th>Vai trò</th><th>Quyền</th><th>Thao tác</th></tr>
+            </thead>
+            <tbody>
+                <tr th:each="m : ${members}">
+                    <td th:text="${m.user().fullName()}">Nhân viên</td>
+                    <td th:text="${m.user().username()}">staff1</td>
+                    <td th:text="${m.user().role().name() == 'STAFF'} ? 'Nhân viên' : 'Kỹ thuật viên'">Nhân viên</td>
+                    <td>
+                        <form th:if="${m.user().role().name() == 'STAFF'}"
+                              th:action="@{'/properties/' + ${property.id()} + '/staff/' + ${m.user().id()} + '/permissions'}"
+                              method="post" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0;">
+                            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                            <label style="font-size: 12px;"><input type="checkbox" name="canManageContracts" value="true" th:checked="${m.assignment().canManageContracts()}"> Hợp đồng</label>
+                            <label style="font-size: 12px;"><input type="checkbox" name="canCollectPayment" value="true" th:checked="${m.assignment().canCollectPayment()}"> Thu tiền</label>
+                            <label style="font-size: 12px;"><input type="checkbox" name="canViewDocuments" value="true" th:checked="${m.assignment().canViewDocuments()}"> Giấy tờ</label>
+                            <button type="submit" class="btn btn-sm btn-secondary">Lưu</button>
+                        </form>
+                        <span th:if="${m.user().role().name() != 'STAFF'}" style="color: var(--text-secondary); font-size: 12px;">Chỉ phiếu bảo trì được giao</span>
+                    </td>
+                    <td>
+                        <form th:action="@{'/properties/' + ${property.id()} + '/staff/' + ${m.user().id()} + '/remove'}"
+                              method="post" style="margin: 0;" onsubmit="return confirm('Gỡ nhân sự này khỏi nhà trọ?');">
+                            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                            <button type="submit" class="btn btn-sm btn-danger">Gỡ</button>
+                        </form>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

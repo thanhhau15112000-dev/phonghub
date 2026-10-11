@@ -57,6 +57,24 @@ public class MaintenanceApiController {
         return ResponseEntity.ok(MaintenanceTicketResponse.from(ticket));
     }
 
+    @PostMapping("/maintenance/{id}/assign")
+    public ResponseEntity<MaintenanceTicketResponse> assignTicket(
+        @PathVariable UUID id,
+        @Valid @RequestBody AssignTicketRequest request
+    ) {
+        return ResponseEntity.ok(MaintenanceTicketResponse.from(
+            maintenanceUseCase.assignTechnician(id, request.technicianId())));
+    }
+
+    @PostMapping("/maintenance/{id}/reject")
+    public ResponseEntity<MaintenanceTicketResponse> rejectTicket(
+        @PathVariable UUID id,
+        @Valid @RequestBody RejectTicketRequest request
+    ) {
+        return ResponseEntity.ok(MaintenanceTicketResponse.from(
+            maintenanceUseCase.rejectTicket(id, request.reason())));
+    }
+
     @PostMapping("/maintenance/{id}/resolve")
     public ResponseEntity<MaintenanceTicketResponse> resolveTicket(
         @PathVariable UUID id,
@@ -69,6 +87,15 @@ public class MaintenanceApiController {
             request.releaseRoomToAvailable()
         ));
         return ResponseEntity.ok(MaintenanceTicketResponse.from(ticket));
+    }
+
+    /** Timeline trạng thái của phiếu: ai chuyển trạng thái nào, lúc nào. */
+    @GetMapping("/maintenance/{id}/timeline")
+    public ResponseEntity<List<TimelineEntry>> timeline(@PathVariable UUID id) {
+        return ResponseEntity.ok(maintenanceUseCase.getTimeline(id).stream()
+            .map(event -> new TimelineEntry(event.fromStatus() == null ? null : event.fromStatus().name(),
+                event.toStatus().name(), event.actorId(), event.note(), event.at()))
+            .toList());
     }
 
     @GetMapping("/maintenance/{id}")
@@ -91,6 +118,12 @@ public class MaintenanceApiController {
 
         boolean setRoomMaintenance
     ) {}
+
+    public record TimelineEntry(String from, String to, UUID actorId, String note, java.time.Instant at) {}
+
+    public record AssignTicketRequest(@NotNull(message = "Technician ID is required") UUID technicianId) {}
+
+    public record RejectTicketRequest(@NotBlank(message = "Reason is required") String reason) {}
 
     public record ResolveTicketRequest(
         @NotBlank(message = "Resolution notes are required")

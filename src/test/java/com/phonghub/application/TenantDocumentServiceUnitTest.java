@@ -1,0 +1,175 @@
+package com.phonghub.application;
+
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantDocumentRepository;
+import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
+import com.phonghub.adapter.out.storage.InMemoryFileStorageAdapter;
+import com.phonghub.application.port.in.TenantDocumentUseCase;
+import com.phonghub.application.port.out.AuditPort;
+import com.phonghub.application.port.out.CurrentUser;
+import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.IdentityProviderPort;
+import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.application.service.AuthorizationService;
+import com.phonghub.application.service.TenantDocumentService;
+import com.phonghub.domain.exception.DuplicateDocumentNumberException;
+import com.phonghub.domain.exception.InvalidCredentialsException;
+import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
+import com.phonghub.domain.model.DocumentType;
+import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.UserRole;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+class TenantDocumentServiceUnitTest {
+
+    private static final byte[] PNG = Base64.getDecoder().decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
+    private final UUID propertyId = UUID.randomUUID();
+    private final CurrentUser owner = new CurrentUser(UUID.randomUUID(), "o@x.vn", "Owner", UserRole.OWNER);
+    private final AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-10-09T10:00:00Z"));
+
+    private InMemoryTenantDocumentRepository documents;
+    private InMemoryFileStorageAdapter storage;
+    private AesGcmTenantDataProtector protector;
+    private TenantRepositoryPort tenants;
+    private IdentityProviderPort identity;
+    private AuthorizationService authorization;
+    private CurrentUserPort currentUser;
+    private TenantDocumentService service;
+    private Tenant tenant;
+    private Tenant otherTenant;
+
+    @BeforeEach
+    void setUp() {
+        documents = new InMemoryTenantDocumentRepository();
+        storage = new InMemoryFileStorageAdapter();
+        protector = new AesGcmTenantDataProtector("v1",
+            Base64.getEncoder().encodeToString(new byte[32]),
+            Base64.getEncoder().encodeToString(new byte[]{
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+                17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}));
+        tenants = mock(TenantRepositoryPort.class);
+        identity = mock(IdentityProviderPort.class);
+        authorization = mock(AuthorizationService.class);
+        currentUser = mock(CurrentUserPort.class);
+        tenant = new Tenant(UUID.randomUUID(), null, "Nguyen A", "079201001111", "0900000001", null, null, Instant.now());
+        otherTenant = new Tenant(UUID.randomUUID(), null, "Tran B", "079201002222", "0900000002", null, null, Instant.now());
+        when(tenants.findById(tenant.id())).thenReturn(Optional.of(tenant));
+        when(tenants.findById(otherTenant.id())).thenReturn(Optional.of(otherTenant));
+        when(currentUser.getCurrentUser()).thenReturn(owner);
+        Clock clock = new Clock() {
+            @Override public java.time.ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(java.time.ZoneId zone) { return this; }
+            @Override public Instant instant() { return now.get(); }
+        };
+        service = new TenantDocumentService(documents, tenants, protector, storage, identity, currentUser,
+            authorization, mock(AuditPort.class), 1024 * 1024, clock);
+    }
+
+    private TenantDocumentUseCase.UploadDocumentCommand gplx(Tenant forTenant, String number) {
+        return new TenantDocumentUseCase.UploadDocumentCommand(propertyId, forTenant.id(), DocumentType.GPLX, number,
+            new TenantDocumentUseCase.DocumentFile("image/png", PNG), null);
+    }
+
+    @Test
+    void storedImageAndNumberAreEncryptedAtRest() throws Exception {
+        service.upload(gplx(tenant, "012345678901"));
+
+        var stored = documents.findByTenantIdAndType(tenant.id(), DocumentType.GPLX).orElseThrow();
+        byte[] blob = storage.get(stored.frontImageKey());
+        assertFalse(Arrays.equals(PNG, blob));
+        assertNotEquals((byte) 0x89, blob[0], "stored blob must not start with the PNG signature");
+        assertFalse(new String(blob, StandardCharsets.ISO_8859_1).contains("PNG"));
+        assertFalse(stored.numberCiphertext().contains("012345678901"));
+        assertEquals("****8901", stored.maskedNumber());
+        assertTrue(stored.frontImageKey().endsWith(".enc"));
+    }
+
+    @Test
+    void revealDecryptsNumberAndImagesAfterCorrectPassword() {
+        service.upload(gplx(tenant, "012345678901"));
+
+        var revealed = service.reveal(propertyId, tenant.id(), DocumentType.GPLX, "correct-horse");
+
+        assertEquals("012345678901", revealed.number());
+        assertEquals("image/png", revealed.front().contentType());
+        assertEquals((byte) 0x89, revealed.front().content()[0]);
+    }
+
+    @Test
+    void duplicateDrivingLicenceNumberForAnotherTenantIsRejected() {
+        service.upload(gplx(tenant, "012 345 678 901"));
+
+        assertThrows(DuplicateDocumentNumberException.class, () -> service.upload(gplx(otherTenant, "012345678901")));
+        service.upload(gplx(tenant, "012345678901"));
+    }
+
+    @Test
+    void replacingADocumentDeletesTheOldEncryptedBlob() {
+        service.upload(gplx(tenant, "012345678901"));
+        String oldKey = documents.findByTenantIdAndType(tenant.id(), DocumentType.GPLX).orElseThrow().frontImageKey();
+
+        service.upload(gplx(tenant, "012345678901"));
+
+        String newKey = documents.findByTenantIdAndType(tenant.id(), DocumentType.GPLX).orElseThrow().frontImageKey();
+        assertNotEquals(oldKey, newKey);
+        assertThrows(IllegalArgumentException.class, () -> storage.get(oldKey));
+        assertEquals(1, documents.findByTenantId(tenant.id()).size());
+    }
+
+    @Test
+    void unauthorizedCallerNeverReachesStorageOrDatabase() {
+        org.mockito.Mockito.doThrow(new UnauthorizedPropertyAccessException("no")).when(authorization)
+            .assertCanAccessTenantDocuments(any(), any(), any());
+
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> service.upload(gplx(tenant, "012345678901")));
+        assertThrows(UnauthorizedPropertyAccessException.class,
+            () -> service.reveal(propertyId, tenant.id(), DocumentType.GPLX, "correct-horse"));
+        assertTrue(documents.findByTenantId(tenant.id()).isEmpty());
+    }
+
+    @Test
+    void failedAttemptsExpireAfterTheWindow() {
+        service.upload(gplx(tenant, "012345678901"));
+        when(identity.login(any(), any())).thenThrow(new InvalidCredentialsException("bad"));
+        for (int i = 0; i < 5; i++) {
+            assertThrows(com.phonghub.domain.exception.DocumentRevealDeniedException.class,
+                () -> service.reveal(propertyId, tenant.id(), DocumentType.GPLX, "bad"));
+        }
+        assertThrows(com.phonghub.domain.exception.TooManyRevealAttemptsException.class,
+            () -> service.reveal(propertyId, tenant.id(), DocumentType.GPLX, "bad"));
+
+        now.set(now.get().plus(Duration.ofMinutes(11)));
+        org.mockito.Mockito.reset(identity);
+        assertArrayEquals(PNG.length > 0 ? new byte[]{(byte) 0x89} : new byte[0],
+            new byte[]{service.reveal(propertyId, tenant.id(), DocumentType.GPLX, "good-password")
+                .front().content()[0]});
+    }
+
+    @Test
+    void missingNumberForDrivingLicenceIsRejected() {
+        assertThrows(IllegalArgumentException.class, () -> service.upload(gplx(tenant, " ")));
+        assertTrue(documents.findByTenantId(tenant.id()).isEmpty());
+    }
+}

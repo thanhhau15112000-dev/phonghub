@@ -67,11 +67,14 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
                 other_amount, total_amount, paid_amount, due_date, status, payment_code,
                 invoice_type, ticket_id, consolidated_into_invoice_id, paid_at, created_at, updated_at
             ) VALUES (
-                :id, :contractId, :roomId, :tenantId, :month, :year, :rentAmount, 0,
+                :id, :contractId, :roomId, :tenantId, :month, :year, :rentAmount, :utilityAmount,
                 :otherAmount, :totalAmount, :paidAmount, :dueDate, :status, :paymentCode,
                 :invoiceType, :ticketId, :consolidatedInto, :paidAt, :createdAt, :updatedAt
             )
             ON CONFLICT (id) DO UPDATE SET
+                utility_amount = EXCLUDED.utility_amount,
+                other_amount = EXCLUDED.other_amount,
+                total_amount = EXCLUDED.total_amount,
                 paid_amount = EXCLUDED.paid_amount,
                 status = EXCLUDED.status,
                 paid_at = EXCLUDED.paid_at,
@@ -87,7 +90,9 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
             .addValue("month", invoice.getMonth())
             .addValue("year", invoice.getYear())
             .addValue("rentAmount", invoice.getRentAmount())
-            .addValue("otherAmount", invoice.getTotalAmount().subtract(invoice.getRentAmount()))
+            .addValue("utilityAmount", invoice.utilityAmount())
+            .addValue("otherAmount", invoice.getTotalAmount().subtract(invoice.getRentAmount())
+                .subtract(invoice.utilityAmount()))
             .addValue("totalAmount", invoice.getTotalAmount())
             .addValue("invoiceType", invoice.getType().name())
             .addValue("ticketId", invoice.getTicketId())
@@ -112,8 +117,9 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
         }
         jdbcTemplate.update("DELETE FROM invoice_items WHERE invoice_id = :invoiceId", Map.of("invoiceId", invoice.getId()));
         String sql = """
-            INSERT INTO invoice_items (id, invoice_id, item_name, quantity, unit_price, total_amount, source_invoice_id)
-            VALUES (:id, :invoiceId, :name, :quantity, :unitPrice, :totalAmount, :sourceInvoiceId)
+            INSERT INTO invoice_items (id, invoice_id, item_name, quantity, unit_price, total_amount, source_invoice_id,
+                                       reading_id, rate_id)
+            VALUES (:id, :invoiceId, :name, :quantity, :unitPrice, :totalAmount, :sourceInvoiceId, :readingId, :rateId)
             """;
         for (InvoiceItem item : invoice.getItems()) {
             jdbcTemplate.update(sql, new MapSqlParameterSource()
@@ -123,7 +129,9 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
                 .addValue("quantity", item.quantity())
                 .addValue("unitPrice", item.unitPrice())
                 .addValue("totalAmount", item.totalAmount())
-                .addValue("sourceInvoiceId", item.sourceInvoiceId()));
+                .addValue("sourceInvoiceId", item.sourceInvoiceId())
+                .addValue("readingId", item.readingId())
+                .addValue("rateId", item.rateId()));
         }
     }
 
@@ -134,11 +142,13 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
         List<UUID> ids = invoices.stream().map(Invoice::getId).toList();
         java.util.Map<UUID, List<InvoiceItem>> byInvoice = new HashMap<>();
         jdbcTemplate.query(
-            "SELECT id, invoice_id, item_name, quantity, unit_price, total_amount, source_invoice_id "
+            "SELECT id, invoice_id, item_name, quantity, unit_price, total_amount, source_invoice_id, reading_id, rate_id "
                 + "FROM invoice_items WHERE invoice_id IN (:ids) ORDER BY created_at, item_name",
             Map.of("ids", ids),
             rs -> {
                 String source = rs.getString("source_invoice_id");
+                String reading = rs.getString("reading_id");
+                String rate = rs.getString("rate_id");
                 byInvoice.computeIfAbsent(UUID.fromString(rs.getString("invoice_id")), k -> new ArrayList<>())
                     .add(new InvoiceItem(
                         UUID.fromString(rs.getString("id")),
@@ -146,7 +156,9 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
                         rs.getBigDecimal("quantity"),
                         rs.getBigDecimal("unit_price"),
                         rs.getBigDecimal("total_amount"),
-                        source != null ? UUID.fromString(source) : null
+                        source != null ? UUID.fromString(source) : null,
+                        reading != null ? UUID.fromString(reading) : null,
+                        rate != null ? UUID.fromString(rate) : null
                     ));
             }
         );

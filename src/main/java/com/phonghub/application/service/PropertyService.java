@@ -70,6 +70,56 @@ public class PropertyService implements PropertyUseCase {
     }
 
     @Override
+    public Property updateProperty(UpdatePropertyCommand command) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        authorizationService.assertOwnerOrAdmin(currentUser, command.propertyId());
+
+        Property property = propertyRepository.findById(command.propertyId())
+            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + command.propertyId()));
+
+        int totalRooms = command.totalRooms() == null ? property.totalRooms() : command.totalRooms();
+        String description = command.description() == null || command.description().isBlank()
+            ? null : command.description().trim();
+        boolean coreChanged = property.changesCoreInfo(command.name(), command.address());
+        boolean unchanged = !coreChanged && java.util.Objects.equals(property.description(), description)
+            && property.totalRooms() == totalRooms;
+        if (unchanged) {
+            return property;
+        }
+
+        PropertyApprovalStatus status = property.approvalStatus();
+        String rejectionReason = property.rejectionReason();
+        if (currentUser.role() == UserRole.OWNER) {
+            boolean resubmit = status == PropertyApprovalStatus.REJECTED
+                || (status == PropertyApprovalStatus.VERIFIED && coreChanged);
+            if (resubmit) {
+                status = PropertyApprovalStatus.PENDING;
+                rejectionReason = null;
+            }
+        }
+        Property saved = propertyRepository.save(property.updateInfo(command.name(), command.address(),
+            description, totalRooms, status, rejectionReason));
+
+        java.util.List<String> changed = new java.util.ArrayList<>();
+        if (!property.name().equals(saved.name())) {
+            changed.add("name");
+        }
+        if (!property.address().equals(saved.address())) {
+            changed.add("address");
+        }
+        if (!java.util.Objects.equals(property.description(), saved.description())) {
+            changed.add("description");
+        }
+        if (property.totalRooms() != saved.totalRooms()) {
+            changed.add("totalRooms");
+        }
+        auditPort.recordEvent(AuditPort.AuditEvent.of("PROPERTY_UPDATED", currentUser.id(), "PROPERTY",
+            saved.id().toString(), Map.of("changedFields", changed,
+                "oldStatus", property.approvalStatus().name(), "newStatus", saved.approvalStatus().name())));
+        return saved;
+    }
+
+    @Override
     public List<Property> listAccessibleProperties() {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Set<UUID> accessibleIds = authorizationService.getAccessiblePropertyIds(currentUser);

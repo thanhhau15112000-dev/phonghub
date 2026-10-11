@@ -35,6 +35,24 @@ public record Property(
         }
     }
 
+    /** Tên và địa chỉ là thông tin định danh nhà trọ; thay đổi hai trường này cần được duyệt lại. */
+    public boolean changesCoreInfo(String newName, String newAddress) {
+        return !name.equals(newName.trim()) || !address.equals(newAddress.trim());
+    }
+
+    public Property updateInfo(
+        String newName,
+        String newAddress,
+        String newDescription,
+        int newTotalRooms,
+        PropertyApprovalStatus newStatus,
+        String newRejectionReason
+    ) {
+        return new Property(id, newName.trim(), newAddress.trim(),
+            newDescription == null || newDescription.isBlank() ? null : newDescription.trim(),
+            newTotalRooms, ownerId, newStatus, newRejectionReason, createdAt);
+    }
+
     public Property(
         UUID id,
         String name,

@@ -53,7 +53,6 @@ public class TenantApiController {
         @NotBlank(message = "Họ và tên không được để trống")
         String fullName,
 
-        @NotBlank(message = "Số CCCD không được để trống")
         String identityCardNumber,
 
         @NotBlank(message = "Số điện thoại không được để trống")
@@ -80,7 +79,7 @@ public class TenantApiController {
                 tenant.id(),
                 tenant.userId(),
                 tenant.fullName(),
-                tenant.identityCardNumber(),
+                tenant.maskedIdentityCardNumber(),
                 tenant.phone(),
                 tenant.email(),
                 tenant.permanentAddress(),

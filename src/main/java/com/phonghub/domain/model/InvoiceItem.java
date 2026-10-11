@@ -5,7 +5,8 @@ import java.util.UUID;
 
 /**
  * Một dòng chi tiết của hóa đơn. {@code sourceInvoiceId} khác null khi dòng này là khoản phí sửa chữa
- * được gộp từ một hóa đơn phí riêng vào hóa đơn tháng.
+ * được gộp từ một hóa đơn phí riêng vào hóa đơn tháng. {@code readingId} và {@code rateId} khác null khi dòng
+ * là tiền điện/nước tính từ một chỉ số công tơ theo một đơn giá; {@code rateId} một mình là dịch vụ cố định.
  */
 public record InvoiceItem(
     UUID id,
@@ -13,7 +14,9 @@ public record InvoiceItem(
     BigDecimal quantity,
     BigDecimal unitPrice,
     BigDecimal totalAmount,
-    UUID sourceInvoiceId
+    UUID sourceInvoiceId,
+    UUID readingId,
+    UUID rateId
 ) {
     public InvoiceItem {
         if (name == null || name.isBlank()) {
@@ -33,7 +36,23 @@ public record InvoiceItem(
         }
     }
 
+    public InvoiceItem(UUID id, String name, BigDecimal quantity, BigDecimal unitPrice, BigDecimal totalAmount,
+                       UUID sourceInvoiceId) {
+        this(id, name, quantity, unitPrice, totalAmount, sourceInvoiceId, null, null);
+    }
+
+    /** Dòng dịch vụ tính theo số lượng: thành tiền làm tròn đến đồng. */
+    public static InvoiceItem charge(String name, BigDecimal quantity, BigDecimal unitPrice, UUID readingId,
+                                     UUID rateId) {
+        BigDecimal total = quantity.multiply(unitPrice).setScale(0, java.math.RoundingMode.HALF_UP);
+        return new InvoiceItem(null, name, quantity, unitPrice, total, null, readingId, rateId);
+    }
+
+    public boolean isUtilityCharge() {
+        return rateId != null;
+    }
+
     public static InvoiceItem of(String name, BigDecimal amount, UUID sourceInvoiceId) {
-        return new InvoiceItem(null, name, BigDecimal.ONE, amount, amount, sourceInvoiceId);
+        return new InvoiceItem(null, name, BigDecimal.ONE, amount, amount, sourceInvoiceId, null, null);
     }
 }

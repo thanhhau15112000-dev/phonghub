@@ -6,6 +6,7 @@ import com.phonghub.domain.model.MaintenanceCause;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
+import com.phonghub.domain.model.MaintenanceTicketEvent;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -47,10 +48,17 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
             rs.getString("resolution_notes"),
             causeStr != null ? MaintenanceCause.valueOf(causeStr) : null,
             LiableParty.valueOf(rs.getString("liable_party")),
+            rs.getString("reject_reason"),
+            nullableInstant(rs.getTimestamp("due_at")),
+            nullableInstant(rs.getTimestamp("sla_notified_at")),
             toInstant(rs.getTimestamp("created_at")),
             toInstant(rs.getTimestamp("updated_at"))
         );
     };
+
+    private static Instant nullableInstant(Timestamp ts) {
+        return ts != null ? ts.toInstant() : null;
+    }
 
     private static Instant toInstant(Timestamp ts) {
         return ts != null ? ts.toInstant() : Instant.now();
@@ -59,8 +67,8 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
     @Override
     public MaintenanceTicket save(MaintenanceTicket ticket) {
         String sql = """
-            INSERT INTO maintenance_tickets (id, room_id, requested_by_tenant_id, assigned_technician_id, title, description, priority, status, repair_cost, resolution_notes, cause_category, liable_party, created_at, updated_at)
-            VALUES (:id, :roomId, :tenantId, :technicianId, :title, :description, :priority, :status, :repairCost, :resolutionNotes, :causeCategory, :liableParty, :createdAt, :updatedAt)
+            INSERT INTO maintenance_tickets (id, room_id, requested_by_tenant_id, assigned_technician_id, title, description, priority, status, repair_cost, resolution_notes, cause_category, liable_party, reject_reason, due_at, sla_notified_at, created_at, updated_at)
+            VALUES (:id, :roomId, :tenantId, :technicianId, :title, :description, :priority, :status, :repairCost, :resolutionNotes, :causeCategory, :liableParty, :rejectReason, :dueAt, :slaNotifiedAt, :createdAt, :updatedAt)
             ON CONFLICT (id) DO UPDATE SET
                 assigned_technician_id = EXCLUDED.assigned_technician_id,
                 title = EXCLUDED.title,
@@ -70,6 +78,9 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
                 repair_cost = EXCLUDED.repair_cost,
                 resolution_notes = EXCLUDED.resolution_notes,
                 liable_party = EXCLUDED.liable_party,
+                reject_reason = EXCLUDED.reject_reason,
+                due_at = EXCLUDED.due_at,
+                sla_notified_at = EXCLUDED.sla_notified_at,
                 updated_at = EXCLUDED.updated_at
             """;
 
@@ -86,11 +97,39 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
             .addValue("resolutionNotes", ticket.getResolutionNotes())
             .addValue("causeCategory", ticket.getCauseCategory() != null ? ticket.getCauseCategory().name() : null)
             .addValue("liableParty", ticket.getLiableParty().name())
+            .addValue("rejectReason", ticket.getRejectionReason())
+            .addValue("dueAt", ticket.getDueAt() == null ? null : Timestamp.from(ticket.getDueAt()))
+            .addValue("slaNotifiedAt", ticket.getSlaNotifiedAt() == null ? null : Timestamp.from(ticket.getSlaNotifiedAt()))
             .addValue("createdAt", Timestamp.from(ticket.getCreatedAt()))
             .addValue("updatedAt", Timestamp.from(ticket.getUpdatedAt()));
 
         jdbcTemplate.update(sql, params);
+        for (MaintenanceTicketEvent event : ticket.drainEvents()) {
+            jdbcTemplate.update("""
+                INSERT INTO maintenance_ticket_events (ticket_id, from_status, to_status, actor_id, note, created_at)
+                VALUES (:ticketId, :from, :to, :actor, :note, :at)
+                """, new MapSqlParameterSource()
+                .addValue("ticketId", event.ticketId())
+                .addValue("from", event.fromStatus() == null ? null : event.fromStatus().name())
+                .addValue("to", event.toStatus().name())
+                .addValue("actor", event.actorId())
+                .addValue("note", event.note())
+                .addValue("at", Timestamp.from(event.at())));
+        }
         return ticket;
+    }
+
+    @Override
+    public List<MaintenanceTicketEvent> findEvents(UUID ticketId) {
+        return jdbcTemplate.query("""
+            SELECT * FROM maintenance_ticket_events WHERE ticket_id = :ticketId ORDER BY created_at, id
+            """, Map.of("ticketId", ticketId), (rs, rowNum) -> new MaintenanceTicketEvent(
+            rs.getObject("ticket_id", UUID.class),
+            rs.getString("from_status") == null ? null : MaintenanceStatus.valueOf(rs.getString("from_status")),
+            MaintenanceStatus.valueOf(rs.getString("to_status")),
+            rs.getObject("actor_id", UUID.class),
+            rs.getString("note"),
+            rs.getTimestamp("created_at").toInstant()));
     }
 
     @Override

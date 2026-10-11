@@ -2,7 +2,10 @@ package com.phonghub.domain.model;
 
 import com.phonghub.domain.exception.MaintenanceTicketException;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -20,8 +23,13 @@ public class MaintenanceTicket {
     private String resolutionNotes;
     private final MaintenanceCause causeCategory;
     private LiableParty liableParty;
+    private String rejectionReason;
+    private Instant dueAt;
+    private Instant slaNotifiedAt;
     private final Instant createdAt;
     private Instant updatedAt;
+    /** Mốc chuyển trạng thái chưa lưu; repository ghi vào timeline khi lưu phiếu rồi xóa. */
+    private final List<MaintenanceTicketEvent> pendingEvents = new ArrayList<>();
 
     /** Phiếu không có thông tin nguyên nhân: chủ trọ chịu phí. */
     public MaintenanceTicket(
@@ -60,6 +68,53 @@ public class MaintenanceTicket {
         Instant createdAt,
         Instant updatedAt
     ) {
+        this(id, roomId, propertyId, requestedByTenantId, assignedTechnicianId, title, description,
+            priority, status, repairCost, resolutionNotes, causeCategory, liableParty, null, createdAt, updatedAt);
+    }
+
+    public MaintenanceTicket(
+        UUID id,
+        UUID roomId,
+        UUID propertyId,
+        UUID requestedByTenantId,
+        UUID assignedTechnicianId,
+        String title,
+        String description,
+        MaintenancePriority priority,
+        MaintenanceStatus status,
+        BigDecimal repairCost,
+        String resolutionNotes,
+        MaintenanceCause causeCategory,
+        LiableParty liableParty,
+        String rejectionReason,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
+        this(id, roomId, propertyId, requestedByTenantId, assignedTechnicianId, title, description,
+            priority, status, repairCost, resolutionNotes, causeCategory, liableParty, rejectionReason, null, null,
+            createdAt, updatedAt);
+    }
+
+    public MaintenanceTicket(
+        UUID id,
+        UUID roomId,
+        UUID propertyId,
+        UUID requestedByTenantId,
+        UUID assignedTechnicianId,
+        String title,
+        String description,
+        MaintenancePriority priority,
+        MaintenanceStatus status,
+        BigDecimal repairCost,
+        String resolutionNotes,
+        MaintenanceCause causeCategory,
+        LiableParty liableParty,
+        String rejectionReason,
+        Instant dueAt,
+        Instant slaNotifiedAt,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
         if (id == null) {
             throw new IllegalArgumentException("Ticket id cannot be null");
         }
@@ -89,6 +144,9 @@ public class MaintenanceTicket {
         this.resolutionNotes = resolutionNotes;
         this.causeCategory = causeCategory;
         this.liableParty = liableParty != null ? liableParty : LiableParty.OWNER;
+        this.rejectionReason = rejectionReason;
+        this.dueAt = dueAt;
+        this.slaNotifiedAt = slaNotifiedAt;
         this.createdAt = createdAt != null ? createdAt : Instant.now();
         this.updatedAt = updatedAt != null ? updatedAt : this.createdAt;
     }
@@ -114,8 +172,22 @@ public class MaintenanceTicket {
         MaintenancePriority priority,
         MaintenanceCause causeCategory
     ) {
+        return create(roomId, propertyId, requestedByTenantId, title, description, priority, causeCategory, null);
+    }
+
+    /** Hạn xử lý {@code due_at} = lúc tạo + SLA của mức ưu tiên; sla null nghĩa là không đặt hạn. */
+    public static MaintenanceTicket create(
+        UUID roomId,
+        UUID propertyId,
+        UUID requestedByTenantId,
+        String title,
+        String description,
+        MaintenancePriority priority,
+        MaintenanceCause causeCategory,
+        Duration sla
+    ) {
         Instant now = Instant.now();
-        return new MaintenanceTicket(
+        MaintenanceTicket ticket = new MaintenanceTicket(
             UUID.randomUUID(),
             roomId,
             propertyId,
@@ -129,9 +201,41 @@ public class MaintenanceTicket {
             null,
             causeCategory,
             causeCategory != null ? causeCategory.defaultLiableParty() : LiableParty.OWNER,
+            null,
+            sla == null ? null : now.plus(sla),
+            null,
             now,
             now
         );
+        ticket.pendingEvents.add(new MaintenanceTicketEvent(ticket.id, null, MaintenanceStatus.REPORTED, null,
+            "Tạo phiếu", now));
+        return ticket;
+    }
+
+    private void recordEvent(MaintenanceStatus from, String note) {
+        pendingEvents.add(new MaintenanceTicketEvent(id, from, status, null, note, updatedAt));
+    }
+
+    /** Gắn người thực hiện cho các mốc chưa lưu (hệ thống tự chuyển trạng thái thì để null). */
+    public void attributeEventsTo(UUID actorId) {
+        for (int i = 0; i < pendingEvents.size(); i++) {
+            pendingEvents.set(i, pendingEvents.get(i).withActor(actorId));
+        }
+    }
+
+    public List<MaintenanceTicketEvent> drainEvents() {
+        List<MaintenanceTicketEvent> events = List.copyOf(pendingEvents);
+        pendingEvents.clear();
+        return events;
+    }
+
+    /** Quá hạn: còn việc phải làm (chưa sửa xong/đóng) và đã qua hạn xử lý. */
+    public boolean isOverdue(Instant now) {
+        return dueAt != null && !isWorkFinished() && now.isAfter(dueAt);
+    }
+
+    public void markSlaNotified(Instant now) {
+        this.slaNotifiedAt = now;
     }
 
     public void assignTo(UUID technicianId) {
@@ -142,15 +246,56 @@ public class MaintenanceTicket {
             || this.status == MaintenanceStatus.AWAITING_PAYMENT) {
             throw new MaintenanceTicketException("Cannot assign technician to a ticket that is already " + status);
         }
+        MaintenanceStatus before = this.status;
         this.assignedTechnicianId = technicianId;
         this.status = MaintenanceStatus.ASSIGNED;
         this.updatedAt = Instant.now();
+        recordEvent(before, "Giao việc cho kỹ thuật viên");
+    }
+
+    /** Quản lý giao (hoặc giao lại) phiếu cho kỹ thuật viên khi chưa bắt đầu xử lý. */
+    public void assign(UUID technicianId) {
+        if (technicianId == null) {
+            throw new IllegalArgumentException("Technician id cannot be null");
+        }
+        if (this.status != MaintenanceStatus.REPORTED && this.status != MaintenanceStatus.ASSIGNED) {
+            throw new MaintenanceTicketException("Chỉ giao được phiếu chưa xử lý (REPORTED/ASSIGNED), phiếu hiện ở " + status);
+        }
+        MaintenanceStatus before = this.status;
+        this.assignedTechnicianId = technicianId;
+        this.status = MaintenanceStatus.ASSIGNED;
+        this.updatedAt = Instant.now();
+        recordEvent(before, before == MaintenanceStatus.ASSIGNED ? "Giao lại cho kỹ thuật viên khác" : "Giao việc cho kỹ thuật viên");
+    }
+
+    /** Từ chối phiếu chưa xử lý; bắt buộc có lý do để người thuê biết. */
+    public void reject(String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Lý do từ chối không được để trống");
+        }
+        if (this.status != MaintenanceStatus.REPORTED && this.status != MaintenanceStatus.ASSIGNED) {
+            throw new MaintenanceTicketException("Chỉ từ chối được phiếu chưa xử lý (REPORTED/ASSIGNED), phiếu hiện ở " + status);
+        }
+        MaintenanceStatus before = this.status;
+        this.rejectionReason = reason.trim();
+        this.status = MaintenanceStatus.REJECTED;
+        this.updatedAt = Instant.now();
+        recordEvent(before, "Từ chối: " + this.rejectionReason);
     }
 
     public void accept(UUID technicianId) {
-        assignTo(technicianId);
+        if (technicianId == null) {
+            throw new IllegalArgumentException("Technician id cannot be null");
+        }
+        if (this.status == MaintenanceStatus.RESOLVED || this.status == MaintenanceStatus.REJECTED
+            || this.status == MaintenanceStatus.AWAITING_PAYMENT) {
+            throw new MaintenanceTicketException("Cannot assign technician to a ticket that is already " + status);
+        }
+        MaintenanceStatus before = this.status;
+        this.assignedTechnicianId = technicianId;
         this.status = MaintenanceStatus.IN_PROGRESS;
         this.updatedAt = Instant.now();
+        recordEvent(before, "Tiếp nhận và bắt đầu xử lý");
     }
 
     public void startWork() {
@@ -159,6 +304,7 @@ public class MaintenanceTicket {
         }
         this.status = MaintenanceStatus.IN_PROGRESS;
         this.updatedAt = Instant.now();
+        recordEvent(MaintenanceStatus.ASSIGNED, "Bắt đầu xử lý");
     }
 
     public void resolve(String notes, BigDecimal cost) {
@@ -178,8 +324,11 @@ public class MaintenanceTicket {
         if (this.repairCost.signum() > 0 && this.liableParty == LiableParty.UNDETERMINED) {
             throw new MaintenanceTicketException("Cần xác định bên chịu phí trước khi ghi nhận chi phí sửa chữa");
         }
+        MaintenanceStatus before = this.status;
         this.status = chargesTenant() ? MaintenanceStatus.AWAITING_PAYMENT : MaintenanceStatus.RESOLVED;
         this.updatedAt = Instant.now();
+        recordEvent(before, this.status == MaintenanceStatus.AWAITING_PAYMENT
+            ? "Đã sửa xong, chờ người thuê thanh toán phí" : "Hoàn tất xử lý");
     }
 
     /** Người thuê chịu phí và có chi phí > 0: phải thu tiền qua hóa đơn. */
@@ -206,6 +355,7 @@ public class MaintenanceTicket {
         }
         this.status = MaintenanceStatus.RESOLVED;
         this.updatedAt = Instant.now();
+        recordEvent(MaintenanceStatus.AWAITING_PAYMENT, "Người thuê đã thanh toán phí sửa chữa");
     }
 
     /** Quản lý miễn khoản phí: chủ trọ chịu, phiếu hoàn tất. */
@@ -216,6 +366,7 @@ public class MaintenanceTicket {
         this.liableParty = LiableParty.OWNER;
         this.status = MaintenanceStatus.RESOLVED;
         this.updatedAt = Instant.now();
+        recordEvent(MaintenanceStatus.AWAITING_PAYMENT, "Quản lý miễn phí sửa chữa");
     }
 
     public boolean isResolved() {
@@ -279,6 +430,18 @@ public class MaintenanceTicket {
 
     public LiableParty getLiableParty() {
         return liableParty;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public Instant getDueAt() {
+        return dueAt;
+    }
+
+    public Instant getSlaNotifiedAt() {
+        return slaNotifiedAt;
     }
 
     public Instant getCreatedAt() {
