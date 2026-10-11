@@ -1,5 +1,5 @@
 -- =============================================================================
--- PHONGHUB - MIGRATION V14: CHAT ROOMS AND MESSAGES
+-- PHONGHUB - MIGRATION V33: CHAT ROOMS AND MESSAGES
 -- =============================================================================
 
 -- 1. Bảng phòng chat (GLOBAL: Kênh chung toàn hệ thống, DIRECT: Chat riêng 1-1)
