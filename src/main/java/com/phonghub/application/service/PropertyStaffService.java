@@ -78,24 +78,26 @@ public class PropertyStaffService implements PropertyStaffUseCase {
             command.propertyId(),
             !technician && command.canCollectPayment(),
             !technician && command.canManageContracts(),
+            !technician && command.canViewDocuments(),
             existing.map(StaffPropertyAssignment::assignedAt).orElseGet(Instant::now)));
         audit(existing.isPresent() ? "STAFF_PERMISSIONS_UPDATED" : "STAFF_ASSIGNED", actor, saved, target);
         return new Member(target, saved);
     }
 
     @Override
-    public Member updatePermissions(UUID propertyId, UUID userId, boolean canCollectPayment, boolean canManageContracts) {
+    public Member updatePermissions(UUID propertyId, UUID userId, boolean canCollectPayment, boolean canManageContracts,
+                                    boolean canViewDocuments) {
         CurrentUser actor = currentUserPort.getCurrentUser();
         authorizationService.assertOwnerOrAdmin(actor, propertyId);
         StaffPropertyAssignment current = assignmentPort.find(userId, propertyId)
             .orElseThrow(() -> new UserNotFoundException("Nhân sự này chưa được phân công vào nhà trọ"));
         User target = userRepository.findById(userId)
             .orElseThrow(() -> new UserNotFoundException("User not found with ID: " + userId));
-        if (target.role() == UserRole.TECHNICIAN && (canCollectPayment || canManageContracts)) {
+        if (target.role() == UserRole.TECHNICIAN && (canCollectPayment || canManageContracts || canViewDocuments)) {
             throw new IllegalArgumentException("Kỹ thuật viên không có quyền thu tiền hay quản lý hợp đồng");
         }
         StaffPropertyAssignment saved = assignmentPort.save(new StaffPropertyAssignment(
-            current.id(), userId, propertyId, canCollectPayment, canManageContracts, current.assignedAt()));
+            current.id(), userId, propertyId, canCollectPayment, canManageContracts, canViewDocuments, current.assignedAt()));
         audit("STAFF_PERMISSIONS_UPDATED", actor, saved, target);
         return new Member(target, saved);
     }
@@ -126,6 +128,7 @@ public class PropertyStaffService implements PropertyStaffUseCase {
         auditPort.recordEvent(AuditPort.AuditEvent.of(action, actor.id(), "PROPERTY", assignment.propertyId().toString(),
             Map.of("userId", target.id().toString(), "role", target.role().name(),
                 "canCollectPayment", assignment.canCollectPayment(),
-                "canManageContracts", assignment.canManageContracts())));
+                "canManageContracts", assignment.canManageContracts(),
+                "canViewDocuments", assignment.canViewDocuments())));
     }
 }

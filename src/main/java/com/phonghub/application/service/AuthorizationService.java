@@ -283,7 +283,14 @@ public class AuthorizationService {
         }
         switch (user.role()) {
             case ADMIN -> { }
-            case OWNER, STAFF -> assertCanManageProperty(user, propertyId);
+            case OWNER -> assertCanManageProperty(user, propertyId);
+            case STAFF -> {
+                assertCanManageProperty(user, propertyId);
+                if (!assignmentPort.find(user.id(), propertyId).map(a -> a.canViewDocuments()).orElse(false)) {
+                    throw new UnauthorizedPropertyAccessException(String.format(
+                        "Staff %s chưa được cấp quyền xem giấy tờ người thuê tại nhà trọ %s", user.fullName(), propertyId));
+                }
+            }
             case TENANT -> {
                 Tenant self = tenantRepositoryPort.findByUserId(user.id()).orElse(null);
                 if (self == null || !self.id().equals(tenantId)) {

@@ -30,6 +30,7 @@ public class PostgresStaffPropertyAssignmentRepository implements StaffPropertyA
         UUID.fromString(rs.getString("property_id")),
         rs.getBoolean("can_collect_payment"),
         rs.getBoolean("can_manage_contracts"),
+        rs.getBoolean("can_view_documents"),
         toInstant(rs.getTimestamp("assigned_at"))
     );
 
@@ -40,11 +41,12 @@ public class PostgresStaffPropertyAssignmentRepository implements StaffPropertyA
     @Override
     public StaffPropertyAssignment save(StaffPropertyAssignment assignment) {
         String sql = """
-            INSERT INTO staff_property_assignments (id, staff_user_id, property_id, can_collect_payment, can_manage_contracts, assigned_at)
-            VALUES (:id, :staffUserId, :propertyId, :canCollectPayment, :canManageContracts, :assignedAt)
+            INSERT INTO staff_property_assignments (id, staff_user_id, property_id, can_collect_payment, can_manage_contracts, can_view_documents, assigned_at)
+            VALUES (:id, :staffUserId, :propertyId, :canCollectPayment, :canManageContracts, :canViewDocuments, :assignedAt)
             ON CONFLICT (staff_user_id, property_id) DO UPDATE SET
                 can_collect_payment = EXCLUDED.can_collect_payment,
-                can_manage_contracts = EXCLUDED.can_manage_contracts
+                can_manage_contracts = EXCLUDED.can_manage_contracts,
+                can_view_documents = EXCLUDED.can_view_documents
             """;
 
         MapSqlParameterSource params = new MapSqlParameterSource()
@@ -53,6 +55,7 @@ public class PostgresStaffPropertyAssignmentRepository implements StaffPropertyA
             .addValue("propertyId", assignment.propertyId())
             .addValue("canCollectPayment", assignment.canCollectPayment())
             .addValue("canManageContracts", assignment.canManageContracts())
+            .addValue("canViewDocuments", assignment.canViewDocuments())
             .addValue("assignedAt", Timestamp.from(assignment.assignedAt()));
 
         jdbcTemplate.update(sql, params);

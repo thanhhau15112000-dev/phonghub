@@ -13,14 +13,21 @@ public interface PropertyStaffUseCase {
     /** Gán theo username hoặc email chính xác; gán lại thì cập nhật quyền. Kỹ thuật viên không có quyền thu tiền/hợp đồng. */
     Member assign(AssignCommand command);
 
-    Member updatePermissions(UUID propertyId, UUID userId, boolean canCollectPayment, boolean canManageContracts);
+    Member updatePermissions(UUID propertyId, UUID userId, boolean canCollectPayment, boolean canManageContracts,
+                             boolean canViewDocuments);
 
     /** Gỡ khỏi nhà trọ; bị chặn khi kỹ thuật viên còn phiếu bảo trì đang giao/đang xử lý tại nhà trọ đó. */
     void unassign(UUID propertyId, UUID userId);
 
     record Member(User user, StaffPropertyAssignment assignment) {}
 
-    record AssignCommand(UUID propertyId, String usernameOrEmail, boolean canCollectPayment, boolean canManageContracts) {
+    record AssignCommand(UUID propertyId, String usernameOrEmail, boolean canCollectPayment,
+                         boolean canManageContracts, boolean canViewDocuments) {
+        public AssignCommand(UUID propertyId, String usernameOrEmail, boolean canCollectPayment,
+                             boolean canManageContracts) {
+            this(propertyId, usernameOrEmail, canCollectPayment, canManageContracts, false);
+        }
+
         public AssignCommand {
             if (propertyId == null) {
                 throw new IllegalArgumentException("Property id cannot be null");

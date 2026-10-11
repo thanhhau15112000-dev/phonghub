@@ -52,11 +52,12 @@ public class PropertyStaffUiController {
         @RequestParam String usernameOrEmail,
         @RequestParam(defaultValue = "false") boolean canCollectPayment,
         @RequestParam(defaultValue = "false") boolean canManageContracts,
+        @RequestParam(defaultValue = "false") boolean canViewDocuments,
         RedirectAttributes redirectAttributes
     ) {
         try {
             staffUseCase.assign(new PropertyStaffUseCase.AssignCommand(
-                propertyId, usernameOrEmail, canCollectPayment, canManageContracts));
+                propertyId, usernameOrEmail, canCollectPayment, canManageContracts, canViewDocuments));
             redirectAttributes.addFlashAttribute("successMessage", "Đã phân công nhân sự vào nhà trọ.");
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
@@ -70,10 +71,11 @@ public class PropertyStaffUiController {
         @PathVariable UUID userId,
         @RequestParam(defaultValue = "false") boolean canCollectPayment,
         @RequestParam(defaultValue = "false") boolean canManageContracts,
+        @RequestParam(defaultValue = "false") boolean canViewDocuments,
         RedirectAttributes redirectAttributes
     ) {
         try {
-            staffUseCase.updatePermissions(propertyId, userId, canCollectPayment, canManageContracts);
+            staffUseCase.updatePermissions(propertyId, userId, canCollectPayment, canManageContracts, canViewDocuments);
             redirectAttributes.addFlashAttribute("successMessage", "Đã cập nhật quyền.");
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());

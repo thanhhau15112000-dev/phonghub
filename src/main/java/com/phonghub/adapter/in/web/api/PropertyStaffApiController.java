@@ -39,7 +39,7 @@ public class PropertyStaffApiController {
         @Valid @RequestBody AssignRequest request
     ) {
         Member member = useCase.assign(new PropertyStaffUseCase.AssignCommand(propertyId, request.usernameOrEmail(),
-            request.canCollectPayment(), request.canManageContracts()));
+            on(request.canCollectPayment()), on(request.canManageContracts()), on(request.canViewDocuments())));
         return ResponseEntity.created(URI.create("/api/properties/" + propertyId + "/staff/" + member.user().id()))
             .body(MemberResponse.from(member));
     }
@@ -50,8 +50,8 @@ public class PropertyStaffApiController {
         @PathVariable UUID userId,
         @RequestBody PermissionsRequest request
     ) {
-        return MemberResponse.from(useCase.updatePermissions(propertyId, userId, request.canCollectPayment(),
-            request.canManageContracts()));
+        return MemberResponse.from(useCase.updatePermissions(propertyId, userId, on(request.canCollectPayment()),
+            on(request.canManageContracts()), on(request.canViewDocuments())));
     }
 
     @DeleteMapping("/{userId}")
@@ -62,18 +62,26 @@ public class PropertyStaffApiController {
 
     public record AssignRequest(
         @NotBlank(message = "Cần nhập tên đăng nhập hoặc email") String usernameOrEmail,
-        boolean canCollectPayment,
-        boolean canManageContracts
+        Boolean canCollectPayment,
+        Boolean canManageContracts,
+        Boolean canViewDocuments
     ) {}
 
-    public record PermissionsRequest(boolean canCollectPayment, boolean canManageContracts) {}
+    /** Trường vắng mặt hiểu là false (không cấp quyền). */
+    public record PermissionsRequest(Boolean canCollectPayment, Boolean canManageContracts, Boolean canViewDocuments) {}
+
+    private static boolean on(Boolean value) {
+        return Boolean.TRUE.equals(value);
+    }
 
     public record MemberResponse(UUID userId, String username, String fullName, String role,
-                                 boolean canCollectPayment, boolean canManageContracts, Instant assignedAt) {
+                                 boolean canCollectPayment, boolean canManageContracts, boolean canViewDocuments,
+                                 Instant assignedAt) {
         static MemberResponse from(Member member) {
             return new MemberResponse(member.user().id(), member.user().username(), member.user().fullName(),
                 member.user().role().name(), member.assignment().canCollectPayment(),
-                member.assignment().canManageContracts(), member.assignment().assignedAt());
+                member.assignment().canManageContracts(), member.assignment().canViewDocuments(),
+                member.assignment().assignedAt());
         }
     }
 }
