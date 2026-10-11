@@ -12,7 +12,9 @@
             <h1>Phòng <span th:text="${room.getRoomNumber()}">P101</span> — <span th:text="${property.name()}">Nhà trọ</span></h1>
             <p style="color: var(--text-secondary); font-size: 13px;">Quản lý trạng thái phòng, hợp đồng đang hiệu lực và yêu cầu bảo trì.</p>
         </div>
-        <div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <a th:if="${currentUser != null and currentUser.role().name() != 'TECHNICIAN'}"
+               th:href="@{'/rooms/' + ${room.getId()} + '/meter-submissions'}" class="btn btn-secondary">Chỉ số điện nước</a>
             <a th:href="@{'/properties/' + ${property.id()}}" class="btn">&larr; Quay lại nhà trọ</a>
         </div>
     </div>

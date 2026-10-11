@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Chỉ số điện nước')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Chỉ số điện nước — phòng <span th:text="${room.getRoomNumber()}">P101</span></h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">
+                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Người thuê chụp ảnh đồng hồ và nhập số đã đọc;
+                hệ thống đối chiếu số với ảnh, chủ trọ duyệt rồi mới thành chỉ số chính thức.
+            </p>
+        </div>
+        <div><a th:href="@{'/rooms/' + ${room.getId()}}" class="btn">&larr; Quay lại phòng</a></div>
+    </div>
+
+    <div class="card" th:if="${isTenant}" style="margin-bottom: 20px;">
+        <h2>Gửi chỉ số mới</h2>
+        <form th:action="@{'/rooms/' + ${room.getId()} + '/meter-submissions'}" method="post" enctype="multipart/form-data"
+              style="display: flex; gap: 12px; flex-wrap: wrap; align-items: end;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group">
+                <label class="form-label" for="meterType">Đồng hồ</label>
+                <select id="meterType" name="meterType" class="form-control" required>
+                    <option value="ELECTRIC">Điện</option>
+                    <option value="WATER">Nước</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="declaredValue">Số trên đồng hồ</label>
+                <input type="number" step="0.01" min="0" id="declaredValue" name="declaredValue" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="file">Ảnh đồng hồ</label>
+                <input type="file" id="file" name="file" class="form-control" accept="image/jpeg,image/png,image/webp" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Gửi</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Lịch sử gửi chỉ số</h2>
+        <p th:if="${submissions.isEmpty()}" style="color: var(--text-secondary);">Chưa có lượt gửi nào.</p>
+        <table th:if="${!submissions.isEmpty()}" class="table">
+            <thead><tr><th>Đồng hồ</th><th>Số khai</th><th>Đọc từ ảnh</th><th>Đối chiếu</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+            <tbody>
+                <tr th:each="s : ${submissions}">
+                    <td th:text="${s.meterType().name() == 'ELECTRIC'} ? 'Điện' : 'Nước'">Điện</td>
+                    <td th:text="${s.declaredValue()}">0</td>
+                    <td th:text="${s.ocrValue() != null} ? ${s.ocrValue()} + ' (' + ${#numbers.formatDecimal(s.ocrConfidence() * 100, 0, 0)} + '%)' : '—'">—</td>
+                    <td>
+                        <span th:if="${s.matchStatus().name() == 'MATCH'}" class="badge">Khớp ảnh</span>
+                        <span th:if="${s.matchStatus().name() == 'MISMATCH'}" class="badge" style="background:#ef4444;color:#fff;">Lệch ảnh</span>
+                        <span th:if="${s.matchStatus().name() == 'UNVERIFIED'}" class="badge">Chưa kiểm chứng</span>
+                    </td>
+                    <td>
+                        <span th:text="${s.status().name() == 'PENDING'} ? 'Chờ duyệt' : (${s.status().name() == 'ACCEPTED'} ? 'Đã duyệt' : 'Bị từ chối')">Chờ duyệt</span>
+                        <span th:if="${s.reviewNote() != null}" th:text="'— ' + ${s.reviewNote()}" style="color: var(--text-secondary);"></span>
+                    </td>
+                    <td>
+                        <div th:if="${s.status().name() == 'PENDING'}" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                            <a th:href="@{'/rooms/' + ${room.getId()} + '/meter-submissions/' + ${s.id()} + '/photo'}" target="_blank" rel="noopener noreferrer" class="btn btn-sm">Xem ảnh</a>
+                            <form th:if="${!isTenant}" th:action="@{'/rooms/' + ${room.getId()} + '/meter-submissions/' + ${s.id()} + '/accept'}" method="post"
+                                  style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 0;">
+                                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                <input type="number" step="0.01" min="0" name="finalValue" class="form-control" style="width: 110px;" placeholder="Số chốt (nếu sửa)">
+                                <input type="number" step="0.01" min="0" name="baselineValue" class="form-control" style="width: 110px;" placeholder="Chỉ số gốc (lần đầu)">
+                                <label th:if="${s.matchStatus().name() == 'MISMATCH'}" style="font-size: 12px;"><input type="checkbox" name="acknowledgeMismatch" value="true"> Chấp nhận số khai dù lệch</label>
+                                <button type="submit" class="btn btn-sm btn-primary">Duyệt</button>
+                            </form>
+                            <form th:if="${!isTenant}" th:action="@{'/rooms/' + ${room.getId()} + '/meter-submissions/' + ${s.id()} + '/reject'}" method="post"
+                                  style="display: flex; gap: 6px; margin: 0;">
+                                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                <input type="text" name="reason" class="form-control" style="width: 160px;" placeholder="Lý do từ chối" required>
+                                <button type="submit" class="btn btn-sm btn-danger">Từ chối</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
