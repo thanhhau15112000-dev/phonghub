@@ -122,6 +122,24 @@
         #phonghubDockedMessagesPane::-webkit-scrollbar-track {
             background: transparent;
         }
+        @keyframes phonghubToastSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(16px) scale(0.96);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        .phonghub-chat-toast {
+            animation: phonghubToastSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: transform 0.2s ease, opacity 0.25s ease, box-shadow 0.2s ease;
+        }
+        .phonghub-chat-toast:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2) !important;
+        }
     </style>
 
     <!-- Cột bên phải (right: 20px) dành cho các nút tròn: Dưới cùng là nút Soạn tin nhắn, phía trên là các Avatar chat thu nhỏ -->
@@ -261,6 +279,7 @@
         function updateWindowsLayout() {
             const dockedBox = document.getElementById('phonghubDockedMessengerBox');
             const newMsgModal = document.getElementById('phonghubNewMessageModal');
+            const toastContainer = document.getElementById('phonghubChatToastContainer');
             if (!dockedBox || !newMsgModal) return;
 
             const isDockedOpen = dockedBox.style.display === 'flex';
@@ -279,6 +298,16 @@
                 }
             } else {
                 newMsgModal.style.right = '86px';
+            }
+
+            if (toastContainer) {
+                if (isDockedOpen && isModalOpen && window.innerWidth >= 1200) {
+                    toastContainer.style.right = '806px';
+                } else if (isDockedOpen || isModalOpen) {
+                    toastContainer.style.right = '446px';
+                } else {
+                    toastContainer.style.right = '86px';
+                }
             }
         }
 
@@ -564,6 +593,142 @@
             renderChatHeads();
         }
 
+        // Phát âm thanh thông báo nhẹ nhàng khi có tin nhắn mới gửi đến
+        function playMessageNotificationSound() {
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                const ctx = new AudioCtx();
+                if (ctx.state === 'suspended') {
+                    ctx.resume();
+                }
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.25);
+            } catch (e) {}
+        }
+
+        // Hiển thị thông báo Toast nổi khi có tin nhắn mới gửi đến
+        function showIncomingMessageToast(msg) {
+            let toastContainer = document.getElementById('phonghubChatToastContainer');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.id = 'phonghubChatToastContainer';
+                toastContainer.style.cssText = 'position: fixed; display: flex; flex-direction: column-reverse; gap: 8px; z-index: 100005; pointer-events: none; transition: right 0.22s ease;';
+                document.body.appendChild(toastContainer);
+            }
+
+            const dockedBox = document.getElementById('phonghubDockedMessengerBox');
+            const newMsgModal = document.getElementById('phonghubNewMessageModal');
+            const isDockedOpen = dockedBox && dockedBox.style.display === 'flex';
+            const isModalOpen = newMsgModal && newMsgModal.style.display === 'flex';
+
+            toastContainer.style.bottom = '84px';
+            if (isDockedOpen && isModalOpen && window.innerWidth >= 1200) {
+                toastContainer.style.right = '806px';
+            } else if (isDockedOpen || isModalOpen) {
+                toastContainer.style.right = '446px';
+            } else {
+                toastContainer.style.right = '86px';
+            }
+
+            const toast = document.createElement('div');
+            toast.className = 'phonghub-chat-toast';
+            toast.style.cssText = `
+                pointer-events: auto;
+                background-color: #ffffff;
+                color: #0f172a;
+                padding: 10px 14px;
+                border-radius: 14px;
+                box-shadow: 0 10px 32px rgba(15, 23, 42, 0.2), 0 2px 8px rgba(15, 23, 42, 0.08);
+                border: 1px solid #cbd5e1;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                min-width: 280px;
+                max-width: 340px;
+                cursor: pointer;
+            `;
+
+            const targetRoom = cachedRooms.find(r => String(r.id).toLowerCase() === String(msg.chatRoomId).toLowerCase());
+            const isGlobal = targetRoom && targetRoom.type === 'GLOBAL';
+            const avatarInitial = isGlobal ? '🌐' : (msg.senderName ? msg.senderName.trim().charAt(msg.senderName.trim().lastIndexOf(' ') + 1) || msg.senderName.charAt(0) : 'U');
+            const avatarColor = isGlobal ? 'linear-gradient(135deg, #0084ff, #4f46e5)' : getAvatarColor(msg.senderName);
+            const senderDisplayName = isGlobal ? `${msg.senderName} (Kênh chung)` : (msg.senderName || 'Tin nhắn mới');
+
+            let previewText = msg.content || '';
+            if (msg.mediaUrl) {
+                previewText = (msg.mediaType === 'VIDEO') ? '🎥 Đã gửi một video' : '📷 Đã gửi một hình ảnh';
+                if (msg.content) previewText += `: ${msg.content}`;
+            }
+
+            toast.innerHTML = `
+                <div style="width: 40px; height: 40px; border-radius: 50%; background: ${avatarColor}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
+                    ${escapeHtml(avatarInitial)}
+                </div>
+                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                        <span style="font-weight: 700; font-size: 13.5px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(senderDisplayName)}</span>
+                        <span style="font-size: 10.5px; color: #0284c7; font-weight: 600; flex-shrink: 0;">Vừa xong</span>
+                    </div>
+                    <span style="font-size: 12.5px; color: #334155; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;">${escapeHtml(previewText)}</span>
+                </div>
+                <button type="button" class="toast-close-btn" style="background: none; border: none; color: #94a3b8; font-size: 15px; font-weight: 700; cursor: pointer; padding: 2px 4px; border-radius: 4px; margin-left: 2px;" title="Đóng">✕</button>
+            `;
+
+            const closeBtn = toast.querySelector('.toast-close-btn');
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toast.remove();
+            });
+
+            toast.addEventListener('click', () => {
+                toast.remove();
+                if (isGlobal) {
+                    removeChatHead(msg.chatRoomId);
+                    openDockedChat(msg.chatRoomId, 'Kênh Chung Ban Quản Lý', '🌐', 'GLOBAL');
+                } else {
+                    removeChatHead(msg.chatRoomId);
+                    openDockedChat(msg.chatRoomId, msg.senderName, avatarInitial, 'DIRECT');
+                }
+            });
+
+            toastContainer.appendChild(toast);
+
+            // Tự động mờ dần và biến mất sau 6 giây
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.style.opacity = '0';
+                    toast.style.transform = 'translateY(10px)';
+                    setTimeout(() => toast.remove(), 250);
+                }
+            }, 6000);
+        }
+
+        function formatChatTime(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            if (isNaN(date.getTime())) return '';
+            const now = new Date();
+            const isToday = date.toDateString() === now.toDateString();
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            if (isToday) {
+                return `${hours}:${minutes}`;
+            }
+            const day = date.getDate().toString().padStart(2, '0');
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            return `${day}/${month}`;
+        }
+
         // Tải và hiển thị danh sách người dùng trong popup
         async function loadAndRenderContacts() {
             const container = document.getElementById('phonghubContactsList');
@@ -576,10 +741,12 @@
                 if (contactsRes.ok) cachedContacts = await contactsRes.json();
                 if (roomsRes.ok) cachedRooms = await roomsRes.json();
 
-                filterAndRenderContacts('');
+                const filterInput = document.getElementById('phonghubContactFilterInput');
+                const keyword = filterInput ? filterInput.value.toLowerCase().trim() : '';
+                filterAndRenderContacts(keyword);
             } catch (err) {
                 console.error('Lỗi khi tải danh sách người dùng:', err);
-                container.innerHTML = '<div style="padding: 24px; text-align: center; color: #ef4444; font-size: 13px;">Không thể tải danh sách tài khoản.</div>';
+                if (container) container.innerHTML = '<div style="padding: 24px; text-align: center; color: #ef4444; font-size: 13px;">Không thể tải danh sách tài khoản.</div>';
             }
         }
 
@@ -603,30 +770,44 @@
 
         function filterAndRenderContacts(keyword) {
             const container = document.getElementById('phonghubContactsList');
+            if (!container) return;
             container.innerHTML = '';
+
+            const globalRoom = cachedRooms.find(r => r.type === 'GLOBAL');
+            const globalUnread = globalRoom ? (globalRoom.unreadCount || 0) : 0;
+            let globalSubtitle = 'Kênh thông báo & trao đổi toàn hệ thống';
+            let globalTime = '';
+            if (globalRoom && globalRoom.lastMessageContent) {
+                const senderPrefix = globalRoom.lastMessageSender ? globalRoom.lastMessageSender + ': ' : '';
+                globalSubtitle = senderPrefix + globalRoom.lastMessageContent;
+                globalTime = formatChatTime(globalRoom.lastMessageAt);
+            }
 
             // 1. Mục Kênh Chat Chung (Pinned Channel)
             if (!keyword || 'kênh chung ban quản lý meta ai'.includes(keyword)) {
                 const globalItem = createChannelItemElement({
                     title: 'Kênh Chung Ban Quản Lý',
-                    subtitle: 'Kênh thông báo & trao đổi toàn hệ thống',
+                    subtitle: globalSubtitle,
                     badgeHtml: '<span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background-color: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; white-space: nowrap;">Kênh chung</span>',
                     isSpecial: true,
+                    isUnread: globalUnread > 0,
+                    unreadCount: globalUnread,
+                    timeText: globalTime,
                     avatarHtml: '<div style="width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #0084ff, #4f46e5); display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,132,255,0.25);">🌐</div>',
                     onClick: async () => {
                         document.getElementById('phonghubNewMessageModal').style.display = 'none';
                         updateWindowsLayout();
-                        let globalRoom = cachedRooms.find(r => r.type === 'GLOBAL');
-                        if (!globalRoom) {
+                        let targetRoom = cachedRooms.find(r => r.type === 'GLOBAL');
+                        if (!targetRoom) {
                             const roomsRes = await fetch('/api/chat/rooms');
                             if (roomsRes.ok) {
                                 cachedRooms = await roomsRes.json();
-                                globalRoom = cachedRooms.find(r => r.type === 'GLOBAL');
+                                targetRoom = cachedRooms.find(r => r.type === 'GLOBAL');
                             }
                         }
-                        if (globalRoom) {
-                            removeChatHead(globalRoom.id);
-                            openDockedChat(globalRoom.id, 'Kênh Chung Ban Quản Lý', '🌐', 'GLOBAL');
+                        if (targetRoom) {
+                            removeChatHead(targetRoom.id);
+                            openDockedChat(targetRoom.id, 'Kênh Chung Ban Quản Lý', '🌐', 'GLOBAL');
                         }
                     }
                 });
@@ -645,12 +826,25 @@
                 container.appendChild(divider);
             }
 
-            // 2. Danh sách các tài khoản người dùng
-            const filtered = cachedContacts.filter(c => {
+            // 2. Danh sách các tài khoản người dùng kết hợp phòng chat
+            const contactListWithRooms = cachedContacts.map(c => {
+                const room = cachedRooms.find(r => r.type === 'DIRECT' && r.peerUserId === c.userId);
+                return {
+                    ...c,
+                    roomId: room ? room.id : null,
+                    unreadCount: room ? (room.unreadCount || 0) : 0,
+                    lastMessageContent: room ? (room.lastMessageContent || '') : '',
+                    lastMessageSender: room ? (room.lastMessageSender || '') : '',
+                    lastMessageAt: room && room.lastMessageAt ? new Date(room.lastMessageAt).getTime() : 0
+                };
+            });
+
+            const filtered = contactListWithRooms.filter(c => {
                 if (!keyword) return true;
                 const full = (c.fullName || '').toLowerCase();
                 const roleInfo = getRoleInfo(c.role);
-                return full.includes(keyword) || roleInfo.label.toLowerCase().includes(keyword);
+                const lastMsg = (c.lastMessageContent || '').toLowerCase();
+                return full.includes(keyword) || roleInfo.label.toLowerCase().includes(keyword) || lastMsg.includes(keyword);
             });
 
             if (filtered.length === 0 && keyword) {
@@ -664,14 +858,37 @@
                 return;
             }
 
+            // SẮP XẾP ƯU TIÊN:
+            // 1. Có tin nhắn chưa đọc lên ĐẦU TIÊN (unreadCount > 0)
+            // 2. Có tin nhắn gần đây nhất lên TIẾP THEO (thời gian mới nhất giảm dần)
+            // 3. Cuối cùng là các tài khoản chưa trò chuyện
+            filtered.sort((a, b) => {
+                if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
+                if (b.unreadCount > 0 && a.unreadCount === 0) return 1;
+                if (a.lastMessageAt !== b.lastMessageAt) {
+                    return b.lastMessageAt - a.lastMessageAt;
+                }
+                return (a.fullName || '').localeCompare(b.fullName || '');
+            });
+
             filtered.forEach(c => {
                 const roleInfo = getRoleInfo(c.role);
                 const initial = c.fullName ? c.fullName.trim().charAt(c.fullName.trim().lastIndexOf(' ') + 1) || c.fullName.charAt(0) : 'U';
                 const avatarColor = getAvatarColor(c.fullName || c.userId);
 
+                let subtitle = roleInfo.label;
+                let timeText = '';
+                if (c.lastMessageContent) {
+                    subtitle = c.lastMessageContent;
+                    timeText = formatChatTime(c.lastMessageAt);
+                }
+
                 const item = createChannelItemElement({
                     title: c.fullName,
-                    subtitle: '',
+                    subtitle: subtitle,
+                    timeText: timeText,
+                    isUnread: c.unreadCount > 0,
+                    unreadCount: c.unreadCount,
                     badgeHtml: `<span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background-color: ${roleInfo.bg}; color: ${roleInfo.color}; white-space: nowrap;">${roleInfo.label}</span>`,
                     isSpecial: false,
                     avatarHtml: `
@@ -680,19 +897,25 @@
                     onClick: async () => {
                         document.getElementById('phonghubNewMessageModal').style.display = 'none';
                         updateWindowsLayout();
-                        try {
-                            const res = await fetch('/api/chat/rooms/direct', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ targetUserId: c.userId })
-                            });
-                            if (res.ok) {
-                                const room = await res.json();
-                                removeChatHead(room.id);
-                                openDockedChat(room.id, c.fullName, initial, 'DIRECT');
+
+                        if (c.roomId) {
+                            removeChatHead(c.roomId);
+                            openDockedChat(c.roomId, c.fullName, initial, 'DIRECT');
+                        } else {
+                            try {
+                                const res = await fetch('/api/chat/rooms/direct', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ targetUserId: c.userId })
+                                });
+                                if (res.ok) {
+                                    const room = await res.json();
+                                    removeChatHead(room.id);
+                                    openDockedChat(room.id, c.fullName, initial, 'DIRECT');
+                                }
+                            } catch (err) {
+                                console.error('Lỗi khi mở cuộc trò chuyện trực tiếp:', err);
                             }
-                        } catch (err) {
-                            console.error('Lỗi khi mở cuộc trò chuyện trực tiếp:', err);
                         }
                     }
                 });
@@ -701,7 +924,7 @@
         }
 
         // Tạo item danh sách giống kênh chat Messenger: Avatar, Tên to rõ, Dòng phụ trạng thái, Badge bên phải
-        function createChannelItemElement({ title, subtitle, badgeHtml, isSpecial, avatarHtml, onClick }) {
+        function createChannelItemElement({ title, subtitle, badgeHtml, isSpecial, avatarHtml, onClick, isUnread, unreadCount, timeText }) {
             const item = document.createElement('div');
             item.className = 'phonghub-contact-item';
             item.style.display = 'flex';
@@ -711,20 +934,42 @@
             item.style.margin = '2px 0';
             item.style.borderRadius = '10px';
             item.style.cursor = 'pointer';
+            item.style.transition = 'background-color 0.15s ease, transform 0.1s ease';
+            if (isUnread) {
+                item.style.backgroundColor = '#f0f9ff';
+            }
             item.addEventListener('click', onClick);
 
+            const titleFontWeight = isUnread ? '700' : '600';
+            const titleColor = isUnread ? '#0f172a' : '#1e293b';
+            const subtitleStyle = isUnread
+                ? 'font-size: 12px; color: #0284c7; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;'
+                : 'font-size: 11.5px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;';
+
+            let rightColHtml = '<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; margin-left: 6px;">';
+            if (timeText) {
+                rightColHtml += `<span style="font-size: 10px; color: ${isUnread ? '#0284c7; font-weight: 700' : '#94a3b8'};">${escapeHtml(timeText)}</span>`;
+            }
+            if (unreadCount > 0) {
+                rightColHtml += `<div style="display: flex; align-items: center; gap: 4px;">${badgeHtml || ''}<span style="background-color: #ef4444; color: #ffffff; font-size: 10.5px; font-weight: 700; border-radius: 12px; padding: 1px 6px; min-width: 17px; text-align: center; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);">${unreadCount}</span></div>`;
+            } else if (badgeHtml) {
+                rightColHtml += badgeHtml;
+            }
+            rightColHtml += '</div>';
+
             item.innerHTML = `
-                ${avatarHtml}
+                <div style="position: relative; flex-shrink: 0;">
+                    ${avatarHtml}
+                    ${isUnread ? '<span style="position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; border-radius: 50%; background-color: #ef4444; border: 2px solid #ffffff;"></span>' : ''}
+                </div>
                 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
                     <div style="display: flex; align-items: center; gap: 5px;">
-                        <span style="font-weight: 600; font-size: 14px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35;">${escapeHtml(title)}</span>
+                        <span style="font-weight: ${titleFontWeight}; font-size: 14px; color: ${titleColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35;">${escapeHtml(title)}</span>
                         ${isSpecial ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="#0084ff" style="flex-shrink: 0;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>' : ''}
                     </div>
-                    ${subtitle ? `<span style="font-size: 11.5px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;">${escapeHtml(subtitle)}</span>` : ''}
+                    ${subtitle ? `<span style="${subtitleStyle}">${escapeHtml(subtitle)}</span>` : ''}
                 </div>
-                <div style="flex-shrink: 0; margin-left: 6px;">
-                    ${badgeHtml}
-                </div>
+                ${rightColHtml}
             `;
             return item;
         }
@@ -781,7 +1026,10 @@
                         updateSeenStatusUI(peerLastReadHeader);
                     }
                     scrollMessagesToBottom();
-                    fetch(`/api/chat/rooms/${roomId}/read`, { method: 'POST' }).then(() => refreshUnreadBadge());
+                    fetch(`/api/chat/rooms/${roomId}/read`, { method: 'POST' }).then(() => {
+                        refreshUnreadBadge();
+                        loadAndRenderContacts();
+                    });
                 }
             } catch (err) {
                 console.error('Lỗi khi tải tin nhắn phòng chat:', err);
@@ -1010,14 +1258,25 @@
 
             const es = new EventSource('/api/chat/stream');
 
-            es.addEventListener('new_message', (e) => {
+            es.addEventListener('new_message', async (e) => {
                 try {
                     const msg = JSON.parse(e.data);
-                    if (activeFloatingRoomId && msg.chatRoomId === activeFloatingRoomId) {
+                    const isCurrentChat = activeFloatingRoomId && String(msg.chatRoomId).toLowerCase() === String(activeFloatingRoomId).toLowerCase();
+                    const isFromMe = String(msg.senderId).toLowerCase() === String(currentUserId).toLowerCase();
+
+                    if (isCurrentChat) {
                         appendDockedMessageUI(msg);
-                        fetch(`/api/chat/rooms/${activeFloatingRoomId}/read`, { method: 'POST' });
+                        fetch(`/api/chat/rooms/${activeFloatingRoomId}/read`, { method: 'POST' }).then(() => {
+                            refreshUnreadBadge();
+                            loadAndRenderContacts();
+                        });
                     } else {
                         refreshUnreadBadge();
+                        await loadAndRenderContacts();
+                        if (!isFromMe) {
+                            playMessageNotificationSound();
+                            showIncomingMessageToast(msg);
+                        }
                     }
                 } catch (err) {
                     console.error('Lỗi nhận tin nhắn realtime SSE:', err);
@@ -1027,7 +1286,7 @@
             es.addEventListener('message_seen', (e) => {
                 try {
                     const data = JSON.parse(e.data);
-                    if (activeFloatingRoomId && data.roomId === activeFloatingRoomId && data.userId !== currentUserId) {
+                    if (activeFloatingRoomId && String(data.roomId).toLowerCase() === String(activeFloatingRoomId).toLowerCase() && String(data.userId).toLowerCase() !== String(currentUserId).toLowerCase()) {
                         updateSeenStatusUI(data.readAt);
                     }
                 } catch (err) {
