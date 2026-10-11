@@ -160,6 +160,16 @@ class MonthlyInvoiceAutomationUnitTest {
                 }
                 return service.issueForContract(contractId, period);
             }
+
+            @Override
+            public List<UUID> findContractsNeedingUtilityCharges(YearMonth period) {
+                return service.findContractsNeedingUtilityCharges(period);
+            }
+
+            @Override
+            public boolean attachUtilityCharges(UUID contractId, YearMonth period) {
+                return service.attachUtilityCharges(contractId, period);
+            }
         };
 
         int created = new MonthlyInvoiceScheduler(flaky).run(LocalDate.of(2026, 10, 15));

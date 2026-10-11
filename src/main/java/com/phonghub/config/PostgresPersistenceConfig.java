@@ -7,11 +7,21 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresMaintenanceTicketRe
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPaymentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetEventRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverItemRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresMeterReadingRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresServiceRateRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverPhotoRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyHouseRulesRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresTenantDocumentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresUserRepository;
 import com.phonghub.adapter.out.supabase.auth.SupabaseIdentityProviderAdapter;
+import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
@@ -20,9 +30,19 @@ import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
+import com.phonghub.application.port.out.RoomAssetEventRepositoryPort;
+import com.phonghub.application.port.out.HandoverItemRepositoryPort;
+import com.phonghub.application.port.out.MeterReadingRepositoryPort;
+import com.phonghub.application.port.out.ServiceRateRepositoryPort;
+import com.phonghub.application.port.out.HandoverPhotoRepositoryPort;
+import com.phonghub.application.port.out.HandoverRepositoryPort;
+import com.phonghub.application.port.out.PropertyHouseRulesRepositoryPort;
+import com.phonghub.application.port.out.RoomAssetRepositoryPort;
+import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.application.port.out.TenantDataProtectionPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -88,13 +108,93 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
+    public MeterReadingRepositoryPort meterReadingRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresMeterReadingRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public ServiceRateRepositoryPort serviceRateRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresServiceRateRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public HandoverRepositoryPort handoverRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresHandoverRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public HandoverPhotoRepositoryPort handoverPhotoRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresHandoverPhotoRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public HandoverItemRepositoryPort handoverItemRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresHandoverItemRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public PropertyHouseRulesRepositoryPort propertyHouseRulesRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresPropertyHouseRulesRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.TenantPrivacyRepositoryPort tenantPrivacyRepository(
+        NamedParameterJdbcTemplate jdbcTemplate
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresTenantPrivacyRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.MaintenanceAttachmentRepositoryPort maintenanceAttachmentRepository(
+        NamedParameterJdbcTemplate jdbcTemplate
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresMaintenanceAttachmentRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.MeterSubmissionRepositoryPort meterSubmissionRepository(
+        NamedParameterJdbcTemplate jdbcTemplate
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresMeterSubmissionRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public TenantDocumentRepositoryPort tenantDocumentRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresTenantDocumentRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public RoomAssetRepositoryPort roomAssetRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresRoomAssetRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public RoomAssetEventRepositoryPort roomAssetEventRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresRoomAssetEventRepository(jdbcTemplate);
+    }
+
+    @Bean
     public ContractRepositoryPort contractRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         return new PostgresContractRepository(jdbcTemplate);
     }
 
     @Bean
-    public TenantRepositoryPort tenantRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        return new PostgresTenantRepository(jdbcTemplate);
+    public TenantRepositoryPort tenantRepository(
+        NamedParameterJdbcTemplate jdbcTemplate,
+        TenantDataProtectionPort tenantDataProtection
+    ) {
+        return new PostgresTenantRepository(jdbcTemplate, tenantDataProtection);
+    }
+
+    @Bean
+    public TenantDataProtectionPort tenantDataProtection(
+        TenantDataProtectionProperties properties
+    ) {
+        return new AesGcmTenantDataProtector(
+            properties.getKeyId(),
+            properties.getEncryptionKey(),
+            properties.getHmacKey()
+        );
     }
 
     @Bean
@@ -103,8 +203,11 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
-    public UserRepositoryPort userRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        return new PostgresUserRepository(jdbcTemplate);
+    public UserRepositoryPort userRepository(
+        NamedParameterJdbcTemplate jdbcTemplate,
+        TenantDataProtectionPort tenantDataProtection
+    ) {
+        return new PostgresUserRepository(jdbcTemplate, tenantDataProtection);
     }
 
     @Bean
@@ -113,8 +216,11 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
-    public PaymentRepositoryPort paymentRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        return new PostgresPaymentRepository(jdbcTemplate);
+    public PaymentRepositoryPort paymentRepository(
+        NamedParameterJdbcTemplate jdbcTemplate,
+        TenantDataProtectionPort tenantDataProtection
+    ) {
+        return new PostgresPaymentRepository(jdbcTemplate, tenantDataProtection);
     }
 
     @Bean
@@ -133,8 +239,11 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
-    public AuditPort auditPort(NamedParameterJdbcTemplate jdbcTemplate) {
-        return new PostgresAuditAdapter(jdbcTemplate, new ObjectMapper());
+    public AuditPort auditPort(
+        NamedParameterJdbcTemplate jdbcTemplate,
+        TenantDataProtectionPort tenantDataProtection
+    ) {
+        return new PostgresAuditAdapter(jdbcTemplate, new ObjectMapper(), tenantDataProtection);
     }
 
     @Bean

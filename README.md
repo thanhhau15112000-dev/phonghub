@@ -15,6 +15,8 @@ tập trung vào các nghiệp vụ property, room, contract và maintenance tic
 - Profile `prod` dùng PostgreSQL bên ngoài, phù hợp với database của Supabase.
 - React SPA không thuộc scope hiện tại; UI chính được server-render bằng
   Thymeleaf, còn REST API vẫn giữ contract cho client tích hợp.
+- Đã có tích hợp thanh toán SePay (webhook) và hóa đơn phí sửa chữa
+  (migration V10-V12).
 - Snapshot này không được gọi là release-ready. Việc deploy thật, CORS, URL
   runtime và dữ liệu Supabase cần được xác minh riêng.
 
@@ -212,11 +214,26 @@ Migration dùng chung:
 - `V2__align_roles_remove_password_hash_and_add_active_contract_constraint.sql`:
   đồng bộ role, tách password sang Supabase Auth và thêm invariant contract.
 - `V3__align_phone_and_add_audit_log.sql`: điều chỉnh phone và tạo audit log.
+- `V6__unique_lower_email_and_username.sql`: email và username duy nhất không
+  phân biệt hoa thường.
+- `V7__add_owner_role_and_property_approval_status.sql`: thêm role OWNER và
+  trạng thái duyệt property.
+- `V9__standardize_property_verification_status.sql`: chuẩn hóa trạng thái xác
+  minh property.
+- `V10__add_sepay_transactions_table.sql`: bảng giao dịch SePay.
+- `V11__link_invoices_to_sepay_payments.sql`: liên kết hóa đơn với thanh toán
+  SePay.
+- `V12__maintenance_repair_fee_invoices.sql`: hóa đơn phí sửa chữa bảo trì.
 
-Fixture local:
+Số V4, V5, V8 thuộc fixture local nên migration dùng chung có khoảng trống;
+migration dùng chung mới tiếp tục từ V13.
 
-- `V4__local_demo_fixture.sql` chỉ nằm trong Flyway location của profile
-  `docker`.
+Fixture local (chỉ nằm trong Flyway location của profile `docker`,
+`db/seed/docker`):
+
+- `V4__local_demo_fixture.sql`
+- `V5__local_vietnamese_fixture_text.sql`
+- `V8__local_demo_owner_fixture.sql`
 - Profile `prod` không quét thư mục fixture này.
 - Fixture hiện mô phỏng cùng kịch bản MVP đang dùng trong test; đây không phải
   bản export đã xác minh từ database Supabase remote.
@@ -242,6 +259,18 @@ Fixture local:
 - `POST /api/maintenance`
 - `POST /api/maintenance/{ticketId}/accept`
 - `POST /api/maintenance/{ticketId}/resolve`
+- `GET /api/maintenance/{id}`
+- `GET /api/contracts/{id}`, `GET /api/contracts/my-active`
+- `POST /api/contracts/{id}/occupants`
+- `POST /api/contracts/{contractId}/occupants/{tenantId}/check-out`
+- `GET /api/properties/{id}`
+- `POST /api/properties/{propertyId}/rooms`
+- `GET`, `PUT /api/rooms/{id}`; `PUT /api/rooms/{id}/status`
+- `GET`, `PUT /api/tenants/{id}`
+- `POST /api/admin/properties/{propertyId}/verify`
+- `POST /api/admin/properties/{propertyId}/reject`
+- `POST /api/v1/payments/sepay/webhook`
+- `GET /api/v1/payments/transactions`, `GET /api/v1/payments/transactions/{id}`
 - `GET /api/chat/rooms` (danh sách phòng chat và số tin chưa đọc)
 - `GET /api/chat/rooms/{roomId}/messages` (lịch sử tin nhắn, kèm header `X-Peer-Last-Read-At`)
 - `POST /api/chat/rooms/{roomId}/messages` (gửi tin nhắn văn bản / icon)
@@ -290,6 +319,15 @@ SUPABASE_SERVICE_ROLE_KEY
 SUPABASE_JWKS_URI
 SUPABASE_JWT_ISSUER
 SUPABASE_JWT_AUDIENCE
+```
+
+Biến cho thanh toán SePay (mặc định rỗng, cần đặt khi dùng thanh toán thật):
+
+```text
+SEPAY_WEBHOOK_API_KEY
+SEPAY_BANK_CODE
+SEPAY_BANK_ACCOUNT_NUMBER
+SEPAY_BANK_ACCOUNT_NAME
 ```
 
 Không đặt giá trị thật trong `application-*.yml`, `.env` đã commit hoặc bundle
@@ -362,3 +400,91 @@ docker build -t phonghub:local .
   `phonghub_pgdata`.
 - Không bật profile `prod` để chạy local. Profile đó yêu cầu đầy đủ biến
   Supabase/JDBC và dùng authentication production.
+
+## Private storage và mã hóa dữ liệu tenant
+
+- Tạo bucket Supabase Storage tên `private-files` (hoặc đặt `SUPABASE_STORAGE_BUCKET`) và giữ bucket ở chế độ private.
+- File upload chỉ nhận JPEG, PNG, WebP và PDF; giới hạn mặc định 10 MiB. Ứng dụng chỉ trả signed URL tối đa 10 phút.
+- Tạo riêng hai khóa 32 byte bằng `openssl rand -base64 32`, rồi đặt `TENANT_DATA_ENCRYPTION_KEY` và `TENANT_DATA_HMAC_KEY`.
+- Đặt `TENANT_DATA_KEY_ID` (ví dụ `v1`). Không đổi hoặc xóa khóa đang dùng trước khi re-encrypt dữ liệu sang key id mới.
+- Migration `V14` mã hóa CCCD cũ bằng AES-256-GCM, tạo HMAC để kiểm tra trùng, rồi xóa cột plaintext. Thiếu key sẽ làm migration dừng an toàn.
+- Tệp vượt giới hạn trả `400`. Ảnh JPEG/PNG được mã hóa lại và WebP bị bỏ EXIF/XMP để xóa dữ liệu vị trí; PDF được lưu nguyên, không xóa metadata.
+- Endpoint: `POST /api/properties/{propertyId}/files`, `GET .../files/signed-url`, `DELETE .../files` (chi tiết trong `docs/api-spec.yaml`).
+
+## Tài sản trong phòng
+
+- Migration `V15` mở rộng `room_assets` (mã tài sản duy nhất, trạng thái GOOD/DAMAGED/LOST/RETIRED, xóa mềm, cột kiểm toán `created_by/updated_at/updated_by`) và thêm `room_asset_events` để lưu lịch sử hư hỏng, sửa chữa, thay mới kèm chi phí.
+- Owner và staff của nhà trọ thêm, sửa, xóa mềm, thêm hàng loạt từ mẫu `BASIC` (5 món) hoặc `FULL` (9 món) và ghi nhận sự kiện. Người thuê của phòng chỉ xem. Sự kiện có thể gắn phiếu bảo trì nhưng phiếu phải thuộc cùng phòng.
+- Ảnh tài sản có thể là liên kết ngoài hoặc tệp tải lên kho riêng tư; tệp chỉ được xem qua link ký có hạn.
+- Mã QR được sinh khi gọi (`GET /api/assets/{assetId}/qr` hoặc nút "Mã QR" ở trang phòng) và không được lưu; nội dung QR là đường dẫn trang phòng nên người quét phải đăng nhập.
+- Áp dụng mẫu hàng loạt hai lần sẽ tạo trùng tài sản; kiểm tra danh sách phòng trước khi áp dụng.
+
+## Hồ sơ giấy tờ người thuê (CCCD, GPLX)
+
+- Migration `V16` tạo `tenant_documents`: mỗi người thuê có tối đa một dòng cho mỗi loại giấy tờ. Số CCCD vẫn ở bảng `tenants` (đã mã hóa ở `V14`); số GPLX được mã hóa AES-256-GCM kèm HMAC để chặn trùng giữa các người thuê.
+- Ảnh giấy tờ (jpeg/png/webp) được kiểm tra bằng magic bytes, xóa metadata, **mã hóa AES-256-GCM rồi mới lưu** vào kho riêng tư (phần mở rộng `.enc`). Dùng chung khóa `TENANT_DATA_*` với số CCCD, nên mất khóa là mất khả năng đọc ảnh; hãy sao lưu khóa an toàn và chỉ xoay khóa sau khi mã hóa lại dữ liệu.
+- Quyền: admin, owner/staff của nhà trọ và chính người thuê (phải có hợp đồng tại nhà trọ đó) được xem và tải lên; chỉ owner/staff/admin được xóa. Kỹ thuật viên và owner nhà khác nhận 403.
+- Xem thường chỉ trả loại giấy tờ và số che (`****1234`), không trả ảnh. Xem đầy đủ (`POST .../documents/{type}/reveal`, hoặc nút "Xem đầy đủ" ở trang `/properties/{propertyId}/tenants/{tenantId}/documents`) yêu cầu nhập lại mật khẩu của chính người xem. Sai mật khẩu trả 403 và được ghi nhật ký; 5 lần sai trong 10 phút trả 429.
+- Mỗi lần xem (danh sách, một giấy tờ, xem đầy đủ, xem thất bại, tải lên, xóa) ghi đúng một sự kiện audit; nhật ký không chứa số giấy tờ hay mật khẩu. Phản hồi xem đầy đủ có `Cache-Control: no-store`.
+- Giới hạn đã biết: bộ đếm lần nhập sai nằm trong bộ nhớ của từng instance (sẽ được thay bằng rate limit chung ở #77); xác nhận mật khẩu dùng đăng nhập của nhà cung cấp danh tính nên mỗi lần kiểm tra tạo thêm một phiên đăng nhập phía nhà cung cấp.
+
+## Mã hóa thông tin cá nhân khi lưu
+
+- Migration Java `V17` mã hóa các cột sau bằng AES-256-GCM (định dạng `enc1.<key id>.<nonce>.<ciphertext>`, mỗi cột có ngữ cảnh riêng nên không thể dán ciphertext sang cột khác): `users` (email, username, họ tên, số điện thoại), `tenants` (họ tên, số điện thoại, email, địa chỉ thường trú), `sepay_transactions` (số tài khoản, tài khoản phụ, nội dung, mô tả) và `audit_logs.details`.
+- Email, username và số điện thoại của `users` có cột chỉ mục mù `*_hmac` (HMAC-SHA256 của giá trị đã chuẩn hóa: bỏ khoảng trắng, chữ thường, bỏ ký tự phân tách số điện thoại). Đăng nhập, tra cứu và ràng buộc duy nhất dùng chỉ mục này nên vẫn không phân biệt hoa thường; các ràng buộc duy nhất trên dữ liệu thường đã bị gỡ. Số điện thoại tenant có `phone_hmac` để tìm khớp chính xác.
+- Họ tên và địa chỉ không còn tìm hoặc sắp xếp được trong SQL; việc lọc phải làm trong ứng dụng. Tìm theo một phần số điện thoại hoặc tên không còn được hỗ trợ ở tầng dữ liệu.
+- Nhật ký audit chỉ ghi id, vai trò, tên các trường đã đổi và số đã che; không ghi họ tên, số điện thoại, email, username hay địa chỉ. Thông báo trùng CCCD không còn nêu tên người đang giữ số đó.
+- Dùng chung khóa `TENANT_DATA_*` với CCCD. **Trước khi deploy phiên bản có `V17`:** sao lưu khóa ở nơi độc lập với DB, chạy `pg_dump` của database, và chắc chắn cả ba biến `TENANT_DATA_*` đã đặt trên môi trường chạy migration. Migration không đảo ngược được nếu mất khóa. Muốn xoay khóa cần tác vụ mã hóa lại dữ liệu (chưa có).
+- Supabase Auth vẫn lưu email của tài khoản ở hệ thống ngoài, không nằm trong phạm vi mã hóa này. `properties.address` là địa chỉ kinh doanh nên giữ nguyên dạng thường.
+
+## Biên bản check-in
+
+- Migration `V18` mở rộng `handovers` (trạng thái, mã băm điều khoản, bản chụp nội quy, người duyệt, cột kiểm toán), đổi ràng buộc duy nhất thành `(contract_id, type)` để mỗi hợp đồng chỉ có một biên bản check-in và còn chỗ cho check-out (#63), và thêm `handover_photos`, `handover_items`, `property_house_rules`. Dòng `handovers` có từ trước V18 được giữ ở trạng thái `APPROVED`.
+- **Thứ tự nghiệp vụ: kích hoạt hợp đồng trước, check-in sau.** Biên bản chỉ tạo được cho hợp đồng `ACTIVE`; duyệt biên bản không đổi trạng thái hợp đồng hay phòng, vì hai thứ đó đã đổi lúc kích hoạt.
+- Luồng: `DRAFT` (owner/staff nhập chỉ số điện nước, tình trạng phòng, chìa khóa, ảnh) -> `PENDING_TENANT` (đã gửi; hệ thống chụp danh sách tài sản của phòng, nội quy và mã băm điều khoản) -> `PENDING_APPROVAL` (người thuê chính xác nhận, cần đã tải CCCD) -> `APPROVED` hoặc `REJECTED` (từ chối phải có lý do; owner/staff mở lại về `DRAFT` để sửa và gửi lại, vẫn là một biên bản).
+- Gửi biên bản cần ít nhất một ảnh phòng, một ảnh đồng hồ điện và một ảnh đồng hồ nước. Chỉ sửa nội dung và ảnh khi ở `DRAFT`. Duyệt khóa dòng trong cơ sở dữ liệu nên hai lần duyệt đồng thời chỉ một lần thành công, lần còn lại trả `409`; lỗi giữa chừng khi duyệt hoàn tác toàn bộ.
+- Nội quy chung lưu ở `property_house_rules` (`PUT /api/properties/{id}/house-rules` hoặc ô nhập ở trang biên bản); mỗi lần sửa tăng phiên bản, biên bản đã gửi giữ bản chụp và mã băm cũ.
+- Quyền: tạo, sửa, gửi, duyệt, từ chối, mở lại thuộc admin và owner/staff của nhà trọ; chỉ người thuê chính xác nhận; người thuê của hợp đồng được xem. Kỹ thuật viên, owner nhà khác và người thuê khác nhận `403`. Mỗi bước ghi một sự kiện audit không chứa dữ liệu cá nhân.
+- Ảnh bàn giao (phòng, đồng hồ) không phải dữ liệu cá nhân nên được làm sạch EXIF và lưu ở kho riêng tư, xem qua link ký có hạn; ảnh giấy tờ của người thuê vẫn được mã hóa theo mục "Hồ sơ giấy tờ".
+
+## Biên bản check-out
+
+- Migration `V19` thêm `handovers.final_deduction` và `handover_items.deduction_amount`; check-out dùng chung bảng và luồng trạng thái với check-in (`type = CHECK_OUT`), nên một hợp đồng có tối đa một check-in và một check-out.
+- Chỉ lập check-out cho hợp đồng `ACTIVE` đã có biên bản check-in được duyệt. Danh sách tài sản khởi tạo từ bản chụp check-in; nhân viên cập nhật tình trạng lúc trả (`GOOD`, `DAMAGED`, `LOST`) và khoản khấu trừ đề xuất cho từng tài sản (tài sản còn tốt không được đề xuất khấu trừ). Chỉ số điện nước nhập là chỉ số cuối kỳ; cần đủ ảnh phòng và ảnh hai đồng hồ trước khi gửi.
+- **Duyệt check-out chỉ dành cho owner hoặc admin** (owner chốt khoản khấu trừ, mặc định bằng tổng đề xuất). Trong một transaction: biên bản `APPROVED`, hợp đồng `TERMINATED`, phòng về `AVAILABLE` hoặc `MAINTENANCE` nếu có tài sản hỏng hoặc mất. Nếu bất kỳ bước nào lỗi (kể cả ghi audit) thì hoàn tác toàn bộ; đã có test trên PostgreSQL thật.
+- API `/api/contracts/{id}/check-out...` và trang `/contracts/{id}/check-out`. Nút kết thúc hợp đồng trực tiếp (`/terminate`) vẫn còn cho các trường hợp không có biên bản.
+- Chưa làm: tính tiền cọc và quyết toán (ngoài phạm vi issue); so sánh check-in/check-out và xuất PDF thuộc #72.
+
+## Sửa thông tin nhà trọ
+
+- `PATCH /api/properties/{id}` và nút "Sửa thông tin" ở trang nhà trọ, dành cho owner của nhà trọ và admin; staff, kỹ thuật viên, owner nhà khác và người thuê nhận `403`.
+- **Duyệt lại:** tên và địa chỉ là thông tin định danh. Owner đổi một trong hai trên nhà trọ đã duyệt thì nhà trọ quay về `PENDING`; trong lúc chờ duyệt không tạo được phòng hoặc hợp đồng mới (hợp đồng đang hiệu lực không bị ảnh hưởng). Nhà trọ bị từ chối (`REJECTED`) được gửi duyệt lại khi owner sửa và lý do từ chối bị xóa. Sửa mô tả hoặc tổng số phòng không cần duyệt lại. Admin sửa không đổi trạng thái.
+- Audit `PROPERTY_UPDATED` chỉ ghi tên các trường đã đổi và trạng thái trước/sau, không ghi giá trị. Gửi dữ liệu không đổi không tạo audit.
+- Chưa làm: kiểm tra tổng số phòng không nhỏ hơn số phòng đang có.
+
+## Chỉ số điện nước theo kỳ
+
+- `GET/POST /api/rooms/{id}/meter-readings`, `POST|GET /api/meter-readings/{id}/photo`, `GET/POST /api/properties/{id}/service-rates` và `PATCH /api/service-rates/{id}` (migration V20). Ghi chỉ số dành cho owner/staff của nhà trọ; xem cho cả kỹ thuật viên và tenant đang ở phòng; người ngoài nhà trọ nhận `403`.
+- **Kỳ = tháng của ngày ghi**; mỗi phòng/loại (điện, nước)/kỳ chỉ một bản ghi (unique ở DB). Trùng kỳ hoặc ghi kỳ cũ hơn kỳ gần nhất nhận `409`; không ghi ngày ở tương lai.
+- **Chỉ số kỳ trước** lấy từ bản ghi gần nhất, nếu chưa có thì từ biên bản check-in đã duyệt; nếu cả hai đều chưa có thì phải gửi `baselineValue`. Không cho nhập tay đè lên giá trị đã suy ra.
+- **Tiêu thụ = mới - cũ.** Số mới nhỏ hơn số cũ bị chặn (`400`) trừ khi khai báo thay đồng hồ (`replacement`: chỉ số cuối đồng hồ cũ, chỉ số bắt đầu đồng hồ mới, ghi chú bắt buộc); khi đó tiêu thụ = (cuối đồng hồ cũ - kỳ trước) + (mới - bắt đầu đồng hồ mới).
+- Ảnh đồng hồ (jpeg/png/webp) lưu private như các file khác, xem qua signed URL hết hạn sau 10 phút. Đơn giá dịch vụ cấu hình theo nhà trọ, chỉ owner của nhà trọ hoặc admin tạo/sửa, tên dịch vụ không trùng trong cùng nhà trọ. Audit: `METER_READING_RECORDED`, `METER_PHOTO_ATTACHED`, `SERVICE_RATE_CREATED/UPDATED`.
+- Chưa làm: màn hình nhập chỉ số (mới có API), đưa tiền điện nước vào hóa đơn (#66), OCR đọc ảnh (#67).
+
+## Điện, nước và dịch vụ trên hóa đơn tháng
+
+- Migration V21 thêm `reading_id`, `rate_id` vào `invoice_items` để biết mỗi dòng được tính từ chỉ số và đơn giá nào. `invoices.utility_amount` giờ ghi tổng các dòng này, `other_amount` là phần còn lại (phí sửa chữa).
+- **Điện/nước** tính theo chỉ số cùng kỳ với hóa đơn (kỳ ghi chỉ số = tháng của ngày ghi): tiêu thụ x đơn giá, làm tròn đến đồng; mỗi đơn giá `PER_KWH` / `PER_M3` của nhà trọ là một dòng. Tiêu thụ bằng 0 hoặc đơn giá 0 thì không có dòng. Chỉ số gắn với hợp đồng khác của cùng phòng (khách trước) bị bỏ qua.
+- **Dịch vụ cố định** (`PER_ROOM_FLAT`, `PER_PERSON` x số người đang ở, tối thiểu 1) chỉ tính lúc phát hành hóa đơn, nên đơn giá thêm sau đó không làm đổi hóa đơn người thuê đã nhận.
+- **Thiếu chỉ số không chặn hóa đơn tiền thuê.** Hóa đơn vẫn phát hành chỉ với tiền thuê; trang hợp đồng và trang thanh toán hiện cảnh báo (chưa có chỉ số điện/nước kỳ này, chưa cấu hình đơn giá, hoặc chỉ số ghi sau khi hóa đơn đã có thanh toán). Nhà trọ không cấu hình đơn giá nước thì không bị cảnh báo thiếu nước.
+- **Scheduler** (mỗi giờ và lúc khởi động) thêm dòng điện/nước cho hóa đơn tháng hiện tại và tháng trước khi chỉ số được ghi sau lúc phát hành. Chỉ thêm vào hóa đơn chưa ai trả đồng nào (đã trả một phần hoặc đã trả đủ thì giữ nguyên để không lệch số tiền người thuê đã chuyển); mỗi cặp chỉ số/đơn giá chỉ tính một lần (unique ở DB), dòng được khóa theo hóa đơn nên không ghi đè khoản webhook vừa cộng.
+- Chưa làm: sửa chỉ số đã ghi rồi tính lại hóa đơn, xử lý thanh toán vượt số tiền sau khi tổng đổi (#81).
+
+## Thanh toán dư và giao dịch cần xem xét
+
+- Migration V22 thêm vào `sepay_transactions` ba cột: `applied_amount` (đã cộng vào hóa đơn), `excess_amount` (phần dư chưa ghi nhận) và `review_reason` (khác NULL nghĩa là cần xem xét). Giao dịch cũ đã khớp hóa đơn được coi là đã cộng đủ.
+- Khi webhook về, số tiền được chia trước khi cộng: chỉ cộng tối đa **số còn nợ** của hóa đơn (hóa đơn đã khóa dòng nên số còn nợ không đổi giữa lúc tính và lúc cộng); phần còn lại là phần dư. `Invoice.applyPayment` giờ từ chối số tiền lớn hơn số còn nợ, không còn cộng quá tổng.
+- Ba lý do cần xem xét: `OVERPAID` (chuyển dư so với số còn nợ), `INVOICE_NOT_PAYABLE` (hóa đơn đã trả đủ, đã hủy hoặc đã gộp vào hóa đơn tháng nên không nhận thêm; cả số tiền là phần dư) và `UNMATCHED` (không khớp hóa đơn nào theo nội dung chuyển khoản). Trả thiếu chỉ làm hóa đơn `PARTIALLY_PAID`, không cần xem xét.
+- Thông báo cho owner (hoặc admin nếu không khớp được hợp đồng) nêu rõ số tiền dư và việc cần làm. Admin xem được `appliedAmount`, `excessAmount`, `reviewReason` ở `GET /api/v1/payments/transactions`.
+- Webhook gửi lại cùng `sepay_id` vẫn được bỏ qua (không cộng và không ghi dư lần hai).
+- Chưa làm: màn hình xử lý giao dịch cần xem xét (đánh dấu đã hoàn tiền/cấn trừ), tự cấn trừ phần dư vào kỳ sau, biên lai và đối soát (#82).

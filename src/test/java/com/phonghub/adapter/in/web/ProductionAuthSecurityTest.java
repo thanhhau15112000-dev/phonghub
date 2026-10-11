@@ -62,7 +62,10 @@ import org.springframework.test.web.servlet.MockMvc;
     "supabase.jwt-audience=authenticated",
     "spring.datasource.url=jdbc:postgresql://localhost:5432/mock",
     "spring.datasource.username=mock",
-    "spring.datasource.password=mock"
+    "spring.datasource.password=mock",
+    "phonghub.security.tenant-data.key-id=v1",
+    "phonghub.security.tenant-data.encryption-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "phonghub.security.tenant-data.hmac-key=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="
 })
 class ProductionAuthSecurityTest {
 
@@ -593,6 +596,33 @@ class ProductionAuthSecurityTest {
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/account/profile"))
             .andExpect(flash().attribute("errorMessage", "Số điện thoại không hợp lệ (phải gồm 10 chữ số bắt đầu bằng 0)"));
+    }
+
+    @Test
+    void fileStorageEndpointsRequireBearerTokenInProd() throws Exception {
+        String files = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/files";
+        mockMvc.perform(get(files + "/signed-url").param("objectKey", "x"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(delete(files).param("objectKey", "x"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void roomAssetEndpointsRequireBearerTokenInProd() throws Exception {
+        String roomId = "10101010-1010-1010-1010-101010101010";
+        mockMvc.perform(get("/api/rooms/" + roomId + "/assets")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/assets/" + roomId)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/assets/" + roomId + "/qr")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void tenantDocumentEndpointsRequireBearerTokenInProd() throws Exception {
+        String base = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/tenants/44444444-0000-0000-0000-444444444441/documents";
+        mockMvc.perform(get(base)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get(base + "/GPLX")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post(base + "/GPLX/reveal").contentType("application/json").content("{\"password\":\"x\"}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(delete(base + "/GPLX")).andExpect(status().isUnauthorized());
     }
 
     @Test

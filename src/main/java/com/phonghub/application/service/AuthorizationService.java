@@ -162,14 +162,18 @@ public class AuthorizationService {
         if (user.role() == UserRole.ADMIN) {
             return;
         }
+        if (user.role() == UserRole.STAFF) {
+            if (tenantPropertyIds(tenantId).stream()
+                .anyMatch(pId -> assignmentPort.isUserAssignedToProperty(user.id(), pId))) {
+                return;
+            }
+            throw new UnauthorizedPropertyAccessException(String.format(
+                "Nhân viên '%s' không phụ trách nhà trọ nào mà người thuê '%s' đang hoặc đã từng cư trú.",
+                user.fullName(), tenantId
+            ));
+        }
         if (user.role() == UserRole.OWNER) {
-            Set<UUID> propertyIds = new HashSet<>();
-            for (Contract c : contractRepositoryPort.findByPrimaryTenantId(tenantId)) {
-                propertyIds.add(c.getPropertyId());
-            }
-            for (Contract c : contractRepositoryPort.findByOccupantTenantId(tenantId)) {
-                propertyIds.add(c.getPropertyId());
-            }
+            Set<UUID> propertyIds = tenantPropertyIds(tenantId);
 
             boolean ownsProperty = propertyIds.stream()
                 .map(propertyRepositoryPort::findById)
@@ -188,7 +192,7 @@ public class AuthorizationService {
         }
 
         throw new UnauthorizedPropertyAccessException(String.format(
-            "Người dùng '%s' với vai trò '%s' không có quyền cập nhật thông tin người thuê. Chỉ Chủ nhà trọ liên quan hoặc Quản trị viên mới được phép.",
+            "Người dùng '%s' với vai trò '%s' không có quyền cập nhật thông tin người thuê. Chỉ Chủ nhà trọ, Nhân viên phụ trách hoặc Quản trị viên mới được phép.",
             user.fullName(), user.role()
         ));
     }
@@ -211,13 +215,7 @@ public class AuthorizationService {
             throw new UnauthorizedPropertyAccessException("Tenant can only view their own tenant profile");
         }
 
-        Set<UUID> propertyIds = new HashSet<>();
-        for (Contract c : contractRepositoryPort.findByPrimaryTenantId(tenantId)) {
-            propertyIds.add(c.getPropertyId());
-        }
-        for (Contract c : contractRepositoryPort.findByOccupantTenantId(tenantId)) {
-            propertyIds.add(c.getPropertyId());
-        }
+        Set<UUID> propertyIds = tenantPropertyIds(tenantId);
 
         if (user.role() == UserRole.OWNER) {
             boolean ownsProperty = propertyIds.stream()
@@ -272,6 +270,71 @@ public class AuthorizationService {
             .anyMatch(c -> c.isActive() && c.getRoomId().equals(roomId));
     }
 
+    /**
+     * Hồ sơ giấy tờ: admin; owner/staff của nhà trọ; hoặc chính người thuê đó. Người thuê phải có hợp đồng
+     * (kể cả DRAFT) hoặc là người ở cùng tại nhà trọ trong đường dẫn. Kỹ thuật viên không có quyền.
+     */
+    public void assertCanAccessTenantDocuments(CurrentUser user, UUID propertyId, UUID tenantId) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (propertyId == null || tenantId == null) {
+            throw new IllegalArgumentException("Property and tenant are required");
+        }
+        switch (user.role()) {
+            case ADMIN -> { }
+            case OWNER -> assertCanManageProperty(user, propertyId);
+            case STAFF -> {
+                assertCanManageProperty(user, propertyId);
+                if (!assignmentPort.find(user.id(), propertyId).map(a -> a.canViewDocuments()).orElse(false)) {
+                    throw new UnauthorizedPropertyAccessException(String.format(
+                        "Staff %s chưa được cấp quyền xem giấy tờ người thuê tại nhà trọ %s", user.fullName(), propertyId));
+                }
+            }
+            case TENANT -> {
+                Tenant self = tenantRepositoryPort.findByUserId(user.id()).orElse(null);
+                if (self == null || !self.id().equals(tenantId)) {
+                    throw new UnauthorizedPropertyAccessException("Tenant can only access their own documents");
+                }
+            }
+            default -> throw new UnauthorizedPropertyAccessException(
+                "Role " + user.role() + " cannot access tenant documents");
+        }
+        if (!isTenantLinkedToProperty(tenantId, propertyId)) {
+            throw new UnauthorizedPropertyAccessException("Tenant has no contract at property " + propertyId);
+        }
+    }
+
+    /** Xóa hồ sơ giấy tờ chỉ dành cho người quản lý nhà trọ; người thuê không tự xóa. */
+    public void assertCanDeleteTenantDocuments(CurrentUser user, UUID propertyId, UUID tenantId) {
+        if (user != null && user.role() == UserRole.TENANT) {
+            throw new UnauthorizedPropertyAccessException("Tenant cannot delete documents");
+        }
+        assertCanAccessTenantDocuments(user, propertyId, tenantId);
+    }
+
+    private boolean isTenantLinkedToProperty(UUID tenantId, UUID propertyId) {
+        return tenantPropertyIds(tenantId).contains(propertyId);
+    }
+
+    /** Nhà trọ mà tenant thuộc về: có hợp đồng (chính hoặc ở cùng) hoặc được gắn trực tiếp khi owner/staff thêm. */
+    public Set<UUID> tenantPropertyIds(UUID tenantId) {
+        Set<UUID> propertyIds = new HashSet<>();
+        for (Contract c : contractRepositoryPort.findByPrimaryTenantId(tenantId)) {
+            propertyIds.add(c.getPropertyId());
+        }
+        for (Contract c : contractRepositoryPort.findByOccupantTenantId(tenantId)) {
+            propertyIds.add(c.getPropertyId());
+        }
+        propertyIds.addAll(tenantRepositoryPort.findLinkedPropertyIds(tenantId));
+        return propertyIds;
+    }
+
+    /** Người thuê chỉ xem được dữ liệu của phòng mình đang ở (hợp đồng ACTIVE, người thuê chính hoặc người ở cùng). */
+    public boolean canTenantViewRoom(CurrentUser user, UUID roomId) {
+        return canTenantViewTicket(user, roomId, null);
+    }
+
     /** Xem hóa đơn: người thuê của hợp đồng (chính hoặc ở cùng), hoặc người có quyền với nhà trọ. */
     public void assertCanViewInvoice(CurrentUser user, com.phonghub.domain.model.Invoice invoice) {
         Contract contract = contractRepositoryPort.findById(invoice.getContractId())
@@ -289,8 +352,24 @@ public class AuthorizationService {
         assertCanAccessProperty(user, contract.getPropertyId());
     }
 
+    /** Hợp đồng, bàn giao, phát hành hóa đơn: staff cần được owner cấp quyền can_manage_contracts. */
     public void assertCanManageContracts(CurrentUser user, UUID propertyId) {
         assertCanManageProperty(user, propertyId);
+        if (user.role() == UserRole.STAFF && !assignmentPort.find(user.id(), propertyId)
+            .map(assignment -> assignment.canManageContracts()).orElse(false)) {
+            throw new UnauthorizedPropertyAccessException(String.format(
+                "Staff %s chưa được cấp quyền quản lý hợp đồng tại nhà trọ %s", user.fullName(), propertyId));
+        }
+    }
+
+    /** Thu tiền: staff cần quyền can_collect_payment. */
+    public void assertCanCollectPayment(CurrentUser user, UUID propertyId) {
+        assertCanManageProperty(user, propertyId);
+        if (user.role() == UserRole.STAFF && !assignmentPort.find(user.id(), propertyId)
+            .map(assignment -> assignment.canCollectPayment()).orElse(false)) {
+            throw new UnauthorizedPropertyAccessException(String.format(
+                "Staff %s chưa được cấp quyền thu tiền tại nhà trọ %s", user.fullName(), propertyId));
+        }
     }
 
     public void assertTechnicianCanWorkOnProperty(CurrentUser user, UUID propertyId) {

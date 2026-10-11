@@ -145,7 +145,7 @@ public class AuthService implements AuthUseCase {
             currentUser.id(),
             "USER",
             currentUser.id().toString(),
-            Map.of("username", user.username())
+            Map.of("userId", user.id().toString())
         ));
     }
 
@@ -182,7 +182,7 @@ public class AuthService implements AuthUseCase {
             caller.id(),
             "USER",
             targetUserId.toString(),
-            Map.of("targetUsername", targetUser.username(), "targetRole", targetUser.role().name())
+            Map.of("targetUserId", targetUser.id().toString(), "targetRole", targetUser.role().name())
         ));
 
         log.info("Admin [{}] (ID: {}) successfully reset password for user [{}] (ID: {}, Role: {})",
@@ -274,7 +274,7 @@ public class AuthService implements AuthUseCase {
             caller.id(),
             "USER",
             authUserId.toString(),
-            Map.of("username", savedUser.username(), "role", savedUser.role().name())
+            Map.of("userId", savedUser.id().toString(), "role", savedUser.role().name())
         ));
 
         return new AdminCreateUserResult(
@@ -324,7 +324,7 @@ public class AuthService implements AuthUseCase {
             "USER",
             targetUserId.toString(),
             Map.of(
-                "username", targetUser.username() != null ? targetUser.username() : "",
+                "userId", targetUser.id().toString(),
                 "role", targetUser.role().name()
             )
         ));

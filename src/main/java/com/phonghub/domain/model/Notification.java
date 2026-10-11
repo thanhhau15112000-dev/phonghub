@@ -88,6 +88,18 @@ public class Notification {
         );
     }
 
+    public static Notification createGeneral(
+        String title,
+        String message,
+        UUID targetUserId,
+        String targetUsername,
+        String targetFullName,
+        UserRole targetRole
+    ) {
+        return new Notification(UUID.randomUUID(), NotificationType.GENERAL, title, message, targetUserId,
+            targetUsername, targetFullName, targetRole, Instant.now(), false, null, null);
+    }
+
     public void markResolved(String resolutionNote) {
         this.resolved = true;
         this.resolvedAt = Instant.now();

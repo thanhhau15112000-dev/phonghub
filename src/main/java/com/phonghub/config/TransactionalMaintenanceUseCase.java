@@ -2,6 +2,7 @@ package com.phonghub.config;
 
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.domain.model.MaintenanceTicket;
+import com.phonghub.domain.model.MaintenanceTicketEvent;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,24 @@ public class TransactionalMaintenanceUseCase implements MaintenanceUseCase {
     @Transactional(rollbackFor = Exception.class)
     public MaintenanceTicket acceptTicket(UUID ticketId) {
         return delegate.acceptTicket(ticketId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MaintenanceTicketEvent> getTimeline(UUID ticketId) {
+        return delegate.getTimeline(ticketId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket assignTechnician(UUID ticketId, UUID technicianId) {
+        return delegate.assignTechnician(ticketId, technicianId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket rejectTicket(UUID ticketId, String reason) {
+        return delegate.rejectTicket(ticketId, reason);
     }
 
     @Override

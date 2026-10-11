@@ -1,6 +1,8 @@
 package com.phonghub.adapter.out.audit;
 
+import com.phonghub.adapter.out.security.PersonalDataFields;
 import com.phonghub.application.port.out.AuditPort;
+import com.phonghub.application.port.out.TenantDataProtectionPort;
 import java.sql.Timestamp;
 import java.util.Map;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -11,9 +13,15 @@ public class PostgresAuditAdapter implements AuditPort {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final TenantDataProtectionPort protector;
 
-    public PostgresAuditAdapter(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    public PostgresAuditAdapter(
+        NamedParameterJdbcTemplate jdbcTemplate,
+        ObjectMapper objectMapper,
+        TenantDataProtectionPort protector
+    ) {
         this.jdbcTemplate = jdbcTemplate;
+        this.protector = protector;
         this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
     }
 
@@ -39,7 +47,7 @@ public class PostgresAuditAdapter implements AuditPort {
             .addValue("actorId", event.actorId())
             .addValue("targetType", event.targetType())
             .addValue("targetId", event.targetId())
-            .addValue("details", detailsJson)
+            .addValue("details", protector.encryptField(PersonalDataFields.AUDIT_DETAILS, detailsJson))
             .addValue("createdAt", Timestamp.from(event.timestamp()));
 
         jdbcTemplate.update(sql, params);

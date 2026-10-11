@@ -60,7 +60,9 @@ class InvoiceUnitTest {
         assertEquals(InvoiceStatus.PARTIALLY_PAID, invoice.getStatus());
         assertEquals(0, new BigDecimal("2000000").compareTo(invoice.remainingAmount()));
 
-        invoice.applyPayment(new BigDecimal("2500000"), Instant.now());
+        assertThrows(DomainException.class, () -> invoice.applyPayment(new BigDecimal("2500000"), Instant.now()));
+        assertEquals(InvoiceStatus.PARTIALLY_PAID, invoice.getStatus());
+        invoice.applyPayment(new BigDecimal("2000000"), Instant.now());
         assertEquals(InvoiceStatus.PAID, invoice.getStatus());
         assertEquals(0, invoice.remainingAmount().signum());
         assertFalse(invoice.isPayable());

@@ -19,6 +19,9 @@ public record MaintenanceTicketResponse(
     MaintenanceStatus status,
     BigDecimal repairCost,
     String resolutionNotes,
+    String rejectionReason,
+    Instant dueAt,
+    boolean overdue,
     Instant createdAt,
     Instant updatedAt
 ) {
@@ -35,6 +38,9 @@ public record MaintenanceTicketResponse(
             ticket.getStatus(),
             ticket.getRepairCost(),
             ticket.getResolutionNotes(),
+            ticket.getRejectionReason(),
+            ticket.getDueAt(),
+            ticket.isOverdue(Instant.now()),
             ticket.getCreatedAt(),
             ticket.getUpdatedAt()
         );

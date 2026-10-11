@@ -26,6 +26,11 @@ public class TransactionalInvoiceUseCase implements InvoiceUseCase {
     }
 
     @Override
+    public java.util.Map<UUID, List<String>> utilityWarnings(UUID contractId) {
+        return delegate.utilityWarnings(contractId);
+    }
+
+    @Override
     public java.util.Optional<Invoice> findFeeInvoiceForTicket(UUID ticketId) {
         return delegate.findFeeInvoiceForTicket(ticketId);
     }
