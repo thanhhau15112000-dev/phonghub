@@ -1,4 +1,4 @@
--- V15: Thêm hỗ trợ hình ảnh và video cho tin nhắn chat
+-- V34: Thêm hỗ trợ hình ảnh và video cho tin nhắn chat
 ALTER TABLE chat_messages
     ALTER COLUMN content DROP NOT NULL,
     ADD COLUMN media_url TEXT,
