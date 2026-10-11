@@ -218,6 +218,31 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.MeterSubmissionUseCase meterSubmissionUseCase(
+        com.phonghub.application.port.out.MeterSubmissionRepositoryPort submissionRepo,
+        RoomRepositoryPort roomRepo,
+        PropertyRepositoryPort propertyRepo,
+        UserRepositoryPort userRepo,
+        NotificationRepositoryPort notificationRepo,
+        UtilityUseCase utilityUseCase,
+        MeterOcrPort meterOcrPort,
+        FileStoragePort fileStoragePort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        StorageProperties storageProperties,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.ocr.min-confidence:0.85}")
+        java.math.BigDecimal minConfidence,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.ocr.match-tolerance:0.5}")
+        java.math.BigDecimal tolerance
+    ) {
+        return new TransactionalMeterSubmissionUseCase(new com.phonghub.application.service.MeterSubmissionService(
+            submissionRepo, roomRepo, propertyRepo, userRepo, notificationRepo, utilityUseCase, meterOcrPort,
+            fileStoragePort, currentUserPort, authorizationService, auditPort, minConfidence, tolerance,
+            storageProperties.getMaxFileSizeBytes()));
+    }
+
+    @Bean
     public com.phonghub.application.service.TenantLockPolicy tenantLockPolicy(
         ContractRepositoryPort contractRepo,
         @org.springframework.beans.factory.annotation.Value("${phonghub.privacy.retention-days:90}") long retentionDays

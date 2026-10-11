@@ -152,6 +152,13 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.application.port.out.MeterSubmissionRepositoryPort meterSubmissionRepository(
+        NamedParameterJdbcTemplate jdbcTemplate
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresMeterSubmissionRepository(jdbcTemplate);
+    }
+
+    @Bean
     public TenantDocumentRepositoryPort tenantDocumentRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         return new PostgresTenantDocumentRepository(jdbcTemplate);
     }
