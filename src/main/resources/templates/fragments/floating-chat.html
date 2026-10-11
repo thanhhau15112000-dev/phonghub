@@ -777,9 +777,11 @@
             const globalUnread = globalRoom ? (globalRoom.unreadCount || 0) : 0;
             let globalSubtitle = 'Kênh thông báo & trao đổi toàn hệ thống';
             let globalTime = '';
-            if (globalRoom && globalRoom.lastMessageContent) {
-                const senderPrefix = globalRoom.lastMessageSender ? globalRoom.lastMessageSender + ': ' : '';
+            if (globalUnread > 0 && globalRoom && globalRoom.lastMessageContent) {
+                const senderPrefix = globalRoom.lastMessageSenderName ? globalRoom.lastMessageSenderName + ': ' : '';
                 globalSubtitle = senderPrefix + globalRoom.lastMessageContent;
+                globalTime = formatChatTime(globalRoom.lastMessageAt);
+            } else if (globalRoom && globalRoom.lastMessageAt) {
                 globalTime = formatChatTime(globalRoom.lastMessageAt);
             }
 
@@ -797,6 +799,15 @@
                     onClick: async () => {
                         document.getElementById('phonghubNewMessageModal').style.display = 'none';
                         updateWindowsLayout();
+
+                        // Xóa chấm đỏ Kênh chung ngay lập tức
+                        if (globalRoom) {
+                            globalRoom.unreadCount = 0;
+                        }
+                        updateGlobalBadgeCount();
+                        const filterInput = document.getElementById('phonghubContactFilterInput');
+                        filterAndRenderContacts(filterInput ? filterInput.value.toLowerCase().trim() : '');
+
                         let targetRoom = cachedRooms.find(r => r.type === 'GLOBAL');
                         if (!targetRoom) {
                             const roomsRes = await fetch('/api/chat/rooms');
@@ -834,7 +845,7 @@
                     roomId: room ? room.id : null,
                     unreadCount: room ? (room.unreadCount || 0) : 0,
                     lastMessageContent: room ? (room.lastMessageContent || '') : '',
-                    lastMessageSender: room ? (room.lastMessageSender || '') : '',
+                    lastMessageSenderName: room ? (room.lastMessageSenderName || '') : '',
                     lastMessageAt: room && room.lastMessageAt ? new Date(room.lastMessageAt).getTime() : 0
                 };
             });
@@ -875,11 +886,17 @@
                 const roleInfo = getRoleInfo(c.role);
                 const initial = c.fullName ? c.fullName.trim().charAt(c.fullName.trim().lastIndexOf(' ') + 1) || c.fullName.charAt(0) : 'U';
                 const avatarColor = getAvatarColor(c.fullName || c.userId);
+                const isUnread = c.unreadCount > 0;
 
+                // LOGIC CHUẨN:
+                // - Khi CÓ tin chưa đọc: Dòng phụ hiện trích đoạn tin nhắn mới màu xanh
+                // - Khi ĐÃ ĐỌC (hoặc chưa nhắn): Dòng phụ hiện vai trò sạch sẽ, KHÔNG hiện tin nhắn cũ
                 let subtitle = roleInfo.label;
                 let timeText = '';
-                if (c.lastMessageContent) {
+                if (isUnread && c.lastMessageContent) {
                     subtitle = c.lastMessageContent;
+                    timeText = formatChatTime(c.lastMessageAt);
+                } else if (c.lastMessageAt) {
                     timeText = formatChatTime(c.lastMessageAt);
                 }
 
@@ -887,7 +904,7 @@
                     title: c.fullName,
                     subtitle: subtitle,
                     timeText: timeText,
-                    isUnread: c.unreadCount > 0,
+                    isUnread: isUnread,
                     unreadCount: c.unreadCount,
                     badgeHtml: `<span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background-color: ${roleInfo.bg}; color: ${roleInfo.color}; white-space: nowrap;">${roleInfo.label}</span>`,
                     isSpecial: false,
@@ -897,6 +914,16 @@
                     onClick: async () => {
                         document.getElementById('phonghubNewMessageModal').style.display = 'none';
                         updateWindowsLayout();
+
+                        // XÓA CHẤM ĐỎ NGAY KHI BẤM XEM
+                        c.unreadCount = 0;
+                        if (c.roomId) {
+                            const room = cachedRooms.find(r => String(r.id).toLowerCase() === String(c.roomId).toLowerCase());
+                            if (room) room.unreadCount = 0;
+                        }
+                        updateGlobalBadgeCount();
+                        const filterInput = document.getElementById('phonghubContactFilterInput');
+                        filterAndRenderContacts(filterInput ? filterInput.value.toLowerCase().trim() : '');
 
                         if (c.roomId) {
                             removeChatHead(c.roomId);
@@ -950,8 +977,8 @@
             if (timeText) {
                 rightColHtml += `<span style="font-size: 10px; color: ${isUnread ? '#0284c7; font-weight: 700' : '#94a3b8'};">${escapeHtml(timeText)}</span>`;
             }
-            if (unreadCount > 0) {
-                rightColHtml += `<div style="display: flex; align-items: center; gap: 4px;">${badgeHtml || ''}<span style="background-color: #ef4444; color: #ffffff; font-size: 10.5px; font-weight: 700; border-radius: 12px; padding: 1px 6px; min-width: 17px; text-align: center; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);">${unreadCount}</span></div>`;
+            if (unreadCount > 1) {
+                rightColHtml += `<div style="display: flex; align-items: center; gap: 4px;">${badgeHtml || ''}<span style="background-color: #ef4444; color: #ffffff; font-size: 10px; font-weight: 700; border-radius: 12px; padding: 1px 5.5px; min-width: 16px; text-align: center; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);">${unreadCount}</span></div>`;
             } else if (badgeHtml) {
                 rightColHtml += badgeHtml;
             }
@@ -960,12 +987,13 @@
             item.innerHTML = `
                 <div style="position: relative; flex-shrink: 0;">
                     ${avatarHtml}
-                    ${isUnread ? '<span style="position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; border-radius: 50%; background-color: #ef4444; border: 2px solid #ffffff;"></span>' : ''}
+                    ${isUnread ? '<span style="position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; border-radius: 50%; background-color: #ef4444; border: 2px solid #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"></span>' : ''}
                 </div>
                 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
-                    <div style="display: flex; align-items: center; gap: 5px;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
                         <span style="font-weight: ${titleFontWeight}; font-size: 14px; color: ${titleColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35;">${escapeHtml(title)}</span>
                         ${isSpecial ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="#0084ff" style="flex-shrink: 0;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>' : ''}
+                        ${isUnread ? '<span title="Tin nhắn chưa đọc" style="display: inline-block; width: 8.5px; height: 8.5px; border-radius: 50%; background-color: #ef4444; flex-shrink: 0; box-shadow: 0 0 0 2px #ffffff, 0 1px 4px rgba(239, 68, 68, 0.5); margin-left: 2px;"></span>' : ''}
                     </div>
                     ${subtitle ? `<span style="${subtitleStyle}">${escapeHtml(subtitle)}</span>` : ''}
                 </div>
@@ -980,6 +1008,15 @@
             activeRecipientName = recipientName;
             activeRecipientAvatar = recipientAvatar;
             activeRoomType = roomType || 'DIRECT';
+
+            // XÓA CHẤM ĐỎ NGAY KHI MỞ CHAT
+            const targetRoomCache = cachedRooms.find(r => String(r.id).toLowerCase() === String(roomId).toLowerCase());
+            if (targetRoomCache) {
+                targetRoomCache.unreadCount = 0;
+            }
+            updateGlobalBadgeCount();
+            const filterInput = document.getElementById('phonghubContactFilterInput');
+            filterAndRenderContacts(filterInput ? filterInput.value.toLowerCase().trim() : '');
 
             const dockedBox = document.getElementById('phonghubDockedMessengerBox');
             dockedBox.style.display = 'flex';
@@ -1232,6 +1269,19 @@
         function scrollMessagesToBottom() {
             const pane = document.getElementById('phonghubDockedMessagesPane');
             if (pane) pane.scrollTop = pane.scrollHeight;
+        }
+
+        function updateGlobalBadgeCount() {
+            const total = cachedRooms.reduce((sum, r) => sum + (r.unreadCount || 0), 0);
+            const badge = document.getElementById('phonghubGlobalUnreadBadge');
+            if (badge) {
+                if (total > 0) {
+                    badge.style.display = 'block';
+                    badge.textContent = total;
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
         }
 
         async function refreshUnreadBadge() {
