@@ -6,6 +6,7 @@
 application-local.yml
 application-local.properties
 secrets/
+uploads/
 
 # Java & Build Tools
 *.class
