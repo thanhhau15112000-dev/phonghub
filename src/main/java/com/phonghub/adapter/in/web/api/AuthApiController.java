@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.net.URI;
 import java.util.Map;
@@ -49,7 +50,9 @@ public class AuthApiController {
     ) {}
 
     public record CreateUserRequest(
-        @NotBlank(message = "Username cannot be blank") String username,
+        @NotBlank(message = "Username cannot be blank")
+        @Pattern(regexp = "^[a-zA-Z0-9._-]{3,50}$", message = "Username must be 3-50 characters containing only letters, numbers, '.', '_', or '-'")
+        String username,
         @NotBlank(message = "Email cannot be blank")
         @Email(message = "Email is invalid")
         String email,

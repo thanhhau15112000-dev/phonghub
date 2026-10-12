@@ -50,6 +50,7 @@ out/
 !**/src/test/**/out/
 
 # Eclipse
+bin/
 .apt_generated
 .classpath
 .factorypath

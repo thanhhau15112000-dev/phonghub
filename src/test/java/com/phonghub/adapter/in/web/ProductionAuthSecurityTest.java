@@ -114,7 +114,7 @@ class ProductionAuthSecurityTest {
             "mock-refresh-token",
             "Bearer",
             3600L,
-            new AuthTokenResponse.UserInfo(userId, "admin", "Admin User", UserRole.ADMIN, false)
+            new AuthTokenResponse.UserInfo(userId, "admin", "admin@example.com", "Admin User", UserRole.ADMIN, false)
         ));
 
         mockMvc.perform(post("/login")
@@ -233,7 +233,7 @@ class ProductionAuthSecurityTest {
             "temporary-refresh-token",
             "Bearer",
             3600L,
-            new AuthTokenResponse.UserInfo(userId, "temporary", "Temporary User", UserRole.TENANT, true)
+            new AuthTokenResponse.UserInfo(userId, "temporary", "temporary@example.com", "Temporary User", UserRole.TENANT, true)
         ));
         when(userRepository.findById(userId)).thenReturn(Optional.of(new User(
             userId, "temporary", "temporary@phonghub.local", "Temporary User", "0900000001",
@@ -514,7 +514,8 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
-    void forgotPasswordWithUnknownUserReturnsErrorMessage() throws Exception {
+    void forgotPasswordWithUnknownUserReturnsNeutralSuccessMessage() throws Exception {
+        // Anti-enumeration: không tiết lộ tài khoản có tồn tại hay không — luôn trả successMessage trung lập
         when(userRepository.findByUsername("unknown_user")).thenReturn(Optional.empty());
         when(userRepository.findByEmail("unknown_user")).thenReturn(Optional.empty());
 
@@ -522,8 +523,8 @@ class ProductionAuthSecurityTest {
                 .with(csrf())
                 .param("identifier", "unknown_user"))
             .andExpect(status().isOk())
-            .andExpect(model().attribute("errorMessage", "Không tìm thấy tài khoản tương ứng với thông tin đã nhập."))
-            .andExpect(model().attribute("identifier", "unknown_user"));
+            .andExpect(model().attributeExists("successMessage"))
+            .andExpect(model().attributeDoesNotExist("errorMessage"));
     }
 
     @Test
@@ -796,7 +797,7 @@ class ProductionAuthSecurityTest {
             "mock-refresh-token",
             "Bearer",
             3600L,
-            new AuthTokenResponse.UserInfo(userId, "tenant1", "Nguyen Van A", UserRole.TENANT, false)
+            new AuthTokenResponse.UserInfo(userId, "tenant1", "tenant1@example.com", "Nguyen Van A", UserRole.TENANT, false)
         ));
 
         mockMvc.perform(post("/api/auth/login")
@@ -1124,7 +1125,7 @@ class ProductionAuthSecurityTest {
             "admin-refresh-token-" + adminId,
             "Bearer",
             3600L,
-            new AuthTokenResponse.UserInfo(adminId, "admin", "Admin User", UserRole.ADMIN, false)
+            new AuthTokenResponse.UserInfo(adminId, "admin", "admin@example.com", "Admin User", UserRole.ADMIN, false)
         ));
         when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
             adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",
