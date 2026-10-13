@@ -229,6 +229,13 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.application.port.out.LateFeePolicyRepositoryPort lateFeePolicyRepository(
+        NamedParameterJdbcTemplate jdbcTemplate
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresLateFeePolicyRepository(jdbcTemplate);
+    }
+
+    @Bean
     public AuditPort auditPort(
         NamedParameterJdbcTemplate jdbcTemplate,
         TenantDataProtectionPort tenantDataProtection
