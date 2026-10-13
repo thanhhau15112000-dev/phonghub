@@ -54,6 +54,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 @ActiveProfiles("prod")
 @TestPropertySource(properties = {
+    "phonghub.rate-limit.enabled=false",
     "supabase.url=https://mock.supabase.co",
     "supabase.anon-key=mock-anon-key",
     "supabase.service-role-key=mock-service-role-key",

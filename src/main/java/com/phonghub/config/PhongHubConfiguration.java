@@ -59,13 +59,25 @@ import com.phonghub.application.port.in.MonthlyInvoiceUseCase;
 import com.phonghub.application.service.InvoiceService;
 import com.phonghub.application.service.PrivateFileStorageService;
 import com.phonghub.application.service.MonthlyInvoiceService;
+import com.phonghub.adapter.in.web.FixedWindowRateLimiter;
+import com.phonghub.adapter.in.web.RateLimitFilter;
+import java.time.Clock;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties({SepayProperties.class, TenantDataProtectionProperties.class})
+@EnableConfigurationProperties({SepayProperties.class, TenantDataProtectionProperties.class, RateLimitProperties.class})
 public class PhongHubConfiguration {
+
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> rateLimitFilter(RateLimitProperties props) {
+        FilterRegistrationBean<RateLimitFilter> bean = new FilterRegistrationBean<>(
+            new RateLimitFilter(props, new FixedWindowRateLimiter(Clock.systemUTC())));
+        bean.setOrder(-150);
+        return bean;
+    }
 
     @Bean
     public AuthorizationService authorizationService(
