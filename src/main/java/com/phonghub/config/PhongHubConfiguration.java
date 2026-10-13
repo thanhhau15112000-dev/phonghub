@@ -95,10 +95,12 @@ public class PhongHubConfiguration {
         ContractRepositoryPort contractRepo,
         TenantRepositoryPort tenantRepo,
         CurrentUserPort currentUserPort,
-        AuthorizationService authorizationService
+        AuthorizationService authorizationService,
+        AuditPort auditPort
     ) {
         return new RoomService(
-            roomRepo, propertyRepo, ticketRepo, contractRepo, tenantRepo, currentUserPort, authorizationService
+            roomRepo, propertyRepo, ticketRepo, contractRepo, tenantRepo, currentUserPort, authorizationService,
+            auditPort
         );
     }
 
@@ -356,6 +358,15 @@ public class PhongHubConfiguration {
             currentUserPort, authorizationService, userRepo, assignmentRepo, notificationRepo, slaPolicy
         );
         return new TransactionalMaintenanceUseCase(service);
+    }
+
+    @Bean
+    public com.phonghub.application.port.in.AuditLogUseCase auditLogUseCase(
+        com.phonghub.application.port.out.AuditQueryPort auditQueryPort,
+        PropertyRepositoryPort propertyRepo,
+        CurrentUserPort currentUserPort
+    ) {
+        return new com.phonghub.application.service.AuditLogService(auditQueryPort, propertyRepo, currentUserPort);
     }
 
     @Bean

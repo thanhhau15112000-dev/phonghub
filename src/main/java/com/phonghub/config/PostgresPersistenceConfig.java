@@ -229,7 +229,7 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
-    public AuditPort auditPort(
+    public PostgresAuditAdapter auditPort(
         NamedParameterJdbcTemplate jdbcTemplate,
         TenantDataProtectionPort tenantDataProtection
     ) {

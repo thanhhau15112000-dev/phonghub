@@ -64,7 +64,7 @@ public class InMemoryPersistenceConfig {
     }
 
     @Bean
-    public AuditPort auditPort() {
+    public InMemoryAuditAdapter auditPort() {
         return new InMemoryAuditAdapter();
     }
 
