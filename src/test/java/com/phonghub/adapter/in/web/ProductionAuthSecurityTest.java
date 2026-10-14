@@ -616,6 +616,20 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void statisticsEndpointsRequireBearerTokenInProd() throws Exception {
+        for (String path : new String[] {"owner/summary", "owner/revenue", "owner/properties", "admin/overview",
+            "admin/pending-properties", "admin/accounts"}) {
+            mockMvc.perform(get("/api/stats/" + path)).andExpect(status().isUnauthorized());
+            mockMvc.perform(get("/api/stats/" + path)
+                    .header("X-Demo-User-Id", "11111111-1111-1111-1111-111111111111"))
+                .andExpect(status().isUnauthorized());
+        }
+        mockMvc.perform(get("/api/stats/owner/summary").param("propertyId", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+                .param("from", "2026-01").param("to", "2026-06"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void tenantDocumentEndpointsRequireBearerTokenInProd() throws Exception {
         String base = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/tenants/44444444-0000-0000-0000-444444444441/documents";
         mockMvc.perform(get(base)).andExpect(status().isUnauthorized());
