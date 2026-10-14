@@ -13,6 +13,7 @@ import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.domain.exception.ContractNotFoundException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
+import com.phonghub.domain.exception.InvalidContractStateException;
 import com.phonghub.domain.exception.InvalidPropertyStatusException;
 import com.phonghub.domain.exception.InvalidRoomCapacityException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
@@ -162,14 +163,15 @@ public class ContractService implements ContractUseCase {
         Contract contract = contractRepository.findById(contractId)
             .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
 
+        // Kiểm tra quyền trước trạng thái để người ngoài phạm vi nhận 403, không biết được trạng thái hợp đồng.
+        Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
+
         if (contract.getStatus() != ContractStatus.DRAFT) {
-            throw new DomainException(String.format(
+            throw new InvalidContractStateException(String.format(
                 "Chỉ có thể kích hoạt hợp đồng ở trạng thái DRAFT. Trạng thái hiện tại: '%s'.",
                 contract.getStatus()
             ));
         }
-
-        Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
 
         // Invariant: Do not allow two active contracts for one room
         Optional<Contract> activeContract = contractRepository.findActiveByRoomId(room.getId());
@@ -204,14 +206,14 @@ public class ContractService implements ContractUseCase {
         Contract contract = contractRepository.findById(contractId)
             .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
 
+        Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
+
         if (contract.getStatus() != ContractStatus.ACTIVE) {
-            throw new DomainException(String.format(
+            throw new InvalidContractStateException(String.format(
                 "Chỉ có thể kết thúc hợp đồng ở trạng thái ACTIVE. Trạng thái hiện tại: '%s'.",
                 contract.getStatus()
             ));
         }
-
-        Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
 
         // Invariant: Ending a contract changes room to AVAILABLE unless maintenance is explicitly required
         contract.terminate();

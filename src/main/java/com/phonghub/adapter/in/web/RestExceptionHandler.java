@@ -10,6 +10,7 @@ import com.phonghub.domain.exception.MeterReadingConflictException;
 import com.phonghub.domain.exception.UtilityNotFoundException;
 import com.phonghub.domain.exception.HandoverAlreadyExistsException;
 import com.phonghub.domain.exception.HandoverNotFoundException;
+import com.phonghub.domain.exception.InvalidContractStateException;
 import com.phonghub.domain.exception.InvalidHandoverStateException;
 import com.phonghub.domain.exception.DuplicateDocumentNumberException;
 import com.phonghub.domain.exception.DuplicateEmailException;
@@ -119,6 +120,7 @@ public class RestExceptionHandler {
         DuplicateAssetCodeException.class,
         DuplicateDocumentNumberException.class,
         InvalidHandoverStateException.class,
+        InvalidContractStateException.class,
         HandoverAlreadyExistsException.class,
         MeterReadingConflictException.class,
         DuplicateServiceRateException.class,
