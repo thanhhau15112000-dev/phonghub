@@ -2,6 +2,8 @@ package com.phonghub.adapter.out.persistence.postgres;
 
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.domain.model.Room;
+import com.phonghub.domain.model.RoomPage;
+import com.phonghub.domain.model.RoomSearchCriteria;
 import com.phonghub.domain.model.RoomStatus;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -71,6 +73,43 @@ public class PostgresRoomRepository implements RoomRepositoryPort {
 
         jdbcTemplate.update(sql, params);
         return room;
+    }
+
+    @Override
+    public RoomPage search(RoomSearchCriteria c) {
+        if (c.restrictToRoomIds() != null && c.restrictToRoomIds().isEmpty()) {
+            return new RoomPage(List.of(), 0, c.page(), c.size());
+        }
+        StringBuilder where = new StringBuilder(" WHERE property_id = :propertyId");
+        MapSqlParameterSource params = new MapSqlParameterSource("propertyId", c.propertyId());
+        if (c.status() != null) {
+            where.append(" AND status = :status");
+            params.addValue("status", c.status().name());
+        }
+        if (c.minPrice() != null) {
+            where.append(" AND base_price >= :minPrice");
+            params.addValue("minPrice", c.minPrice());
+        }
+        if (c.maxPrice() != null) {
+            where.append(" AND base_price <= :maxPrice");
+            params.addValue("maxPrice", c.maxPrice());
+        }
+        if (c.floor() != null) {
+            where.append(" AND floor = :floor");
+            params.addValue("floor", c.floor());
+        }
+        if (c.restrictToRoomIds() != null) {
+            where.append(" AND id IN (:roomIds)");
+            params.addValue("roomIds", c.restrictToRoomIds());
+        }
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM rooms" + where, params, Long.class);
+        String sql = "SELECT * FROM rooms" + where + " ORDER BY floor ASC, room_number ASC";
+        if (c.size() != null) {
+            sql += " LIMIT :limit OFFSET :offset";
+            params.addValue("limit", c.size()).addValue("offset", (long) c.page() * c.size());
+        }
+        return new RoomPage(
+            jdbcTemplate.query(sql, params, ROW_MAPPER), total == null ? 0 : total, c.page(), c.size());
     }
 
     @Override
