@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Biên lai thanh toán')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<style>
+    @media print {
+        header, footer, .no-print, .alert { display: none !important; }
+        body { background: #fff; }
+        .card { border: none; box-shadow: none; }
+    }
+</style>
+
+<main class="container">
+    <div class="no-print" th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row no-print">
+        <div>
+            <h1>Biên lai thanh toán</h1>
+        </div>
+        <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn btn-primary" onclick="window.print()">In biên lai</button>
+            <a th:href="@{'/invoices/' + ${receipt.invoiceId()} + '/pay'}" class="btn">&larr; Quay lại hóa đơn</a>
+        </div>
+    </div>
+
+    <div class="card" id="receipt">
+        <div class="flex-between" style="margin-bottom: 16px; align-items: flex-start;">
+            <div>
+                <h2 style="margin-bottom: 4px;">BIÊN LAI THANH TOÁN</h2>
+                <div style="font-size: 13px; color: var(--text-secondary);">
+                    Số biên lai: <strong style="font-family: monospace;" th:text="${receipt.receiptNumber()}">BL-PHXXXX</strong>
+                </div>
+            </div>
+            <span class="badge" th:text="${receipt.fullyPaid() ? 'Đã thanh toán đủ' : 'Đã thanh toán một phần'}"
+                  th:style="${receipt.fullyPaid() ? 'background:#dcfce7;color:#166534;' : 'background:#fef3c7;color:#b45309;'}">Đã thanh toán đủ</span>
+        </div>
+
+        <table class="data-table" style="margin-bottom: 16px;">
+            <tbody>
+                <tr>
+                    <td style="color: var(--text-secondary); width: 200px;">Nhà trọ:</td>
+                    <td>
+                        <strong th:text="${receipt.propertyName() != null ? receipt.propertyName() : '—'}">Nhà trọ</strong>
+                        <div style="font-size: 12px; color: var(--text-secondary);" th:text="${receipt.propertyAddress()}">Địa chỉ</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="color: var(--text-secondary);">Phòng:</td>
+                    <td th:text="${receipt.roomNumber() != null ? receipt.roomNumber() : '—'}">P101</td>
+                </tr>
+                <tr>
+                    <td style="color: var(--text-secondary);">Người thuê:</td>
+                    <td th:text="${receipt.tenantName() != null ? receipt.tenantName() : '—'}">Nguyễn Văn A</td>
+                </tr>
+                <tr>
+                    <td style="color: var(--text-secondary);">Khoản thanh toán:</td>
+                    <td th:text="${(receipt.type().name() == 'MAINTENANCE' ? 'Phí sửa chữa ' : 'Tiền thuê ') + #numbers.formatInteger(receipt.month(), 2) + '/' + receipt.year()}">Tiền thuê 10/2026</td>
+                </tr>
+                <tr th:if="${receipt.paymentCode() != null}">
+                    <td style="color: var(--text-secondary);">Mã thanh toán:</td>
+                    <td style="font-family: monospace;" th:text="${receipt.paymentCode()}">PHXXXX</td>
+                </tr>
+                <tr>
+                    <td style="color: var(--text-secondary);">Tổng tiền hóa đơn:</td>
+                    <td th:text="${#numbers.formatDecimal(receipt.totalAmount(), 0, 'COMMA', 0, 'POINT')} + ' đ'">3,500,000 đ</td>
+                </tr>
+                <tr>
+                    <td style="color: var(--text-secondary);">Đã thanh toán:</td>
+                    <td style="font-weight: 700;" th:text="${#numbers.formatDecimal(receipt.paidAmount(), 0, 'COMMA', 0, 'POINT')} + ' đ'">3,500,000 đ</td>
+                </tr>
+                <tr th:if="${!receipt.fullyPaid()}">
+                    <td style="color: var(--text-secondary);">Còn lại:</td>
+                    <td th:text="${#numbers.formatDecimal(receipt.remainingAmount(), 0, 'COMMA', 0, 'POINT')} + ' đ'">0 đ</td>
+                </tr>
+                <tr th:if="${receipt.paidAt() != null}">
+                    <td style="color: var(--text-secondary);">Ngày thanh toán:</td>
+                    <td th:text="${#temporals.format(receipt.paidAt(), 'dd/MM/yyyy HH:mm')}">05/10/2026 08:00</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3 style="margin-bottom: 8px;">Các lần tiền về</h3>
+        <div th:if="${#lists.isEmpty(receipt.payments())}" class="empty-state">
+            <p>Không có giao dịch chuyển khoản được ghi nhận cho hóa đơn này.</p>
+        </div>
+        <table th:if="${!#lists.isEmpty(receipt.payments())}" class="data-table" id="receiptPayments">
+            <thead>
+                <tr>
+                    <th>Thời gian</th>
+                    <th>Ngân hàng</th>
+                    <th>Mã tham chiếu</th>
+                    <th class="col-number">Số tiền ghi nhận</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="p : ${receipt.payments()}">
+                    <td th:text="${#temporals.format(p.receivedAt(), 'dd/MM/yyyy HH:mm')}">05/10/2026 08:00</td>
+                    <td th:text="${p.gateway()}">MBBank</td>
+                    <td style="font-family: monospace;" th:text="${p.referenceCode() != null ? p.referenceCode() : '—'}">REF</td>
+                    <td class="col-number" th:text="${#numbers.formatDecimal(p.appliedAmount(), 0, 'COMMA', 0, 'POINT')} + ' đ'">3,500,000 đ</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 16px;">
+            Biên lai được tạo từ dữ liệu thanh toán đã đối soát trên PhongHub.
+        </p>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

@@ -3224,6 +3224,91 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  # ==========================================
+  # RECONCILIATION & RECEIPTS (#82)
+  # ==========================================
+  /api/v1/payments/reconciliation:
+    get:
+      tags: [Payments]
+      summary: Giao dịch SePay kèm trạng thái đối soát (khớp / cần xem xét / không khớp / bỏ qua)
+      description: >
+        Admin xem mọi giao dịch (kể cả chưa khớp hợp đồng); owner xem giao dịch hợp đồng nhà mình; staff xem nhà được
+        phân công có quyền thu tiền. Kỹ thuật viên, người thuê, lọc nhà ngoài phạm vi: 403.
+      parameters:
+        - name: propertyId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { type: string, enum: [MATCHED, NEEDS_REVIEW, UNMATCHED, IGNORED] }
+        - name: from
+          in: query
+          description: Ngày bắt đầu (yyyy-MM-dd, giờ Việt Nam, bao gồm)
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          description: Ngày kết thúc (yyyy-MM-dd, bao gồm)
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Danh sách giao dịch mới nhất trước, số lượng theo trạng thái và tổng tiền
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        sepayId: { type: integer }
+                        receivedAt: { type: string, format: date-time }
+                        gateway: { type: string }
+                        referenceCode: { type: string }
+                        amount: { type: number }
+                        appliedAmount: { type: number }
+                        excessAmount: { type: number }
+                        status: { type: string, enum: [MATCHED, NEEDS_REVIEW, UNMATCHED, IGNORED] }
+                        reviewReason: { type: string, nullable: true, enum: [OVERPAID, INVOICE_NOT_PAYABLE, UNMATCHED] }
+                        invoiceId: { type: string, format: uuid, nullable: true }
+                        propertyName: { type: string, nullable: true }
+                        roomNumber: { type: string, nullable: true }
+                  counts:
+                    type: object
+                    additionalProperties: { type: integer }
+                  totalReceived: { type: number }
+                  totalApplied: { type: number }
+                  totalExcess: { type: number }
+        '400':
+          description: Tham số sai (trạng thái không hợp lệ, from > to)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/invoices/{invoiceId}/receipt:
+    get:
+      tags: [Payments]
+      summary: Biên lai thanh toán của hóa đơn (người thuê của hợp đồng hoặc người quản lý nhà trọ)
+      parameters:
+        - name: invoiceId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Biên lai; danh sách lần tiền về không kèm số tài khoản hay nội dung chuyển khoản
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Hóa đơn chưa có khoản thanh toán nào nên chưa có biên lai
+
 # ==========================================
 # COMPONENTS (REUSABLE SCHEMAS & CONTRACTS)
 # ==========================================

@@ -23,6 +23,8 @@ import com.phonghub.domain.exception.MaintenanceTicketException;
 import com.phonghub.domain.exception.PasswordChangeRequiredException;
 import com.phonghub.domain.exception.PrimaryOccupantRemovalException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
+import com.phonghub.domain.exception.InvoiceNotFoundException;
+import com.phonghub.domain.exception.ReceiptNotAvailableException;
 import com.phonghub.domain.exception.RoomAssetNotFoundException;
 import com.phonghub.domain.exception.TenantDocumentNotFoundException;
 import com.phonghub.domain.exception.TooManyRevealAttemptsException;
@@ -119,6 +121,7 @@ public class RestExceptionHandler {
         DuplicateAssetCodeException.class,
         DuplicateDocumentNumberException.class,
         InvalidHandoverStateException.class,
+        ReceiptNotAvailableException.class,
         HandoverAlreadyExistsException.class,
         MeterReadingConflictException.class,
         DuplicateServiceRateException.class,
@@ -182,6 +185,7 @@ public class RestExceptionHandler {
 
     @ExceptionHandler({
         PropertyNotFoundException.class,
+        InvoiceNotFoundException.class,
         RoomNotFoundException.class,
         RoomAssetNotFoundException.class,
         TenantDocumentNotFoundException.class,

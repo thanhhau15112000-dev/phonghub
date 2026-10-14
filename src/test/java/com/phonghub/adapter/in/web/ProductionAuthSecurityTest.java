@@ -616,6 +616,20 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void reconciliationAndReceiptRequireAuthenticationInProd() throws Exception {
+        String invoiceId = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+        mockMvc.perform(get("/api/v1/payments/reconciliation")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/payments/reconciliation").param("status", "MATCHED")
+                .header("X-Demo-User-Id", "11111111-1111-1111-1111-111111111111"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/invoices/" + invoiceId + "/receipt")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/payments")).andExpect(status().is3xxRedirection()).andExpect(redirectedUrl("/login"));
+        mockMvc.perform(get("/invoices/" + invoiceId + "/receipt"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
     void tenantDocumentEndpointsRequireBearerTokenInProd() throws Exception {
         String base = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/tenants/44444444-0000-0000-0000-444444444441/documents";
         mockMvc.perform(get(base)).andExpect(status().isUnauthorized());
