@@ -18,6 +18,7 @@ import com.phonghub.domain.model.ChatRoom;
 import com.phonghub.domain.model.ChatRoomMember;
 import com.phonghub.domain.model.ChatRoomType;
 import com.phonghub.domain.model.User;
+import com.phonghub.domain.model.UserRole;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -60,6 +61,14 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
     private void assertAuthenticated(CurrentUser user) {
         if (user == null) {
             throw new UnauthorizedChatAccessException("Yêu cầu xác thực tài khoản để truy cập chat");
+        }
+    }
+
+    private void assertCanSendToRoom(CurrentUser user, ChatRoom room) {
+        if (room.isGlobal() && user.role() == UserRole.TENANT) {
+            throw new UnauthorizedChatAccessException(
+                "Khách thuê không có quyền gửi tin vào Kênh Chung. Kênh Chung chỉ dành cho Ban Quản Lý."
+            );
         }
     }
 
@@ -196,6 +205,9 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         // Kiểm tra quyền truy cập phòng trước khi gửi tin
         ChatRoom room = getRoomById(currentUser, roomId);
 
+        // Kênh Chung chỉ cho phép Ban Quản Lý gửi tin (Admin, Chủ trọ, Staff, Technician)
+        assertCanSendToRoom(currentUser, room);
+
         ChatMessage message = ChatMessage.create(room.id(), currentUser.id(), currentUser.fullName(), content.trim());
         ChatMessage saved = chatMessageRepositoryPort.save(message);
 
@@ -226,6 +238,9 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         }
 
         ChatRoom room = getRoomById(currentUser, roomId);
+
+        // Kênh Chung chỉ cho phép Ban Quản Lý gửi tin (Admin, Chủ trọ, Staff, Technician)
+        assertCanSendToRoom(currentUser, room);
         String mediaType = detectMediaType(contentType, originalFilename);
         String mediaUrl = mediaStoragePort.store(originalFilename, contentType, bytes);
         String textContent = caption != null ? caption.trim() : "";
