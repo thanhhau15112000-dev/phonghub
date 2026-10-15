@@ -242,9 +242,31 @@ Fixture local:
 - `POST /api/maintenance`
 - `POST /api/maintenance/{ticketId}/accept`
 - `POST /api/maintenance/{ticketId}/resolve`
+- `GET /api/chat/rooms` (danh sách phòng chat và số tin chưa đọc)
+- `GET /api/chat/rooms/{roomId}/messages` (lịch sử tin nhắn, kèm header `X-Peer-Last-Read-At`)
+- `POST /api/chat/rooms/{roomId}/messages` (gửi tin nhắn văn bản / icon)
+- `POST /api/chat/rooms/{roomId}/media` (gửi ảnh hoặc video đính kèm caption, tối đa 25MB)
+- `POST /api/chat/rooms/{roomId}/read` (đánh dấu đã đọc phòng chat)
+- `GET /api/chat/rooms/{roomId}/seen` (lấy thời gian đã xem của đối phương)
+- `GET /api/chat/stream` (SSE server-sent events realtime cho tin nhắn mới và trạng thái đã xem)
+- `GET /api/chat/contacts` (danh sách người dùng để bắt đầu trò chuyện)
+- `POST /api/chat/rooms/direct` (tạo hoặc mở phòng chat 1-1)
 
 Chi tiết request/response được định nghĩa trong controller và DTO tương ứng.
 Frontend nên dùng API contract đó thay vì phụ thuộc vào fixture local.
+
+### Hệ thống Chat Real-time & Lưu trữ Media
+
+Hệ thống trò chuyện được thiết kế theo chuẩn Hexagonal Architecture (Ports & Adapters):
+- **Inbound Port:** `ChatRoomUseCase`, `ChatMessageUseCase`
+- **Outbound Ports:**
+  - `ChatMessageRepositoryPort`, `ChatRoomRepositoryPort` (PostgreSQL / In-Memory)
+  - `ChatEventPublisherPort` (SSE Broadcast)
+  - `MediaStoragePort` (Lưu trữ và phân phối hình ảnh/video qua CDN)
+- **Cơ chế lưu trữ Media (Images & Videos):**
+  - **Môi trường Production:** `SupabaseMediaStorageAdapter` tải tệp lên bucket Supabase Storage (`chat-media`) qua REST API và trả về URL CDN công khai (`/storage/v1/object/public/...`) giúp tối ưu tốc độ phân phối và bộ nhớ đệm.
+  - **Môi trường Local / Docker:** Tự động fallback sang `LocalMediaStorageAdapter` lưu trữ tại thư mục cục bộ `uploads/chat-media/` và phục vụ qua Spring Web MVC Resource Handler (`/uploads/**`), đảm bảo chạy mượt mà ngay cả khi ngắt mạng hoặc chưa cấu hình Supabase credentials.
+  - **Giới hạn & Định dạng:** Hỗ trợ kích thước tệp tối đa 25MB. Hỗ trợ ảnh (`.jpg, .png, .webp, .gif`) và video (`.mp4, .webm, .mov`). Hiển thị trực quan với thumbnail phóng to và trình phát video HTML5 tích hợp ngay trong bong bóng chat.
 
 ## Cấu hình production
 
