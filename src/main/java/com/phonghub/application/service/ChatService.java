@@ -38,15 +38,6 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         ChatRoomRepositoryPort chatRoomRepositoryPort,
         ChatMessageRepositoryPort chatMessageRepositoryPort,
         UserRepositoryPort userRepositoryPort,
-        ChatEventPublisherPort chatEventPublisherPort
-    ) {
-        this(chatRoomRepositoryPort, chatMessageRepositoryPort, userRepositoryPort, chatEventPublisherPort, new com.phonghub.adapter.out.storage.LocalMediaStorageAdapter());
-    }
-
-    public ChatService(
-        ChatRoomRepositoryPort chatRoomRepositoryPort,
-        ChatMessageRepositoryPort chatMessageRepositoryPort,
-        UserRepositoryPort userRepositoryPort,
         ChatEventPublisherPort chatEventPublisherPort,
         com.phonghub.application.port.out.MediaStoragePort mediaStoragePort
     ) {
