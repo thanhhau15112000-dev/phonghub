@@ -526,6 +526,23 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.PaymentReconciliationUseCase paymentReconciliationUseCase(
+        PaymentRepositoryPort paymentRepository,
+        InvoiceRepositoryPort invoiceRepository,
+        ContractRepositoryPort contractRepository,
+        PropertyRepositoryPort propertyRepository,
+        RoomRepositoryPort roomRepository,
+        TenantRepositoryPort tenantRepository,
+        StaffPropertyAssignmentPort assignmentRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService
+    ) {
+        return new com.phonghub.application.service.PaymentReconciliationService(paymentRepository, invoiceRepository,
+            contractRepository, propertyRepository, roomRepository, tenantRepository, assignmentRepository,
+            currentUserPort, authorizationService);
+    }
+
+    @Bean
     public com.phonghub.application.port.in.LateFeePolicyUseCase lateFeePolicyUseCase(
         com.phonghub.application.port.out.LateFeePolicyRepositoryPort policyRepository,
         CurrentUserPort currentUserPort,

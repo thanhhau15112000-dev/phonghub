@@ -17,6 +17,7 @@
                 <li><a th:href="@{/properties}">Nhà trọ</a></li>
                 <li><a th:href="@{/contracts}">Hợp đồng</a></li>
                 <li><a th:href="@{/maintenance}">Bảo trì</a></li>
+                <li th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF')}"><a th:href="@{/payments}">Giao dịch</a></li>
                 <li th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}"><a th:href="@{/admin/users}">Tài khoản</a></li>
                 <li th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'OWNER')}"><a th:href="@{/audit}">Nhật ký</a></li>
                 <li th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}">
