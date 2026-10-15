@@ -3,6 +3,8 @@ phonghub:
     enabled: true
   invoicing:
     auto-generate: false
+    # Test gọi InvoiceDueReminderUseCase trực tiếp với ngày cố định.
+    due-reminder-enabled: false
   sepay:
     allow-unsigned-webhook: true
     simulation-enabled: true

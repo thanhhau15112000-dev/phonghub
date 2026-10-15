@@ -3,6 +3,7 @@ package com.phonghub.adapter.in.web;
 import com.phonghub.domain.exception.ContractNotFoundException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
+import com.phonghub.domain.exception.NotificationNotFoundException;
 import com.phonghub.domain.exception.DocumentRevealDeniedException;
 import com.phonghub.domain.exception.DuplicateAssetCodeException;
 import com.phonghub.domain.exception.DuplicateServiceRateException;
@@ -189,7 +190,8 @@ public class RestExceptionHandler {
         UtilityNotFoundException.class,
         ContractNotFoundException.class,
         UserNotFoundException.class,
-        TenantNotFoundException.class
+        TenantNotFoundException.class,
+        NotificationNotFoundException.class
     })
     public ProblemDetail handleNotFound(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());

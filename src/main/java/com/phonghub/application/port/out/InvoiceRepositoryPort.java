@@ -1,6 +1,7 @@
 package com.phonghub.application.port.out;
 
 import com.phonghub.domain.model.Invoice;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -11,6 +12,9 @@ public interface InvoiceRepositoryPort {
     List<Invoice> findByContractId(UUID contractId);
     /** Kỳ tiền thuê chưa bị hủy (status khác VOIDED) của hợp đồng trong tháng/năm. */
     Optional<Invoice> findActiveRentByContractIdAndPeriod(UUID contractId, int year, int month);
+    /** Hóa đơn còn phải trả (chưa trả đủ, chưa hủy, chưa gộp) có hạn thanh toán trong [from, to] (#86). */
+    List<Invoice> findPayableDueBetween(LocalDate from, LocalDate to);
+
     /** Khoản phí sửa chữa chưa bị hủy của phiếu bảo trì. */
     Optional<Invoice> findActiveByTicketId(UUID ticketId);
     /** Khóa dòng (SELECT ... FOR UPDATE) khi chạy trong transaction để tránh cộng tiền đồng thời. */

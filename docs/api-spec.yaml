@@ -50,6 +50,8 @@ tags:
     description: Quy trình xử lý sự cố/bảo trì phòng trọ
   - name: Checkout & Settlement
     description: Quy trình trả phòng, nghiệm thu và thanh lý tiền cọc
+  - name: Notifications
+    description: Trung tâm thông báo cá nhân cho mọi vai trò (#86)
 
 security:
   - bearerAuth: []
@@ -3224,6 +3226,89 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  # ==========================================
+  # 11. NOTIFICATIONS (#86)
+  # ==========================================
+  /api/notifications:
+    get:
+      tags: [Notifications]
+      summary: Thông báo cá nhân của người đang đăng nhập, mới nhất trước
+      description: >
+        Gồm hóa đơn sắp đến hạn, hợp đồng sắp hết hạn, bảo trì quá hạn, biên bản check-in/check-out cần xác nhận
+        hoặc chờ duyệt... Không gồm việc của quản trị viên (yêu cầu cấp lại mật khẩu, tiền về không khớp hóa đơn).
+      parameters:
+        - name: unread
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Chỉ lấy thông báo chưa đọc
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 50
+      responses:
+        '200':
+          description: Một trang thông báo kèm tổng số và số chưa đọc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationInbox'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/notifications/{notificationId}/read:
+    parameters:
+      - name: notificationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Notifications]
+      summary: Đánh dấu một thông báo của mình là đã đọc
+      responses:
+        '200':
+          description: Thông báo sau khi đánh dấu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/notifications/read-all:
+    post:
+      tags: [Notifications]
+      summary: Đánh dấu mọi thông báo chưa đọc của mình là đã đọc
+      responses:
+        '200':
+          description: Số thông báo được cập nhật
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: integer
+                    example: 3
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 # ==========================================
 # COMPONENTS (REUSABLE SCHEMAS & CONTRACTS)
 # ==========================================
@@ -4095,6 +4180,51 @@ components:
           type: string
           format: date-time
 
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: Hóa đơn sắp đến hạn
+        message:
+          type: string
+          example: Hóa đơn kỳ 11/2026 (phòng P101 - Nhà trọ Xanh) còn 3,500,000 đ, hạn thanh toán 05/11/2026 (còn 3 ngày).
+        link:
+          type: string
+          nullable: true
+          description: Đường dẫn nội bộ tới đối tượng liên quan (luôn bắt đầu bằng "/")
+          example: /invoices/7c9e6679-7425-40de-944b-e07fc1f90ae7/pay
+        createdAt:
+          type: string
+          format: date-time
+        read:
+          type: boolean
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+    NotificationInbox:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        total:
+          type: integer
+          description: Tổng số thông báo theo bộ lọc
+        unread:
+          type: integer
+          description: Tổng số thông báo chưa đọc
+        page:
+          type: integer
+        size:
+          type: integer
+        totalPages:
+          type: integer
     MaintenanceTicket:
       type: object
       required: [id, roomId, title, status, priority, createdAt]
