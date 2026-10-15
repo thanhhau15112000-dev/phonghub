@@ -97,36 +97,29 @@
             </thead>
             <tbody>
                 <tr th:each="p : ${properties}">
-                    <td>
+                    <td class="col-wrap">
                         <a th:href="@{'/properties/' + ${p.id()}}" th:text="${p.name()}" style="font-weight: 600; color: var(--accent);">Tên nhà trọ</a>
                     </td>
-                    <td th:text="${p.address()}">Địa chỉ</td>
-                    <td th:text="${p.description() != null ? p.description() : '—'}">Mô tả</td>
+                    <td class="col-wrap" th:text="${p.address()}">Địa chỉ</td>
+                    <td class="col-wrap" th:text="${!#strings.isEmpty(p.description()) ? p.description() : '—'}">Mô tả</td>
                     <td class="col-number" th:text="${p.totalRooms()}">0</td>
                     <td class="col-status">
-                        <div class="status-cell-wrapper">
-                            <div class="status-badge-row">
-                                <span class="badge"
-                                      th:classappend="${p.approvalStatus() != null ? 'badge-' + p.approvalStatus().name() : 'badge-VERIFIED'}"
-                                      th:text="${p.approvalStatus() != null ? uiText.approvalStatus(p.approvalStatus()) : 'Đã duyệt'}">Đã duyệt</span>
-                                <button th:if="${p.approvalStatus() != null and p.approvalStatus().name() == 'REJECTED' and p.rejectionReason() != null and !#strings.isEmpty(p.rejectionReason())}"
-                                        type="button"
-                                        class="btn-reason-pill"
-                                        th:title="'Lý do từ chối: ' + ${p.rejectionReason()}"
-                                        th:attr="data-id=${p.id()},data-name=${p.name()},data-reason=${p.rejectionReason()}"
-                                        onclick="openViewReasonModal(this.getAttribute('data-name'), this.getAttribute('data-reason'))">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                                    <span>Xem lý do</span>
-                                </button>
-                            </div>
-                        </div>
+                        <span class="badge"
+                              th:classappend="${p.approvalStatus() != null ? 'badge-' + p.approvalStatus().name() : 'badge-VERIFIED'}"
+                              th:text="${p.approvalStatus() != null ? uiText.approvalStatus(p.approvalStatus()) : 'Đã duyệt'}">Đã duyệt</span>
                     </td>
+                    <!-- "Chi tiết" luôn đứng cuối: cột căn phải nên nút này cố định vị trí dù dòng có thêm nút hay không (#91). -->
                     <td class="col-actions">
                         <div class="table-actions">
-                            <a th:href="@{'/properties/' + ${p.id()}}" class="btn btn-sm btn-secondary" title="Xem thông tin chi tiết nhà trọ">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                <span>Chi tiết</span>
-                            </a>
+                            <button th:if="${p.approvalStatus() != null and p.approvalStatus().name() == 'REJECTED' and !#strings.isEmpty(p.rejectionReason())}"
+                                    type="button"
+                                    class="btn-reason-pill"
+                                    th:title="'Lý do từ chối: ' + ${p.rejectionReason()}"
+                                    th:attr="data-id=${p.id()},data-name=${p.name()},data-reason=${p.rejectionReason()}"
+                                    onclick="openViewReasonModal(this.getAttribute('data-name'), this.getAttribute('data-reason'))">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                                <span>Xem lý do</span>
+                            </button>
                             <th:block th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and p.approvalStatus() != null and p.approvalStatus().name() == 'PENDING'}">
                                 <form th:action="@{'/properties/' + ${p.id()} + '/verify'}" method="post">
                                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -145,6 +138,10 @@
                                     <span>Từ chối</span>
                                 </button>
                             </th:block>
+                            <a th:href="@{'/properties/' + ${p.id()}}" class="btn btn-sm btn-secondary" title="Xem thông tin chi tiết nhà trọ">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                <span>Chi tiết</span>
+                            </a>
                         </div>
                     </td>
                 </tr>

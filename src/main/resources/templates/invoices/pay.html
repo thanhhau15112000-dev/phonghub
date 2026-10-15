@@ -17,7 +17,8 @@
                 </span>
             </p>
         </div>
-        <div>
+        <div style="display: flex; gap: 8px;">
+            <a th:if="${invoice.getPaidAmount().signum() > 0}" th:href="@{'/invoices/' + ${invoice.getId()} + '/receipt'}" class="btn" id="receipt-link">Xem biên lai</a>
             <a th:href="@{'/contracts/' + ${invoice.getContractId()} + '#payments'}" class="btn">&larr; Quay lại hợp đồng</a>
         </div>
     </div>

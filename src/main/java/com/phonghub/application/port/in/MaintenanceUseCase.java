@@ -20,6 +20,20 @@ public interface MaintenanceUseCase {
     /** Quản lý miễn khoản phí đang chờ thanh toán: hủy hóa đơn, chủ trọ chịu phí, phiếu hoàn tất. */
     MaintenanceTicket waiveRepairFee(UUID ticketId, String reason);
     MaintenanceTicket getTicket(UUID ticketId);
+    /**
+     * Báo giá (#83): kỹ thuật viên được giao phiếu, owner/staff quản lý nhà trọ hoặc admin; chỉ khi phiếu chưa sửa
+     * xong (409 nếu đã xong/đã từ chối).
+     */
+    MaintenanceTicket quoteTicket(UUID ticketId, BigDecimal amount, String note);
+    /**
+     * Báo giá người xem được thấy: người quản lý và kỹ thuật viên luôn thấy; người thuê chỉ thấy khi mình là bên chịu
+     * phí. Trả null nếu chưa báo giá hoặc bị ẩn; 403 nếu không được xem phiếu.
+     */
+    MaintenanceTicket.Quote visibleQuote(UUID ticketId);
+    /** Người thuê của phòng xác nhận đã sửa đạt: RESOLVED → VERIFIED (409 nếu chưa sửa xong). */
+    MaintenanceTicket verifyTicket(UUID ticketId);
+    /** Người thuê của phòng phản hồi chưa đạt kèm lý do: phiếu mở lại để sửa tiếp (409 nếu chưa sửa xong). */
+    MaintenanceTicket reopenTicket(UUID ticketId, String feedback);
     /** Timeline trạng thái của phiếu; cùng quy tắc xem với {@link #getTicket}. */
     List<MaintenanceTicketEvent> getTimeline(UUID ticketId);
     List<MaintenanceTicket> listTicketsForProperty(UUID propertyId);

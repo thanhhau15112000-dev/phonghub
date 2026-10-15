@@ -20,6 +20,10 @@ public interface InvoiceRepositoryPort {
     /** Khóa dòng (SELECT ... FOR UPDATE) khi chạy trong transaction để tránh cộng tiền đồng thời. */
     Optional<Invoice> findByPaymentCodeForUpdate(String paymentCode);
     boolean existsByPaymentCode(String paymentCode);
+    /** Khóa dòng theo id (SELECT ... FOR UPDATE) để job chạy nền không ghi đè khoản tiền vừa nhận. */
+    Optional<Invoice> findByIdForUpdate(UUID id);
+    /** Id hóa đơn tiền thuê còn phải thanh toán, chưa gộp và đã quá hạn trước {@code today}. */
+    List<UUID> findOverdueRentInvoiceIds(java.time.LocalDate today);
 
     default String newUniquePaymentCode() {
         for (int i = 0; i < 10; i++) {

@@ -251,14 +251,14 @@ class OwnerBypassAndAdminSecurityIntegrationTest {
     @Test
     @DisplayName("Trạng thái hợp đồng: Kích hoạt hợp đồng không ở trạng thái DRAFT sẽ bị từ chối")
     void testContractStatusValidation() throws Exception {
-        // Hợp đồng CONTRACT_1_ID đang ACTIVE, thử gọi activate lần nữa -> 400 Bad Request
+        // Hợp đồng CONTRACT_1_ID đang ACTIVE, thử gọi activate lần nữa -> 409 Conflict (xung đột trạng thái)
         mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/activate")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isConflict());
 
-        // Hợp đồng owner1DraftContract đang DRAFT, thử gọi terminate -> 400 Bad Request
+        // Hợp đồng owner1DraftContract đang DRAFT, thử gọi terminate -> 409 Conflict
         mockMvc.perform(post("/api/contracts/" + owner1DraftContract.getId() + "/terminate")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isConflict());
     }
 }

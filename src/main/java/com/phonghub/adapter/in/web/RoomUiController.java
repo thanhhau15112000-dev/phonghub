@@ -116,6 +116,7 @@ public class RoomUiController {
         @RequestParam(required = false) BigDecimal areaSqm,
         @RequestParam BigDecimal basePrice,
         @RequestParam int maxOccupants,
+        @RequestParam(required = false) Long version,
         RedirectAttributes redirectAttributes
     ) {
         try {
@@ -125,7 +126,8 @@ public class RoomUiController {
                 floor,
                 areaSqm,
                 basePrice,
-                maxOccupants
+                maxOccupants,
+                version
             ));
             redirectAttributes.addFlashAttribute("successMessage", "Cập nhật thông tin phòng " + room.getRoomNumber() + " thành công.");
         } catch (DomainException | IllegalArgumentException ex) {

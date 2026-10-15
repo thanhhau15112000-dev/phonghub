@@ -98,6 +98,11 @@ public class LocalDemoAuthenticationAdapter implements CurrentUserPort, DemoActo
         this.fallbackUser = user != null ? user : DEMO_ADMIN;
     }
 
+    public void setNoUser() {
+        currentUserHolder.remove();
+        this.fallbackUser = null;
+    }
+
     @Override
     public void switchActor(UUID userId) {
         CurrentUser user = DEMO_USERS.get(userId);

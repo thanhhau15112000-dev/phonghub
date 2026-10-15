@@ -30,6 +30,8 @@ import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.Room;
+import com.phonghub.domain.model.RoomPage;
+import com.phonghub.domain.model.RoomSearchCriteria;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
@@ -82,6 +84,11 @@ class TransactionRollbackFaultInjectionTest {
                         throw new RuntimeException("Simulated database failure on room update");
                     }
                     return realRoomRepo.save(room);
+                }
+
+                @Override
+                public RoomPage search(RoomSearchCriteria criteria) {
+                    return realRoomRepo.search(criteria);
                 }
 
                 @Override

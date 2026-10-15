@@ -1,5 +1,6 @@
 package com.phonghub.adapter.out.persistence.postgres;
 
+import com.phonghub.domain.exception.OptimisticLockConflictException;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.InvoiceItem;
@@ -24,7 +25,7 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
     private static final String COLUMNS = """
         id, contract_id, room_id, tenant_id, month, year, rent_amount, total_amount,
         paid_amount, due_date, status, payment_code, invoice_type, ticket_id, consolidated_into_invoice_id,
-        paid_at, created_at, updated_at
+        paid_at, created_at, updated_at, version
         """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -37,7 +38,7 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
         Timestamp paidAt = rs.getTimestamp("paid_at");
         String ticketIdStr = rs.getString("ticket_id");
         String consolidatedStr = rs.getString("consolidated_into_invoice_id");
-        return new Invoice(
+        Invoice invoice = new Invoice(
             UUID.fromString(rs.getString("id")),
             UUID.fromString(rs.getString("contract_id")),
             UUID.fromString(rs.getString("room_id")),
@@ -58,6 +59,8 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
             rs.getTimestamp("created_at").toInstant(),
             rs.getTimestamp("updated_at").toInstant()
         );
+        invoice.restoreVersion(rs.getLong("version"));
+        return invoice;
     }
 
     @Override
@@ -66,11 +69,11 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
             INSERT INTO invoices (
                 id, contract_id, room_id, tenant_id, month, year, rent_amount, utility_amount,
                 other_amount, total_amount, paid_amount, due_date, status, payment_code,
-                invoice_type, ticket_id, consolidated_into_invoice_id, paid_at, created_at, updated_at
+                invoice_type, ticket_id, consolidated_into_invoice_id, paid_at, created_at, updated_at, version
             ) VALUES (
                 :id, :contractId, :roomId, :tenantId, :month, :year, :rentAmount, :utilityAmount,
                 :otherAmount, :totalAmount, :paidAmount, :dueDate, :status, :paymentCode,
-                :invoiceType, :ticketId, :consolidatedInto, :paidAt, :createdAt, :updatedAt
+                :invoiceType, :ticketId, :consolidatedInto, :paidAt, :createdAt, :updatedAt, :version
             )
             ON CONFLICT (id) DO UPDATE SET
                 utility_amount = EXCLUDED.utility_amount,
@@ -80,11 +83,15 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
                 status = EXCLUDED.status,
                 paid_at = EXCLUDED.paid_at,
                 consolidated_into_invoice_id = EXCLUDED.consolidated_into_invoice_id,
-                updated_at = EXCLUDED.updated_at
+                updated_at = EXCLUDED.updated_at,
+                version = invoices.version + 1
+            WHERE invoices.version = :version
+            RETURNING version
             """;
 
         MapSqlParameterSource params = new MapSqlParameterSource()
             .addValue("id", invoice.getId())
+            .addValue("version", invoice.getVersion())
             .addValue("contractId", invoice.getContractId())
             .addValue("roomId", invoice.getRoomId())
             .addValue("tenantId", invoice.getTenantId())
@@ -106,7 +113,11 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
             .addValue("createdAt", Timestamp.from(invoice.getCreatedAt()))
             .addValue("updatedAt", Timestamp.from(invoice.getUpdatedAt()));
 
-        jdbcTemplate.update(sql, params);
+        List<Long> versions = jdbcTemplate.queryForList(sql, params, Long.class);
+        if (versions.isEmpty()) {
+            throw new OptimisticLockConflictException("Hóa đơn");
+        }
+        invoice.restoreVersion(versions.getFirst());
         saveItems(invoice);
         return invoice;
     }
@@ -210,6 +221,22 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
     public Optional<Invoice> findByPaymentCodeForUpdate(String paymentCode) {
         String sql = "SELECT " + COLUMNS + " FROM invoices WHERE payment_code = :code FOR UPDATE";
         return hydrate(jdbcTemplate.query(sql, Map.of("code", paymentCode), this::mapRow)).stream().findFirst();
+    }
+
+    @Override
+    public Optional<Invoice> findByIdForUpdate(UUID id) {
+        String sql = "SELECT " + COLUMNS + " FROM invoices WHERE id = :id FOR UPDATE";
+        return hydrate(jdbcTemplate.query(sql, Map.of("id", id), this::mapRow)).stream().findFirst();
+    }
+
+    @Override
+    public List<UUID> findOverdueRentInvoiceIds(java.time.LocalDate today) {
+        return jdbcTemplate.query("""
+            SELECT id FROM invoices
+            WHERE invoice_type = 'RENT' AND status IN ('ISSUED', 'PARTIALLY_PAID', 'OVERDUE')
+              AND consolidated_into_invoice_id IS NULL AND due_date < :today
+            ORDER BY due_date
+            """, Map.of("today", java.sql.Date.valueOf(today)), (rs, rowNum) -> UUID.fromString(rs.getString(1)));
     }
 
     @Override

@@ -115,7 +115,7 @@ public class MonthlyInvoiceService implements MonthlyInvoiceUseCase {
     }
 
     private static boolean isEligible(Contract contract, YearMonth period) {
-        if (!contract.isActive()) {
+        if (!contract.isResiding()) {
             return false;
         }
         YearMonth firstMonth = YearMonth.from(contract.getStartDate());

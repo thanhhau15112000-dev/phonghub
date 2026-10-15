@@ -44,14 +44,16 @@ tags:
     description: Quản lý công tơ và ghi nhận chỉ số điện/nước
   - name: Billing & Invoices
     description: Kỳ tính cước, lập hóa đơn, phát hành và hủy hóa đơn
+  - name: Notifications
+    description: Trung tâm thông báo cá nhân cho mọi vai trò (#86)
   - name: Payments
     description: Ghi nhận thanh toán và phân bổ tiền vào hóa đơn
   - name: Maintenance
     description: Quy trình xử lý sự cố/bảo trì phòng trọ
   - name: Checkout & Settlement
     description: Quy trình trả phòng, nghiệm thu và thanh lý tiền cọc
-  - name: Notifications
-    description: Trung tâm thông báo cá nhân cho mọi vai trò (#86)
+  - name: Statistics
+    description: Thống kê doanh thu, chi phí, công nợ, lấp đầy (owner) và tổng quan hệ thống (admin)
 
 security:
   - bearerAuth: []
@@ -3227,6 +3229,371 @@ paths:
           $ref: '#/components/responses/Unauthorized'
 
   # ==========================================
+  # EXPORTS (#85)
+  # ==========================================
+  /api/exports/{dataset}:
+    get:
+      tags: [Billing & Invoices]
+      summary: Xuất hóa đơn / công nợ / hợp đồng ra Excel hoặc PDF trong phạm vi quyền
+      description: >
+        Hóa đơn và công nợ cần quyền thu tiền, hợp đồng cần quyền quản lý hợp đồng (admin mọi nhà, owner nhà của
+        mình, staff theo quyền được cấp). Kỹ thuật viên và người thuê bị 403. Số CCCD luôn được che (****1234).
+        Mỗi lần xuất được ghi audit DATA_EXPORTED.
+      parameters:
+        - name: dataset
+          in: path
+          required: true
+          schema: { type: string, enum: [invoices, debts, contracts] }
+        - name: format
+          in: query
+          schema: { type: string, enum: [xlsx, pdf], default: xlsx }
+        - name: propertyId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          description: Chỉ cho hóa đơn - tháng bắt đầu (yyyy-MM), mặc định 11 tháng trước tháng kết thúc
+          schema: { type: string, example: '2026-01' }
+        - name: to
+          in: query
+          description: Chỉ cho hóa đơn - tháng kết thúc (yyyy-MM), mặc định tháng hiện tại; tối đa 60 tháng
+          schema: { type: string, example: '2026-12' }
+      responses:
+        '200':
+          description: Tệp đính kèm (Content-Disposition attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+            application/pdf:
+              schema: { type: string, format: binary }
+        '400':
+          description: Loại dữ liệu, định dạng hoặc khoảng tháng không hợp lệ
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==========================================
+  # RECONCILIATION & RECEIPTS (#82)
+  # ==========================================
+  /api/v1/payments/reconciliation:
+    get:
+      tags: [Payments]
+      summary: Giao dịch SePay kèm trạng thái đối soát (khớp / cần xem xét / không khớp / bỏ qua)
+      description: >
+        Admin xem mọi giao dịch (kể cả chưa khớp hợp đồng); owner xem giao dịch hợp đồng nhà mình; staff xem nhà được
+        phân công có quyền thu tiền. Kỹ thuật viên, người thuê, lọc nhà ngoài phạm vi: 403.
+      parameters:
+        - name: propertyId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { type: string, enum: [MATCHED, NEEDS_REVIEW, UNMATCHED, IGNORED] }
+        - name: from
+          in: query
+          description: Ngày bắt đầu (yyyy-MM-dd, giờ Việt Nam, bao gồm)
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          description: Ngày kết thúc (yyyy-MM-dd, bao gồm)
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Danh sách giao dịch mới nhất trước, số lượng theo trạng thái và tổng tiền
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        sepayId: { type: integer }
+                        receivedAt: { type: string, format: date-time }
+                        gateway: { type: string }
+                        referenceCode: { type: string }
+                        amount: { type: number }
+                        appliedAmount: { type: number }
+                        excessAmount: { type: number }
+                        status: { type: string, enum: [MATCHED, NEEDS_REVIEW, UNMATCHED, IGNORED] }
+                        reviewReason: { type: string, nullable: true, enum: [OVERPAID, INVOICE_NOT_PAYABLE, UNMATCHED] }
+                        invoiceId: { type: string, format: uuid, nullable: true }
+                        propertyName: { type: string, nullable: true }
+                        roomNumber: { type: string, nullable: true }
+                  counts:
+                    type: object
+                    additionalProperties: { type: integer }
+                  totalReceived: { type: number }
+                  totalApplied: { type: number }
+                  totalExcess: { type: number }
+        '400':
+          description: Tham số sai (trạng thái không hợp lệ, from > to)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/invoices/{invoiceId}/receipt:
+    get:
+      tags: [Payments]
+      summary: Biên lai thanh toán của hóa đơn (người thuê của hợp đồng hoặc người quản lý nhà trọ)
+      parameters:
+        - name: invoiceId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Biên lai; danh sách lần tiền về không kèm số tài khoản hay nội dung chuyển khoản
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Hóa đơn chưa có khoản thanh toán nào nên chưa có biên lai
+
+  # ==========================================
+  # MAINTENANCE QUOTE & TENANT CONFIRMATION (#83)
+  # ==========================================
+  /api/maintenance/{id}/quote:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Maintenance]
+      summary: Nhập/cập nhật báo giá khi phiếu chưa sửa xong (kỹ thuật viên được giao, owner/staff quản lý, admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: { type: number, minimum: 0 }
+                note: { type: string, maxLength: 1000 }
+      responses:
+        '200':
+          description: Báo giá đã lưu
+        '400':
+          description: Số tiền thiếu hoặc âm
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Phiếu đã sửa xong, đang chờ thanh toán hoặc đã bị từ chối
+    get:
+      tags: [Maintenance]
+      summary: Báo giá người xem được thấy (người thuê chỉ thấy khi là bên chịu phí)
+      responses:
+        '200':
+          description: Báo giá
+        '204':
+          description: Chưa có báo giá hoặc người thuê không phải bên chịu phí
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/maintenance/{id}/verify:
+    post:
+      tags: [Maintenance]
+      summary: Người thuê của phòng xác nhận đã sửa xong (RESOLVED -> VERIFIED)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Phiếu ở trạng thái VERIFIED
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Phiếu chưa sửa xong, còn phí chờ thanh toán hoặc đã xác nhận
+
+  /api/maintenance/{id}/reopen:
+    post:
+      tags: [Maintenance]
+      summary: Người thuê phản hồi chưa đạt; phiếu về ASSIGNED (có kỹ thuật viên) hoặc REPORTED, sửa lại không thu phí lần hai
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [feedback]
+              properties:
+                feedback: { type: string, maxLength: 1000 }
+      responses:
+        '200':
+          description: Phiếu được mở lại
+        '400':
+          description: Thiếu lý do chưa đạt
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Phiếu chưa sửa xong
+
+  # ==========================================
+  # STATISTICS (#93)
+  # Doanh thu tính theo kỳ hóa đơn (bỏ hóa đơn VOIDED và phí đã gộp vào hóa đơn tháng); chi phí là phí sửa chữa
+  # chủ nhà chịu của phiếu hoàn thành trong kỳ; lợi nhuận ước tính = đã thu - chi phí. Tháng theo giờ Việt Nam.
+  # Owner chỉ thấy nhà của mình (403 nếu lọc nhà khác); admin thấy mọi nhà. Staff/kỹ thuật viên/người thuê: 403.
+  # ==========================================
+  /api/stats/owner/summary:
+    get:
+      tags: [Statistics]
+      summary: Tổng hợp doanh thu, công nợ, chi phí, lấp đầy và bảo trì của owner
+      parameters:
+        - $ref: '#/components/parameters/StatsPropertyParam'
+        - $ref: '#/components/parameters/StatsFromParam'
+        - $ref: '#/components/parameters/StatsToParam'
+      responses:
+        '200':
+          description: Số liệu tổng hợp (owner chưa có nhà trọ thì các số bằng 0, tỷ lệ null)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerStatsSummary'
+        '400':
+          description: Khoảng thời gian sai (from > to, quá 60 tháng, sai định dạng yyyy-MM)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/stats/owner/revenue:
+    get:
+      tags: [Statistics]
+      summary: Chuỗi doanh thu, công nợ, chi phí, lợi nhuận theo tháng/quý/năm (đủ kỳ, kỳ trống = 0)
+      parameters:
+        - $ref: '#/components/parameters/StatsPropertyParam'
+        - $ref: '#/components/parameters/StatsFromParam'
+        - $ref: '#/components/parameters/StatsToParam'
+        - name: groupBy
+          in: query
+          schema:
+            type: string
+            enum: [MONTH, QUARTER, YEAR]
+            default: MONTH
+      responses:
+        '200':
+          description: Mỗi phần tử là một kỳ (2026-03, 2026-Q1 hoặc 2026)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StatsPeriod'
+        '400':
+          description: Tham số sai
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/stats/owner/properties:
+    get:
+      tags: [Statistics]
+      summary: Số liệu từng nhà trọ trong phạm vi
+      parameters:
+        - $ref: '#/components/parameters/StatsPropertyParam'
+        - $ref: '#/components/parameters/StatsFromParam'
+        - $ref: '#/components/parameters/StatsToParam'
+      responses:
+        '200':
+          description: Danh sách nhà trọ sắp theo tên
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PropertyStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/stats/admin/overview:
+    get:
+      tags: [Statistics]
+      summary: Admin - tổng quan toàn hệ thống (nhà trọ theo trạng thái xác minh, tài khoản theo vai trò, doanh thu, lấp đầy)
+      parameters:
+        - $ref: '#/components/parameters/StatsFromParam'
+        - $ref: '#/components/parameters/StatsToParam'
+      responses:
+        '200':
+          description: Tổng quan hệ thống
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStatsOverview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/stats/admin/pending-properties:
+    get:
+      tags: [Statistics]
+      summary: Admin - nhà trọ chờ duyệt, cũ nhất trước, kèm chủ nhà
+      responses:
+        '200':
+          description: Danh sách nhà trọ chờ duyệt
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PendingPropertyStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/stats/admin/accounts:
+    get:
+      tags: [Statistics]
+      summary: Admin - tài khoản theo vai trò/trạng thái và hoạt động theo tháng (tài khoản mới, thao tác audit)
+      parameters:
+        - $ref: '#/components/parameters/StatsFromParam'
+        - $ref: '#/components/parameters/StatsToParam'
+      responses:
+        '200':
+          description: Số liệu tài khoản
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ==========================================
   # 11. NOTIFICATIONS (#86)
   # ==========================================
   /api/notifications:
@@ -3320,6 +3687,29 @@ components:
       bearerFormat: JWT
 
   parameters:
+    StatsPropertyParam:
+      name: propertyId
+      in: query
+      description: Chỉ thống kê một nhà trọ (owner phải sở hữu, nếu không trả 403)
+      schema:
+        type: string
+        format: uuid
+    StatsFromParam:
+      name: from
+      in: query
+      description: Tháng bắt đầu (yyyy-MM, bao gồm). Mặc định 11 tháng trước tháng kết thúc
+      schema:
+        type: string
+        pattern: '^\d{4}-\d{2}$'
+        example: '2026-01'
+    StatsToParam:
+      name: to
+      in: query
+      description: Tháng kết thúc (yyyy-MM, bao gồm). Mặc định tháng hiện tại; khoảng tối đa 60 tháng
+      schema:
+        type: string
+        pattern: '^\d{4}-\d{2}$'
+        example: '2026-12'
     PageParam:
       name: page
       in: query
@@ -3410,6 +3800,115 @@ components:
       type: string
       enum: [LOW, MEDIUM, HIGH, URGENT]
 
+    StatsRevenue:
+      type: object
+      properties:
+        invoiceCount: { type: integer }
+        billed: { type: number, description: Tổng tiền hóa đơn phát sinh trong kỳ }
+        collected: { type: number, description: Số đã thu của các hóa đơn đó }
+        outstanding: { type: number, description: Công nợ còn lại của hóa đơn chưa trả đủ }
+        overdueInvoices: { type: integer }
+        overdueAmount: { type: number }
+        collectionRate: { type: number, nullable: true, description: 'Phần trăm đã thu trên phát sinh, null khi chưa phát sinh' }
+    StatsOccupancy:
+      type: object
+      properties:
+        totalRooms: { type: integer }
+        occupied: { type: integer }
+        reserved: { type: integer }
+        maintenance: { type: integer }
+        available: { type: integer }
+        occupancyRate: { type: number, nullable: true }
+    OwnerStatsSummary:
+      type: object
+      properties:
+        from: { type: string, example: '2025-11' }
+        to: { type: string, example: '2026-10' }
+        propertyId: { type: string, format: uuid, nullable: true }
+        propertyCount: { type: integer }
+        revenue: { $ref: '#/components/schemas/StatsRevenue' }
+        repairCost: { type: number, description: Phí sửa chữa chủ nhà chịu của phiếu hoàn thành trong kỳ }
+        estimatedProfit: { type: number }
+        occupancy: { $ref: '#/components/schemas/StatsOccupancy' }
+        maintenance:
+          type: object
+          properties:
+            openTickets: { type: integer }
+            overdueTickets: { type: integer, description: Phiếu đang mở đã quá hạn SLA }
+            roomsUnderMaintenance: { type: integer }
+            completedTickets: { type: integer }
+            repairCost: { type: number }
+            avgResolutionHours: { type: number, nullable: true }
+    StatsPeriod:
+      type: object
+      properties:
+        period: { type: string, example: '2026-Q1' }
+        billed: { type: number }
+        collected: { type: number }
+        outstanding: { type: number }
+        repairCost: { type: number }
+        estimatedProfit: { type: number }
+    PropertyStats:
+      type: object
+      properties:
+        propertyId: { type: string, format: uuid }
+        name: { type: string }
+        approvalStatus: { type: string, enum: [PENDING, VERIFIED, REJECTED] }
+        revenue: { $ref: '#/components/schemas/StatsRevenue' }
+        repairCost: { type: number }
+        estimatedProfit: { type: number }
+        occupancy: { $ref: '#/components/schemas/StatsOccupancy' }
+    AdminStatsOverview:
+      type: object
+      properties:
+        from: { type: string }
+        to: { type: string }
+        properties: { type: integer }
+        propertiesByApproval:
+          type: object
+          additionalProperties: { type: integer }
+          example: { PENDING: 1, VERIFIED: 10, REJECTED: 2 }
+        accountsByRole:
+          type: object
+          additionalProperties: { type: integer }
+          example: { ADMIN: 1, OWNER: 5, STAFF: 3, TECHNICIAN: 2, TENANT: 40 }
+        revenue: { $ref: '#/components/schemas/StatsRevenue' }
+        occupancy: { $ref: '#/components/schemas/StatsOccupancy' }
+    PendingPropertyStats:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        address: { type: string }
+        ownerId: { type: string, format: uuid, nullable: true }
+        ownerName: { type: string, nullable: true }
+        ownerEmail: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    AccountStats:
+      type: object
+      properties:
+        from: { type: string }
+        to: { type: string }
+        totalAccounts: { type: integer }
+        byRole:
+          type: object
+          additionalProperties: { type: integer }
+        byStatus:
+          type: object
+          additionalProperties: { type: integer }
+          example: { ACTIVE: 50, INACTIVE: 1, SUSPENDED: 0 }
+        activity:
+          type: array
+          items:
+            type: object
+            properties:
+              period: { type: string, example: '2026-10' }
+              newAccounts: { type: integer }
+              newAccountsByRole:
+                type: object
+                additionalProperties: { type: integer }
+              actions: { type: integer, description: Số thao tác ghi trong audit log }
+              activeUsers: { type: integer, description: Số người có thao tác }
     Error:
       type: object
       required: [code, message]

@@ -3,6 +3,7 @@ package com.phonghub.adapter.out.persistence.inmemory;
 import com.phonghub.application.port.out.PaymentRepositoryPort;
 import com.phonghub.domain.model.PaymentTransaction;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +52,21 @@ public class InMemoryPaymentRepository implements PaymentRepositoryPort {
     public List<PaymentTransaction> findAll() {
         return store.values().stream()
             .sorted(Comparator.comparing(PaymentTransaction::createdAt).reversed())
+            .toList();
+    }
+
+    @Override
+    public List<PaymentTransaction> findByContractIds(Collection<UUID> contractIds) {
+        return findAll().stream()
+            .filter(t -> t.contractId() != null && contractIds.contains(t.contractId()))
+            .toList();
+    }
+
+    @Override
+    public List<PaymentTransaction> findByInvoiceId(UUID invoiceId) {
+        return store.values().stream()
+            .filter(t -> invoiceId.equals(t.invoiceId()))
+            .sorted(Comparator.comparing(PaymentTransaction::createdAt))
             .toList();
     }
 
