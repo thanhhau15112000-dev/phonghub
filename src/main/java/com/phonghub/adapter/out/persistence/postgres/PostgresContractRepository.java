@@ -144,7 +144,10 @@ public class PostgresContractRepository implements ContractRepositoryPort {
 
     @Override
     public Optional<Contract> findActiveByRoomId(UUID roomId) {
-        String sql = "SELECT * FROM contracts WHERE room_id = :roomId AND status = 'ACTIVE'";
+        String sql = """
+            SELECT * FROM contracts WHERE room_id = :roomId AND status IN ('ACTIVE', 'EXPIRED')
+            ORDER BY (status = 'ACTIVE') DESC, updated_at DESC LIMIT 1
+            """;
         List<Contract> list = jdbcTemplate.query(sql, Map.of("roomId", roomId), (rs, rn) -> mapContract(rs));
         return list.isEmpty() ? Optional.empty() : Optional.of(list.getFirst());
     }

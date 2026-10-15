@@ -4,7 +4,6 @@ import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.domain.exception.TenantProfileLockedException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
-import com.phonghub.domain.model.ContractStatus;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -51,7 +50,8 @@ public class TenantLockPolicy {
                 .filter(java.util.Objects::nonNull)
                 .map(date -> date.atStartOfDay(ZoneOffset.UTC).toInstant())
                 .findFirst().orElse(null);
-            boolean open = contract.getStatus() == ContractStatus.DRAFT || contract.getStatus() == ContractStatus.ACTIVE;
+            // Hết hạn mà chưa check-out (#87) vẫn đang mở: không khóa/xóa hồ sơ người còn ở.
+            boolean open = contract.isOpen();
             if (open && leftAt == null) {
                 return new LockInfo(true, null, null);
             }

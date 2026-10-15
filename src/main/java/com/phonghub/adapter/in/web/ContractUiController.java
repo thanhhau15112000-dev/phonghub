@@ -246,7 +246,7 @@ public class ContractUiController {
             .min(Comparator.comparing(Invoice::getYear).thenComparing(Invoice::getMonth))
             .orElse(null);
 
-        boolean canIssueInvoice = contract.isActive() && currentUser != null && (
+        boolean canIssueInvoice = contract.isResiding() && currentUser != null && (
             currentUser.role() == UserRole.ADMIN
                 || currentUser.role() == UserRole.STAFF
                 || (currentUser.role() == UserRole.OWNER && currentUser.id().equals(property.ownerId()))

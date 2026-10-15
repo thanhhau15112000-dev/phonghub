@@ -140,8 +140,9 @@ public class Invoice {
         if (contract == null || period == null) {
             throw new IllegalArgumentException("Contract and period are required");
         }
-        if (!contract.isActive()) {
-            throw new DomainException("Chỉ có thể tạo kỳ thanh toán cho hợp đồng đang hiệu lực.");
+        // Hợp đồng đã hết hạn mà chưa trả phòng (#87) vẫn lập được hóa đơn các kỳ trong thời hạn hợp đồng.
+        if (!contract.isResiding()) {
+            throw new DomainException("Chỉ có thể tạo kỳ thanh toán cho hợp đồng đang hiệu lực hoặc chưa trả phòng.");
         }
         YearMonth firstPeriod = YearMonth.from(contract.getStartDate());
         YearMonth lastPeriod = YearMonth.from(contract.getEndDate());
@@ -282,8 +283,8 @@ public class Invoice {
         if (contract == null || ticketId == null || today == null) {
             throw new IllegalArgumentException("Contract, ticket and date are required");
         }
-        if (!contract.isActive()) {
-            throw new DomainException("Chỉ có thể tạo khoản phí cho hợp đồng đang hiệu lực.");
+        if (!contract.isResiding()) {
+            throw new DomainException("Chỉ có thể tạo khoản phí cho hợp đồng đang hiệu lực hoặc chưa trả phòng.");
         }
         if (amount == null || amount.signum() <= 0) {
             throw new IllegalArgumentException("Fee amount must be greater than zero");

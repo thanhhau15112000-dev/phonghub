@@ -3,6 +3,9 @@ phonghub:
     enabled: true
   invoicing:
     auto-generate: false
+  contracts:
+    # Test gọi ContractLifecycleUseCase trực tiếp với ngày cố định thay vì để job chạy theo giờ máy.
+    expiry-job-enabled: false
   sepay:
     allow-unsigned-webhook: true
     simulation-enabled: true

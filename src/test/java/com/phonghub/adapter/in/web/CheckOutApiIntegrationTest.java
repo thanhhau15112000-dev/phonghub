@@ -4,13 +4,16 @@ import com.jayway.jsonpath.JsonPath;
 import com.phonghub.adapter.out.audit.InMemoryAuditAdapter;
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverItemRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverPhotoRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyHouseRulesRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomAssetRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantDocumentRepository;
+import com.phonghub.application.port.in.ContractLifecycleUseCase;
 import com.phonghub.application.port.out.AuditPort;
+import java.time.LocalDate;
 import java.util.Base64;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +54,8 @@ class CheckOutApiIntegrationTest extends SeededWebTest {
     @Autowired private InMemoryPropertyHouseRulesRepository rules;
     @Autowired private InMemoryTenantDocumentRepository documents;
     @Autowired private InMemoryRoomAssetRepository roomAssets;
+    @Autowired private InMemoryContractRepository contracts;
+    @Autowired private ContractLifecycleUseCase contractLifecycle;
 
     @BeforeEach
     void reset() {
@@ -256,5 +261,50 @@ class CheckOutApiIntegrationTest extends SeededWebTest {
         mockMvc.perform(get(CONTRACT + "/check-out").header("X-User-Id", OWNER_2)).andExpect(status().isForbidden());
         mockMvc.perform(post(CONTRACT + "/check-out/confirm").header("X-User-Id", OWNER_1))
             .andExpect(status().isForbidden());
+    }
+
+    private void expireContract() {
+        LocalDate end = contracts.findById(DataSeeder.CONTRACT_1_ID).orElseThrow().getEndDate();
+        assertEquals(1, contractLifecycle.runDaily(end.plusDays(1)).expired());
+    }
+
+    @Test
+    @DisplayName("Expired contract (#87): room stays occupied and blocks new contracts; only check-out ends it")
+    void expiredContractStillNeedsCheckOut() throws Exception {
+        approvedCheckIn();
+        expireContract();
+
+        mockMvc.perform(get("/api/contracts/" + DataSeeder.CONTRACT_1_ID).header("X-User-Id", OWNER_1))
+            .andExpect(jsonPath("$.status").value("EXPIRED"));
+        mockMvc.perform(get("/api/rooms/" + DataSeeder.ROOM_101_ID).header("X-User-Id", OWNER_1))
+            .andExpect(jsonPath("$.status").value("OCCUPIED"));
+        mockMvc.perform(get("/api/rooms/" + DataSeeder.ROOM_101_ID).header("X-User-Id", TENANT_1))
+            .andExpect(status().isOk());
+        mockMvc.perform(post("/api/contracts").header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"propertyId": "%s", "roomId": "%s", "primaryTenantFullName": "Lê Mới",
+                     "primaryTenantIdCard": "079201009999", "primaryTenantPhone": "0901112223",
+                     "depositAmount": 1000000, "rentAmount": 3000000, "startDate": "%s", "endDate": "%s",
+                     "paymentDay": 5}
+                    """.formatted(DataSeeder.PROP_1_ID, DataSeeder.ROOM_101_ID, LocalDate.now(),
+                    LocalDate.now().plusMonths(6))))
+            .andExpect(status().isConflict());
+
+        createCheckOut();
+        sendAndConfirm();
+        mockMvc.perform(post(CONTRACT + "/check-out/approve").header("X-User-Id", OWNER_1))
+            .andExpect(status().isOk());
+        mockMvc.perform(get("/api/contracts/" + DataSeeder.CONTRACT_1_ID).header("X-User-Id", OWNER_1))
+            .andExpect(jsonPath("$.status").value("TERMINATED"));
+        mockMvc.perform(get("/api/rooms/" + DataSeeder.ROOM_101_ID).header("X-User-Id", OWNER_1))
+            .andExpect(jsonPath("$.status").value("AVAILABLE"));
+    }
+
+    @Test
+    @DisplayName("Expired contract (#87): a new check-in is no longer allowed")
+    void expiredContractRejectsCheckIn() throws Exception {
+        expireContract();
+        mockMvc.perform(post(CONTRACT + "/check-in").header("X-User-Id", OWNER_1)
+            .contentType(MediaType.APPLICATION_JSON).content(BODY)).andExpect(status().isConflict());
     }
 }

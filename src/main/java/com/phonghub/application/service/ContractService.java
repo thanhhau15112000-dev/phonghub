@@ -208,9 +208,9 @@ public class ContractService implements ContractUseCase {
 
         Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
 
-        if (contract.getStatus() != ContractStatus.ACTIVE) {
+        if (!contract.isResiding()) {
             throw new InvalidContractStateException(String.format(
-                "Chỉ có thể kết thúc hợp đồng ở trạng thái ACTIVE. Trạng thái hiện tại: '%s'.",
+                "Chỉ có thể kết thúc hợp đồng đang hiệu lực hoặc đã hết hạn nhưng chưa trả phòng. Trạng thái hiện tại: '%s'.",
                 contract.getStatus()
             ));
         }
@@ -279,7 +279,10 @@ public class ContractService implements ContractUseCase {
                 return Optional.of(c);
             }
         }
-        return Optional.empty();
+        // Hợp đồng đã hết hạn nhưng chưa check-out (#87): người thuê vẫn ở và vẫn cần thanh toán/check-out.
+        return java.util.stream.Stream.concat(primaryContracts.stream(), occupantContracts.stream())
+            .filter(Contract::isResiding)
+            .findFirst();
     }
 
     @Override
