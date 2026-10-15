@@ -291,7 +291,13 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
-    public PlatformTransactionManager transactionManager(DataSource dataSource) {
-        return new DataSourceTransactionManager(dataSource);
+    public PlatformTransactionManager transactionManager(
+        DataSource dataSource,
+        CacheEvictingTransactionListener cacheEvictingTransactionListener
+    ) {
+        DataSourceTransactionManager manager = new DataSourceTransactionManager(dataSource);
+        // Transaction ghi commit xong thì xóa cache danh sách/dashboard (#88).
+        manager.addListener(cacheEvictingTransactionListener);
+        return manager;
     }
 }

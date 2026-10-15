@@ -5,6 +5,9 @@ phonghub:
     enabled: true
   invoicing:
     auto-generate: false
+  # Nhiều test sửa thẳng repository in-memory (không qua service/transaction) nên tắt cache; test cache bật riêng.
+  cache:
+    enabled: false
   sepay:
     allow-unsigned-webhook: true
     simulation-enabled: true
