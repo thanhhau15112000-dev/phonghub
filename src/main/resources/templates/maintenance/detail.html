@@ -72,6 +72,43 @@
         </div>
     </div>
 
+    <!-- Báo giá sửa chữa (#83): người thuê chỉ thấy khi là bên chịu phí -->
+    <div th:if="${quote != null or ((currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED' or ticket.getStatus().name() == 'IN_PROGRESS'))}"
+         class="card" style="margin-bottom: 20px;" id="quote">
+        <h2>Báo giá sửa chữa</h2>
+        <div th:if="${quote != null}" style="font-size: 13px; margin-bottom: 12px;" id="quote-detail">
+            <div style="margin-bottom: 4px;">
+                <span style="color: var(--text-secondary);">Số tiền dự kiến:</span>
+                <strong th:text="${#numbers.formatDecimal(quote.amount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">500,000 đ</strong>
+            </div>
+            <div th:if="${quote.note() != null}" style="margin-bottom: 4px;">
+                <span style="color: var(--text-secondary);">Ghi chú:</span>
+                <span th:text="${quote.note()}">Thay vòi nước</span>
+            </div>
+            <div th:if="${quote.quotedAt() != null}">
+                <span style="color: var(--text-secondary);">Báo giá lúc:</span>
+                <span th:text="${#temporals.format(quote.quotedAt(), 'dd/MM/yyyy HH:mm')}">01/10/2026 10:00</span>
+            </div>
+        </div>
+        <p th:if="${quote == null}" style="color: var(--text-secondary); font-size: 13px;">Chưa có báo giá.</p>
+        <form th:if="${(currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED' or ticket.getStatus().name() == 'IN_PROGRESS')}"
+              th:action="@{'/maintenance/' + ${ticket.getId()} + '/quote'}" method="post" id="quote-form"
+              style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group" style="margin: 0; min-width: 160px;">
+                <label class="form-label" for="quoteAmount">Số tiền (VND)</label>
+                <input type="number" id="quoteAmount" name="amount" class="form-control" min="0" step="1000" required
+                       th:value="${quote != null ? quote.amount() : ''}">
+            </div>
+            <div class="form-group" style="margin: 0; flex: 1; min-width: 200px;">
+                <label class="form-label" for="quoteNote">Ghi chú</label>
+                <input type="text" id="quoteNote" name="note" class="form-control" maxlength="1000" placeholder="Linh kiện, công thay thế..."
+                       th:value="${quote != null ? quote.note() : ''}">
+            </div>
+            <button type="submit" class="btn btn-primary" th:text="${quote != null ? 'Cập nhật báo giá' : 'Lưu báo giá'}">Lưu báo giá</button>
+        </form>
+    </div>
+
     <!-- Khoản phí sửa chữa chờ thanh toán -->
     <div th:if="${ticket.getStatus().name() == 'AWAITING_PAYMENT'}" class="card" style="margin-bottom: 20px;" id="repair-fee">
         <h2>Phí sửa chữa chờ thanh toán</h2>
@@ -126,6 +163,24 @@
                 <strong th:text="${#numbers.formatDecimal(ticket.getRepairCost(), 0, 'COMMA', 0, 'POINT') + ' đ'}">150,000 đ</strong>
             </div>
         </div>
+    </div>
+
+    <!-- Người thuê xác nhận kết quả sửa (#83) -->
+    <div th:if="${currentUser.role().name() == 'TENANT' and ticket.getStatus().name() == 'RESOLVED'}" class="card" style="margin-bottom: 20px;" id="tenant-confirm">
+        <h2>Xác nhận kết quả sửa chữa</h2>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">Hãy kiểm tra lại và xác nhận đã sửa xong, hoặc cho biết chỗ chưa đạt để kỹ thuật viên sửa tiếp.</p>
+        <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/verify'}" method="post" style="margin-bottom: 12px;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button type="submit" class="btn btn-primary">Xác nhận đã sửa xong</button>
+        </form>
+        <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/reopen'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <label class="form-label" for="reopenFeedback">Chưa đạt? Mô tả vấn đề còn lại</label>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="reopenFeedback" name="feedback" class="form-control" maxlength="1000" placeholder="Ví dụ: vòi vẫn còn rỉ nước" required>
+                <button type="submit" class="btn">Báo chưa đạt</button>
+            </div>
+        </form>
     </div>
 
     <!-- Timeline trạng thái -->
@@ -216,7 +271,8 @@
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label">Chi phí sửa chữa (VND)</label>
-                    <input type="number" name="repairCost" class="form-control" value="0" min="0">
+                    <input type="number" name="repairCost" class="form-control" min="0"
+                           th:value="${quote != null ? quote.amount() : 0}">
                 </div>
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label">Bên chịu phí</label>

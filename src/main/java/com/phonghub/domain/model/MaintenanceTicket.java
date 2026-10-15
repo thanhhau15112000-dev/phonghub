@@ -1,5 +1,6 @@
 package com.phonghub.domain.model;
 
+import com.phonghub.domain.exception.InvalidMaintenanceStateException;
 import com.phonghub.domain.exception.MaintenanceTicketException;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -31,6 +32,11 @@ public class MaintenanceTicket {
     private long version;
     /** Mốc chuyển trạng thái chưa lưu; repository ghi vào timeline khi lưu phiếu rồi xóa. */
     private final List<MaintenanceTicketEvent> pendingEvents = new ArrayList<>();
+    /** Báo giá sửa chữa gần nhất (#83); null khi chưa báo giá. */
+    private Quote quote;
+
+    /** Báo giá do kỹ thuật viên hoặc người quản lý nhập trước khi sửa. */
+    public record Quote(BigDecimal amount, String note, UUID quotedBy, Instant quotedAt) {}
 
     /** Phiếu không có thông tin nguyên nhân: chủ trọ chịu phí. */
     public MaintenanceTicket(
@@ -347,6 +353,69 @@ public class MaintenanceTicket {
         }
         this.liableParty = party;
         this.updatedAt = Instant.now();
+    }
+
+    /**
+     * Nhập (hoặc cập nhật) báo giá khi phiếu chưa sửa xong. Báo giá không thay đổi trạng thái, chỉ ghi vào timeline;
+     * chi phí thực tế vẫn chốt khi xử lý xong.
+     */
+    public void quote(BigDecimal amount, String note, UUID actorId) {
+        if (status != MaintenanceStatus.REPORTED && status != MaintenanceStatus.ASSIGNED
+            && status != MaintenanceStatus.IN_PROGRESS) {
+            throw new InvalidMaintenanceStateException("Chỉ báo giá được khi phiếu chưa sửa xong. Trạng thái hiện tại: " + status);
+        }
+        if (amount == null || amount.signum() < 0) {
+            throw new IllegalArgumentException("Số tiền báo giá không được để trống hoặc âm.");
+        }
+        String cleanNote = note == null || note.isBlank() ? null : note.trim();
+        if (cleanNote != null && cleanNote.length() > 1000) {
+            throw new IllegalArgumentException("Ghi chú báo giá tối đa 1000 ký tự.");
+        }
+        this.updatedAt = Instant.now();
+        this.quote = new Quote(amount, cleanNote, actorId, this.updatedAt);
+        String amountText = java.text.NumberFormat.getIntegerInstance(java.util.Locale.forLanguageTag("vi-VN"))
+            .format(amount);
+        recordEvent(status, "Báo giá " + amountText + " đ" + (cleanNote == null ? "" : ": " + cleanNote));
+    }
+
+    /** Người thuê xác nhận đã sửa đạt: phiếu đóng ở trạng thái VERIFIED. */
+    public void verifyByTenant() {
+        if (status != MaintenanceStatus.RESOLVED) {
+            throw new InvalidMaintenanceStateException(
+                "Chỉ xác nhận được khi phiếu đã sửa xong và không còn phí chờ thanh toán. Trạng thái hiện tại: " + status);
+        }
+        this.status = MaintenanceStatus.VERIFIED;
+        this.updatedAt = Instant.now();
+        recordEvent(MaintenanceStatus.RESOLVED, "Người thuê xác nhận đã sửa xong");
+    }
+
+    /**
+     * Người thuê phản hồi chưa đạt: phiếu mở lại để sửa tiếp — về ASSIGNED nếu đã có kỹ thuật viên, ngược lại
+     * REPORTED để quản lý giao việc.
+     */
+    public void reopenByTenant(String feedback) {
+        if (status != MaintenanceStatus.RESOLVED) {
+            throw new InvalidMaintenanceStateException(
+                "Chỉ phản hồi chưa đạt được khi phiếu đã sửa xong. Trạng thái hiện tại: " + status);
+        }
+        if (feedback == null || feedback.isBlank()) {
+            throw new IllegalArgumentException("Cần nêu lý do chưa đạt.");
+        }
+        if (feedback.trim().length() > 1000) {
+            throw new IllegalArgumentException("Phản hồi tối đa 1000 ký tự.");
+        }
+        this.status = assignedTechnicianId != null ? MaintenanceStatus.ASSIGNED : MaintenanceStatus.REPORTED;
+        this.updatedAt = Instant.now();
+        recordEvent(MaintenanceStatus.RESOLVED, "Người thuê phản hồi chưa đạt: " + feedback.trim());
+    }
+
+    /** Repository khôi phục báo giá đã lưu khi đọc phiếu. */
+    public void restoreQuote(Quote quote) {
+        this.quote = quote;
+    }
+
+    public Quote getQuote() {
+        return quote;
     }
 
     /** Hóa đơn phí sửa chữa đã thanh toán đủ. */

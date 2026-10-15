@@ -217,6 +217,7 @@ public class MaintenanceUiController {
             model.addAttribute("liableParties", LiableParty.values());
             model.addAttribute("today", LocalDate.now());
             model.addAttribute("feeInvoice", invoiceUseCase.findFeeInvoiceForTicket(id).orElse(null));
+            model.addAttribute("quote", maintenanceUseCase.visibleQuote(id));
 
             return "maintenance/detail";
         } catch (DomainException ex) {
@@ -303,6 +304,46 @@ public class MaintenanceUiController {
         try {
             maintenanceUseCase.rejectTicket(id, reason);
             redirectAttributes.addFlashAttribute("successMessage", "Đã từ chối yêu cầu và thông báo cho người thuê.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
+                ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
+                : ex.getMessage());
+        }
+        return "redirect:/maintenance/" + id;
+    }
+
+    @PostMapping("/{id}/quote")
+    public String quoteTicket(
+        @PathVariable UUID id,
+        @RequestParam(required = false) BigDecimal amount,
+        @RequestParam(required = false) String note,
+        RedirectAttributes redirectAttributes
+    ) {
+        return act(id, redirectAttributes, () -> maintenanceUseCase.quoteTicket(id, amount, note),
+            "Đã lưu báo giá sửa chữa.");
+    }
+
+    @PostMapping("/{id}/verify")
+    public String verifyTicket(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        return act(id, redirectAttributes, () -> maintenanceUseCase.verifyTicket(id),
+            "Cảm ơn bạn đã xác nhận. Phiếu bảo trì đã đóng.");
+    }
+
+    @PostMapping("/{id}/reopen")
+    public String reopenTicket(
+        @PathVariable UUID id,
+        @RequestParam(required = false) String feedback,
+        RedirectAttributes redirectAttributes
+    ) {
+        return act(id, redirectAttributes, () -> maintenanceUseCase.reopenTicket(id, feedback),
+            "Đã gửi phản hồi chưa đạt. Phiếu được mở lại để sửa tiếp.");
+    }
+
+    /** Thực hiện một thao tác trên phiếu rồi quay lại trang chi tiết kèm thông báo thành công hoặc lỗi. */
+    private String act(UUID id, RedirectAttributes redirectAttributes, Runnable action, String successMessage) {
+        try {
+            action.run();
+            redirectAttributes.addFlashAttribute("successMessage", successMessage);
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
                 ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
