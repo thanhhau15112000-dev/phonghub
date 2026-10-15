@@ -45,7 +45,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -205,7 +204,7 @@ class ConcurrencyAndRollbackPostgresTest {
     void failureMidwayRollsBackAndRetrySucceeds() {
         Invoice invoice = invoice(2031, 3, "3000000");
         AtomicBoolean failOnSave = new AtomicBoolean(true);
-        SepayPaymentService service = payments(new FailingInvoiceRepository(new PostgresInvoiceRepository(jdbc), failOnSave));
+        SepayPaymentService service = payments(new FailingInvoiceRepository(jdbc, failOnSave));
 
         assertThrows(IllegalStateException.class, () -> tx.execute(s -> service.processWebhook("Apikey " + API_KEY,
             transfer(790004, invoice.getPaymentCode(), "3000000"))));
@@ -257,46 +256,25 @@ class ConcurrencyAndRollbackPostgresTest {
             new BigDecimal("3000000"), LocalDate.now(), LocalDate.now().plusMonths(6), 5);
     }
 
-    /** Bọc repository thật, ném lỗi khi lưu hóa đơn để mô phỏng sự cố sau khi giao dịch đã được ghi. */
-    private record FailingInvoiceRepository(InvoiceRepositoryPort delegate, AtomicBoolean fail)
-        implements InvoiceRepositoryPort {
+    /**
+     * Repository thật nhưng ném lỗi khi lưu hóa đơn để mô phỏng sự cố sau khi giao dịch đã được ghi. Kế thừa thay vì
+     * bọc InvoiceRepositoryPort để không phải sửa lại mỗi khi port có thêm hàm.
+     */
+    private static final class FailingInvoiceRepository extends PostgresInvoiceRepository {
+
+        private final AtomicBoolean fail;
+
+        FailingInvoiceRepository(NamedParameterJdbcTemplate jdbc, AtomicBoolean fail) {
+            super(jdbc);
+            this.fail = fail;
+        }
 
         @Override
         public Invoice save(Invoice invoice) {
             if (fail.get()) {
                 throw new IllegalStateException("invoice store is down");
             }
-            return delegate.save(invoice);
-        }
-
-        @Override
-        public Optional<Invoice> findById(UUID id) {
-            return delegate.findById(id);
-        }
-
-        @Override
-        public List<Invoice> findByContractId(UUID contractId) {
-            return delegate.findByContractId(contractId);
-        }
-
-        @Override
-        public Optional<Invoice> findActiveRentByContractIdAndPeriod(UUID contractId, int year, int month) {
-            return delegate.findActiveRentByContractIdAndPeriod(contractId, year, month);
-        }
-
-        @Override
-        public Optional<Invoice> findActiveByTicketId(UUID ticketId) {
-            return delegate.findActiveByTicketId(ticketId);
-        }
-
-        @Override
-        public Optional<Invoice> findByPaymentCodeForUpdate(String paymentCode) {
-            return delegate.findByPaymentCodeForUpdate(paymentCode);
-        }
-
-        @Override
-        public boolean existsByPaymentCode(String paymentCode) {
-            return delegate.existsByPaymentCode(paymentCode);
+            return super.save(invoice);
         }
     }
 }
