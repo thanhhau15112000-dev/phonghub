@@ -25,6 +25,10 @@ public final class PersonalDataFields {
 
     public static final String AUDIT_DETAILS = "audit_logs.details";
 
+    public static final String NOTIFICATIONS_TITLE = "notifications.title";
+    public static final String NOTIFICATIONS_MESSAGE = "notifications.message";
+    public static final String NOTIFICATIONS_RESOLUTION_NOTE = "notifications.resolution_note";
+
     private PersonalDataFields() {}
 
     /** Email và tên đăng nhập không phân biệt hoa thường. */

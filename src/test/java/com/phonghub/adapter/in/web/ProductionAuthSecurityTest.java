@@ -97,6 +97,10 @@ class ProductionAuthSecurityTest {
     @MockitoBean
     private com.phonghub.application.port.in.SepayWebhookUseCase sepayWebhookUseCase;
 
+    // Thông báo lưu trên Postgres (#86); header của mọi trang đọc số thông báo nên cần thay DB bằng mock.
+    @MockitoBean
+    private com.phonghub.application.port.out.NotificationRepositoryPort notificationRepository;
+
     @Test
     void healthEndpointIsPermittedWithoutAuthenticationInProd() throws Exception {
         mockMvc.perform(get("/health"))
@@ -607,6 +611,17 @@ class ProductionAuthSecurityTest {
             .andExpect(status().isUnauthorized());
         mockMvc.perform(delete(files).param("objectKey", "x"))
             .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void notificationCenterRequiresAuthenticationInProd() throws Exception {
+        String id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+        mockMvc.perform(get("/api/notifications")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/notifications/" + id + "/read")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/notifications/read-all")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/notifications"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
     }
 
     @Test

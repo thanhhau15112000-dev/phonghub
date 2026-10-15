@@ -5,6 +5,8 @@ phonghub:
     enabled: true
   invoicing:
     auto-generate: false
+    # Test gọi InvoiceDueReminderUseCase trực tiếp với ngày cố định.
+    due-reminder-enabled: false
   contracts:
     # Test gọi ContractLifecycleUseCase trực tiếp với ngày cố định thay vì để job chạy theo giờ máy.
     expiry-job-enabled: false

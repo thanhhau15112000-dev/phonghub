@@ -528,6 +528,62 @@ dialog.modal-dialog::backdrop {
   margin-bottom: 12px;
 }
 
+/* Trung tâm thông báo (#86) */
+.notification-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.notification-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.notification-item.unread {
+  background-color: rgba(254, 243, 199, 0.25);
+}
+
+.notification-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.notification-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.notification-item.unread .notification-title {
+  font-weight: 700;
+}
+
+.notification-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #ef4444;
+  flex-shrink: 0;
+}
+
+.notification-message {
+  margin: 4px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.notification-time {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
 .flex-between {
   display: flex;
   justify-content: space-between;
@@ -897,4 +953,5 @@ dialog.modal-dialog::backdrop {
   .card img { max-width: 100%; height: auto; }
   .btn { white-space: normal; }
   .notif-dropdown { max-width: calc(100vw - 32px); }
+  .notification-item { flex-direction: column; gap: 8px; }
 }

@@ -197,6 +197,16 @@ public class InMemoryPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository notificationRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository();
+    }
+
+    @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceReminderRepository invoiceReminderRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceReminderRepository();
+    }
+
+    @Bean
     public StatisticsQueryPort statisticsQueryPort(
         com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository invoiceRepo,
         InMemoryContractRepository contractRepo,

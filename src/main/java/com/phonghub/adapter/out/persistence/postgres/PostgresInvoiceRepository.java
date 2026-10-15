@@ -10,6 +10,7 @@ import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -187,6 +188,15 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
     public List<Invoice> findByContractId(UUID contractId) {
         String sql = "SELECT " + COLUMNS + " FROM invoices WHERE contract_id = :contractId ORDER BY year DESC, month DESC";
         return hydrate(jdbcTemplate.query(sql, Map.of("contractId", contractId), this::mapRow));
+    }
+
+    @Override
+    public List<Invoice> findPayableDueBetween(LocalDate from, LocalDate to) {
+        String sql = "SELECT " + COLUMNS + " FROM invoices WHERE due_date BETWEEN :from AND :to"
+            + " AND status IN ('ISSUED', 'PARTIALLY_PAID', 'OVERDUE') AND consolidated_into_invoice_id IS NULL";
+        return hydrate(jdbcTemplate.query(sql, new MapSqlParameterSource()
+            .addValue("from", Date.valueOf(from))
+            .addValue("to", Date.valueOf(to)), this::mapRow));
     }
 
     @Override

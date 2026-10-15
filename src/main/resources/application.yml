@@ -40,6 +40,9 @@ phonghub:
     signed-url-ttl-seconds: ${STORAGE_SIGNED_URL_TTL_SECONDS:600}
   invoicing:
     auto-generate: true
+    # Nhắc người thuê hóa đơn sắp đến hạn lúc 07:00 hằng ngày (#86)
+    due-reminder-enabled: ${INVOICE_DUE_REMINDER_ENABLED:true}
+    due-reminder-days: ${INVOICE_DUE_REMINDER_DAYS:3}
   contracts:
     expiry-job-enabled: ${CONTRACT_EXPIRY_JOB_ENABLED:true}
     expiry-reminder-days: ${CONTRACT_EXPIRY_REMINDER_DAYS:30}

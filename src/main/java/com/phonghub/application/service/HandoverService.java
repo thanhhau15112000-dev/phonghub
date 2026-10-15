@@ -65,6 +65,7 @@ public class HandoverService implements HandoverUseCase {
     private final AuthorizationService authorizationService;
     private final AuditPort auditPort;
     private final long maxFileSizeBytes;
+    private final NotificationDispatcher notifications;
 
     public HandoverService(
         HandoverRepositoryPort handoverRepository,
@@ -82,6 +83,30 @@ public class HandoverService implements HandoverUseCase {
         AuditPort auditPort,
         long maxFileSizeBytes
     ) {
+        this(handoverRepository, photoRepository, itemRepository, rulesRepository, contractRepository, assetRepository,
+            tenantRepository, documentRepository, contractUseCase, storagePort, currentUserPort, authorizationService,
+            auditPort, maxFileSizeBytes, null);
+    }
+
+    /** {@code notifications} null thì không gửi thông báo yêu cầu xác nhận/duyệt biên bản (#86). */
+    public HandoverService(
+        HandoverRepositoryPort handoverRepository,
+        HandoverPhotoRepositoryPort photoRepository,
+        HandoverItemRepositoryPort itemRepository,
+        PropertyHouseRulesRepositoryPort rulesRepository,
+        ContractRepositoryPort contractRepository,
+        RoomAssetRepositoryPort assetRepository,
+        TenantRepositoryPort tenantRepository,
+        TenantDocumentRepositoryPort documentRepository,
+        ContractUseCase contractUseCase,
+        FileStoragePort storagePort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        long maxFileSizeBytes,
+        NotificationDispatcher notifications
+    ) {
+        this.notifications = notifications;
         this.handoverRepository = handoverRepository;
         this.photoRepository = photoRepository;
         this.itemRepository = itemRepository;
@@ -261,6 +286,12 @@ public class HandoverService implements HandoverUseCase {
             rules == null ? null : sha256(rules.content()),
             user.id()));
         audit(type, "SENT", user, saved, Map.of("items", itemCount, "photos", photos.size()));
+        if (notifications != null) {
+            // Chỉ người thuê chính xác nhận được biên bản (requirePrimaryTenant).
+            notifications.notifyTenants(contract, false, "Biên bản " + label(type) + " cần bạn xác nhận",
+                "Chủ trọ đã gửi biên bản " + label(type) + ". Vui lòng kiểm tra tài sản, ảnh và xác nhận.",
+                link(type, contractId));
+        }
         return saved;
     }
 
@@ -281,7 +312,23 @@ public class HandoverService implements HandoverUseCase {
         }
         Handover saved = handoverRepository.save(handover.tenantConfirm(user.id()));
         audit(type, "TENANT_CONFIRMED", user, saved, Map.of());
+        if (notifications != null) {
+            // Người nhận khớp quyền duyệt ở approve(): check-out chỉ chủ trọ, check-in cả staff quản lý hợp đồng.
+            notifications.notifyManagers(contract.getPropertyId(), type == HandoverType.CHECK_IN,
+                "Biên bản " + label(type) + " chờ duyệt",
+                "Người thuê đã xác nhận biên bản " + label(type) + ". Vui lòng kiểm tra và duyệt.",
+                link(type, contractId));
+        }
         return saved;
+    }
+
+    private static String label(HandoverType type) {
+        return type == HandoverType.CHECK_IN ? "check-in" : "check-out";
+    }
+
+    /** Trang biên bản: /contracts/{id}/handover (check-in) hoặc /contracts/{id}/check-out. */
+    private static String link(HandoverType type, UUID contractId) {
+        return "/contracts/" + contractId + (type == HandoverType.CHECK_IN ? "/handover" : "/check-out");
     }
 
     @Override

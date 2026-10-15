@@ -4,6 +4,7 @@ import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.InvoiceStatus;
 import com.phonghub.domain.model.InvoiceType;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -29,6 +30,13 @@ public class InMemoryInvoiceRepository implements InvoiceRepositoryPort {
     public List<Invoice> findByContractId(UUID contractId) {
         return store.values().stream()
             .filter(i -> i.getContractId().equals(contractId))
+            .toList();
+    }
+
+    @Override
+    public List<Invoice> findPayableDueBetween(LocalDate from, LocalDate to) {
+        return store.values().stream()
+            .filter(i -> i.isPayable() && !i.getDueDate().isBefore(from) && !i.getDueDate().isAfter(to))
             .toList();
     }
 

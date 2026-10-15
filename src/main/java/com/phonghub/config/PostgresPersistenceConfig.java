@@ -238,6 +238,22 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.application.port.out.NotificationRepositoryPort notificationRepository(
+        NamedParameterJdbcTemplate jdbcTemplate,
+        TenantDataProtectionPort tenantDataProtection
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresNotificationRepository(jdbcTemplate,
+            tenantDataProtection);
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.InvoiceReminderPort invoiceReminderRepository(
+        NamedParameterJdbcTemplate jdbcTemplate
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceReminderRepository(jdbcTemplate);
+    }
+
+    @Bean
     public StatisticsQueryPort statisticsQueryPort(
         NamedParameterJdbcTemplate jdbcTemplate,
         TenantDataProtectionPort tenantDataProtection

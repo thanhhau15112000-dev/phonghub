@@ -44,9 +44,14 @@ import com.phonghub.application.service.TenantDocumentService;
 import com.phonghub.application.service.UtilityService;
 import com.phonghub.application.service.RoomService;
 import com.phonghub.application.service.UserService;
-import com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository;
+import com.phonghub.application.port.in.InvoiceDueReminderUseCase;
+import com.phonghub.application.port.in.NotificationInboxUseCase;
+import com.phonghub.application.port.out.InvoiceReminderPort;
 import com.phonghub.application.port.in.NotificationUseCase;
 import com.phonghub.application.port.out.NotificationRepositoryPort;
+import com.phonghub.application.service.InvoiceDueReminderService;
+import com.phonghub.application.service.NotificationDispatcher;
+import com.phonghub.application.service.NotificationInboxService;
 import com.phonghub.application.service.NotificationService;
 import com.phonghub.application.port.in.SepayWebhookUseCase;
 import com.phonghub.application.port.out.PaymentRepositoryPort;
@@ -198,11 +203,13 @@ public class PhongHubConfiguration {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
         AuditPort auditPort,
-        StorageProperties storageProperties
+        StorageProperties storageProperties,
+        NotificationDispatcher notificationDispatcher
     ) {
         HandoverService service = new HandoverService(
             handoverRepo, photoRepo, itemRepo, rulesRepo, contractRepo, assetRepo, tenantRepo, documentRepo,
-            contractUseCase, fileStoragePort, currentUserPort, authorizationService, auditPort, storageProperties.getMaxFileSizeBytes()
+            contractUseCase, fileStoragePort, currentUserPort, authorizationService, auditPort, storageProperties.getMaxFileSizeBytes(),
+            notificationDispatcher
         );
         return new TransactionalHandoverUseCase(service);
     }
@@ -453,6 +460,40 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public NotificationDispatcher notificationDispatcher(
+        NotificationRepositoryPort notificationRepository,
+        PropertyRepositoryPort propertyRepository,
+        StaffPropertyAssignmentPort assignmentRepository,
+        TenantRepositoryPort tenantRepository,
+        UserRepositoryPort userRepository
+    ) {
+        return new NotificationDispatcher(notificationRepository, propertyRepository, assignmentRepository,
+            tenantRepository, userRepository);
+    }
+
+    @Bean
+    public NotificationInboxUseCase notificationInboxUseCase(
+        NotificationRepositoryPort notificationRepository,
+        CurrentUserPort currentUserPort
+    ) {
+        return new NotificationInboxService(notificationRepository, currentUserPort);
+    }
+
+    @Bean
+    public InvoiceDueReminderUseCase invoiceDueReminderUseCase(
+        InvoiceRepositoryPort invoiceRepository,
+        InvoiceReminderPort invoiceReminderRepository,
+        ContractRepositoryPort contractRepository,
+        RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
+        NotificationDispatcher notificationDispatcher,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.invoicing.due-reminder-days:3}") int reminderDays
+    ) {
+        return new InvoiceDueReminderService(invoiceRepository, invoiceReminderRepository, contractRepository,
+            roomRepository, propertyRepository, notificationDispatcher, reminderDays);
+    }
+
+    @Bean
     public com.phonghub.application.port.in.ContractLifecycleUseCase contractLifecycleUseCase(
         ContractRepositoryPort contractRepository,
         com.phonghub.application.port.out.ContractReminderPort reminderPort,
@@ -480,11 +521,6 @@ public class PhongHubConfiguration {
     ) {
         return new CachingStatisticsUseCase(new StatisticsService(statisticsQueryPort, propertyRepo, currentUserPort,
             authorizationService, java.time.Clock.systemUTC()), caches, currentUserPort);
-    }
-
-    @Bean
-    public NotificationRepositoryPort notificationRepository() {
-        return new InMemoryNotificationRepository();
     }
 
     @Bean
