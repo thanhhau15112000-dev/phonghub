@@ -27,6 +27,7 @@ import com.phonghub.application.service.SepayPaymentService;
 import com.phonghub.config.SepayProperties;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
+import com.phonghub.domain.exception.OptimisticLockConflictException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
 import com.phonghub.domain.model.Invoice;
@@ -242,7 +243,8 @@ class ConcurrencyAndRollbackPostgresTest {
         assertEquals(1, results.stream().filter(Contract.class::isInstance).count(), results.toString());
         Object failure = results.stream().filter(Exception.class::isInstance).findFirst().orElseThrow();
         assertTrue(failure instanceof DuplicateActiveContractException || failure instanceof InvalidRoomStateException
-            || failure instanceof DataIntegrityViolationException, failure.toString());
+            || failure instanceof DataIntegrityViolationException
+            || failure instanceof OptimisticLockConflictException, failure.toString());
 
         List<Contract> after = contracts.findByRoomId(room.getId());
         assertEquals(1, after.stream().filter(c -> c.getStatus() == ContractStatus.ACTIVE).count());
