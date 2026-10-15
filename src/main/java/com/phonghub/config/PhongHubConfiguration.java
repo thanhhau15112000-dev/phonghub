@@ -453,6 +453,24 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.ContractLifecycleUseCase contractLifecycleUseCase(
+        ContractRepositoryPort contractRepository,
+        com.phonghub.application.port.out.ContractReminderPort reminderPort,
+        PropertyRepositoryPort propertyRepository,
+        RoomRepositoryPort roomRepository,
+        TenantRepositoryPort tenantRepository,
+        UserRepositoryPort userRepository,
+        StaffPropertyAssignmentPort assignmentRepository,
+        NotificationRepositoryPort notificationRepository,
+        AuditPort auditPort,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.contracts.expiry-reminder-days:30}") int reminderDays
+    ) {
+        return new com.phonghub.application.service.ContractLifecycleService(contractRepository, reminderPort,
+            propertyRepository, roomRepository, tenantRepository, userRepository, assignmentRepository,
+            notificationRepository, auditPort, reminderDays);
+    }
+
+    @Bean
     public StatisticsUseCase statisticsUseCase(
         StatisticsQueryPort statisticsQueryPort,
         PropertyRepositoryPort propertyRepo,

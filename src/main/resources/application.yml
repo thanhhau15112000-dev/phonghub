@@ -40,6 +40,9 @@ phonghub:
     signed-url-ttl-seconds: ${STORAGE_SIGNED_URL_TTL_SECONDS:600}
   invoicing:
     auto-generate: true
+  contracts:
+    expiry-job-enabled: ${CONTRACT_EXPIRY_JOB_ENABLED:true}
+    expiry-reminder-days: ${CONTRACT_EXPIRY_REMINDER_DAYS:30}
   # Cache danh sách nhà trọ/phòng và dashboard owner (#88); xóa khi dữ liệu đổi, TTL là lưới an toàn
   cache:
     enabled: ${CACHE_ENABLED:true}

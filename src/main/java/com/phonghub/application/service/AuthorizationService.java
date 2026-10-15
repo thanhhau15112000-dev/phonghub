@@ -267,7 +267,7 @@ public class AuthorizationService {
                 contractRepositoryPort.findByPrimaryTenantId(tenantId).stream(),
                 contractRepositoryPort.findByOccupantTenantId(tenantId).stream()
             )
-            .anyMatch(c -> c.isActive() && c.getRoomId().equals(roomId));
+            .anyMatch(c -> c.isResiding() && c.getRoomId().equals(roomId));
     }
 
     /**
@@ -426,13 +426,13 @@ public class AuthorizationService {
         List<Contract> contracts = contractRepositoryPort.findByPrimaryTenantId(tenant.id());
         Set<UUID> propertyIds = new HashSet<>();
         for (Contract c : contracts) {
-            if (c.isActive()) {
+            if (c.isResiding()) {
                 propertyIds.add(c.getPropertyId());
             }
         }
         List<Contract> occupantContracts = contractRepositoryPort.findByOccupantTenantId(tenant.id());
         for (Contract c : occupantContracts) {
-            if (c.isActive()) {
+            if (c.isResiding()) {
                 propertyIds.add(c.getPropertyId());
             }
         }
