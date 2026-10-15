@@ -35,6 +35,7 @@ public class Invoice {
     private Instant paidAt;
     private final Instant createdAt;
     private Instant updatedAt;
+    private long version;
 
     public Invoice(
         UUID id,
@@ -429,4 +430,13 @@ public class Invoice {
     public Instant getPaidAt() { return paidAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+
+    /** Phiên bản dùng cho khóa lạc quan; do tầng lưu trữ gán sau khi đọc/ghi. */
+    public long getVersion() {
+        return version;
+    }
+
+    public void restoreVersion(long version) {
+        this.version = version;
+    }
 }

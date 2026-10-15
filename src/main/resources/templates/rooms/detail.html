@@ -377,6 +377,7 @@
         </div>
 
         <form th:action="@{'/rooms/' + ${room.getId()} + '/edit'}" method="post">
+            <input type="hidden" name="version" th:value="${room.getVersion()}">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">

@@ -153,7 +153,12 @@ public class ContractService implements ContractUseCase {
             command.paymentDay()
         );
 
-        return contractRepository.save(contract);
+        Contract saved = contractRepository.save(contract);
+        audit("CONTRACT_CREATED", currentUser, saved, Map.of(
+            "roomId", saved.getRoomId().toString(), "status", saved.getStatus().name(),
+            "rentAmount", saved.getRentAmount().toPlainString(), "depositAmount", saved.getDepositAmount().toPlainString(),
+            "startDate", saved.getStartDate().toString(), "endDate", saved.getEndDate().toString()));
+        return saved;
     }
 
     @Override
@@ -195,7 +200,10 @@ public class ContractService implements ContractUseCase {
         room.occupy();
 
         roomRepository.save(room);
-        return contractRepository.save(contract);
+        Contract saved = contractRepository.save(contract);
+        audit("CONTRACT_ACTIVATED", currentUser, saved, Map.of(
+            "oldStatus", ContractStatus.DRAFT.name(), "newStatus", saved.getStatus().name()));
+        return saved;
     }
 
     @Override
@@ -218,7 +226,18 @@ public class ContractService implements ContractUseCase {
         room.vacate(requiresMaintenance);
 
         roomRepository.save(room);
-        return contractRepository.save(contract);
+        Contract saved = contractRepository.save(contract);
+        audit("CONTRACT_TERMINATED", currentUser, saved, Map.of(
+            "oldStatus", ContractStatus.ACTIVE.name(), "newStatus", saved.getStatus().name(),
+            "requiresMaintenance", requiresMaintenance));
+        return saved;
+    }
+
+    private void audit(String action, CurrentUser actor, Contract contract, Map<String, Object> details) {
+        if (auditPort != null) {
+            auditPort.recordEvent(AuditPort.AuditEvent.of(action, actor == null ? null : actor.id(), "CONTRACT",
+                contract.getId().toString(), contract.getPropertyId(), details));
+        }
     }
 
     @Override
