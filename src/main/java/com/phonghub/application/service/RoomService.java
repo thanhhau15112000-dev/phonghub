@@ -13,6 +13,7 @@ import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateRoomNumberException;
 import com.phonghub.domain.exception.InvalidPropertyStatusException;
 import com.phonghub.domain.exception.InvalidRoomCapacityException;
+import com.phonghub.domain.exception.OptimisticLockConflictException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.RoomNotFoundException;
@@ -23,6 +24,8 @@ import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.Room;
+import com.phonghub.domain.model.RoomPage;
+import com.phonghub.domain.model.RoomSearchCriteria;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.UserRole;
@@ -141,6 +144,10 @@ public class RoomService implements RoomUseCase {
 
         authorizationService.assertOwnerOrAdmin(currentUser, room.getPropertyId());
 
+        if (command.expectedVersion() != null && command.expectedVersion() != room.getVersion()) {
+            throw new OptimisticLockConflictException("Phòng");
+        }
+
         Optional<Room> duplicate = roomRepository.findByPropertyIdAndRoomNumber(room.getPropertyId(), command.roomNumber().trim());
         if (duplicate.isPresent() && !duplicate.get().getId().equals(room.getId())) {
             throw new DuplicateRoomNumberException(String.format(
@@ -185,29 +192,44 @@ public class RoomService implements RoomUseCase {
         authorizationService.assertCanAccessProperty(currentUser, propertyId);
 
         if (currentUser.role() == UserRole.TENANT) {
-            // Tenant can only see their own room (primary or additional occupant)
-            Optional<Tenant> tenantOpt = tenantRepository.findByUserId(currentUser.id());
-            if (tenantOpt.isEmpty()) {
-                return Collections.emptyList();
-            }
-            Optional<Contract> activeContract = contractRepository.findByPrimaryTenantId(tenantOpt.get().id()).stream()
-                .filter(Contract::isActive)
-                .filter(c -> c.getPropertyId().equals(propertyId))
-                .findFirst();
-
-            if (activeContract.isEmpty()) {
-                activeContract = contractRepository.findByOccupantTenantId(tenantOpt.get().id()).stream()
-                    .filter(Contract::isActive)
-                    .filter(c -> c.getPropertyId().equals(propertyId))
-                    .findFirst();
-            }
-
-            return activeContract.flatMap(c -> roomRepository.findById(c.getRoomId()))
-                .map(List::of)
-                .orElse(Collections.emptyList());
+            return tenantRoom(currentUser, propertyId).map(List::of).orElse(Collections.emptyList());
         }
 
         return roomRepository.findByPropertyId(propertyId);
+    }
+
+    @Override
+    public RoomPage searchRooms(RoomSearchCriteria criteria) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        authorizationService.assertCanAccessProperty(currentUser, criteria.propertyId());
+
+        if (currentUser.role() == UserRole.TENANT) {
+            List<UUID> ownRoomIds = tenantRoom(currentUser, criteria.propertyId()).map(r -> List.of(r.getId()))
+                .orElse(List.of());
+            return roomRepository.search(criteria.restrictedTo(ownRoomIds));
+        }
+        return roomRepository.search(criteria);
+    }
+
+    /** Người thuê chỉ thấy phòng của mình (chủ hợp đồng hoặc người ở cùng) trong nhà trọ này. */
+    private Optional<Room> tenantRoom(CurrentUser tenantUser, UUID propertyId) {
+        Optional<Tenant> tenantOpt = tenantRepository.findByUserId(tenantUser.id());
+        if (tenantOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<Contract> activeContract = contractRepository.findByPrimaryTenantId(tenantOpt.get().id()).stream()
+            .filter(Contract::isActive)
+            .filter(c -> c.getPropertyId().equals(propertyId))
+            .findFirst();
+
+        if (activeContract.isEmpty()) {
+            activeContract = contractRepository.findByOccupantTenantId(tenantOpt.get().id()).stream()
+                .filter(Contract::isActive)
+                .filter(c -> c.getPropertyId().equals(propertyId))
+                .findFirst();
+        }
+
+        return activeContract.flatMap(c -> roomRepository.findById(c.getRoomId()));
     }
 
     @Override

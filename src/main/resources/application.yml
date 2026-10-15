@@ -47,3 +47,5 @@ phonghub:
     bank-code: ${SEPAY_BANK_CODE:}
     bank-account-number: ${SEPAY_BANK_ACCOUNT_NUMBER:}
     bank-account-name: ${SEPAY_BANK_ACCOUNT_NAME:}
+  chat:
+    supabase-bucket: ${SUPABASE_CHAT_BUCKET:chat-media}
