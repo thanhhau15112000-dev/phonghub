@@ -618,6 +618,34 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void contractHandoverAndInvoiceEndpointsRequireAuthenticationInProd() throws Exception {
+        String contract = "/api/contracts/cccccccc-cccc-cccc-cccc-cccccccccccc";
+        mockMvc.perform(get("/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/contracts"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/contracts").contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(contract)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/contracts/my-active")).andExpect(status().isUnauthorized());
+        for (String action : new String[] {"/activate", "/terminate", "/handover/send", "/handover/confirm",
+            "/handover/approve", "/check-out/approve"}) {
+            mockMvc.perform(post(contract + action)).andExpect(status().isUnauthorized());
+        }
+        mockMvc.perform(post(contract + "/check-in").contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(contract + "/handover")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/payments/transactions")).andExpect(status().isUnauthorized());
+
+        String invoice = "/invoices/eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+        mockMvc.perform(get(invoice + "/pay"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+        mockMvc.perform(post("/contracts/cccccccc-cccc-cccc-cccc-cccccccccccc/invoices").with(csrf())
+                .param("period", "2026-10"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
     void statisticsEndpointsRequireBearerTokenInProd() throws Exception {
         for (String path : new String[] {"owner/summary", "owner/revenue", "owner/properties", "admin/overview",
             "admin/pending-properties", "admin/accounts"}) {
