@@ -96,7 +96,8 @@ public class SupabaseIdentityProviderAdapter implements IdentityProviderPort {
      * <ul>
      *   <li>429 → {@link IdentityProviderUnavailableException} (rate limit)</li>
      *   <li>401/403 → {@link IdentityProviderUnavailableException} + ERROR log (apikey/config issue)</li>
-     *   <li>400 (invalid_grant) and all other 4xx → {@link InvalidCredentialsException}</li>
+     *   <li>400 invalid credentials → {@link InvalidCredentialsException}</li>
+     *   <li>Other 4xx → {@link IdentityProviderUnavailableException}</li>
      * </ul>
      * This method always throws; it never returns normally.
      */
@@ -107,12 +108,19 @@ public class SupabaseIdentityProviderAdapter implements IdentityProviderPort {
         }
         if (status == 401 || status == 403) {
             // apikey sai hoặc project bị khoá — lỗi cấu hình, không phải do credentials người dùng
-            log.error("Supabase Auth apikey/project configuration error: HTTP {} body={}", status, body);
+            log.error("Supabase Auth apikey/project configuration error: HTTP {}", status);
             throw new IdentityProviderUnavailableException(
                 "Dịch vụ xác thực đang gặp sự cố cấu hình (HTTP " + status + ").");
         }
-        // 400 invalid_grant, user_not_found, v.v. — sai username/mật khẩu
-        throw new InvalidCredentialsException("Invalid username or password");
+        String errorCode = extractErrorCode(body);
+        if (status == 400 && ("invalid_grant".equals(errorCode)
+                || "invalid_credentials".equals(errorCode)
+                || body.toLowerCase(java.util.Locale.ROOT).contains("invalid login credentials"))) {
+            throw new InvalidCredentialsException("Invalid username or password");
+        }
+        log.error("Unexpected Supabase Auth login client error: HTTP {}, error_code={}", status, errorCode);
+        throw new IdentityProviderUnavailableException(
+            "Supabase Auth rejected the login request unexpectedly (HTTP " + status + ").");
     }
 
     @Override

@@ -89,6 +89,39 @@ class SupabaseIdentityProviderAdapterUnitTest {
     }
 
     @Test
+    @DisplayName("Login: 400 validation error is not reported as invalid credentials")
+    void login400UnexpectedErrorThrowsIdentityProviderUnavailableException() {
+        mockServer.expect(requestTo(SUPABASE_URL + "/auth/v1/token?grant_type=password"))
+            .andExpect(method(HttpMethod.POST))
+            .andRespond(withBadRequest().body("""
+                {"error_code": "validation_failed", "msg": "Invalid request payload"}
+                """).contentType(MediaType.APPLICATION_JSON));
+
+        IdentityProviderUnavailableException ex = assertThrows(
+            IdentityProviderUnavailableException.class,
+            () -> adapter.login("user@phonghub.local", "password")
+        );
+        assertTrue(ex.getMessage().contains("unexpectedly"));
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("Login: 404 is not reported as invalid credentials")
+    void login404ThrowsIdentityProviderUnavailableException() {
+        mockServer.expect(requestTo(SUPABASE_URL + "/auth/v1/token?grant_type=password"))
+            .andExpect(method(HttpMethod.POST))
+            .andRespond(withStatus(HttpStatus.NOT_FOUND).body("""
+                {"message": "Auth endpoint not found"}
+                """).contentType(MediaType.APPLICATION_JSON));
+
+        assertThrows(
+            IdentityProviderUnavailableException.class,
+            () -> adapter.login("user@phonghub.local", "password")
+        );
+        mockServer.verify();
+    }
+
+    @Test
     @DisplayName("Login: 429 Too Many Requests throws IdentityProviderUnavailableException with retry message")
     void login429ThrowsIdentityProviderUnavailableException() {
         mockServer.expect(requestTo(SUPABASE_URL + "/auth/v1/token?grant_type=password"))
