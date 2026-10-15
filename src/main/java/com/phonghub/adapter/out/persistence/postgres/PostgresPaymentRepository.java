@@ -10,6 +10,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -141,5 +142,20 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
     public List<PaymentTransaction> findAll() {
         String sql = "SELECT * FROM sepay_transactions ORDER BY created_at DESC";
         return jdbcTemplate.query(sql, this::mapRow);
+    }
+
+    @Override
+    public List<PaymentTransaction> findByContractIds(Collection<UUID> contractIds) {
+        if (contractIds == null || contractIds.isEmpty()) {
+            return List.of();
+        }
+        String sql = "SELECT * FROM sepay_transactions WHERE contract_id IN (:ids) ORDER BY created_at DESC";
+        return jdbcTemplate.query(sql, Map.of("ids", contractIds), this::mapRow);
+    }
+
+    @Override
+    public List<PaymentTransaction> findByInvoiceId(UUID invoiceId) {
+        String sql = "SELECT * FROM sepay_transactions WHERE invoice_id = :invoiceId ORDER BY created_at, id";
+        return jdbcTemplate.query(sql, Map.of("invoiceId", invoiceId), this::mapRow);
     }
 }

@@ -34,6 +34,198 @@
         </div>
     </div>
 
+    <!-- Dashboard vận hành (#75): chỉ chủ nhà trọ / quản trị viên, số liệu theo phạm vi quyền -->
+    <div th:if="${opsSummary != null}" id="operations">
+        <div class="card">
+            <div class="flex-between" style="margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
+                <div>
+                    <h2>Vận hành</h2>
+                    <p style="color: var(--text-secondary); font-size: 12px; margin-top: 2px;"
+                       th:text="'Kỳ ' + ${opsSummary.from()} + ' → ' + ${opsSummary.to()} + ' · ' + ${opsSummary.propertyCount()} + ' nhà trọ'">Kỳ 2025-11 → 2026-10</p>
+                </div>
+                <form th:action="@{/}" method="get" id="opsFilterForm" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end;">
+                    <div class="form-group" style="margin: 0; min-width: 180px;">
+                        <label class="form-label" for="statsPropertyId">Nhà trọ</label>
+                        <select id="statsPropertyId" name="statsPropertyId" class="form-control">
+                            <option value="">Tất cả nhà trọ</option>
+                            <option th:each="p : ${opsProperties}" th:value="${p.propertyId()}" th:text="${p.name()}"
+                                    th:selected="${opsQuery.propertyId() != null and p.propertyId() == opsQuery.propertyId()}">Nhà trọ</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" for="statsFrom">Từ tháng</label>
+                        <input id="statsFrom" type="month" name="statsFrom" class="form-control" th:value="${opsQuery.from()}">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" for="statsTo">Đến tháng</label>
+                        <input id="statsTo" type="month" name="statsTo" class="form-control" th:value="${opsQuery.to()}">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">Xem</button>
+                </form>
+            </div>
+
+            <div class="grid-cols-4">
+                <div class="metric-card">
+                    <div class="metric-label">Tỷ lệ lấp đầy</div>
+                    <div class="metric-value" th:text="${opsSummary.occupancy().occupancyRate() != null ? opsSummary.occupancy().occupancyRate() + '%' : '—'}">0%</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);"
+                         th:text="${opsSummary.occupancy().occupied()} + '/' + ${opsSummary.occupancy().totalRooms()} + ' phòng đang ở'">0/0 phòng</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Đã thu / phát sinh</div>
+                    <div class="metric-value" th:text="${#numbers.formatDecimal(opsSummary.revenue().collected(), 0, 'COMMA', 0, 'POINT')} + ' đ'">0 đ</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);"
+                         th:text="'/ ' + ${#numbers.formatDecimal(opsSummary.revenue().billed(), 0, 'COMMA', 0, 'POINT')} + ' đ · thu ' + ${opsSummary.revenue().collectionRate() != null ? opsSummary.revenue().collectionRate() + '%' : '—'}">/ 0 đ</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Công nợ</div>
+                    <div class="metric-value" th:text="${#numbers.formatDecimal(opsSummary.revenue().outstanding(), 0, 'COMMA', 0, 'POINT')} + ' đ'">0 đ</div>
+                    <div style="font-size: 12px;" th:style="${opsSummary.revenue().overdueInvoices() > 0 ? 'color: #b91c1c;' : 'color: var(--text-secondary);'}"
+                         th:text="${opsSummary.revenue().overdueInvoices()} + ' hóa đơn quá hạn · ' + ${#numbers.formatDecimal(opsSummary.revenue().overdueAmount(), 0, 'COMMA', 0, 'POINT')} + ' đ'">0 hóa đơn quá hạn</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Lợi nhuận ước tính</div>
+                    <div class="metric-value" th:text="${#numbers.formatDecimal(opsSummary.estimatedProfit(), 0, 'COMMA', 0, 'POINT')} + ' đ'">0 đ</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);"
+                         th:text="'Chi phí sửa chữa ' + ${#numbers.formatDecimal(opsSummary.repairCost(), 0, 'COMMA', 0, 'POINT')} + ' đ'">Chi phí sửa chữa 0 đ</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Phòng đang bảo trì</div>
+                    <div class="metric-value" th:text="${opsSummary.maintenance().roomsUnderMaintenance()}">0</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);"
+                         th:text="${opsSummary.maintenance().openTickets()} + ' phiếu mở · ' + ${opsSummary.maintenance().overdueTickets()} + ' quá hạn SLA'">0 phiếu mở</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Thời gian xử lý trung bình</div>
+                    <div class="metric-value" th:text="${opsSummary.maintenance().avgResolutionHours() != null ? opsSummary.maintenance().avgResolutionHours() + ' giờ' : '—'}">—</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);"
+                         th:text="${opsSummary.maintenance().completedTickets()} + ' phiếu hoàn thành trong kỳ'">0 phiếu hoàn thành</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom: 12px;">Doanh thu theo tháng</h2>
+            <table class="data-table" id="opsRevenueTable">
+                <thead>
+                    <tr>
+                        <th>Tháng</th>
+                        <th style="min-width: 200px;">Phát sinh</th>
+                        <th class="col-number">Đã thu</th>
+                        <th class="col-number">Công nợ</th>
+                        <th class="col-number">Chi phí sửa chữa</th>
+                        <th class="col-number">Lợi nhuận ước tính</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="r : ${opsRevenue}">
+                        <td th:text="${r.period()}">2026-10</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="flex: 1; background: var(--border-color); border-radius: 4px; height: 8px; min-width: 60px;">
+                                    <div style="background: var(--accent); border-radius: 4px; height: 8px;"
+                                         th:style="'width: ' + ${opsRevenueBars[r.period()]} + '%'"></div>
+                                </div>
+                                <span style="white-space: nowrap;" th:text="${#numbers.formatDecimal(r.billed(), 0, 'COMMA', 0, 'POINT')}">0</span>
+                            </div>
+                        </td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(r.collected(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(r.outstanding(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(r.repairCost(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(r.estimatedProfit(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom: 12px;">Theo nhà trọ</h2>
+            <div th:if="${#lists.isEmpty(opsProperties)}" class="empty-state">
+                <p>Chưa có nhà trọ nào trong phạm vi.</p>
+            </div>
+            <table th:if="${!#lists.isEmpty(opsProperties)}" class="data-table" id="opsPropertyTable">
+                <thead>
+                    <tr>
+                        <th>Nhà trọ</th>
+                        <th class="col-number">Lấp đầy</th>
+                        <th class="col-number">Phát sinh</th>
+                        <th class="col-number">Đã thu</th>
+                        <th class="col-number">Công nợ</th>
+                        <th class="col-number">Quá hạn</th>
+                        <th class="col-number">Lợi nhuận ước tính</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="p : ${opsProperties}">
+                        <td><a th:href="@{'/properties/' + ${p.propertyId()}}" th:text="${p.name()}" style="font-weight: 600; color: var(--accent);">Nhà trọ</a></td>
+                        <td class="col-number" th:text="${p.occupancy().occupancyRate() != null ? p.occupancy().occupancyRate() + '%' : '—'}">0%</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(p.revenue().billed(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(p.revenue().collected(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(p.revenue().outstanding(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                        <td class="col-number" th:text="${p.revenue().overdueInvoices()}">0</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(p.estimatedProfit(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Quản trị viên: tổng quan hệ thống và nhà trọ chờ duyệt -->
+    <div th:if="${adminOverview != null}" class="card" id="adminOverview">
+        <h2 style="margin-bottom: 12px;">Toàn hệ thống</h2>
+        <div class="grid-cols-4">
+            <div class="metric-card">
+                <div class="metric-label">Nhà trọ</div>
+                <div class="metric-value" th:text="${adminOverview.properties()}">0</div>
+                <div style="font-size: 12px; color: var(--text-secondary);"
+                     th:text="${adminOverview.propertiesWithStatus('PENDING')} + ' chờ duyệt · ' + ${adminOverview.propertiesWithStatus('REJECTED')} + ' bị từ chối'">0 chờ duyệt</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Phòng</div>
+                <div class="metric-value" th:text="${adminOverview.occupancy().totalRooms()}">0</div>
+                <div style="font-size: 12px; color: var(--text-secondary);"
+                     th:text="'Lấp đầy ' + ${adminOverview.occupancy().occupancyRate() != null ? adminOverview.occupancy().occupancyRate() + '%' : '—'}">Lấp đầy 0%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Chủ nhà / người thuê</div>
+                <div class="metric-value"
+                     th:text="${adminOverview.accounts('OWNER')} + ' / ' + ${adminOverview.accounts('TENANT')}">0 / 0</div>
+                <div style="font-size: 12px; color: var(--text-secondary);"
+                     th:text="${adminOverview.accounts('STAFF')} + ' nhân viên · ' + ${adminOverview.accounts('TECHNICIAN')} + ' kỹ thuật viên'">0 nhân viên</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Doanh thu hệ thống (đã thu)</div>
+                <div class="metric-value" th:text="${#numbers.formatDecimal(adminOverview.revenue().collected(), 0, 'COMMA', 0, 'POINT')} + ' đ'">0 đ</div>
+                <div style="font-size: 12px; color: var(--text-secondary);"
+                     th:text="'Phát sinh ' + ${#numbers.formatDecimal(adminOverview.revenue().billed(), 0, 'COMMA', 0, 'POINT')} + ' đ'">Phát sinh 0 đ</div>
+            </div>
+        </div>
+
+        <h3 style="margin: 16px 0 8px;">Nhà trọ chờ duyệt</h3>
+        <div th:if="${#lists.isEmpty(pendingProperties)}" class="empty-state">
+            <p>Không có nhà trọ nào chờ duyệt.</p>
+        </div>
+        <table th:if="${!#lists.isEmpty(pendingProperties)}" class="data-table" id="pendingPropertyTable">
+            <thead>
+                <tr>
+                    <th>Nhà trọ</th>
+                    <th>Chủ nhà</th>
+                    <th>Gửi lúc</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="p : ${pendingProperties}">
+                    <td>
+                        <a th:href="@{'/properties/' + ${p.id()}}" th:text="${p.name()}" style="font-weight: 600; color: var(--accent);">Nhà trọ</a>
+                        <div style="font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere;" th:text="${p.address()}">Địa chỉ</div>
+                    </td>
+                    <td th:text="${p.ownerName() != null ? p.ownerName() : '—'}">Chủ nhà</td>
+                    <td th:text="${p.createdAt() != null ? #temporals.format(p.createdAt(), 'dd/MM/yyyy HH:mm') : '—'}">01/10/2026</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
     <!-- Người thuê: kỳ thanh toán và nơi ở -->
     <div th:if="${currentUser != null and currentUser.role().name() == 'TENANT'}">
         <div class="card" id="rent-payment">

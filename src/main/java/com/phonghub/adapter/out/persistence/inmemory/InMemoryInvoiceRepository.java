@@ -51,6 +51,19 @@ public class InMemoryInvoiceRepository implements InvoiceRepositoryPort {
     }
 
     @Override
+    public Optional<Invoice> findByIdForUpdate(UUID id) {
+        return findById(id);
+    }
+
+    @Override
+    public List<UUID> findOverdueRentInvoiceIds(java.time.LocalDate today) {
+        return store.values().stream()
+            .filter(i -> i.getType() == InvoiceType.RENT && i.isOverdue(today))
+            .map(Invoice::getId)
+            .toList();
+    }
+
+    @Override
     public Optional<Invoice> findByPaymentCodeForUpdate(String paymentCode) {
         return store.values().stream()
             .filter(i -> paymentCode.equals(i.getPaymentCode()))
@@ -60,6 +73,11 @@ public class InMemoryInvoiceRepository implements InvoiceRepositoryPort {
     @Override
     public boolean existsByPaymentCode(String paymentCode) {
         return findByPaymentCodeForUpdate(paymentCode).isPresent();
+    }
+
+    /** Toàn bộ hóa đơn, dùng cho thống kê in-memory (#93). */
+    public List<Invoice> findAll() {
+        return List.copyOf(store.values());
     }
 
     public void clear() {

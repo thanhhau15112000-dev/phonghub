@@ -18,6 +18,7 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetRepository
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantDocumentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresStaffPropertyAssignmentRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresStatisticsQueryAdapter;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresUserRepository;
 import com.phonghub.adapter.out.supabase.auth.SupabaseIdentityProviderAdapter;
@@ -41,6 +42,7 @@ import com.phonghub.application.port.out.RoomAssetRepositoryPort;
 import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
+import com.phonghub.application.port.out.StatisticsQueryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.application.port.out.TenantDataProtectionPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
@@ -224,12 +226,44 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.application.port.out.ContractReminderPort contractReminderRepository(
+        NamedParameterJdbcTemplate jdbcTemplate
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresContractReminderRepository(jdbcTemplate);
+    }
+
+    @Bean
     public InvoiceRepositoryPort invoiceRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         return new PostgresInvoiceRepository(jdbcTemplate);
     }
 
     @Bean
-    public AuditPort auditPort(
+    public StatisticsQueryPort statisticsQueryPort(
+        NamedParameterJdbcTemplate jdbcTemplate,
+        TenantDataProtectionPort tenantDataProtection
+    ) {
+        return new PostgresStatisticsQueryAdapter(jdbcTemplate, tenantDataProtection);
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.LateFeePolicyRepositoryPort lateFeePolicyRepository(
+        NamedParameterJdbcTemplate jdbcTemplate
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresLateFeePolicyRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.ChatRoomRepositoryPort chatRoomRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresChatRoomRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.ChatMessageRepositoryPort chatMessageRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresChatMessageRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public PostgresAuditAdapter auditPort(
         NamedParameterJdbcTemplate jdbcTemplate,
         TenantDataProtectionPort tenantDataProtection
     ) {
@@ -264,7 +298,13 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
-    public PlatformTransactionManager transactionManager(DataSource dataSource) {
-        return new DataSourceTransactionManager(dataSource);
+    public PlatformTransactionManager transactionManager(
+        DataSource dataSource,
+        CacheEvictingTransactionListener cacheEvictingTransactionListener
+    ) {
+        DataSourceTransactionManager manager = new DataSourceTransactionManager(dataSource);
+        // Transaction ghi commit xong thì xóa cache danh sách/dashboard (#88).
+        manager.addListener(cacheEvictingTransactionListener);
+        return manager;
     }
 }

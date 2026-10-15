@@ -3,6 +3,8 @@ package com.phonghub.adapter.in.web.api;
 import com.phonghub.adapter.in.web.api.dto.RoomResponse;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.domain.model.Room;
+import com.phonghub.domain.model.RoomPage;
+import com.phonghub.domain.model.RoomSearchCriteria;
 import com.phonghub.domain.model.RoomStatus;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -32,12 +35,33 @@ public class RoomApiController {
         this.roomUseCase = roomUseCase;
     }
 
+    /**
+     * Danh sách phòng của nhà trọ. Không có tham số lọc/phân trang thì trả toàn bộ như trước; có thì lọc kết hợp
+     * (AND) theo trạng thái, khoảng giá, tầng và phân trang, tổng số khớp nằm ở header {@code X-Total-Count}.
+     * Chỉ phân trang khi có {@code size}; truyền {@code page} mà thiếu {@code size} trả 400.
+     */
     @GetMapping("/properties/{propertyId}/rooms")
-    public ResponseEntity<List<RoomResponse>> listRoomsForProperty(@PathVariable UUID propertyId) {
-        List<RoomResponse> list = roomUseCase.listRoomsForProperty(propertyId).stream()
-            .map(RoomResponse::from)
-            .toList();
-        return ResponseEntity.ok(list);
+    public ResponseEntity<List<RoomResponse>> listRoomsForProperty(
+        @PathVariable UUID propertyId,
+        @RequestParam(required = false) RoomStatus status,
+        @RequestParam(required = false) BigDecimal minPrice,
+        @RequestParam(required = false) BigDecimal maxPrice,
+        @RequestParam(required = false) Integer floor,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(required = false) Integer size
+    ) {
+        RoomSearchCriteria criteria = new RoomSearchCriteria(
+            propertyId, status, minPrice, maxPrice, floor, null, page, size);
+        if (criteria.isUnfiltered()) {
+            return ResponseEntity.ok(roomUseCase.listRoomsForProperty(propertyId).stream()
+                .map(RoomResponse::from)
+                .toList());
+        }
+        RoomPage result = roomUseCase.searchRooms(criteria);
+        return ResponseEntity.ok()
+            .header("X-Total-Count", Long.toString(result.totalElements()))
+            .header("X-Page", Integer.toString(result.page()))
+            .body(result.items().stream().map(RoomResponse::from).toList());
     }
 
     @PostMapping("/properties/{propertyId}/rooms")
@@ -74,7 +98,8 @@ public class RoomApiController {
             request.floor(),
             request.areaSqm(),
             request.basePrice(),
-            request.maxOccupants()
+            request.maxOccupants(),
+            request.version()
         ));
         return ResponseEntity.ok(RoomResponse.from(room));
     }
@@ -119,8 +144,15 @@ public class RoomApiController {
         BigDecimal basePrice,
 
         @Min(value = 1, message = "Max occupants must be at least 1")
-        int maxOccupants
-    ) {}
+        int maxOccupants,
+
+        /** Phiên bản phòng khi client đọc; bỏ trống thì không kiểm tra xung đột ở tầng ứng dụng. */
+        Long version
+    ) {
+        public UpdateRoomRequest(String roomNumber, int floor, BigDecimal areaSqm, BigDecimal basePrice, int maxOccupants) {
+            this(roomNumber, floor, areaSqm, basePrice, maxOccupants, null);
+        }
+    }
 
     public record UpdateRoomStatusRequest(
         @NotNull(message = "Status is required")

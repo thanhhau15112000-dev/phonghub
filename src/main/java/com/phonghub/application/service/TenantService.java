@@ -11,7 +11,6 @@ import com.phonghub.domain.exception.TenantHasActiveContractException;
 import com.phonghub.domain.exception.TenantNotFoundException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
-import com.phonghub.domain.model.ContractStatus;
 import com.phonghub.domain.model.Tenant;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -213,14 +212,14 @@ public class TenantService implements TenantUseCase {
         return new PropertyTenantView(view.tenant(), false, view.hasActiveContract());
     }
 
-    /** Tenant của nhà trọ = có hợp đồng tại nhà trọ ∪ được gắn trực tiếp. Ẩn chỉ có hiệu lực khi không còn hợp đồng ACTIVE. */
+    /** Tenant của nhà trọ = có hợp đồng tại nhà trọ ∪ được gắn trực tiếp. Ẩn chỉ có hiệu lực khi không còn hợp đồng đang mở. */
     private List<PropertyTenantView> loadPropertyTenants(UUID propertyId) {
         Set<UUID> ids = new HashSet<>();
         Set<UUID> activeIds = new HashSet<>();
         if (contractRepository != null) {
             for (Contract contract : contractRepository.findByPropertyId(propertyId)) {
                 // Hợp đồng nháp cũng tính là đang mở: cùng quy tắc với khóa hồ sơ (TenantLockPolicy).
-                boolean open = contract.getStatus() == ContractStatus.DRAFT || contract.getStatus() == ContractStatus.ACTIVE;
+                boolean open = contract.isOpen();
                 ids.add(contract.getPrimaryTenantId());
                 if (open) {
                     activeIds.add(contract.getPrimaryTenantId());

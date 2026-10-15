@@ -53,6 +53,30 @@ public class TransactionalMaintenanceUseCase implements MaintenanceUseCase {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket quoteTicket(UUID ticketId, java.math.BigDecimal amount, String note) {
+        return delegate.quoteTicket(ticketId, amount, note);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public MaintenanceTicket.Quote visibleQuote(UUID ticketId) {
+        return delegate.visibleQuote(ticketId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket verifyTicket(UUID ticketId) {
+        return delegate.verifyTicket(ticketId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket reopenTicket(UUID ticketId, String feedback) {
+        return delegate.reopenTicket(ticketId, feedback);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public MaintenanceTicket waiveRepairFee(UUID ticketId, String reason) {
         return delegate.waiveRepairFee(ticketId, reason);
     }

@@ -6,6 +6,8 @@ import com.phonghub.domain.exception.IdentityProviderUnavailableException;
 import com.phonghub.domain.exception.InvalidCredentialsException;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -16,6 +18,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 public class SupabaseIdentityProviderAdapter implements IdentityProviderPort {
+
+    private static final Logger log = LoggerFactory.getLogger(SupabaseIdentityProviderAdapter.class);
 
     private final RestClient restClient;
     private final String supabaseUrl;
@@ -53,10 +57,14 @@ public class SupabaseIdentityProviderAdapter implements IdentityProviderPort {
                 .body(payload)
                 .retrieve()
                 .onStatus(HttpStatusCode::is4xxClientError, (req, resp) -> {
-                    throw new InvalidCredentialsException("Invalid username or password");
+                    int status = resp.getStatusCode().value();
+                    byte[] bodyBytes = resp.getBody().readAllBytes();
+                    String body = new String(bodyBytes, java.nio.charset.StandardCharsets.UTF_8);
+                    mapLoginClientError(status, body);
                 })
                 .onStatus(HttpStatusCode::is5xxServerError, (req, resp) -> {
-                    throw new IdentityProviderUnavailableException("Supabase Auth service is currently unavailable (HTTP " + resp.getStatusCode() + ")");
+                    throw new IdentityProviderUnavailableException(
+                        "Supabase Auth service is currently unavailable (HTTP " + resp.getStatusCode() + ")");
                 })
                 .body(String.class);
 
@@ -70,15 +78,49 @@ public class SupabaseIdentityProviderAdapter implements IdentityProviderPort {
         } catch (InvalidCredentialsException | IdentityProviderUnavailableException ex) {
             throw ex;
         } catch (ResourceAccessException ex) {
-            throw new IdentityProviderUnavailableException("Supabase Auth connection timeout or network failure: " + ex.getMessage(), ex);
+            throw new IdentityProviderUnavailableException(
+                "Supabase Auth connection timeout or network failure: " + ex.getMessage(), ex);
         } catch (RestClientResponseException ex) {
-            if (ex.getStatusCode().is4xxClientError()) {
-                throw new InvalidCredentialsException("Invalid username or password");
-            }
-            throw new IdentityProviderUnavailableException("Supabase Auth provider outage (status " + ex.getStatusCode() + ")", ex);
+            mapLoginClientError(ex.getStatusCode().value(), ex.getResponseBodyAsString());
+            // mapLoginClientError always throws; unreachable but required by compiler
+            throw new IdentityProviderUnavailableException(
+                "Supabase Auth provider outage (status " + ex.getStatusCode() + ")", ex);
         } catch (Exception ex) {
-            throw new IdentityProviderUnavailableException("Supabase Auth communication failure: " + ex.getMessage(), ex);
+            throw new IdentityProviderUnavailableException(
+                "Supabase Auth communication failure: " + ex.getMessage(), ex);
         }
+    }
+
+    /**
+     * Maps a 4xx HTTP status + body from Supabase /auth/v1/token to the correct domain exception.
+     * <ul>
+     *   <li>429 → {@link IdentityProviderUnavailableException} (rate limit)</li>
+     *   <li>401/403 → {@link IdentityProviderUnavailableException} + ERROR log (apikey/config issue)</li>
+     *   <li>400 invalid credentials → {@link InvalidCredentialsException}</li>
+     *   <li>Other 4xx → {@link IdentityProviderUnavailableException}</li>
+     * </ul>
+     * This method always throws; it never returns normally.
+     */
+    private void mapLoginClientError(int status, String body) {
+        if (status == 429) {
+            throw new IdentityProviderUnavailableException(
+                "Quá nhiều yêu cầu đăng nhập. Vui lòng thử lại sau.");
+        }
+        if (status == 401 || status == 403) {
+            // apikey sai hoặc project bị khoá — lỗi cấu hình, không phải do credentials người dùng
+            log.error("Supabase Auth apikey/project configuration error: HTTP {}", status);
+            throw new IdentityProviderUnavailableException(
+                "Dịch vụ xác thực đang gặp sự cố cấu hình (HTTP " + status + ").");
+        }
+        String errorCode = extractErrorCode(body);
+        if (status == 400 && ("invalid_grant".equals(errorCode)
+                || "invalid_credentials".equals(errorCode)
+                || body.toLowerCase(java.util.Locale.ROOT).contains("invalid login credentials"))) {
+            throw new InvalidCredentialsException("Invalid username or password");
+        }
+        log.error("Unexpected Supabase Auth login client error: HTTP {}, error_code={}", status, errorCode);
+        throw new IdentityProviderUnavailableException(
+            "Supabase Auth rejected the login request unexpectedly (HTTP " + status + ").");
     }
 
     @Override
@@ -157,16 +199,31 @@ public class SupabaseIdentityProviderAdapter implements IdentityProviderPort {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceRoleKey)
                 .body(payload)
                 .retrieve()
+                .onStatus(code -> code.value() == 422, (req, resp) -> {
+                    byte[] bodyBytes = resp.getBody().readAllBytes();
+                    String body = new String(bodyBytes, java.nio.charset.StandardCharsets.UTF_8);
+                    String errorCode = extractErrorCode(body);
+                    if ("weak_password".equals(errorCode)) {
+                        throw new IllegalArgumentException(
+                            "Mật khẩu không đủ độ mạnh theo yêu cầu của Supabase (weak_password). "
+                            + "Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt.");
+                    }
+                    throw new IllegalArgumentException(
+                        "Mật khẩu không hợp lệ theo yêu cầu của hệ thống xác thực (422). Error code: " + errorCode);
+                })
                 .onStatus(HttpStatusCode::isError, (req, resp) -> {
-                    throw new IdentityProviderUnavailableException("Failed to update password in Supabase Admin: HTTP " + resp.getStatusCode());
+                    throw new IdentityProviderUnavailableException(
+                        "Failed to update password in Supabase Admin: HTTP " + resp.getStatusCode());
                 })
                 .toBodilessEntity();
-        } catch (IdentityProviderUnavailableException ex) {
+        } catch (IdentityProviderUnavailableException | IllegalArgumentException ex) {
             throw ex;
         } catch (ResourceAccessException ex) {
-            throw new IdentityProviderUnavailableException("Supabase Admin network timeout: " + ex.getMessage(), ex);
+            throw new IdentityProviderUnavailableException(
+                "Supabase Admin network timeout: " + ex.getMessage(), ex);
         } catch (Exception ex) {
-            throw new IdentityProviderUnavailableException("Supabase Admin set password error: " + ex.getMessage(), ex);
+            throw new IdentityProviderUnavailableException(
+                "Supabase Admin set password error: " + ex.getMessage(), ex);
         }
     }
 
@@ -187,27 +244,39 @@ public class SupabaseIdentityProviderAdapter implements IdentityProviderPort {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceRoleKey)
                 .body(payload)
                 .retrieve()
-                .onStatus(HttpStatusCode::isError, (req, resp) -> {
+                .onStatus(code -> code.value() == 422, (req, resp) -> {
                     byte[] bodyBytes = resp.getBody().readAllBytes();
                     String body = new String(bodyBytes, java.nio.charset.StandardCharsets.UTF_8);
-                    if (resp.getStatusCode().value() == 422 || body.contains("email_exists") || body.contains("already been registered")) {
-                        throw new DuplicateEmailException("Email đã tồn tại trong hệ thống xác thực: " + email);
+                    String errorCode = extractErrorCode(body);
+                    if ("email_exists".equals(errorCode) || body.contains("already been registered")) {
+                        throw new DuplicateEmailException(
+                            "Email đã tồn tại trong hệ thống xác thực: " + email);
                     }
-                    throw new IdentityProviderUnavailableException("Failed to create user in Supabase Admin: HTTP " + resp.getStatusCode());
+                    if ("weak_password".equals(errorCode)) {
+                        throw new IllegalArgumentException(
+                            "Mật khẩu tạm thời không đủ độ mạnh theo yêu cầu của Supabase (weak_password). "
+                            + "Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt.");
+                    }
+                    throw new IdentityProviderUnavailableException(
+                        "Supabase validation error when creating user (422). Error code: " + errorCode);
+                })
+                .onStatus(HttpStatusCode::isError, (req, resp) -> {
+                    throw new IdentityProviderUnavailableException(
+                        "Failed to create user in Supabase Admin: HTTP " + resp.getStatusCode());
                 })
                 .body(String.class);
 
             JsonNode root = objectMapper.readTree(responseBody);
             String idStr = root.path("id").asText();
             return UUID.fromString(idStr);
-        } catch (DuplicateEmailException ex) {
-            throw ex;
-        } catch (IdentityProviderUnavailableException ex) {
+        } catch (DuplicateEmailException | IllegalArgumentException | IdentityProviderUnavailableException ex) {
             throw ex;
         } catch (ResourceAccessException ex) {
-            throw new IdentityProviderUnavailableException("Supabase Admin network timeout: " + ex.getMessage(), ex);
+            throw new IdentityProviderUnavailableException(
+                "Supabase Admin network timeout: " + ex.getMessage(), ex);
         } catch (Exception ex) {
-            throw new IdentityProviderUnavailableException("Supabase Admin create user error: " + ex.getMessage(), ex);
+            throw new IdentityProviderUnavailableException(
+                "Supabase Admin create user error: " + ex.getMessage(), ex);
         }
     }
 
@@ -230,6 +299,26 @@ public class SupabaseIdentityProviderAdapter implements IdentityProviderPort {
             throw new IdentityProviderUnavailableException("Supabase Admin network timeout: " + ex.getMessage(), ex);
         } catch (Exception ex) {
             throw new IdentityProviderUnavailableException("Supabase Admin delete user error: " + ex.getMessage(), ex);
+        }
+    }
+
+    /**
+     * Trích xuất error_code từ body JSON của Supabase
+     * (ví dụ: {@code "email_exists"}, {@code "weak_password"}).
+     * Trả về chuỗi rỗng nếu không parse được.
+     */
+    private String extractErrorCode(String body) {
+        try {
+            JsonNode root = objectMapper.readTree(body);
+            // Supabase trả về { "error_code": "...", "msg": "..." }
+            String code = root.path("error_code").asText("");
+            if (!code.isBlank()) return code;
+            // Fallback: trường "code" hoặc "error"
+            code = root.path("code").asText("");
+            if (!code.isBlank()) return code;
+            return root.path("error").asText("");
+        } catch (Exception ignored) {
+            return "";
         }
     }
 }
