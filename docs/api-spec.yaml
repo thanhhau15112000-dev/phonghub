@@ -3224,6 +3224,53 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  # ==========================================
+  # EXPORTS (#85)
+  # ==========================================
+  /api/exports/{dataset}:
+    get:
+      tags: [Billing & Invoices]
+      summary: Xuất hóa đơn / công nợ / hợp đồng ra Excel hoặc PDF trong phạm vi quyền
+      description: >
+        Hóa đơn và công nợ cần quyền thu tiền, hợp đồng cần quyền quản lý hợp đồng (admin mọi nhà, owner nhà của
+        mình, staff theo quyền được cấp). Kỹ thuật viên và người thuê bị 403. Số CCCD luôn được che (****1234).
+        Mỗi lần xuất được ghi audit DATA_EXPORTED.
+      parameters:
+        - name: dataset
+          in: path
+          required: true
+          schema: { type: string, enum: [invoices, debts, contracts] }
+        - name: format
+          in: query
+          schema: { type: string, enum: [xlsx, pdf], default: xlsx }
+        - name: propertyId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          description: Chỉ cho hóa đơn - tháng bắt đầu (yyyy-MM), mặc định 11 tháng trước tháng kết thúc
+          schema: { type: string, example: '2026-01' }
+        - name: to
+          in: query
+          description: Chỉ cho hóa đơn - tháng kết thúc (yyyy-MM), mặc định tháng hiện tại; tối đa 60 tháng
+          schema: { type: string, example: '2026-12' }
+      responses:
+        '200':
+          description: Tệp đính kèm (Content-Disposition attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+            application/pdf:
+              schema: { type: string, format: binary }
+        '400':
+          description: Loại dữ liệu, định dạng hoặc khoảng tháng không hợp lệ
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 # ==========================================
 # COMPONENTS (REUSABLE SCHEMAS & CONTRACTS)
 # ==========================================

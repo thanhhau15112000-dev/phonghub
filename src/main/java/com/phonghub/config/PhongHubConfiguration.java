@@ -452,6 +452,24 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.ExportUseCase exportUseCase(
+        PropertyRepositoryPort propertyRepository,
+        ContractRepositoryPort contractRepository,
+        InvoiceRepositoryPort invoiceRepository,
+        RoomRepositoryPort roomRepository,
+        TenantRepositoryPort tenantRepository,
+        StaffPropertyAssignmentPort assignmentRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort
+    ) {
+        return new com.phonghub.application.service.ExportService(propertyRepository, contractRepository,
+            invoiceRepository, roomRepository, tenantRepository, assignmentRepository, currentUserPort,
+            authorizationService, auditPort, new com.phonghub.adapter.out.export.XlsxTableExporter(),
+            new com.phonghub.adapter.out.export.PdfTableExporter(), java.time.Clock.systemUTC());
+    }
+
+    @Bean
     public MonthlyInvoiceUseCase monthlyInvoiceUseCase(
         ContractRepositoryPort contractRepository,
         InvoiceRepositoryPort invoiceRepository,
