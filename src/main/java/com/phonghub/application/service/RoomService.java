@@ -12,6 +12,7 @@ import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateRoomNumberException;
 import com.phonghub.domain.exception.InvalidPropertyStatusException;
 import com.phonghub.domain.exception.InvalidRoomCapacityException;
+import com.phonghub.domain.exception.OptimisticLockConflictException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.RoomNotFoundException;
@@ -118,6 +119,10 @@ public class RoomService implements RoomUseCase {
             .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + command.roomId()));
 
         authorizationService.assertOwnerOrAdmin(currentUser, room.getPropertyId());
+
+        if (command.expectedVersion() != null && command.expectedVersion() != room.getVersion()) {
+            throw new OptimisticLockConflictException("Phòng");
+        }
 
         Optional<Room> duplicate = roomRepository.findByPropertyIdAndRoomNumber(room.getPropertyId(), command.roomNumber().trim());
         if (duplicate.isPresent() && !duplicate.get().getId().equals(room.getId())) {

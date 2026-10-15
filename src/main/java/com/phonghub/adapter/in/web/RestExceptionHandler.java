@@ -7,6 +7,7 @@ import com.phonghub.domain.exception.DocumentRevealDeniedException;
 import com.phonghub.domain.exception.DuplicateAssetCodeException;
 import com.phonghub.domain.exception.DuplicateServiceRateException;
 import com.phonghub.domain.exception.MeterReadingConflictException;
+import com.phonghub.domain.exception.OptimisticLockConflictException;
 import com.phonghub.domain.exception.UtilityNotFoundException;
 import com.phonghub.domain.exception.HandoverAlreadyExistsException;
 import com.phonghub.domain.exception.HandoverNotFoundException;
@@ -134,7 +135,8 @@ public class RestExceptionHandler {
         TenantHasActiveContractException.class,
         StaffAssignmentConflictException.class,
         TenantProfileLockedException.class,
-        AttachmentLimitException.class
+        AttachmentLimitException.class,
+        OptimisticLockConflictException.class
     })
     public ProblemDetail handleDuplicateAccountConflict(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
