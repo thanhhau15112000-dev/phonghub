@@ -618,6 +618,18 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void roomFilterEndpointRequiresBearerTokenInProd() throws Exception {
+        String rooms = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/rooms";
+        mockMvc.perform(get(rooms)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get(rooms).param("status", "AVAILABLE").param("minPrice", "1000000")
+                .param("page", "0").param("size", "10"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(rooms).param("status", "AVAILABLE")
+                .header("X-Demo-User-Id", "11111111-1111-1111-1111-111111111111"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void tenantDocumentEndpointsRequireBearerTokenInProd() throws Exception {
         String base = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/tenants/44444444-0000-0000-0000-444444444441/documents";
         mockMvc.perform(get(base)).andExpect(status().isUnauthorized());
