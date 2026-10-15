@@ -18,6 +18,7 @@
                 <li><a th:href="@{/contracts}">Hợp đồng</a></li>
                 <li><a th:href="@{/maintenance}">Bảo trì</a></li>
                 <li th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}"><a th:href="@{/admin/users}">Tài khoản</a></li>
+                <li th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'OWNER')}"><a th:href="@{/audit}">Nhật ký</a></li>
                 <li th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}">
                     <a th:href="@{/admin/notifications}">Thông báo
                         <span th:if="${unreadNotificationCount > 0}" class="badge-count" style="background-color: #ef4444; color: #ffffff; margin-left: 4px;" th:text="${unreadNotificationCount}">1</span>
@@ -28,6 +29,7 @@
     </div>
 
     <div class="header-account">
+
         <!-- Chuông thông báo dành riêng cho Quản trị viên (ADMIN) -->
         <div th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" class="notif-bell-wrapper" style="position: relative;">
             <button type="button" id="notifBellBtn" class="notif-bell-btn" aria-label="Xem thông báo" title="Thông báo hệ thống" style="position: relative; background: none; border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--text-primary);">
@@ -136,6 +138,7 @@
             }
         });
     </script>
+    <div th:replace="~{fragments/floating-chat :: floatingChatWidget}"></div>
 </footer>
 
 </body>

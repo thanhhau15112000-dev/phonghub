@@ -52,6 +52,17 @@ public record InvoiceItem(
         return rateId != null;
     }
 
+    public static final String LATE_FEE_NAME = "Phạt trả trễ";
+
+    /** Dòng phạt trả trễ (#80): một dòng riêng, không gắn chỉ số, đơn giá hay hóa đơn nguồn. */
+    public static InvoiceItem lateFee(BigDecimal amount) {
+        return new InvoiceItem(null, LATE_FEE_NAME, BigDecimal.ONE, amount, amount, null, null, null);
+    }
+
+    public boolean isLateFee() {
+        return LATE_FEE_NAME.equals(name) && rateId == null && readingId == null && sourceInvoiceId == null;
+    }
+
     public static InvoiceItem of(String name, BigDecimal amount, UUID sourceInvoiceId) {
         return new InvoiceItem(null, name, BigDecimal.ONE, amount, amount, sourceInvoiceId, null, null);
     }

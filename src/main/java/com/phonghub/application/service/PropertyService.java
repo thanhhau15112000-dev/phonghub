@@ -58,7 +58,8 @@ public class PropertyService implements PropertyUseCase {
             UUID.randomUUID(),
             command.name().trim(),
             command.address().trim(),
-            command.description(),
+            // Cùng quy tắc với updateProperty: mô tả trống lưu null để danh sách hiện "—" (#91).
+            command.description() == null || command.description().isBlank() ? null : command.description().trim(),
             command.totalRooms(),
             ownerId,
             approvalStatus,

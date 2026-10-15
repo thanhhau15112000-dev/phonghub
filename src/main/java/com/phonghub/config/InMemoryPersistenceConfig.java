@@ -66,7 +66,7 @@ public class InMemoryPersistenceConfig {
     }
 
     @Bean
-    public AuditPort auditPort() {
+    public InMemoryAuditAdapter auditPort() {
         return new InMemoryAuditAdapter();
     }
 
@@ -199,6 +199,21 @@ public class InMemoryPersistenceConfig {
     ) {
         return new InMemoryStatisticsQueryAdapter(
             invoiceRepo, contractRepo, roomRepo, propertyRepo, ticketRepo, userRepo, auditPort);
+    }
+
+    @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryLateFeePolicyRepository lateFeePolicyRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryLateFeePolicyRepository();
+    }
+
+    @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryChatRoomRepository chatRoomRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryChatRoomRepository();
+    }
+
+    @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryChatMessageRepository chatMessageRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryChatMessageRepository();
     }
 
     @Bean
