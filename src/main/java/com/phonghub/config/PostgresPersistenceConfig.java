@@ -229,6 +229,16 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.application.port.out.ChatRoomRepositoryPort chatRoomRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresChatRoomRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.ChatMessageRepositoryPort chatMessageRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresChatMessageRepository(jdbcTemplate);
+    }
+
+    @Bean
     public AuditPort auditPort(
         NamedParameterJdbcTemplate jdbcTemplate,
         TenantDataProtectionPort tenantDataProtection

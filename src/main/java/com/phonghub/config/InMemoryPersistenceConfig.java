@@ -186,6 +186,16 @@ public class InMemoryPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryChatRoomRepository chatRoomRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryChatRoomRepository();
+    }
+
+    @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryChatMessageRepository chatMessageRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryChatMessageRepository();
+    }
+
+    @Bean
     public Boolean seedInitialData(
         InMemoryUserRepository userRepo,
         InMemoryPropertyRepository propertyRepo,

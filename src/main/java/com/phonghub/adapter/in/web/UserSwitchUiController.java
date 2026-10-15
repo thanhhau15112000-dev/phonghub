@@ -36,6 +36,22 @@ public class UserSwitchUiController {
         session.setAttribute("currentUserId", userId);
         demoActorPort.switchActor(userId);
 
+        demoActorPort.findDemoUser(userId).ifPresent(u -> {
+            org.springframework.security.core.context.SecurityContext context =
+                org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
+            context.setAuthentication(new com.phonghub.adapter.in.security.DomainAuthenticationToken(
+                u,
+                "demo-token",
+                java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_" + u.role().name())),
+                u.mustChangePassword()
+            ));
+            org.springframework.security.core.context.SecurityContextHolder.setContext(context);
+            session.setAttribute(
+                org.springframework.security.web.context.HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+                context
+            );
+        });
+
         String referer = request.getHeader("Referer");
         if (referer != null && !referer.isBlank() && !referer.contains("/switch-user")) {
             return "redirect:" + referer;
