@@ -1,0 +1,1370 @@
+<div th:fragment="floatingChatWidget" th:if="${currentUser != null}" id="phonghubFloatingChatContainer"
+     th:data-user-id="${currentUser.id()}" th:data-user-name="${currentUser.fullName()}">
+    <style>
+        /* Tương tác mượt mà cho các phần tử chat PhongHub (Theme: Trắng viền xám) */
+        #phonghubMessengerToggleBtn:hover {
+            background-color: #f8fafc !important;
+            border-color: #94a3b8 !important;
+            transform: scale(1.06);
+            box-shadow: 0 6px 20px rgba(15, 23, 42, 0.18) !important;
+        }
+        #phonghubMessengerToggleBtn:active {
+            transform: scale(0.96);
+        }
+        .phonghub-contact-item {
+            transition: background-color 0.15s ease, transform 0.1s ease;
+        }
+        .phonghub-contact-item:hover {
+            background-color: #f1f5f9 !important;
+        }
+        .phonghub-contact-item:active {
+            transform: scale(0.99);
+        }
+        .phonghub-chat-head {
+            position: relative;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.15);
+            transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.18s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            border: 2px solid #ffffff;
+        }
+        .phonghub-chat-head:hover {
+            transform: scale(1.08);
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
+        }
+        .phonghub-chat-head .chat-head-close-btn {
+            display: none;
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background-color: #ffffff;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 700;
+            border: 1px solid #cbd5e1;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        .phonghub-chat-head:hover .chat-head-close-btn {
+            display: flex;
+        }
+        .phonghub-chat-head .chat-head-close-btn:hover {
+            background-color: #ef4444;
+            color: #ffffff;
+            border-color: #ef4444;
+        }
+        .phonghub-chat-head .chat-head-tooltip {
+            display: none;
+            position: absolute;
+            right: 58px;
+            background-color: #ffffff;
+            color: #0f172a;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 8px;
+            white-space: nowrap;
+            box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
+            pointer-events: none;
+            border: 1px solid #cbd5e1;
+        }
+        .phonghub-chat-head:hover .chat-head-tooltip {
+            display: block;
+        }
+        .phonghub-icon-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+        }
+        .phonghub-icon-btn:hover {
+            background-color: #f1f5f9;
+            color: #0f172a;
+        }
+        .phonghub-icon-btn:active {
+            transform: scale(0.92);
+        }
+        #phonghubContactFilterInput::placeholder,
+        #phonghubDockedInput::placeholder {
+            color: #94a3b8;
+        }
+        #phonghubDockedSubmitBtn:hover {
+            transform: scale(1.15);
+        }
+        #phonghubContactsList::-webkit-scrollbar,
+        #phonghubDockedMessagesPane::-webkit-scrollbar {
+            width: 6px;
+        }
+        #phonghubContactsList::-webkit-scrollbar-thumb,
+        #phonghubDockedMessagesPane::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 6px;
+        }
+        #phonghubContactsList::-webkit-scrollbar-track,
+        #phonghubDockedMessagesPane::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        @keyframes phonghubToastSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(16px) scale(0.96);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        .phonghub-chat-toast {
+            animation: phonghubToastSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: transform 0.2s ease, opacity 0.25s ease, box-shadow 0.2s ease;
+        }
+        .phonghub-chat-toast:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2) !important;
+        }
+    </style>
+
+    <!-- Cột bên phải (right: 20px) dành cho các nút tròn: Dưới cùng là nút Soạn tin nhắn, phía trên là các Avatar chat thu nhỏ -->
+    
+    <!-- 1. Danh sách các nút tròn Avatar thu nhỏ (Chat Heads) xếp ở phía TRÊN nút soạn tin nhắn -->
+    <div id="phonghubChatHeadsContainer" style="position: fixed; bottom: 76px; right: 20px; display: flex; flex-direction: column-reverse; gap: 8px; z-index: 99999;">
+        <!-- Các avatar tròn thu nhỏ sẽ được thêm động vào đây bằng JavaScript -->
+    </div>
+
+    <!-- 2. Nút bấm tròn Soạn tin nhắn ở góc dưới cùng bên phải: Theme màu trắng viền xám đồng nhất -->
+    <button type="button" id="phonghubMessengerToggleBtn" aria-label="Soạn tin nhắn" title="Soạn tin nhắn mới"
+            style="position: fixed; bottom: 20px; right: 20px; width: 48px; height: 48px; border-radius: 50%; background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.14); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 99999; transition: background-color 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;">
+        <!-- Icon Soạn tin nhắn chuẩn Messenger -->
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="display: block;">
+            <rect x="3" y="3" width="18" height="18" rx="5" stroke="#1e293b" stroke-width="2.2"/>
+            <path d="M8.5 15.5L14.5 9.5" stroke="#1e293b" stroke-width="2.6" stroke-linecap="round"/>
+            <circle cx="15.5" cy="8.5" r="1.3" fill="#1e293b"/>
+        </svg>
+        <!-- Huy hiệu số tin nhắn chưa đọc toàn cục -->
+        <span id="phonghubGlobalUnreadBadge" style="display: none; position: absolute; top: -3px; right: -3px; background-color: #ef4444; color: #ffffff; font-size: 10px; font-weight: 700; border-radius: 10px; padding: 1px 5px; min-width: 16px; text-align: center; border: 2px solid #ffffff; line-height: 1.2;">0</span>
+    </button>
+
+    <!-- 3. Modal "Tin nhắn mới / Chọn kênh chat" - Cố định sát mép dưới (bottom: 0, không cách ra) -->
+    <div id="phonghubNewMessageModal" style="display: none; position: fixed; bottom: 0; right: 86px; width: 348px; height: 465px; background-color: #ffffff; color: #0f172a; border-radius: 12px 12px 0 0; box-shadow: 0 12px 36px rgba(15, 23, 42, 0.16), 0 2px 10px rgba(15, 23, 42, 0.08); border: 1px solid #cbd5e1; border-bottom: none; z-index: 100000; flex-direction: column; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; transition: right 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;">
+        <!-- Header: Tiêu đề + Nút đóng X -->
+        <div style="padding: 12px 16px 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; background-color: #ffffff;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 700; font-size: 15.5px; color: #0f172a; letter-spacing: -0.2px;">Tin nhắn & Kênh chat</span>
+            </div>
+            <button type="button" id="phonghubCloseNewMessageBtn" class="phonghub-icon-btn" aria-label="Đóng" style="font-size: 17px; font-weight: 700;">✕</button>
+        </div>
+
+        <!-- Hàng tìm kiếm kênh / người dùng dạng thanh pill bo tròn sáng sủa -->
+        <div style="padding: 10px 14px 8px 14px; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;">
+            <div style="display: flex; align-items: center; background-color: #f1f5f9; border-radius: 20px; padding: 6px 14px; gap: 8px; border: 1px solid #e2e8f0;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="phonghubContactFilterInput" placeholder="Tìm người dùng hoặc kênh chat..." autocomplete="off"
+                       style="flex: 1; background: transparent; border: none; outline: none; color: #0f172a; font-size: 13px;">
+            </div>
+        </div>
+
+        <!-- Danh sách các kênh chat và người dùng (Giao diện kênh chat trực quan, chuyên nghiệp) -->
+        <div id="phonghubContactsList" style="flex: 1; overflow-y: auto; padding: 8px 10px; background-color: #ffffff;">
+            <div style="padding: 24px; text-align: center; color: #64748b; font-size: 13px;">Đang tải danh sách...</div>
+        </div>
+    </div>
+
+    <!-- 4. Khung chat Messenger docked - Theme Màu trắng viền xám đồng nhất với PhongHub -->
+    <div id="phonghubDockedMessengerBox" style="display: none; position: fixed; bottom: 0; right: 86px; width: 348px; height: 465px; background-color: #ffffff; color: #0f172a; border-radius: 12px 12px 0 0; box-shadow: 0 12px 36px rgba(15, 23, 42, 0.16), 0 2px 10px rgba(15, 23, 42, 0.08); border: 1px solid #cbd5e1; border-bottom: none; z-index: 100001; flex-direction: column; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; transition: right 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;">
+        <!-- Header khung chat: Nền trắng, viền xám, hiển thị rõ ràng -->
+        <div id="phonghubDockedHeader" style="padding: 10px 14px; background-color: #ffffff; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; user-select: none;">
+            <!-- Thông tin người đang chat: Gọn gàng, chỉ Avatar và Tên -->
+            <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                <div id="phonghubDockedAvatar" style="width: 36px; height: 36px; border-radius: 50%; background: #e2e8f0; color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; overflow: hidden; border: 1.5px solid #cbd5e1; flex-shrink: 0;">
+                    U
+                </div>
+                <div style="min-width: 0; display: flex; flex-direction: column;">
+                    <span id="phonghubDockedTitle" style="font-weight: 700; font-size: 14px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; letter-spacing: -0.1px;">Người dùng</span>
+                    <span id="phonghubDockedStatus" style="display: none; font-size: 11px; color: #64748b; line-height: 1.2;"></span>
+                </div>
+            </div>
+
+            <!-- Các nút điều khiển: Thu nhỏ '-' và Đóng 'X' -->
+            <div style="display: flex; align-items: center; gap: 4px;">
+                <!-- Nút thu nhỏ '-' -->
+                <button type="button" id="phonghubDockedMinimizeBtn" class="phonghub-icon-btn" title="Thu nhỏ cuộc trò chuyện">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="4" y="11" width="16" height="2.5" rx="1"/>
+                    </svg>
+                </button>
+                <!-- Nút đóng 'X' -->
+                <button type="button" id="phonghubDockedCloseBtn" class="phonghub-icon-btn" title="Đóng cuộc trò chuyện" style="font-size: 17px; font-weight: 700; line-height: 1;">
+                    ✕
+                </button>
+            </div>
+        </div>
+
+        <!-- Khung hiển thị các tin nhắn trò chuyện (Nền xám nhạt dịu mắt chuẩn PhongHub) -->
+        <div id="phonghubDockedMessagesPane" style="flex: 1; padding: 12px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background-color: #f8fafc;">
+            <div style="margin: auto; color: #64748b; font-size: 12.5px;">Đang tải tin nhắn...</div>
+        </div>
+
+        <!-- Khung nhập văn bản bên dưới: Nền trắng, ô nhập xám nhạt có viền -->
+        <div id="phonghubDockedFooter" style="padding: 8px 10px; background-color: #ffffff; border-top: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 4px;">
+            <!-- Thanh preview file đính kèm nếu đang chọn file -->
+            <div id="phonghubDockedMediaPreview" style="display: none; padding: 4px 8px; background-color: #f1f5f9; border-radius: 8px; align-items: center; justify-content: space-between; font-size: 11.5px; color: #334155; border: 1px dashed #cbd5e1;">
+                <span id="phonghubDockedMediaFileName" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; font-weight: 500;"></span>
+                <button type="button" id="phonghubDockedMediaCancelBtn" style="background: none; border: none; color: #ef4444; cursor: pointer; font-weight: 700; font-size: 13px; padding: 0 4px;" title="Hủy đính kèm">✕</button>
+            </div>
+            <form id="phonghubDockedSendForm" style="width: 100%; display: flex; align-items: center; margin: 0; gap: 6px;">
+                <!-- Nút đính kèm Ảnh / Video -->
+                <button type="button" id="phonghubDockedAttachBtn" title="Gửi ảnh hoặc video" class="phonghub-icon-btn" style="color: #0084ff; flex-shrink: 0; width: 28px; height: 28px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                </button>
+                <input type="file" id="phonghubDockedFileInput" accept="image/*,video/*" style="display: none;">
+
+                <input type="text" id="phonghubDockedInput" placeholder="Aa" autocomplete="off"
+                       style="flex: 1; background-color: #f1f5f9; color: #0f172a; border-radius: 20px; border: 1px solid #cbd5e1; padding: 7px 12px; font-size: 13.5px; outline: none; transition: border-color 0.15s ease;">
+                <!-- Nút Thích hoặc Nút Gửi -->
+                <button type="submit" id="phonghubDockedSubmitBtn" title="Gửi" style="background: none; border: none; color: #0084ff; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: transform 0.15s ease; flex-shrink: 0;">
+                    <span id="phonghubSendIconLike" style="display: flex;">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/>
+                        </svg>
+                    </span>
+                    <span id="phonghubSendIconFly" style="display: none;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                        </svg>
+                    </span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Script điều khiển toàn bộ Chat & Minimized Chat Heads -->
+    <script>
+    (function() {
+        let currentUserId = '';
+        let activeFloatingRoomId = null;
+        let activeRecipientName = '';
+        let activeRecipientAvatar = '';
+        let activeRoomType = 'DIRECT';
+        let cachedContacts = [];
+        let cachedRooms = [];
+
+        // Danh sách các phòng chat đang được thu nhỏ (Chat Heads)
+        let minimizedChatList = [];
+
+        function updateWindowsLayout() {
+            const dockedBox = document.getElementById('phonghubDockedMessengerBox');
+            const newMsgModal = document.getElementById('phonghubNewMessageModal');
+            const toastContainer = document.getElementById('phonghubChatToastContainer');
+            if (!dockedBox || !newMsgModal) return;
+
+            const isDockedOpen = dockedBox.style.display === 'flex';
+            const isModalOpen = newMsgModal.style.display === 'flex';
+
+            dockedBox.style.right = '86px';
+
+            if (isDockedOpen && isModalOpen) {
+                if (window.innerWidth >= 820) {
+                    // Cả 2 cùng mở trên màn hình rộng: Xếp kề sang bên trái khung chat (cách 12px), tuyệt đối không bị đè lên nhau
+                    newMsgModal.style.right = '446px';
+                } else {
+                    // Màn hình hẹp: Không đủ chỗ cho 2 cửa sổ -> Tự động đóng modal chọn người để ưu tiên khung chat
+                    newMsgModal.style.display = 'none';
+                    newMsgModal.style.right = '86px';
+                }
+            } else {
+                newMsgModal.style.right = '86px';
+            }
+
+            if (toastContainer) {
+                if (isDockedOpen && isModalOpen && window.innerWidth >= 1200) {
+                    toastContainer.style.right = '806px';
+                } else if (isDockedOpen || isModalOpen) {
+                    toastContainer.style.right = '446px';
+                } else {
+                    toastContainer.style.right = '86px';
+                }
+            }
+        }
+
+        function startWidget() {
+            const container = document.getElementById('phonghubFloatingChatContainer');
+            if (!container) return;
+            currentUserId = container.dataset.userId || '';
+            if (!currentUserId) return;
+
+            const toggleBtn = document.getElementById('phonghubMessengerToggleBtn');
+            const newMsgModal = document.getElementById('phonghubNewMessageModal');
+            const closeNewMsgBtn = document.getElementById('phonghubCloseNewMessageBtn');
+            const contactFilterInput = document.getElementById('phonghubContactFilterInput');
+            
+            const dockedBox = document.getElementById('phonghubDockedMessengerBox');
+            const dockedCloseBtn = document.getElementById('phonghubDockedCloseBtn');
+            const dockedMinimizeBtn = document.getElementById('phonghubDockedMinimizeBtn');
+            const dockedSendForm = document.getElementById('phonghubDockedSendForm');
+            const dockedInput = document.getElementById('phonghubDockedInput');
+            const iconLike = document.getElementById('phonghubSendIconLike');
+            const iconFly = document.getElementById('phonghubSendIconFly');
+            const attachBtn = document.getElementById('phonghubDockedAttachBtn');
+            const fileInput = document.getElementById('phonghubDockedFileInput');
+            const mediaPreview = document.getElementById('phonghubDockedMediaPreview');
+            const mediaFileName = document.getElementById('phonghubDockedMediaFileName');
+            const mediaCancelBtn = document.getElementById('phonghubDockedMediaCancelBtn');
+            let selectedMediaFile = null;
+
+            if (attachBtn && fileInput) {
+                attachBtn.addEventListener('click', () => {
+                    fileInput.click();
+                });
+
+                fileInput.addEventListener('change', () => {
+                    if (fileInput.files && fileInput.files[0]) {
+                        selectedMediaFile = fileInput.files[0];
+                        if (selectedMediaFile.size > 25 * 1024 * 1024) {
+                            alert('Kích thước tệp vượt quá giới hạn 25MB. Vui lòng chọn tệp nhỏ hơn.');
+                            selectedMediaFile = null;
+                            fileInput.value = '';
+                            return;
+                        }
+                        const isVideo = selectedMediaFile.type.startsWith('video/') || selectedMediaFile.name.toLowerCase().match(/\.(mp4|webm|mov)$/);
+                        mediaFileName.textContent = (isVideo ? '🎥 ' : '📷 ') + selectedMediaFile.name;
+                        mediaPreview.style.display = 'flex';
+                        if (iconLike && iconFly) {
+                            iconLike.style.display = 'none';
+                            iconFly.style.display = 'flex';
+                        }
+                    }
+                });
+            }
+
+            if (mediaCancelBtn) {
+                mediaCancelBtn.addEventListener('click', () => {
+                    selectedMediaFile = null;
+                    if (fileInput) fileInput.value = '';
+                    if (mediaPreview) mediaPreview.style.display = 'none';
+                    const hasText = dockedInput.value.trim().length > 0;
+                    if (iconLike && iconFly) {
+                        iconLike.style.display = hasText ? 'none' : 'flex';
+                        iconFly.style.display = hasText ? 'flex' : 'none';
+                    }
+                });
+            }
+
+            // Chuyển đổi icon Thích 👍 sang icon Gửi ✈️ khi người dùng gõ văn bản
+            if (dockedInput) {
+                dockedInput.addEventListener('input', () => {
+                    const hasText = dockedInput.value.trim().length > 0 || selectedMediaFile != null;
+                    if (iconLike && iconFly) {
+                        iconLike.style.display = hasText ? 'none' : 'flex';
+                        iconFly.style.display = hasText ? 'flex' : 'none';
+                    }
+                });
+            }
+
+            // Bấm nút tròn Soạn tin nhắn -> Bật/tắt modal "Tin nhắn mới" ở BÊN TRÁI nút
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isHidden = newMsgModal.style.display === 'none' || newMsgModal.style.display === '';
+                    if (isHidden) {
+                        newMsgModal.style.display = 'flex';
+                        updateWindowsLayout();
+                        loadAndRenderContacts();
+                        if (contactFilterInput) {
+                            contactFilterInput.value = '';
+                            setTimeout(() => contactFilterInput.focus(), 60);
+                        }
+                    } else {
+                        newMsgModal.style.display = 'none';
+                        updateWindowsLayout();
+                    }
+                });
+            }
+
+            // Đóng modal "Tin nhắn mới"
+            if (closeNewMsgBtn) {
+                closeNewMsgBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    newMsgModal.style.display = 'none';
+                    updateWindowsLayout();
+                });
+            }
+
+            // Đóng modal khi bấm ra ngoài trang (không tự đóng khi người dùng đang bấm trong khung chat hoặc chat heads)
+            document.addEventListener('click', (e) => {
+                if (newMsgModal && newMsgModal.style.display === 'flex' &&
+                    !newMsgModal.contains(e.target) &&
+                    toggleBtn && !toggleBtn.contains(e.target) &&
+                    dockedBox && !dockedBox.contains(e.target) &&
+                    !e.target.closest('.phonghub-chat-head')) {
+                    newMsgModal.style.display = 'none';
+                    updateWindowsLayout();
+                }
+            });
+
+            window.addEventListener('resize', updateWindowsLayout);
+
+            // Tìm kiếm/lọc người dùng trong ô tìm kiếm
+            if (contactFilterInput) {
+                contactFilterInput.addEventListener('input', (e) => {
+                    const keyword = e.target.value.toLowerCase().trim();
+                    filterAndRenderContacts(keyword);
+                });
+            }
+
+            // Đóng khung chat docked hoàn toàn (nút 'X')
+            if (dockedCloseBtn) {
+                dockedCloseBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    removeChatHead(activeFloatingRoomId);
+                    activeFloatingRoomId = null;
+                    dockedBox.style.display = 'none';
+                    updateWindowsLayout();
+                });
+            }
+
+            // Thu nhỏ khung chat (nút '-') -> Biến thành nút tròn avatar ở TRÊN nút soạn tin nhắn
+            if (dockedMinimizeBtn) {
+                dockedMinimizeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    minimizeActiveChat();
+                    updateWindowsLayout();
+                });
+            }
+
+            // Gửi tin nhắn khi nhấn Enter hoặc bấm nút Gửi/Thích
+            if (dockedSendForm) {
+                dockedSendForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    if (!activeFloatingRoomId) return;
+
+                    if (selectedMediaFile) {
+                        const fileToSend = selectedMediaFile;
+                        const caption = dockedInput.value.trim();
+                        selectedMediaFile = null;
+                        if (fileInput) fileInput.value = '';
+                        if (mediaPreview) mediaPreview.style.display = 'none';
+                        dockedInput.value = '';
+                        if (iconLike && iconFly) {
+                            iconLike.style.display = 'flex';
+                            iconFly.style.display = 'none';
+                        }
+                        await postMedia(fileToSend, caption);
+                    } else {
+                        let content = dockedInput.value.trim();
+                        if (!content) {
+                            content = '👍';
+                        }
+                        dockedInput.value = '';
+                        if (iconLike && iconFly) {
+                            iconLike.style.display = 'flex';
+                            iconFly.style.display = 'none';
+                        }
+                        await postMessage(content);
+                    }
+                });
+            }
+
+            async function postMedia(file, caption) {
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    if (caption) formData.append('caption', caption);
+
+                    const res = await fetch(`/api/chat/rooms/${activeFloatingRoomId}/media`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (res.ok) {
+                        const saved = await res.json();
+                        appendDockedMessageUI(saved);
+                    } else {
+                        alert('Không thể gửi tệp tin media. Vui lòng kiểm tra định dạng hoặc kích thước (tối đa 25MB).');
+                    }
+                } catch (err) {
+                    console.error('Lỗi khi gửi tệp media:', err);
+                }
+            }
+
+            async function postMessage(content) {
+                try {
+                    const res = await fetch(`/api/chat/rooms/${activeFloatingRoomId}/messages`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content })
+                    });
+                    if (res.ok) {
+                        const saved = await res.json();
+                        appendDockedMessageUI(saved);
+                    }
+                } catch (err) {
+                    console.error('Lỗi khi gửi tin nhắn:', err);
+                }
+            }
+
+            refreshUnreadBadge();
+            initGlobalSse();
+        }
+
+        // Chức năng thu nhỏ chat thành nút tròn Avatar (Chat Head) ở cột bên phải
+        function minimizeActiveChat() {
+            if (!activeFloatingRoomId) return;
+            const dockedBox = document.getElementById('phonghubDockedMessengerBox');
+            dockedBox.style.display = 'none';
+            updateWindowsLayout();
+
+            const exists = minimizedChatList.some(c => c.roomId === activeFloatingRoomId);
+            if (!exists) {
+                minimizedChatList.push({
+                    roomId: activeFloatingRoomId,
+                    name: activeRecipientName,
+                    avatar: activeRecipientAvatar,
+                    type: activeRoomType
+                });
+            }
+            activeFloatingRoomId = null;
+            renderChatHeads();
+        }
+
+        // Render các nút tròn Avatar ở trên nút soạn tin nhắn
+        function renderChatHeads() {
+            const headsContainer = document.getElementById('phonghubChatHeadsContainer');
+            headsContainer.innerHTML = '';
+
+            minimizedChatList.forEach(chat => {
+                const headDiv = document.createElement('div');
+                headDiv.className = 'phonghub-chat-head';
+
+                const avatarColor = chat.type === 'GLOBAL' ? 'linear-gradient(135deg, #0084ff, #4f46e5)' : getAvatarColor(chat.name);
+                headDiv.style.background = avatarColor;
+                headDiv.style.color = '#ffffff';
+                headDiv.style.fontWeight = '700';
+                headDiv.style.fontSize = '15px';
+
+                headDiv.innerHTML = `
+                    <span>${chat.type === 'GLOBAL' ? '🌐' : (chat.avatar || 'U')}</span>
+                    <!-- Tooltip tên người chat khi rê chuột -->
+                    <div class="chat-head-tooltip">${escapeHtml(chat.name)}</div>
+                    <!-- Nút X nhỏ để đóng hẳn chat head -->
+                    <div class="chat-head-close-btn" title="Đóng">✕</div>
+                `;
+
+                const closeBtn = headDiv.querySelector('.chat-head-close-btn');
+                closeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    removeChatHead(chat.roomId);
+                });
+
+                headDiv.addEventListener('click', () => {
+                    removeChatHead(chat.roomId);
+                    openDockedChat(chat.roomId, chat.name, chat.avatar, chat.type);
+                });
+
+                headsContainer.appendChild(headDiv);
+            });
+        }
+
+        function removeChatHead(roomId) {
+            minimizedChatList = minimizedChatList.filter(c => c.roomId !== roomId);
+            renderChatHeads();
+        }
+
+        // Phát âm thanh thông báo nhẹ nhàng khi có tin nhắn mới gửi đến
+        function playMessageNotificationSound() {
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                const ctx = new AudioCtx();
+                if (ctx.state === 'suspended') {
+                    ctx.resume();
+                }
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.25);
+            } catch (e) {}
+        }
+
+        // Hiển thị thông báo Toast nổi khi có tin nhắn mới gửi đến
+        function showIncomingMessageToast(msg) {
+            let toastContainer = document.getElementById('phonghubChatToastContainer');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.id = 'phonghubChatToastContainer';
+                toastContainer.style.cssText = 'position: fixed; display: flex; flex-direction: column-reverse; gap: 8px; z-index: 100005; pointer-events: none; transition: right 0.22s ease;';
+                document.body.appendChild(toastContainer);
+            }
+
+            const dockedBox = document.getElementById('phonghubDockedMessengerBox');
+            const newMsgModal = document.getElementById('phonghubNewMessageModal');
+            const isDockedOpen = dockedBox && dockedBox.style.display === 'flex';
+            const isModalOpen = newMsgModal && newMsgModal.style.display === 'flex';
+
+            toastContainer.style.bottom = '84px';
+            if (isDockedOpen && isModalOpen && window.innerWidth >= 1200) {
+                toastContainer.style.right = '806px';
+            } else if (isDockedOpen || isModalOpen) {
+                toastContainer.style.right = '446px';
+            } else {
+                toastContainer.style.right = '86px';
+            }
+
+            const toast = document.createElement('div');
+            toast.className = 'phonghub-chat-toast';
+            toast.style.cssText = `
+                pointer-events: auto;
+                background-color: #ffffff;
+                color: #0f172a;
+                padding: 10px 14px;
+                border-radius: 14px;
+                box-shadow: 0 10px 32px rgba(15, 23, 42, 0.2), 0 2px 8px rgba(15, 23, 42, 0.08);
+                border: 1px solid #cbd5e1;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                min-width: 280px;
+                max-width: 340px;
+                cursor: pointer;
+            `;
+
+            const targetRoom = cachedRooms.find(r => String(r.id).toLowerCase() === String(msg.chatRoomId).toLowerCase());
+            const isGlobal = targetRoom && targetRoom.type === 'GLOBAL';
+            const avatarInitial = isGlobal ? '🌐' : (msg.senderName ? msg.senderName.trim().charAt(msg.senderName.trim().lastIndexOf(' ') + 1) || msg.senderName.charAt(0) : 'U');
+            const avatarColor = isGlobal ? 'linear-gradient(135deg, #0084ff, #4f46e5)' : getAvatarColor(msg.senderName);
+            const senderDisplayName = isGlobal ? `${msg.senderName} (Kênh chung)` : (msg.senderName || 'Tin nhắn mới');
+
+            let previewText = msg.content || '';
+            if (msg.mediaUrl) {
+                previewText = (msg.mediaType === 'VIDEO') ? '🎥 Đã gửi một video' : '📷 Đã gửi một hình ảnh';
+                if (msg.content) previewText += `: ${msg.content}`;
+            }
+
+            toast.innerHTML = `
+                <div style="width: 40px; height: 40px; border-radius: 50%; background: ${avatarColor}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
+                    ${escapeHtml(avatarInitial)}
+                </div>
+                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                        <span style="font-weight: 700; font-size: 13.5px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(senderDisplayName)}</span>
+                        <span style="font-size: 10.5px; color: #0284c7; font-weight: 600; flex-shrink: 0;">Vừa xong</span>
+                    </div>
+                    <span style="font-size: 12.5px; color: #334155; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;">${escapeHtml(previewText)}</span>
+                </div>
+                <button type="button" class="toast-close-btn" style="background: none; border: none; color: #94a3b8; font-size: 15px; font-weight: 700; cursor: pointer; padding: 2px 4px; border-radius: 4px; margin-left: 2px;" title="Đóng">✕</button>
+            `;
+
+            const closeBtn = toast.querySelector('.toast-close-btn');
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toast.remove();
+            });
+
+            toast.addEventListener('click', () => {
+                toast.remove();
+                if (isGlobal) {
+                    removeChatHead(msg.chatRoomId);
+                    openDockedChat(msg.chatRoomId, 'Kênh Chung Ban Quản Lý', '🌐', 'GLOBAL');
+                } else {
+                    removeChatHead(msg.chatRoomId);
+                    openDockedChat(msg.chatRoomId, msg.senderName, avatarInitial, 'DIRECT');
+                }
+            });
+
+            toastContainer.appendChild(toast);
+
+            // Tự động mờ dần và biến mất sau 6 giây
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.style.opacity = '0';
+                    toast.style.transform = 'translateY(10px)';
+                    setTimeout(() => toast.remove(), 250);
+                }
+            }, 6000);
+        }
+
+        function formatChatTime(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            if (isNaN(date.getTime())) return '';
+            const now = new Date();
+            const isToday = date.toDateString() === now.toDateString();
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            if (isToday) {
+                return `${hours}:${minutes}`;
+            }
+            const day = date.getDate().toString().padStart(2, '0');
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            return `${day}/${month}`;
+        }
+
+        // Tải và hiển thị danh sách người dùng trong popup
+        async function loadAndRenderContacts() {
+            const container = document.getElementById('phonghubContactsList');
+            try {
+                const [contactsRes, roomsRes] = await Promise.all([
+                    fetch('/api/chat/contacts'),
+                    fetch('/api/chat/rooms')
+                ]);
+
+                if (contactsRes.ok) cachedContacts = await contactsRes.json();
+                if (roomsRes.ok) cachedRooms = await roomsRes.json();
+
+                const filterInput = document.getElementById('phonghubContactFilterInput');
+                const keyword = filterInput ? filterInput.value.toLowerCase().trim() : '';
+                filterAndRenderContacts(keyword);
+            } catch (err) {
+                console.error('Lỗi khi tải danh sách người dùng:', err);
+                if (container) container.innerHTML = '<div style="padding: 24px; text-align: center; color: #ef4444; font-size: 13px;">Không thể tải danh sách tài khoản.</div>';
+            }
+        }
+
+        // Lấy thông tin vai trò: Nhãn rõ ràng, badge màu pastel tinh tế trên nền trắng
+        function getRoleInfo(role) {
+            switch (role) {
+                case 'ADMIN':
+                    return { label: 'Quản trị viên', bg: '#f3e8ff', color: '#7e22ce' };
+                case 'OWNER':
+                    return { label: 'Chủ trọ', bg: '#dcfce7', color: '#15803d' };
+                case 'STAFF':
+                    return { label: 'Nhân viên', bg: '#dbeafe', color: '#1d4ed8' };
+                case 'TECHNICIAN':
+                    return { label: 'Kỹ thuật viên', bg: '#fef3c7', color: '#b45309' };
+                case 'TENANT':
+                    return { label: 'Người dùng', bg: '#f1f5f9', color: '#475569' };
+                default:
+                    return { label: 'Người dùng', bg: '#f1f5f9', color: '#475569' };
+            }
+        }
+
+        function filterAndRenderContacts(keyword) {
+            const container = document.getElementById('phonghubContactsList');
+            if (!container) return;
+            container.innerHTML = '';
+
+            const globalRoom = cachedRooms.find(r => r.type === 'GLOBAL');
+            const globalUnread = globalRoom ? (globalRoom.unreadCount || 0) : 0;
+            let globalSubtitle = 'Kênh thông báo & trao đổi toàn hệ thống';
+            let globalTime = '';
+            if (globalUnread > 0 && globalRoom && globalRoom.lastMessageContent) {
+                const senderPrefix = globalRoom.lastMessageSenderName ? globalRoom.lastMessageSenderName + ': ' : '';
+                globalSubtitle = senderPrefix + globalRoom.lastMessageContent;
+                globalTime = formatChatTime(globalRoom.lastMessageAt);
+            } else if (globalRoom && globalRoom.lastMessageAt) {
+                globalTime = formatChatTime(globalRoom.lastMessageAt);
+            }
+
+            // 1. Mục Kênh Chat Chung (Pinned Channel)
+            if (!keyword || 'kênh chung ban quản lý meta ai'.includes(keyword)) {
+                const globalItem = createChannelItemElement({
+                    title: 'Kênh Chung Ban Quản Lý',
+                    subtitle: globalSubtitle,
+                    badgeHtml: '<span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background-color: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; white-space: nowrap;">Kênh chung</span>',
+                    isSpecial: true,
+                    isUnread: globalUnread > 0,
+                    unreadCount: globalUnread,
+                    timeText: globalTime,
+                    avatarHtml: '<div style="width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #0084ff, #4f46e5); display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,132,255,0.25);">🌐</div>',
+                    onClick: async () => {
+                        document.getElementById('phonghubNewMessageModal').style.display = 'none';
+                        updateWindowsLayout();
+
+                        // Xóa chấm đỏ Kênh chung ngay lập tức
+                        if (globalRoom) {
+                            globalRoom.unreadCount = 0;
+                        }
+                        updateGlobalBadgeCount();
+                        const filterInput = document.getElementById('phonghubContactFilterInput');
+                        filterAndRenderContacts(filterInput ? filterInput.value.toLowerCase().trim() : '');
+
+                        let targetRoom = cachedRooms.find(r => r.type === 'GLOBAL');
+                        if (!targetRoom) {
+                            const roomsRes = await fetch('/api/chat/rooms');
+                            if (roomsRes.ok) {
+                                cachedRooms = await roomsRes.json();
+                                targetRoom = cachedRooms.find(r => r.type === 'GLOBAL');
+                            }
+                        }
+                        if (targetRoom) {
+                            removeChatHead(targetRoom.id);
+                            openDockedChat(targetRoom.id, 'Kênh Chung Ban Quản Lý', '🌐', 'GLOBAL');
+                        }
+                    }
+                });
+                container.appendChild(globalItem);
+
+                // Dòng phân cách nhóm kênh chat và người dùng
+                const divider = document.createElement('div');
+                divider.style.display = 'flex';
+                divider.style.alignItems = 'center';
+                divider.style.margin = '10px 4px 6px 4px';
+                divider.style.fontSize = '11px';
+                divider.style.fontWeight = '700';
+                divider.style.color = '#94a3b8';
+                divider.style.letterSpacing = '0.5px';
+                divider.textContent = 'TRÒ CHUYỆN TRỰC TIẾP';
+                container.appendChild(divider);
+            }
+
+            // 2. Danh sách các tài khoản người dùng kết hợp phòng chat
+            const contactListWithRooms = cachedContacts.map(c => {
+                const room = cachedRooms.find(r => r.type === 'DIRECT' && r.peerUserId === c.userId);
+                return {
+                    ...c,
+                    roomId: room ? room.id : null,
+                    unreadCount: room ? (room.unreadCount || 0) : 0,
+                    lastMessageContent: room ? (room.lastMessageContent || '') : '',
+                    lastMessageSenderName: room ? (room.lastMessageSenderName || '') : '',
+                    lastMessageAt: room && room.lastMessageAt ? new Date(room.lastMessageAt).getTime() : 0
+                };
+            });
+
+            const filtered = contactListWithRooms.filter(c => {
+                if (!keyword) return true;
+                const full = (c.fullName || '').toLowerCase();
+                const roleInfo = getRoleInfo(c.role);
+                const lastMsg = (c.lastMessageContent || '').toLowerCase();
+                return full.includes(keyword) || roleInfo.label.toLowerCase().includes(keyword) || lastMsg.includes(keyword);
+            });
+
+            if (filtered.length === 0 && keyword) {
+                const noMatch = document.createElement('div');
+                noMatch.style.padding = '24px';
+                noMatch.style.textAlign = 'center';
+                noMatch.style.color = '#64748b';
+                noMatch.style.fontSize = '13px';
+                noMatch.textContent = 'Không tìm thấy người dùng phù hợp.';
+                container.appendChild(noMatch);
+                return;
+            }
+
+            // SẮP XẾP ƯU TIÊN:
+            // 1. Có tin nhắn chưa đọc lên ĐẦU TIÊN (unreadCount > 0)
+            // 2. Có tin nhắn gần đây nhất lên TIẾP THEO (thời gian mới nhất giảm dần)
+            // 3. Cuối cùng là các tài khoản chưa trò chuyện
+            filtered.sort((a, b) => {
+                if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
+                if (b.unreadCount > 0 && a.unreadCount === 0) return 1;
+                if (a.lastMessageAt !== b.lastMessageAt) {
+                    return b.lastMessageAt - a.lastMessageAt;
+                }
+                return (a.fullName || '').localeCompare(b.fullName || '');
+            });
+
+            filtered.forEach(c => {
+                const roleInfo = getRoleInfo(c.role);
+                const initial = c.fullName ? c.fullName.trim().charAt(c.fullName.trim().lastIndexOf(' ') + 1) || c.fullName.charAt(0) : 'U';
+                const avatarColor = getAvatarColor(c.fullName || c.userId);
+                const isUnread = c.unreadCount > 0;
+
+                // LOGIC CHUẨN:
+                // - Khi CÓ tin chưa đọc: Dòng phụ hiện trích đoạn tin nhắn mới màu xanh
+                // - Khi ĐÃ ĐỌC (hoặc chưa nhắn): Dòng phụ hiện vai trò sạch sẽ, KHÔNG hiện tin nhắn cũ
+                let subtitle = roleInfo.label;
+                let timeText = '';
+                if (isUnread && c.lastMessageContent) {
+                    subtitle = c.lastMessageContent;
+                    timeText = formatChatTime(c.lastMessageAt);
+                } else if (c.lastMessageAt) {
+                    timeText = formatChatTime(c.lastMessageAt);
+                }
+
+                const item = createChannelItemElement({
+                    title: c.fullName,
+                    subtitle: subtitle,
+                    timeText: timeText,
+                    isUnread: isUnread,
+                    unreadCount: c.unreadCount,
+                    badgeHtml: `<span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background-color: ${roleInfo.bg}; color: ${roleInfo.color}; white-space: nowrap;">${roleInfo.label}</span>`,
+                    isSpecial: false,
+                    avatarHtml: `
+                        <div style="width: 40px; height: 40px; border-radius: 50%; background-color: ${avatarColor}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); flex-shrink: 0;">${initial}</div>
+                    `,
+                    onClick: async () => {
+                        document.getElementById('phonghubNewMessageModal').style.display = 'none';
+                        updateWindowsLayout();
+
+                        // XÓA CHẤM ĐỎ NGAY KHI BẤM XEM
+                        c.unreadCount = 0;
+                        if (c.roomId) {
+                            const room = cachedRooms.find(r => String(r.id).toLowerCase() === String(c.roomId).toLowerCase());
+                            if (room) room.unreadCount = 0;
+                        }
+                        updateGlobalBadgeCount();
+                        const filterInput = document.getElementById('phonghubContactFilterInput');
+                        filterAndRenderContacts(filterInput ? filterInput.value.toLowerCase().trim() : '');
+
+                        if (c.roomId) {
+                            removeChatHead(c.roomId);
+                            openDockedChat(c.roomId, c.fullName, initial, 'DIRECT');
+                        } else {
+                            try {
+                                const res = await fetch('/api/chat/rooms/direct', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ targetUserId: c.userId })
+                                });
+                                if (res.ok) {
+                                    const room = await res.json();
+                                    removeChatHead(room.id);
+                                    openDockedChat(room.id, c.fullName, initial, 'DIRECT');
+                                }
+                            } catch (err) {
+                                console.error('Lỗi khi mở cuộc trò chuyện trực tiếp:', err);
+                            }
+                        }
+                    }
+                });
+                container.appendChild(item);
+            });
+        }
+
+        // Tạo item danh sách giống kênh chat Messenger: Avatar, Tên to rõ, Dòng phụ trạng thái, Badge bên phải
+        function createChannelItemElement({ title, subtitle, badgeHtml, isSpecial, avatarHtml, onClick, isUnread, unreadCount, timeText }) {
+            const item = document.createElement('div');
+            item.className = 'phonghub-contact-item';
+            item.style.display = 'flex';
+            item.style.alignItems = 'center';
+            item.style.gap = '12px';
+            item.style.padding = '8px 10px';
+            item.style.margin = '2px 0';
+            item.style.borderRadius = '10px';
+            item.style.cursor = 'pointer';
+            item.style.transition = 'background-color 0.15s ease, transform 0.1s ease';
+            if (isUnread) {
+                item.style.backgroundColor = '#f0f9ff';
+            }
+            item.addEventListener('click', onClick);
+
+            const titleFontWeight = isUnread ? '700' : '600';
+            const titleColor = isUnread ? '#0f172a' : '#1e293b';
+            const subtitleStyle = isUnread
+                ? 'font-size: 12px; color: #0284c7; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;'
+                : 'font-size: 11.5px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;';
+
+            let rightColHtml = '<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; margin-left: 6px;">';
+            if (timeText) {
+                rightColHtml += `<span style="font-size: 10px; color: ${isUnread ? '#0284c7; font-weight: 700' : '#94a3b8'};">${escapeHtml(timeText)}</span>`;
+            }
+            if (unreadCount > 1) {
+                rightColHtml += `<div style="display: flex; align-items: center; gap: 4px;">${badgeHtml || ''}<span style="background-color: #ef4444; color: #ffffff; font-size: 10px; font-weight: 700; border-radius: 12px; padding: 1px 5.5px; min-width: 16px; text-align: center; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);">${unreadCount}</span></div>`;
+            } else if (badgeHtml) {
+                rightColHtml += badgeHtml;
+            }
+            rightColHtml += '</div>';
+
+            item.innerHTML = `
+                <div style="position: relative; flex-shrink: 0;">
+                    ${avatarHtml}
+                    ${isUnread ? '<span style="position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; border-radius: 50%; background-color: #ef4444; border: 2px solid #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"></span>' : ''}
+                </div>
+                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-weight: ${titleFontWeight}; font-size: 14px; color: ${titleColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35;">${escapeHtml(title)}</span>
+                        ${isSpecial ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="#0084ff" style="flex-shrink: 0;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>' : ''}
+                        ${isUnread ? '<span title="Tin nhắn chưa đọc" style="display: inline-block; width: 8.5px; height: 8.5px; border-radius: 50%; background-color: #ef4444; flex-shrink: 0; box-shadow: 0 0 0 2px #ffffff, 0 1px 4px rgba(239, 68, 68, 0.5); margin-left: 2px;"></span>' : ''}
+                    </div>
+                    ${subtitle ? `<span style="${subtitleStyle}">${escapeHtml(subtitle)}</span>` : ''}
+                </div>
+                ${rightColHtml}
+            `;
+            return item;
+        }
+
+        // Mở khung chat docked Messenger (Theme Màu trắng viền xám)
+        window.openDockedChat = async function(roomId, recipientName, recipientAvatar, roomType) {
+            activeFloatingRoomId = roomId;
+            activeRecipientName = recipientName;
+            activeRecipientAvatar = recipientAvatar;
+            activeRoomType = roomType || 'DIRECT';
+
+            // XÓA CHẤM ĐỎ NGAY KHI MỞ CHAT
+            const targetRoomCache = cachedRooms.find(r => String(r.id).toLowerCase() === String(roomId).toLowerCase());
+            if (targetRoomCache) {
+                targetRoomCache.unreadCount = 0;
+            }
+            updateGlobalBadgeCount();
+            const filterInput = document.getElementById('phonghubContactFilterInput');
+            filterAndRenderContacts(filterInput ? filterInput.value.toLowerCase().trim() : '');
+
+            const dockedBox = document.getElementById('phonghubDockedMessengerBox');
+            dockedBox.style.display = 'flex';
+            updateWindowsLayout();
+
+            document.getElementById('phonghubDockedTitle').textContent = recipientName;
+            const statusElem = document.getElementById('phonghubDockedStatus');
+            if (statusElem) {
+                if (roomType === 'GLOBAL') {
+                    statusElem.textContent = 'Kênh thông báo & trao đổi toàn hệ thống';
+                    statusElem.style.display = 'block';
+                } else {
+                    statusElem.textContent = '';
+                    statusElem.style.display = 'none';
+                }
+            }
+
+            const avatarElem = document.getElementById('phonghubDockedAvatar');
+            if (roomType === 'GLOBAL') {
+                avatarElem.style.background = 'linear-gradient(135deg, #0084ff, #4f46e5)';
+                avatarElem.style.color = '#ffffff';
+                avatarElem.textContent = '🌐';
+            } else {
+                avatarElem.style.background = getAvatarColor(recipientName);
+                avatarElem.style.color = '#ffffff';
+                avatarElem.textContent = recipientAvatar || 'U';
+            }
+
+            const messagesPane = document.getElementById('phonghubDockedMessagesPane');
+            messagesPane.innerHTML = '<div style="margin: auto; color: #64748b; font-size: 12.5px;">Đang tải tin nhắn...</div>';
+
+            try {
+                const res = await fetch(`/api/chat/rooms/${roomId}/messages`);
+                if (res.ok) {
+                    const peerLastReadHeader = res.headers.get('X-Peer-Last-Read-At');
+                    const messages = await res.json();
+                    messagesPane.innerHTML = '';
+                    if (messages.length === 0) {
+                        messagesPane.innerHTML = '<div style="margin: auto; color: #64748b; font-size: 12.5px; text-align: center;">Chưa có tin nhắn nào.<br>Hãy gửi lời chào đầu tiên! 👋</div>';
+                    } else {
+                        messages.forEach(m => appendDockedMessageUI(m));
+                    }
+                    if (peerLastReadHeader) {
+                        updateSeenStatusUI(peerLastReadHeader);
+                    }
+                    scrollMessagesToBottom();
+                    fetch(`/api/chat/rooms/${roomId}/read`, { method: 'POST' }).then(() => {
+                        refreshUnreadBadge();
+                        loadAndRenderContacts();
+                    });
+                }
+            } catch (err) {
+                console.error('Lỗi khi tải tin nhắn phòng chat:', err);
+            }
+        };
+
+        function appendDockedMessageUI(msg) {
+            const pane = document.getElementById('phonghubDockedMessagesPane');
+            if (document.getElementById(`docked-msg-${msg.id}`)) return;
+
+            const isMe = msg.senderId === currentUserId;
+            const msgWrapper = document.createElement('div');
+            msgWrapper.id = `docked-msg-${msg.id}`;
+            msgWrapper.setAttribute('data-created-at', msg.createdAt);
+            if (isMe) {
+                msgWrapper.classList.add('phonghub-my-message');
+                const oldSeen = pane.querySelector('.phonghub-seen-status');
+                if (oldSeen) oldSeen.remove();
+            }
+            msgWrapper.style.display = 'flex';
+            msgWrapper.style.flexDirection = 'column';
+            msgWrapper.style.alignItems = isMe ? 'flex-end' : 'flex-start';
+            msgWrapper.style.marginBottom = '4px';
+
+            if (!isMe) {
+                const senderName = document.createElement('span');
+                senderName.style.fontSize = '10.5px';
+                senderName.style.color = '#64748b';
+                senderName.style.marginBottom = '2px';
+                senderName.style.paddingLeft = '36px';
+                senderName.textContent = msg.senderName;
+                msgWrapper.appendChild(senderName);
+            }
+
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            row.style.alignItems = 'flex-end';
+            row.style.gap = '8px';
+            row.style.maxWidth = '85%';
+
+            if (!isMe) {
+                const miniAvatar = document.createElement('div');
+                miniAvatar.style.width = '26px';
+                miniAvatar.style.height = '26px';
+                miniAvatar.style.borderRadius = '50%';
+                miniAvatar.style.backgroundColor = getAvatarColor(msg.senderName);
+                miniAvatar.style.color = '#ffffff';
+                miniAvatar.style.fontSize = '11.5px';
+                miniAvatar.style.fontWeight = '700';
+                miniAvatar.style.display = 'flex';
+                miniAvatar.style.alignItems = 'center';
+                miniAvatar.style.justifyContent = 'center';
+                miniAvatar.style.flexShrink = '0';
+                miniAvatar.textContent = msg.senderName ? msg.senderName.charAt(0) : 'U';
+                row.appendChild(miniAvatar);
+            }
+
+            const hasMedia = msg.mediaUrl && msg.mediaUrl.trim().length > 0;
+            const hasCaption = msg.content && msg.content.trim().length > 0;
+
+            if (hasMedia) {
+                const mediaContainer = document.createElement('div');
+                mediaContainer.style.display = 'flex';
+                mediaContainer.style.flexDirection = 'column';
+                mediaContainer.style.gap = '4px';
+                mediaContainer.style.maxWidth = '230px';
+
+                const isVideo = (msg.mediaType === 'VIDEO') || (msg.mediaUrl.match(/\.(mp4|webm|mov|mkv|avi)($|\?)/i));
+
+                if (isVideo) {
+                    const videoEl = document.createElement('video');
+                    videoEl.src = msg.mediaUrl;
+                    videoEl.controls = true;
+                    videoEl.preload = 'metadata';
+                    videoEl.style.maxWidth = '100%';
+                    videoEl.style.maxHeight = '240px';
+                    videoEl.style.borderRadius = hasCaption ? '12px 12px 4px 4px' : '14px';
+                    videoEl.style.backgroundColor = '#000000';
+                    videoEl.style.boxShadow = '0 2px 8px rgba(15, 23, 42, 0.12)';
+                    videoEl.style.display = 'block';
+                    mediaContainer.appendChild(videoEl);
+                } else {
+                    const imgEl = document.createElement('img');
+                    imgEl.src = msg.mediaUrl;
+                    imgEl.alt = 'Hình ảnh';
+                    imgEl.loading = 'lazy';
+                    imgEl.style.maxWidth = '100%';
+                    imgEl.style.maxHeight = '240px';
+                    imgEl.style.borderRadius = hasCaption ? '12px 12px 4px 4px' : '14px';
+                    imgEl.style.objectFit = 'cover';
+                    imgEl.style.cursor = 'pointer';
+                    imgEl.style.boxShadow = '0 2px 8px rgba(15, 23, 42, 0.12)';
+                    imgEl.style.border = isMe ? '1px solid #0072db' : '1px solid #cbd5e1';
+                    imgEl.style.display = 'block';
+                    imgEl.title = 'Bấm để xem ảnh kích thước đầy đủ';
+                    imgEl.addEventListener('click', () => {
+                        window.open(msg.mediaUrl, '_blank');
+                    });
+                    mediaContainer.appendChild(imgEl);
+                }
+
+                if (hasCaption) {
+                    const captionBubble = document.createElement('div');
+                    captionBubble.style.padding = '6px 12px';
+                    captionBubble.style.fontSize = '13px';
+                    captionBubble.style.lineHeight = '1.35';
+                    captionBubble.style.wordBreak = 'break-word';
+                    if (isMe) {
+                        captionBubble.style.borderRadius = '4px 4px 4px 14px';
+                        captionBubble.style.backgroundColor = '#0084ff';
+                        captionBubble.style.color = '#ffffff';
+                    } else {
+                        captionBubble.style.borderRadius = '4px 4px 14px 4px';
+                        captionBubble.style.backgroundColor = '#e2e8f0';
+                        captionBubble.style.color = '#0f172a';
+                    }
+                    captionBubble.textContent = msg.content;
+                    mediaContainer.appendChild(captionBubble);
+                }
+                row.appendChild(mediaContainer);
+            } else {
+                const bubble = document.createElement('div');
+                bubble.style.padding = '8px 12px';
+                bubble.style.fontSize = '13.5px';
+                bubble.style.lineHeight = '1.4';
+                bubble.style.wordBreak = 'break-word';
+
+                if (isMe) {
+                    bubble.style.borderRadius = '18px 18px 4px 18px';
+                    bubble.style.backgroundColor = '#0084ff';
+                    bubble.style.color = '#ffffff';
+                    bubble.style.boxShadow = '0 1px 3px rgba(0, 132, 255, 0.2)';
+                } else {
+                    bubble.style.borderRadius = '18px 18px 18px 4px';
+                    bubble.style.backgroundColor = '#e2e8f0';
+                    bubble.style.color = '#0f172a';
+                }
+                bubble.textContent = msg.content;
+                row.appendChild(bubble);
+            }
+
+            msgWrapper.appendChild(row);
+
+            const timeSpan = document.createElement('span');
+            timeSpan.style.fontSize = '9.5px';
+            timeSpan.style.color = '#94a3b8';
+            timeSpan.style.marginTop = '2px';
+            timeSpan.style.padding = isMe ? '0 4px 0 0' : '0 0 0 36px';
+            const d = new Date(msg.createdAt);
+            timeSpan.textContent = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+            msgWrapper.appendChild(timeSpan);
+
+            pane.appendChild(msgWrapper);
+            scrollMessagesToBottom();
+        }
+
+        function updateSeenStatusUI(peerLastReadAtStr) {
+            if (!peerLastReadAtStr || activeRoomType !== 'DIRECT') return;
+            const peerReadTime = new Date(peerLastReadAtStr).getTime();
+            if (isNaN(peerReadTime)) return;
+
+            const pane = document.getElementById('phonghubDockedMessagesPane');
+            if (!pane) return;
+
+            const myMessages = pane.querySelectorAll('.phonghub-my-message');
+            if (myMessages.length === 0) return;
+
+            const lastMyMsg = myMessages[myMessages.length - 1];
+            const msgCreatedAtStr = lastMyMsg.getAttribute('data-created-at');
+            if (!msgCreatedAtStr) return;
+
+            const msgTime = new Date(msgCreatedAtStr).getTime();
+            if (peerReadTime >= msgTime) {
+                let seenDiv = lastMyMsg.querySelector('.phonghub-seen-status');
+                if (!seenDiv) {
+                    pane.querySelectorAll('.phonghub-seen-status').forEach(el => el.remove());
+                    seenDiv = document.createElement('div');
+                    seenDiv.className = 'phonghub-seen-status';
+                    seenDiv.style.fontSize = '11px';
+                    seenDiv.style.color = '#64748b';
+                    seenDiv.style.textAlign = 'right';
+                    seenDiv.style.marginTop = '2px';
+                    seenDiv.style.paddingRight = '4px';
+                    seenDiv.style.display = 'flex';
+                    seenDiv.style.alignItems = 'center';
+                    seenDiv.style.justifyContent = 'flex-end';
+                    seenDiv.style.gap = '3px';
+                    seenDiv.innerHTML = `
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span>Đã xem</span>
+                    `;
+                    lastMyMsg.appendChild(seenDiv);
+                    scrollMessagesToBottom();
+                }
+            }
+        }
+
+        function scrollMessagesToBottom() {
+            const pane = document.getElementById('phonghubDockedMessagesPane');
+            if (pane) pane.scrollTop = pane.scrollHeight;
+        }
+
+        function updateGlobalBadgeCount() {
+            const total = cachedRooms.reduce((sum, r) => sum + (r.unreadCount || 0), 0);
+            const badge = document.getElementById('phonghubGlobalUnreadBadge');
+            if (badge) {
+                if (total > 0) {
+                    badge.style.display = 'block';
+                    badge.textContent = total;
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+        }
+
+        async function refreshUnreadBadge() {
+            try {
+                const res = await fetch('/api/chat/unread-count');
+                if (res.ok) {
+                    const data = await res.json();
+                    const badge = document.getElementById('phonghubGlobalUnreadBadge');
+                    const count = data.unreadCount || 0;
+                    if (badge) {
+                        if (count > 0) {
+                            badge.style.display = 'block';
+                            badge.textContent = count;
+                        } else {
+                            badge.style.display = 'none';
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+
+        function initGlobalSse() {
+            if (!window.EventSource) return;
+
+            const es = new EventSource('/api/chat/stream');
+
+            es.addEventListener('new_message', async (e) => {
+                try {
+                    const msg = JSON.parse(e.data);
+                    const isCurrentChat = activeFloatingRoomId && String(msg.chatRoomId).toLowerCase() === String(activeFloatingRoomId).toLowerCase();
+                    const isFromMe = String(msg.senderId).toLowerCase() === String(currentUserId).toLowerCase();
+
+                    if (isCurrentChat) {
+                        appendDockedMessageUI(msg);
+                        fetch(`/api/chat/rooms/${activeFloatingRoomId}/read`, { method: 'POST' }).then(() => {
+                            refreshUnreadBadge();
+                            loadAndRenderContacts();
+                        });
+                    } else {
+                        refreshUnreadBadge();
+                        await loadAndRenderContacts();
+                        if (!isFromMe) {
+                            playMessageNotificationSound();
+                            showIncomingMessageToast(msg);
+                        }
+                    }
+                } catch (err) {
+                    console.error('Lỗi nhận tin nhắn realtime SSE:', err);
+                }
+            });
+
+            es.addEventListener('message_seen', (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    if (activeFloatingRoomId && String(data.roomId).toLowerCase() === String(activeFloatingRoomId).toLowerCase() && String(data.userId).toLowerCase() !== String(currentUserId).toLowerCase()) {
+                        updateSeenStatusUI(data.readAt);
+                    }
+                } catch (err) {
+                    console.error('Lỗi nhận trạng thái seen SSE:', err);
+                }
+            });
+        }
+
+        function getAvatarColor(name) {
+            const colors = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#4f46e5'];
+            if (!name) return colors[0];
+            let hash = 0;
+            for (let i = 0; i < name.length; i++) {
+                hash = name.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            return colors[Math.abs(hash) % colors.length];
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startWidget);
+        } else {
+            startWidget();
+        }
+    })();
+    </script>
+</div>

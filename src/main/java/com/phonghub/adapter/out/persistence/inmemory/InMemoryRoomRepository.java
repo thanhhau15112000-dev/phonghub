@@ -2,9 +2,12 @@ package com.phonghub.adapter.out.persistence.inmemory;
 
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.domain.model.Room;
+import com.phonghub.domain.model.RoomPage;
+import com.phonghub.domain.model.RoomSearchCriteria;
 import com.phonghub.domain.model.RoomStatus;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +39,22 @@ public class InMemoryRoomRepository implements RoomRepositoryPort {
         Room copy = clone(room);
         store.put(copy.getId(), copy);
         return clone(copy);
+    }
+
+    @Override
+    public RoomPage search(RoomSearchCriteria c) {
+        List<Room> matches = store.values().stream()
+            .filter(r -> r.getPropertyId().equals(c.propertyId()))
+            .filter(r -> c.status() == null || r.getStatus() == c.status())
+            .filter(r -> c.minPrice() == null || r.getBasePrice().compareTo(c.minPrice()) >= 0)
+            .filter(r -> c.maxPrice() == null || r.getBasePrice().compareTo(c.maxPrice()) <= 0)
+            .filter(r -> c.floor() == null || r.getFloor() == c.floor())
+            .filter(r -> c.restrictToRoomIds() == null || c.restrictToRoomIds().contains(r.getId()))
+            .sorted(Comparator.comparingInt(Room::getFloor).thenComparing(Room::getRoomNumber))
+            .toList();
+        int from = c.size() == null ? 0 : Math.min(matches.size(), c.page() * c.size());
+        int to = c.size() == null ? matches.size() : Math.min(matches.size(), from + c.size());
+        return new RoomPage(matches.subList(from, to), matches.size(), c.page(), c.size());
     }
 
     @Override

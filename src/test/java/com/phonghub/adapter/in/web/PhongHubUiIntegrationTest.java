@@ -11,7 +11,11 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
 import com.phonghub.domain.model.Tenant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,6 +27,9 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -285,6 +292,50 @@ class PhongHubUiIntegrationTest {
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/properties"))
             .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("#91: 'Chi tiết' is the last action of every row, the reject reason sits in the actions column, "
+        + "blank descriptions show a dash and free-text cells wrap")
+    void testPropertiesTableLayout() throws Exception {
+        String longAddress = "SoNha" + "x".repeat(150);
+        mockMvc.perform(post("/properties")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .param("name", "Nhà trọ Không Mô Tả")
+                .param("address", longAddress)
+                .param("description", "  ")
+                .param("totalRooms", "3"))
+            .andExpect(status().is3xxRedirection());
+        assertNull(propertyRepository.findAll().stream()
+            .filter(p -> p.name().equals("Nhà trọ Không Mô Tả")).findFirst().orElseThrow().description(),
+            "mô tả trống được lưu null");
+
+        String html = mockMvc.perform(get("/properties")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        List<String> actionCells = cells(html, "col-actions");
+        assertEquals(4, actionCells.size(), "một ô thao tác cho mỗi nhà trọ (3 mẫu + 1 mới)");
+        for (String cell : actionCells) {
+            assertTrue(cell.replaceAll("\\s+", "").endsWith("<span>Chitiết</span></a></div>"),
+                "nút Chi tiết phải đứng cuối để không bị xô lệch: " + cell);
+        }
+        assertTrue(actionCells.stream().anyMatch(cell -> cell.contains("btn-reason-pill")),
+            "nút Xem lý do nằm ở cột Thao tác");
+        assertTrue(cells(html, "col-status").stream().noneMatch(cell -> cell.contains("btn-reason-pill")),
+            "cột Trạng thái chỉ còn badge");
+        assertTrue(html.contains("<td class=\"col-wrap\">" + longAddress + "</td>"), "địa chỉ dài được phép xuống dòng");
+        assertTrue(html.contains("<td class=\"col-wrap\">—</td>"), "mô tả trống hiện dấu gạch ngang");
+    }
+
+    private static List<String> cells(String html, String cssClass) {
+        Matcher matcher = Pattern.compile("<td class=\"" + cssClass + "\">(.*?)</td>", Pattern.DOTALL).matcher(html);
+        List<String> cells = new ArrayList<>();
+        while (matcher.find()) {
+            cells.add(matcher.group(1));
+        }
+        return cells;
     }
 
     @Test

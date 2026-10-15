@@ -107,12 +107,16 @@ class AuthServiceUnitTest {
         );
 
         when(userRepository.findByUsername("tenant2")).thenReturn(Optional.of(suspendedUser));
+        // Supabase login được gọi TRƯỚC khi check status — password đúng thì mới kiểm tra trạng thái tài khoản
+        when(identityProviderPort.login("tenant2@phonghub.local", "secret123"))
+            .thenReturn(new IdentityProviderPort.RawTokenResponse("tok", "ref", "Bearer", 3600));
 
         assertThrows(
             AccountDisabledException.class,
             () -> authService.login("tenant2", "secret123")
         );
-        verify(identityProviderPort, never()).login(anyString(), anyString());
+        // Supabase PHẢI được gọi (password được xác thực trước khi biết account bị khoá)
+        verify(identityProviderPort).login("tenant2@phonghub.local", "secret123");
     }
 
     @Test
@@ -408,5 +412,64 @@ class AuthServiceUnitTest {
         );
 
         verify(identityProviderPort, never()).adminCreateUser(any(), any());
+    }
+
+    @Test
+    void loginInactiveUserWithWrongPasswordThrowsInvalidCredentials() {
+        UUID userId = UUID.randomUUID();
+        User suspendedUser = new User(
+            userId, "suspended_user", "suspended@phonghub.local", "Suspended User", "0923456789",
+            UserRole.TENANT, User.UserStatus.SUSPENDED, false, Instant.now()
+        );
+
+        when(userRepository.findByUsername("suspended_user")).thenReturn(Optional.of(suspendedUser));
+        when(identityProviderPort.login("suspended@phonghub.local", "wrong-password"))
+            .thenThrow(new InvalidCredentialsException("Invalid username or password"));
+
+        // Phải ném InvalidCredentialsException, KHÔNG tiết lộ tài khoản bị khóa
+        assertThrows(
+            InvalidCredentialsException.class,
+            () -> authService.login("suspended_user", "wrong-password")
+        );
+        verify(identityProviderPort).login("suspended@phonghub.local", "wrong-password");
+    }
+
+    @Test
+    void adminCreateUserRejectsInvalidUsernameFormat() {
+        UUID adminId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+
+        // Chứa ký tự đặc biệt XSS hoặc HTML
+        assertThrows(IllegalArgumentException.class, () -> authService.adminCreateUser(
+            new AuthUseCase.CreateUserCommand("<script>", "xss@phonghub.local", "XSS", "0911223344", UserRole.TENANT)
+        ));
+
+        // Chứa ký tự '@'
+        assertThrows(IllegalArgumentException.class, () -> authService.adminCreateUser(
+            new AuthUseCase.CreateUserCommand("user@phonghub", "at@phonghub.local", "At", "0911223344", UserRole.TENANT)
+        ));
+
+        // Quá ngắn (< 3 ký tự)
+        assertThrows(IllegalArgumentException.class, () -> authService.adminCreateUser(
+            new AuthUseCase.CreateUserCommand("ab", "short@phonghub.local", "Short", "0911223344", UserRole.TENANT)
+        ));
+
+        // Chứa khoảng trắng
+        assertThrows(IllegalArgumentException.class, () -> authService.adminCreateUser(
+            new AuthUseCase.CreateUserCommand("invalid user", "space@phonghub.local", "Space", "0911223344", UserRole.TENANT)
+        ));
+    }
+
+    @Test
+    void temporaryPasswordContainsAllFourCharacterClasses() {
+        for (int i = 0; i < 50; i++) {
+            String tempPass = AuthService.generateSecureTemporaryPassword(16);
+            assertEquals(16, tempPass.length());
+            assertTrue(tempPass.chars().anyMatch(Character::isUpperCase), "Must have uppercase");
+            assertTrue(tempPass.chars().anyMatch(Character::isLowerCase), "Must have lowercase");
+            assertTrue(tempPass.chars().anyMatch(Character::isDigit), "Must have digit");
+            assertTrue(tempPass.chars().anyMatch(ch -> "!@#$%^&*".indexOf(ch) >= 0), "Must have special char");
+        }
     }
 }

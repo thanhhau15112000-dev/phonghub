@@ -5,24 +5,37 @@ import com.phonghub.application.port.in.InvoiceUseCase;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
+import com.phonghub.application.port.in.StatisticsUseCase;
+import com.phonghub.application.port.in.StatisticsUseCase.Granularity;
+import com.phonghub.application.port.in.StatisticsUseCase.PeriodStat;
+import com.phonghub.application.port.in.StatisticsUseCase.StatsQuery;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.StatisticsQueryPort;
+import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.UserRole;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @Controller
 public class DashboardUiController {
@@ -33,6 +46,7 @@ public class DashboardUiController {
     private final MaintenanceUseCase maintenanceUseCase;
     private final CurrentUserPort currentUserPort;
     private final InvoiceUseCase invoiceUseCase;
+    private final StatisticsUseCase statisticsUseCase;
 
     public DashboardUiController(
         PropertyUseCase propertyUseCase,
@@ -40,9 +54,11 @@ public class DashboardUiController {
         ContractUseCase contractUseCase,
         MaintenanceUseCase maintenanceUseCase,
         CurrentUserPort currentUserPort,
-        InvoiceUseCase invoiceUseCase
+        InvoiceUseCase invoiceUseCase,
+        StatisticsUseCase statisticsUseCase
     ) {
         this.invoiceUseCase = invoiceUseCase;
+        this.statisticsUseCase = statisticsUseCase;
         this.propertyUseCase = propertyUseCase;
         this.roomUseCase = roomUseCase;
         this.contractUseCase = contractUseCase;
@@ -51,8 +67,16 @@ public class DashboardUiController {
     }
 
     @GetMapping({"/", "/dashboard"})
-    public String dashboard(Model model) {
+    public String dashboard(
+        @RequestParam(name = "statsPropertyId", required = false) String statsPropertyId,
+        @RequestParam(name = "statsFrom", required = false) String statsFrom,
+        @RequestParam(name = "statsTo", required = false) String statsTo,
+        Model model
+    ) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
+        if (currentUser.role() == UserRole.OWNER || currentUser.role() == UserRole.ADMIN) {
+            addOperationsAttributes(model, currentUser, statsPropertyId, statsFrom, statsTo);
+        }
         List<Property> properties = propertyUseCase.listAccessibleProperties();
 
         List<Room> allRooms = new ArrayList<>();
@@ -101,6 +125,67 @@ public class DashboardUiController {
         model.addAttribute("ticketsDoneCount", allTickets.stream().filter(MaintenanceListFilter::isDone).count());
 
         return "dashboard";
+    }
+
+    /**
+     * Dashboard vận hành (#75) cho owner/admin: số liệu lấy từ {@link StatisticsUseCase}, nơi đã kiểm tra phạm vi nhà
+     * trọ. Bộ lọc sai hoặc nhà trọ ngoài phạm vi thì báo lỗi và quay về số liệu mặc định thay vì làm hỏng trang.
+     */
+    private void addOperationsAttributes(
+        Model model, CurrentUser currentUser, String propertyParam, String fromParam, String toParam
+    ) {
+        YearMonth current = YearMonth.now(StatisticsQueryPort.ZONE);
+        StatsQuery query;
+        try {
+            query = StatsQuery.of(parseUuid(propertyParam), parseMonth(fromParam), parseMonth(toParam),
+                Granularity.MONTH, current);
+            model.addAttribute("opsSummary", statisticsUseCase.ownerSummary(query));
+        } catch (IllegalArgumentException | DomainException ex) {
+            model.addAttribute("errorMessage", ex.getMessage());
+            query = StatsQuery.of(null, null, null, Granularity.MONTH, current);
+            model.addAttribute("opsSummary", statisticsUseCase.ownerSummary(query));
+        }
+        List<PeriodStat> revenue = statisticsUseCase.ownerRevenue(query);
+        BigDecimal maxBilled = revenue.stream().map(PeriodStat::billed).max(BigDecimal::compareTo)
+            .orElse(BigDecimal.ZERO);
+        // Độ dài thanh doanh thu (% so với tháng phát sinh cao nhất) cho biểu đồ thanh ngang.
+        Map<String, Integer> bars = new LinkedHashMap<>();
+        for (PeriodStat r : revenue) {
+            bars.put(r.period(), maxBilled.signum() == 0 ? 0
+                : r.billed().multiply(BigDecimal.valueOf(100)).divide(maxBilled, 0, RoundingMode.HALF_UP).intValue());
+        }
+
+        model.addAttribute("opsQuery", query);
+        model.addAttribute("opsRevenue", revenue);
+        model.addAttribute("opsRevenueBars", bars);
+        model.addAttribute("opsProperties", statisticsUseCase.ownerProperties(
+            new StatsQuery(null, query.from(), query.to(), Granularity.MONTH)));
+        if (currentUser.role() == UserRole.ADMIN) {
+            model.addAttribute("adminOverview", statisticsUseCase.adminOverview(query));
+            model.addAttribute("pendingProperties", statisticsUseCase.pendingProperties());
+        }
+    }
+
+    private static UUID parseUuid(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value.trim());
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Nhà trọ được chọn không hợp lệ.");
+        }
+    }
+
+    private static YearMonth parseMonth(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return YearMonth.parse(value.trim());
+        } catch (DateTimeParseException ex) {
+            throw new IllegalArgumentException("Tháng thống kê không hợp lệ (định dạng yyyy-MM).");
+        }
     }
 
     private void addTenantPaymentAttributes(
