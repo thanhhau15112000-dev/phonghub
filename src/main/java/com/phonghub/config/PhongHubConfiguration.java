@@ -80,14 +80,31 @@ public class PhongHubConfiguration {
         return new AuthorizationService(assignmentRepo, propertyRepo, tenantRepo, contractRepo);
     }
 
+    /** Cache danh sách nhà trọ/phòng và dashboard owner (#88); tắt trong profile test (test bật riêng khi cần). */
+    @Bean
+    public PhongHubCaches phongHubCaches(
+        @org.springframework.beans.factory.annotation.Value("${phonghub.cache.enabled:true}") boolean enabled,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.cache.ttl-seconds:300}") long ttlSeconds,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.cache.max-size:1000}") long maxSize
+    ) {
+        return new PhongHubCaches(enabled, java.time.Duration.ofSeconds(ttlSeconds), maxSize);
+    }
+
+    @Bean
+    public CacheEvictingTransactionListener cacheEvictingTransactionListener(PhongHubCaches caches) {
+        return new CacheEvictingTransactionListener(caches);
+    }
+
     @Bean
     public PropertyUseCase propertyUseCase(
         PropertyRepositoryPort propertyRepo,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
-        AuditPort auditPort
+        AuditPort auditPort,
+        PhongHubCaches caches
     ) {
-        return new PropertyService(propertyRepo, currentUserPort, authorizationService, auditPort);
+        return new CachingPropertyUseCase(
+            new PropertyService(propertyRepo, currentUserPort, authorizationService, auditPort), caches, currentUserPort);
     }
 
     @Bean
@@ -98,11 +115,12 @@ public class PhongHubConfiguration {
         ContractRepositoryPort contractRepo,
         TenantRepositoryPort tenantRepo,
         CurrentUserPort currentUserPort,
-        AuthorizationService authorizationService
+        AuthorizationService authorizationService,
+        PhongHubCaches caches
     ) {
-        return new RoomService(
+        return new CachingRoomUseCase(new RoomService(
             roomRepo, propertyRepo, ticketRepo, contractRepo, tenantRepo, currentUserPort, authorizationService
-        );
+        ), caches, currentUserPort);
     }
 
     @Bean
@@ -416,10 +434,11 @@ public class PhongHubConfiguration {
         StatisticsQueryPort statisticsQueryPort,
         PropertyRepositoryPort propertyRepo,
         CurrentUserPort currentUserPort,
-        AuthorizationService authorizationService
+        AuthorizationService authorizationService,
+        PhongHubCaches caches
     ) {
-        return new StatisticsService(statisticsQueryPort, propertyRepo, currentUserPort, authorizationService,
-            java.time.Clock.systemUTC());
+        return new CachingStatisticsUseCase(new StatisticsService(statisticsQueryPort, propertyRepo, currentUserPort,
+            authorizationService, java.time.Clock.systemUTC()), caches, currentUserPort);
     }
 
     @Bean

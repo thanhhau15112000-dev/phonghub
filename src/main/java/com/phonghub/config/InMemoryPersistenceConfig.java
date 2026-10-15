@@ -40,9 +40,13 @@ public class InMemoryPersistenceConfig {
         InMemoryRoomRepository roomRepo,
         InMemoryMaintenanceTicketRepository ticketRepo,
         InMemoryContractRepository contractRepo,
-        InMemoryTenantRepository tenantRepo
+        InMemoryTenantRepository tenantRepo,
+        CacheEvictingTransactionListener cacheEvictingTransactionListener
     ) {
-        return new SnapshottingTransactionManager(roomRepo, ticketRepo, contractRepo, tenantRepo);
+        SnapshottingTransactionManager manager =
+            new SnapshottingTransactionManager(roomRepo, ticketRepo, contractRepo, tenantRepo);
+        manager.addListener(cacheEvictingTransactionListener);
+        return manager;
     }
 
     @Bean
