@@ -22,7 +22,6 @@ import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.AssetStatus;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
-import com.phonghub.domain.model.ContractStatus;
 import com.phonghub.domain.model.DocumentType;
 import com.phonghub.domain.model.Handover;
 import com.phonghub.domain.model.HandoverItem;
@@ -104,9 +103,12 @@ public class HandoverService implements HandoverUseCase {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(command.contractId());
         authorizationService.assertCanManageContracts(user, contract.getPropertyId());
-        if (contract.getStatus() != ContractStatus.ACTIVE) {
+        // Check-in cần hợp đồng đang hiệu lực; check-out được cả khi hợp đồng đã hết hạn mà chưa trả phòng (#87).
+        boolean allowed = type == HandoverType.CHECK_OUT ? contract.isResiding() : contract.isActive();
+        if (!allowed) {
             throw new InvalidHandoverStateException(String.format(
-                "Chỉ lập biên bản cho hợp đồng đang hiệu lực (ACTIVE). Trạng thái hiện tại: %s.",
+                "Chỉ lập biên bản cho hợp đồng đang hiệu lực%s. Trạng thái hiện tại: %s.",
+                type == HandoverType.CHECK_OUT ? " hoặc đã hết hạn nhưng chưa trả phòng" : " (ACTIVE)",
                 contract.getStatus()));
         }
         Handover checkIn = handoverRepository.find(contract.getId(), HandoverType.CHECK_IN).orElse(null);

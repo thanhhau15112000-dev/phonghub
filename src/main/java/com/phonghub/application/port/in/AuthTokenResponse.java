@@ -13,6 +13,7 @@ public record AuthTokenResponse(
     public record UserInfo(
         UUID id,
         String username,
+        String email,
         String fullName,
         UserRole role,
         boolean mustChangePassword

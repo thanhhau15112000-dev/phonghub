@@ -12,6 +12,7 @@ import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.application.service.RoomService;
 import com.phonghub.domain.exception.DuplicateRoomNumberException;
 import com.phonghub.domain.exception.InvalidRoomCapacityException;
+import com.phonghub.domain.exception.OptimisticLockConflictException;
 import com.phonghub.domain.exception.RoomNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
@@ -97,6 +98,38 @@ class RoomServiceUpdateUnitTest {
             Instant.now(),
             Instant.now()
         );
+    }
+
+    @Test
+    @DisplayName("updateRoom rejects a stale version with an optimistic lock conflict and does not save")
+    void testUpdateRoomStaleVersion() {
+        existingRoom.restoreVersion(3);
+        when(currentUserPort.getCurrentUser()).thenReturn(ownerUser);
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(existingRoom));
+
+        var cmd = new RoomUseCase.UpdateRoomCommand(
+            roomId, "102", 2, new BigDecimal("30.0"), new BigDecimal("4000000"), 3, 2L
+        );
+
+        assertThrows(OptimisticLockConflictException.class, () -> roomService.updateRoom(cmd));
+        verify(roomRepository, never()).save(any(Room.class));
+    }
+
+    @Test
+    @DisplayName("updateRoom accepts the current version")
+    void testUpdateRoomCurrentVersion() {
+        existingRoom.restoreVersion(3);
+        when(currentUserPort.getCurrentUser()).thenReturn(ownerUser);
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(existingRoom));
+        when(roomRepository.findByPropertyIdAndRoomNumber(propertyId, "102")).thenReturn(Optional.empty());
+        when(contractRepository.findActiveByRoomId(roomId)).thenReturn(Optional.empty());
+        when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var cmd = new RoomUseCase.UpdateRoomCommand(
+            roomId, "102", 2, new BigDecimal("30.0"), new BigDecimal("4000000"), 3, 3L
+        );
+
+        assertEquals("102", roomService.updateRoom(cmd).getRoomNumber());
     }
 
     @Test

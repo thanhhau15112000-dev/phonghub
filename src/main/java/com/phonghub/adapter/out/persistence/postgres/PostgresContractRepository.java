@@ -1,5 +1,6 @@
 package com.phonghub.adapter.out.persistence.postgres;
 
+import com.phonghub.domain.exception.OptimisticLockConflictException;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
@@ -51,7 +52,7 @@ public class PostgresContractRepository implements ContractRepositoryPort {
         UUID id = UUID.fromString(rs.getString("id"));
         List<ContractOccupant> occupants = loadOccupants(id);
 
-        return new Contract(
+        Contract contract = new Contract(
             id,
             UUID.fromString(rs.getString("property_id")),
             UUID.fromString(rs.getString("room_id")),
@@ -66,13 +67,15 @@ public class PostgresContractRepository implements ContractRepositoryPort {
             toInstant(rs.getTimestamp("created_at")),
             toInstant(rs.getTimestamp("updated_at"))
         );
+        contract.restoreVersion(rs.getLong("version"));
+        return contract;
     }
 
     @Override
     public Contract save(Contract contract) {
         String sql = """
-            INSERT INTO contracts (id, property_id, room_id, primary_tenant_id, deposit_amount, rent_amount, start_date, end_date, payment_day, status, created_at, updated_at)
-            VALUES (:id, :propertyId, :roomId, :primaryTenantId, :depositAmount, :rentAmount, :startDate, :endDate, :paymentDay, :status, :createdAt, :updatedAt)
+            INSERT INTO contracts (id, property_id, room_id, primary_tenant_id, deposit_amount, rent_amount, start_date, end_date, payment_day, status, created_at, updated_at, version)
+            VALUES (:id, :propertyId, :roomId, :primaryTenantId, :depositAmount, :rentAmount, :startDate, :endDate, :paymentDay, :status, :createdAt, :updatedAt, :version)
             ON CONFLICT (id) DO UPDATE SET
                 property_id = EXCLUDED.property_id,
                 room_id = EXCLUDED.room_id,
@@ -83,11 +86,15 @@ public class PostgresContractRepository implements ContractRepositoryPort {
                 end_date = EXCLUDED.end_date,
                 payment_day = EXCLUDED.payment_day,
                 status = EXCLUDED.status,
-                updated_at = EXCLUDED.updated_at
+                updated_at = EXCLUDED.updated_at,
+                version = contracts.version + 1
+            WHERE contracts.version = :version
+            RETURNING version
             """;
 
         MapSqlParameterSource params = new MapSqlParameterSource()
             .addValue("id", contract.getId())
+            .addValue("version", contract.getVersion())
             .addValue("propertyId", contract.getPropertyId())
             .addValue("roomId", contract.getRoomId())
             .addValue("primaryTenantId", contract.getPrimaryTenantId())
@@ -100,7 +107,11 @@ public class PostgresContractRepository implements ContractRepositoryPort {
             .addValue("createdAt", Timestamp.from(contract.getCreatedAt()))
             .addValue("updatedAt", Timestamp.from(contract.getUpdatedAt()));
 
-        jdbcTemplate.update(sql, params);
+        List<Long> versions = jdbcTemplate.queryForList(sql, params, Long.class);
+        if (versions.isEmpty()) {
+            throw new OptimisticLockConflictException("Hợp đồng");
+        }
+        contract.restoreVersion(versions.getFirst());
 
         // Sync occupants
         jdbcTemplate.update("DELETE FROM contract_occupants WHERE contract_id = :contractId", Map.of("contractId", contract.getId()));
@@ -144,7 +155,10 @@ public class PostgresContractRepository implements ContractRepositoryPort {
 
     @Override
     public Optional<Contract> findActiveByRoomId(UUID roomId) {
-        String sql = "SELECT * FROM contracts WHERE room_id = :roomId AND status = 'ACTIVE'";
+        String sql = """
+            SELECT * FROM contracts WHERE room_id = :roomId AND status IN ('ACTIVE', 'EXPIRED')
+            ORDER BY (status = 'ACTIVE') DESC, updated_at DESC LIMIT 1
+            """;
         List<Contract> list = jdbcTemplate.query(sql, Map.of("roomId", roomId), (rs, rn) -> mapContract(rs));
         return list.isEmpty() ? Optional.empty() : Optional.of(list.getFirst());
     }

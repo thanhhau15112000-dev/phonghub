@@ -15,9 +15,9 @@
             </p>
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <a th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and currentUser.role().name() != 'TECHNICIAN'}"
+            <a th:if="${contract.isResiding() and currentUser != null and currentUser.role().name() != 'TECHNICIAN'}"
                th:href="@{'/contracts/' + ${contract.getId()} + '/handover'}" class="btn btn-secondary">Biên bản check-in</a>
-            <a th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and currentUser.role().name() != 'TECHNICIAN'}"
+            <a th:if="${contract.isResiding() and currentUser != null and currentUser.role().name() != 'TECHNICIAN'}"
                th:href="@{'/contracts/' + ${contract.getId()} + '/check-out'}" class="btn btn-secondary">Check-out</a>
             <a th:href="@{/contracts}" class="btn">&larr; Quay lại danh sách hợp đồng</a>
         </div>
@@ -39,8 +39,8 @@
                     <button type="submit" class="btn btn-primary">Kích hoạt hợp đồng (chuyển phòng sang đang thuê)</button>
                 </form>
 
-                <!-- Nút chấm dứt khi đang có hiệu lực -->
-                <form th:if="${contract.getStatus().name() == 'ACTIVE'}" th:action="@{'/contracts/' + ${contract.getId()} + '/terminate'}" method="post" style="display: flex; align-items: center; gap: 8px;">
+                <!-- Nút chấm dứt khi đang có hiệu lực hoặc đã hết hạn mà chưa trả phòng (#87) -->
+                <form th:if="${contract.isResiding()}" th:action="@{'/contracts/' + ${contract.getId()} + '/terminate'}" method="post" style="display: flex; align-items: center; gap: 8px;">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <label style="font-size: 12px; display: flex; align-items: center; gap: 4px;">
                         <input type="checkbox" name="requiresMaintenance" value="true">
