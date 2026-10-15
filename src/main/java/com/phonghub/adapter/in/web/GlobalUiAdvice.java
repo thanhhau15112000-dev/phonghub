@@ -24,15 +24,18 @@ public class GlobalUiAdvice {
     private final boolean demoEnabled;
     private final Optional<DemoActorPort> demoActorPort;
     private final Optional<NotificationUseCase> notificationUseCase;
+    private final Optional<com.phonghub.application.port.in.ChatMessageUseCase> chatMessageUseCase;
 
     public GlobalUiAdvice(
         @Value("${phonghub.demo.enabled:true}") boolean demoEnabled,
         Optional<DemoActorPort> demoActorPort,
-        Optional<NotificationUseCase> notificationUseCase
+        Optional<NotificationUseCase> notificationUseCase,
+        Optional<com.phonghub.application.port.in.ChatMessageUseCase> chatMessageUseCase
     ) {
         this.demoEnabled = demoEnabled;
         this.demoActorPort = demoActorPort;
         this.notificationUseCase = notificationUseCase;
+        this.chatMessageUseCase = chatMessageUseCase;
     }
 
     @ModelAttribute("demoEnabled")
@@ -79,5 +82,16 @@ public class GlobalUiAdvice {
             return notificationUseCase.get().listAdminNotifications();
         }
         return Collections.emptyList();
+    }
+
+    @ModelAttribute("unreadChatCount")
+    public int unreadChatCount(HttpServletRequest request) {
+        CurrentUser user = currentUser(request);
+        if (user != null && chatMessageUseCase.isPresent()) {
+            try {
+                return chatMessageUseCase.get().getTotalUnreadCount(user);
+            } catch (Exception ignored) {}
+        }
+        return 0;
     }
 }

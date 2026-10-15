@@ -13,6 +13,7 @@ import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.domain.exception.ContractNotFoundException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
+import com.phonghub.domain.exception.InvalidContractStateException;
 import com.phonghub.domain.exception.InvalidPropertyStatusException;
 import com.phonghub.domain.exception.InvalidRoomCapacityException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
@@ -153,7 +154,12 @@ public class ContractService implements ContractUseCase {
             command.paymentDay()
         );
 
-        return contractRepository.save(contract);
+        Contract saved = contractRepository.save(contract);
+        audit("CONTRACT_CREATED", currentUser, saved, Map.of(
+            "roomId", saved.getRoomId().toString(), "status", saved.getStatus().name(),
+            "rentAmount", saved.getRentAmount().toPlainString(), "depositAmount", saved.getDepositAmount().toPlainString(),
+            "startDate", saved.getStartDate().toString(), "endDate", saved.getEndDate().toString()));
+        return saved;
     }
 
     @Override
@@ -162,14 +168,15 @@ public class ContractService implements ContractUseCase {
         Contract contract = contractRepository.findById(contractId)
             .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
 
+        // Kiểm tra quyền trước trạng thái để người ngoài phạm vi nhận 403, không biết được trạng thái hợp đồng.
+        Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
+
         if (contract.getStatus() != ContractStatus.DRAFT) {
-            throw new DomainException(String.format(
+            throw new InvalidContractStateException(String.format(
                 "Chỉ có thể kích hoạt hợp đồng ở trạng thái DRAFT. Trạng thái hiện tại: '%s'.",
                 contract.getStatus()
             ));
         }
-
-        Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
 
         // Invariant: Do not allow two active contracts for one room
         Optional<Contract> activeContract = contractRepository.findActiveByRoomId(room.getId());
@@ -195,7 +202,10 @@ public class ContractService implements ContractUseCase {
         room.occupy();
 
         roomRepository.save(room);
-        return contractRepository.save(contract);
+        Contract saved = contractRepository.save(contract);
+        audit("CONTRACT_ACTIVATED", currentUser, saved, Map.of(
+            "oldStatus", ContractStatus.DRAFT.name(), "newStatus", saved.getStatus().name()));
+        return saved;
     }
 
     @Override
@@ -204,21 +214,32 @@ public class ContractService implements ContractUseCase {
         Contract contract = contractRepository.findById(contractId)
             .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
 
+        Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
+
         if (contract.getStatus() != ContractStatus.ACTIVE) {
-            throw new DomainException(String.format(
+            throw new InvalidContractStateException(String.format(
                 "Chỉ có thể kết thúc hợp đồng ở trạng thái ACTIVE. Trạng thái hiện tại: '%s'.",
                 contract.getStatus()
             ));
         }
-
-        Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
 
         // Invariant: Ending a contract changes room to AVAILABLE unless maintenance is explicitly required
         contract.terminate();
         room.vacate(requiresMaintenance);
 
         roomRepository.save(room);
-        return contractRepository.save(contract);
+        Contract saved = contractRepository.save(contract);
+        audit("CONTRACT_TERMINATED", currentUser, saved, Map.of(
+            "oldStatus", ContractStatus.ACTIVE.name(), "newStatus", saved.getStatus().name(),
+            "requiresMaintenance", requiresMaintenance));
+        return saved;
+    }
+
+    private void audit(String action, CurrentUser actor, Contract contract, Map<String, Object> details) {
+        if (auditPort != null) {
+            auditPort.recordEvent(AuditPort.AuditEvent.of(action, actor == null ? null : actor.id(), "CONTRACT",
+                contract.getId().toString(), contract.getPropertyId(), details));
+        }
     }
 
     @Override

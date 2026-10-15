@@ -7,9 +7,11 @@ import com.phonghub.domain.exception.DocumentRevealDeniedException;
 import com.phonghub.domain.exception.DuplicateAssetCodeException;
 import com.phonghub.domain.exception.DuplicateServiceRateException;
 import com.phonghub.domain.exception.MeterReadingConflictException;
+import com.phonghub.domain.exception.OptimisticLockConflictException;
 import com.phonghub.domain.exception.UtilityNotFoundException;
 import com.phonghub.domain.exception.HandoverAlreadyExistsException;
 import com.phonghub.domain.exception.HandoverNotFoundException;
+import com.phonghub.domain.exception.InvalidContractStateException;
 import com.phonghub.domain.exception.InvalidHandoverStateException;
 import com.phonghub.domain.exception.InvalidMaintenanceStateException;
 import com.phonghub.domain.exception.DuplicateDocumentNumberException;
@@ -96,6 +98,15 @@ public class RestExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(com.phonghub.domain.exception.UnauthorizedChatAccessException.class)
+    public ProblemDetail handleUnauthorizedChatAccess(com.phonghub.domain.exception.UnauthorizedChatAccessException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        problem.setTitle("Unauthorized Chat Access");
+        problem.setType(URI.create("https://phonghub.local/errors/forbidden"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
     @ExceptionHandler(DuplicateActiveContractException.class)
     public ProblemDetail handleDuplicateActiveContract(DuplicateActiveContractException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
@@ -121,13 +132,15 @@ public class RestExceptionHandler {
         DuplicateDocumentNumberException.class,
         InvalidHandoverStateException.class,
         InvalidMaintenanceStateException.class,
+        InvalidContractStateException.class,
         HandoverAlreadyExistsException.class,
         MeterReadingConflictException.class,
         DuplicateServiceRateException.class,
         TenantHasActiveContractException.class,
         StaffAssignmentConflictException.class,
         TenantProfileLockedException.class,
-        AttachmentLimitException.class
+        AttachmentLimitException.class,
+        OptimisticLockConflictException.class
     })
     public ProblemDetail handleDuplicateAccountConflict(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
@@ -182,6 +195,15 @@ public class RestExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(com.phonghub.domain.exception.InvalidChatTargetException.class)
+    public ProblemDetail handleInvalidChatTarget(com.phonghub.domain.exception.InvalidChatTargetException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Conflict");
+        problem.setType(URI.create("https://phonghub.local/errors/conflict"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
     @ExceptionHandler({
         PropertyNotFoundException.class,
         RoomNotFoundException.class,
@@ -191,7 +213,8 @@ public class RestExceptionHandler {
         UtilityNotFoundException.class,
         ContractNotFoundException.class,
         UserNotFoundException.class,
-        TenantNotFoundException.class
+        TenantNotFoundException.class,
+        com.phonghub.domain.exception.ChatRoomNotFoundException.class
     })
     public ProblemDetail handleNotFound(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
