@@ -75,6 +75,11 @@ public class InMemoryInvoiceRepository implements InvoiceRepositoryPort {
         return findByPaymentCodeForUpdate(paymentCode).isPresent();
     }
 
+    /** Toàn bộ hóa đơn, dùng cho thống kê in-memory (#93). */
+    public List<Invoice> findAll() {
+        return List.copyOf(store.values());
+    }
+
     public void clear() {
         store.clear();
     }

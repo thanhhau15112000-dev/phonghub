@@ -18,12 +18,14 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomAssetRepository
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantDocumentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryStatisticsQueryAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
 import com.phonghub.application.port.in.DemoActorPort;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
+import com.phonghub.application.port.out.StatisticsQueryPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -183,6 +185,20 @@ public class InMemoryPersistenceConfig {
     @Bean
     public com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository invoiceRepository() {
         return new com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository();
+    }
+
+    @Bean
+    public StatisticsQueryPort statisticsQueryPort(
+        com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository invoiceRepo,
+        InMemoryContractRepository contractRepo,
+        InMemoryRoomRepository roomRepo,
+        InMemoryPropertyRepository propertyRepo,
+        InMemoryMaintenanceTicketRepository ticketRepo,
+        InMemoryUserRepository userRepo,
+        AuditPort auditPort
+    ) {
+        return new InMemoryStatisticsQueryAdapter(
+            invoiceRepo, contractRepo, roomRepo, propertyRepo, ticketRepo, userRepo, auditPort);
     }
 
     @Bean

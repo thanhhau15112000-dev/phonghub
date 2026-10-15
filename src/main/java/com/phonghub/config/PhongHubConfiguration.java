@@ -59,6 +59,9 @@ import com.phonghub.application.port.in.MonthlyInvoiceUseCase;
 import com.phonghub.application.service.InvoiceService;
 import com.phonghub.application.service.PrivateFileStorageService;
 import com.phonghub.application.service.MonthlyInvoiceService;
+import com.phonghub.application.port.in.StatisticsUseCase;
+import com.phonghub.application.port.out.StatisticsQueryPort;
+import com.phonghub.application.service.StatisticsService;
 import com.phonghub.adapter.in.web.FixedWindowRateLimiter;
 import com.phonghub.adapter.in.web.RateLimitFilter;
 import java.time.Clock;
@@ -429,6 +432,17 @@ public class PhongHubConfiguration {
         TenantService service = new TenantService(tenantRepo, currentUserPort, authorizationService, auditPort,
             contractRepo, tenantLockPolicy);
         return new TransactionalTenantUseCase(service);
+    }
+
+    @Bean
+    public StatisticsUseCase statisticsUseCase(
+        StatisticsQueryPort statisticsQueryPort,
+        PropertyRepositoryPort propertyRepo,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService
+    ) {
+        return new StatisticsService(statisticsQueryPort, propertyRepo, currentUserPort, authorizationService,
+            java.time.Clock.systemUTC());
     }
 
     @Bean
