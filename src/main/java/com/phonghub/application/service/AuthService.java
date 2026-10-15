@@ -68,17 +68,30 @@ public class AuthService implements AuthUseCase {
         }
 
         String normalizedUsername = username.trim().toLowerCase();
-        User user = userRepository.findByUsername(normalizedUsername)
-            .orElseThrow(() -> new InvalidCredentialsException("Invalid username or password"));
+        User user = userRepository.findByUsername(normalizedUsername).orElse(null);
+        if (user == null) {
+            auditLoginFailed(null, "UNKNOWN_USER", normalizedUsername);
+            throw new InvalidCredentialsException("Invalid username or password");
+        }
 
         // Bước 1: Xác thực password với Supabase TRƯỚC khi check status.
         // Lý do: nếu check status trước, attacker biết tài khoản tồn tại & bị khoá chỉ từ username.
-        IdentityProviderPort.RawTokenResponse rawToken = identityProviderPort.login(user.email(), password);
+        IdentityProviderPort.RawTokenResponse rawToken;
+        try {
+            rawToken = identityProviderPort.login(user.email(), password);
+        } catch (InvalidCredentialsException ex) {
+            auditLoginFailed(user, "INVALID_CREDENTIALS", null);
+            throw ex;
+        }
 
         // Bước 2: Password đúng — giờ mới kiểm tra trạng thái tài khoản.
         if (user.status() != User.UserStatus.ACTIVE) {
+            auditLoginFailed(user, "ACCOUNT_DISABLED", null);
             throw new AccountDisabledException("User account is " + user.status() + " (not ACTIVE)");
         }
+
+        auditPort.recordEvent(AuditPort.AuditEvent.of("LOGIN_SUCCEEDED", user.id(), "USER", user.id().toString(),
+            Map.of("username", user.username(), "role", user.role().name())));
 
         return new AuthTokenResponse(
             rawToken.accessToken(),
@@ -94,6 +107,32 @@ public class AuthService implements AuthUseCase {
                 user.mustChangePassword()
             )
         );
+    }
+
+    /**
+     * Ghi đăng nhập thất bại. Tên đăng nhập gõ vào chỉ được lưu dưới dạng băm ngắn khi không tìm thấy tài khoản,
+     * vì người dùng có thể gõ nhầm mật khẩu vào ô tên đăng nhập.
+     */
+    private void auditLoginFailed(User user, String reason, String unknownIdentifier) {
+        Map<String, Object> details = new java.util.LinkedHashMap<>();
+        details.put("reason", reason);
+        if (user != null) {
+            details.put("username", user.username());
+        } else if (unknownIdentifier != null) {
+            details.put("identifierHash", shortHash(unknownIdentifier));
+        }
+        auditPort.recordEvent(AuditPort.AuditEvent.of("LOGIN_FAILED", null, "USER",
+            user != null ? user.id().toString() : null, details));
+    }
+
+    private static String shortHash(String value) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest, 0, 4);
+        } catch (java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     @Override
