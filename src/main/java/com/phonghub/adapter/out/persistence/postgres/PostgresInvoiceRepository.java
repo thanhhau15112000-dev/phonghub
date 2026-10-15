@@ -214,6 +214,22 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
     }
 
     @Override
+    public Optional<Invoice> findByIdForUpdate(UUID id) {
+        String sql = "SELECT " + COLUMNS + " FROM invoices WHERE id = :id FOR UPDATE";
+        return hydrate(jdbcTemplate.query(sql, Map.of("id", id), this::mapRow)).stream().findFirst();
+    }
+
+    @Override
+    public List<UUID> findOverdueRentInvoiceIds(java.time.LocalDate today) {
+        return jdbcTemplate.query("""
+            SELECT id FROM invoices
+            WHERE invoice_type = 'RENT' AND status IN ('ISSUED', 'PARTIALLY_PAID', 'OVERDUE')
+              AND consolidated_into_invoice_id IS NULL AND due_date < :today
+            ORDER BY due_date
+            """, Map.of("today", java.sql.Date.valueOf(today)), (rs, rowNum) -> UUID.fromString(rs.getString(1)));
+    }
+
+    @Override
     public boolean existsByPaymentCode(String paymentCode) {
         Integer count = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM invoices WHERE payment_code = :code", Map.of("code", paymentCode), Integer.class

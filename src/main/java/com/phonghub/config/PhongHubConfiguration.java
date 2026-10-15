@@ -475,6 +475,28 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.LateFeePolicyUseCase lateFeePolicyUseCase(
+        com.phonghub.application.port.out.LateFeePolicyRepositoryPort policyRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort
+    ) {
+        return new TransactionalLateFeeUseCases.Policy(new com.phonghub.application.service.LateFeePolicyService(
+            policyRepository, currentUserPort, authorizationService, auditPort));
+    }
+
+    @Bean
+    public com.phonghub.application.port.in.LateFeeAssessmentUseCase lateFeeAssessmentUseCase(
+        InvoiceRepositoryPort invoiceRepository,
+        ContractRepositoryPort contractRepository,
+        com.phonghub.application.port.out.LateFeePolicyRepositoryPort policyRepository,
+        AuditPort auditPort
+    ) {
+        return new TransactionalLateFeeUseCases.Assessment(new com.phonghub.application.service.LateFeeAssessmentService(
+            invoiceRepository, contractRepository, policyRepository, auditPort));
+    }
+
+    @Bean
     public MonthlyInvoiceUseCase monthlyInvoiceUseCase(
         ContractRepositoryPort contractRepository,
         InvoiceRepositoryPort invoiceRepository,

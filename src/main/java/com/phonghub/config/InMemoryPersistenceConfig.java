@@ -186,6 +186,11 @@ public class InMemoryPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryLateFeePolicyRepository lateFeePolicyRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryLateFeePolicyRepository();
+    }
+
+    @Bean
     public com.phonghub.adapter.out.persistence.inmemory.InMemoryChatRoomRepository chatRoomRepository() {
         return new com.phonghub.adapter.out.persistence.inmemory.InMemoryChatRoomRepository();
     }
