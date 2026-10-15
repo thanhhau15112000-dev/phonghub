@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Nhật ký hoạt động')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div class="page-title-row">
+        <div>
+            <h1>Nhật ký hoạt động</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">
+                Lịch sử đăng nhập, thay đổi dữ liệu và xem giấy tờ. Mật khẩu, token và số giấy tờ đầy đủ không bao giờ được lưu.
+            </p>
+        </div>
+    </div>
+
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="card">
+        <form method="get" th:action="@{/audit}" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+            <div class="form-group" style="flex: 1; min-width: 180px;">
+                <label class="form-label" for="propertyId">Nhà trọ</label>
+                <select id="propertyId" name="propertyId" class="form-control">
+                    <option value="">Tất cả</option>
+                    <option th:each="p : ${properties}" th:value="${p.id()}" th:text="${p.name()}"
+                            th:selected="${propertyId != null and propertyId == p.id()}">Nhà trọ</option>
+                </select>
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 160px;">
+                <label class="form-label" for="targetType">Đối tượng</label>
+                <select id="targetType" name="targetType" class="form-control">
+                    <option value="">Tất cả</option>
+                    <option th:each="t : ${targetTypes}" th:value="${t}" th:text="${t}"
+                            th:selected="${t == targetType}">ROOM</option>
+                </select>
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 160px;">
+                <label class="form-label" for="action">Hành động</label>
+                <input id="action" type="text" name="action" class="form-control" th:value="${action}" placeholder="VD: LOGIN_FAILED">
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+                <label class="form-label" for="actorId">Mã người thực hiện</label>
+                <input id="actorId" type="text" name="actorId" class="form-control" th:value="${actorId}" placeholder="UUID người dùng">
+            </div>
+            <div class="form-group" style="min-width: 150px;">
+                <label class="form-label" for="from">Từ ngày</label>
+                <input id="from" type="date" name="from" class="form-control" th:value="${from}">
+            </div>
+            <div class="form-group" style="min-width: 150px;">
+                <label class="form-label" for="to">Đến ngày</label>
+                <input id="to" type="date" name="to" class="form-control" th:value="${to}">
+            </div>
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">Lọc</button>
+                <a th:href="@{/audit}" class="btn" style="text-decoration: none;">Xóa lọc</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="card" style="margin-top: 16px;">
+        <div th:if="${#lists.isEmpty(entries)}" style="padding: 24px; text-align: center; color: var(--text-secondary);">
+            Không có sự kiện nào khớp bộ lọc.
+        </div>
+        <table th:if="${!#lists.isEmpty(entries)}" class="data-table">
+            <thead>
+            <tr>
+                <th>Thời gian</th>
+                <th>Hành động</th>
+                <th>Người thực hiện</th>
+                <th>Đối tượng</th>
+                <th>Chi tiết</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="e : ${entries}">
+                <td th:text="${#temporals.format(e.createdAt(), 'dd/MM/yyyy HH:mm:ss')}">01/01/2026 00:00:00</td>
+                <td><code th:text="${e.action()}">ACTION</code></td>
+                <td>
+                    <span th:if="${e.actorName() != null}" th:text="${e.actorName()}">Tên</span>
+                    <span th:if="${e.actorName() == null and e.actorId() != null}" th:text="${e.actorId()}">id</span>
+                    <span th:if="${e.actorId() == null}" style="color: var(--text-secondary);">Hệ thống</span>
+                </td>
+                <td>
+                    <span th:text="${e.targetType()}">ROOM</span>
+                    <div style="font-size: 11px; color: var(--text-secondary); word-break: break-all;" th:text="${e.targetId()}">id</div>
+                </td>
+                <td style="max-width: 360px; word-break: break-word; font-size: 12px;" th:text="${e.details()}">{}</td>
+            </tr>
+            </tbody>
+        </table>
+
+        <div style="display: flex; justify-content: space-between; margin-top: 12px;">
+            <a th:if="${page > 0}" class="btn btn-sm" style="text-decoration: none;"
+               th:href="@{/audit(propertyId=${propertyId}, actorId=${actorId}, targetType=${targetType}, action=${action}, from=${from}, to=${to}, page=${page - 1})}">&larr; Trang trước</a>
+            <span></span>
+            <a th:if="${#lists.size(entries) == pageSize}" class="btn btn-sm" style="text-decoration: none;"
+               th:href="@{/audit(propertyId=${propertyId}, actorId=${actorId}, targetType=${targetType}, action=${action}, from=${from}, to=${to}, page=${page + 1})}">Trang sau &rarr;</a>
+        </div>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

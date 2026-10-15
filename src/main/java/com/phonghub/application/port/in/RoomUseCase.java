@@ -1,6 +1,8 @@
 package com.phonghub.application.port.in;
 
 import com.phonghub.domain.model.Room;
+import com.phonghub.domain.model.RoomPage;
+import com.phonghub.domain.model.RoomSearchCriteria;
 import com.phonghub.domain.model.RoomStatus;
 import java.math.BigDecimal;
 import java.util.List;
@@ -9,6 +11,12 @@ import java.util.UUID;
 public interface RoomUseCase {
     Room createRoom(CreateRoomCommand command);
     Room updateRoom(UpdateRoomCommand command);
+
+    /**
+     * Lọc phòng của một nhà trọ theo trạng thái, khoảng giá, tầng và phân trang. Giữ nguyên phân quyền của
+     * {@link #listRoomsForProperty(UUID)}: người thuê chỉ thấy phòng của mình.
+     */
+    RoomPage searchRooms(RoomSearchCriteria criteria);
     List<Room> listRoomsForProperty(UUID propertyId);
     Room getRoom(UUID roomId);
     Room changeRoomStatus(UUID roomId, RoomStatus targetStatus);
@@ -46,8 +54,20 @@ public interface RoomUseCase {
         int floor,
         BigDecimal areaSqm,
         BigDecimal basePrice,
-        int maxOccupants
+        int maxOccupants,
+        Long expectedVersion
     ) {
+        public UpdateRoomCommand(
+            UUID roomId,
+            String roomNumber,
+            int floor,
+            BigDecimal areaSqm,
+            BigDecimal basePrice,
+            int maxOccupants
+        ) {
+            this(roomId, roomNumber, floor, areaSqm, basePrice, maxOccupants, null);
+        }
+
         public UpdateRoomCommand {
             if (roomId == null) {
                 throw new IllegalArgumentException("Room id cannot be null");

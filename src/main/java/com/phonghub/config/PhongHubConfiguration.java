@@ -59,13 +59,28 @@ import com.phonghub.application.port.in.MonthlyInvoiceUseCase;
 import com.phonghub.application.service.InvoiceService;
 import com.phonghub.application.service.PrivateFileStorageService;
 import com.phonghub.application.service.MonthlyInvoiceService;
+import com.phonghub.application.port.in.StatisticsUseCase;
+import com.phonghub.application.port.out.StatisticsQueryPort;
+import com.phonghub.application.service.StatisticsService;
+import com.phonghub.adapter.in.web.FixedWindowRateLimiter;
+import com.phonghub.adapter.in.web.RateLimitFilter;
+import java.time.Clock;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties({SepayProperties.class, TenantDataProtectionProperties.class})
+@EnableConfigurationProperties({SepayProperties.class, TenantDataProtectionProperties.class, RateLimitProperties.class})
 public class PhongHubConfiguration {
+
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> rateLimitFilter(RateLimitProperties props) {
+        FilterRegistrationBean<RateLimitFilter> bean = new FilterRegistrationBean<>(
+            new RateLimitFilter(props, new FixedWindowRateLimiter(Clock.systemUTC())));
+        bean.setOrder(-150);
+        return bean;
+    }
 
     @Bean
     public AuthorizationService authorizationService(
@@ -77,14 +92,31 @@ public class PhongHubConfiguration {
         return new AuthorizationService(assignmentRepo, propertyRepo, tenantRepo, contractRepo);
     }
 
+    /** Cache danh sách nhà trọ/phòng và dashboard owner (#88); tắt trong profile test (test bật riêng khi cần). */
+    @Bean
+    public PhongHubCaches phongHubCaches(
+        @org.springframework.beans.factory.annotation.Value("${phonghub.cache.enabled:true}") boolean enabled,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.cache.ttl-seconds:300}") long ttlSeconds,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.cache.max-size:1000}") long maxSize
+    ) {
+        return new PhongHubCaches(enabled, java.time.Duration.ofSeconds(ttlSeconds), maxSize);
+    }
+
+    @Bean
+    public CacheEvictingTransactionListener cacheEvictingTransactionListener(PhongHubCaches caches) {
+        return new CacheEvictingTransactionListener(caches);
+    }
+
     @Bean
     public PropertyUseCase propertyUseCase(
         PropertyRepositoryPort propertyRepo,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
-        AuditPort auditPort
+        AuditPort auditPort,
+        PhongHubCaches caches
     ) {
-        return new PropertyService(propertyRepo, currentUserPort, authorizationService, auditPort);
+        return new CachingPropertyUseCase(
+            new PropertyService(propertyRepo, currentUserPort, authorizationService, auditPort), caches, currentUserPort);
     }
 
     @Bean
@@ -95,11 +127,14 @@ public class PhongHubConfiguration {
         ContractRepositoryPort contractRepo,
         TenantRepositoryPort tenantRepo,
         CurrentUserPort currentUserPort,
-        AuthorizationService authorizationService
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        PhongHubCaches caches
     ) {
-        return new RoomService(
-            roomRepo, propertyRepo, ticketRepo, contractRepo, tenantRepo, currentUserPort, authorizationService
-        );
+        return new CachingRoomUseCase(new RoomService(
+            roomRepo, propertyRepo, ticketRepo, contractRepo, tenantRepo, currentUserPort, authorizationService,
+            auditPort
+        ), caches, currentUserPort);
     }
 
     @Bean
@@ -359,6 +394,15 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.AuditLogUseCase auditLogUseCase(
+        com.phonghub.application.port.out.AuditQueryPort auditQueryPort,
+        PropertyRepositoryPort propertyRepo,
+        CurrentUserPort currentUserPort
+    ) {
+        return new com.phonghub.application.service.AuditLogService(auditQueryPort, propertyRepo, currentUserPort);
+    }
+
+    @Bean
     public com.phonghub.application.port.in.PropertyStaffUseCase propertyStaffUseCase(
         StaffPropertyAssignmentPort assignmentRepo,
         UserRepositoryPort userRepo,
@@ -427,6 +471,18 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public StatisticsUseCase statisticsUseCase(
+        StatisticsQueryPort statisticsQueryPort,
+        PropertyRepositoryPort propertyRepo,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        PhongHubCaches caches
+    ) {
+        return new CachingStatisticsUseCase(new StatisticsService(statisticsQueryPort, propertyRepo, currentUserPort,
+            authorizationService, java.time.Clock.systemUTC()), caches, currentUserPort);
+    }
+
+    @Bean
     public NotificationRepositoryPort notificationRepository() {
         return new InMemoryNotificationRepository();
     }
@@ -467,6 +523,28 @@ public class PhongHubConfiguration {
             sepayProperties
         );
         return new TransactionalSepayWebhookUseCase(service);
+    }
+
+    @Bean
+    public com.phonghub.application.port.in.LateFeePolicyUseCase lateFeePolicyUseCase(
+        com.phonghub.application.port.out.LateFeePolicyRepositoryPort policyRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort
+    ) {
+        return new TransactionalLateFeeUseCases.Policy(new com.phonghub.application.service.LateFeePolicyService(
+            policyRepository, currentUserPort, authorizationService, auditPort));
+    }
+
+    @Bean
+    public com.phonghub.application.port.in.LateFeeAssessmentUseCase lateFeeAssessmentUseCase(
+        InvoiceRepositoryPort invoiceRepository,
+        ContractRepositoryPort contractRepository,
+        com.phonghub.application.port.out.LateFeePolicyRepositoryPort policyRepository,
+        AuditPort auditPort
+    ) {
+        return new TransactionalLateFeeUseCases.Assessment(new com.phonghub.application.service.LateFeeAssessmentService(
+            invoiceRepository, contractRepository, policyRepository, auditPort));
     }
 
     @Bean
@@ -513,5 +591,45 @@ public class PhongHubConfiguration {
             authorizationService,
             storageProperties.getMaxFileSizeBytes()
         );
+    }
+
+    @Bean
+    public com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher() {
+        return new com.phonghub.adapter.out.event.SseChatEventPublisher();
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.MediaStoragePort mediaStoragePort(
+        @org.springframework.beans.factory.annotation.Value("${supabase.url:}") String supabaseUrl,
+        @org.springframework.beans.factory.annotation.Value("${supabase.service-role-key:}") String serviceRoleKey,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.chat.supabase-bucket:chat-media}") String bucketName
+    ) {
+        if (supabaseUrl != null && !supabaseUrl.isBlank() && serviceRoleKey != null && !serviceRoleKey.isBlank()) {
+            return new com.phonghub.adapter.out.supabase.storage.SupabaseMediaStorageAdapter(supabaseUrl, serviceRoleKey, bucketName);
+        }
+        return new com.phonghub.adapter.out.storage.LocalMediaStorageAdapter();
+    }
+
+    @Bean
+    public com.phonghub.application.service.ChatService chatService(
+        com.phonghub.application.port.out.ChatRoomRepositoryPort chatRoomRepository,
+        com.phonghub.application.port.out.ChatMessageRepositoryPort chatMessageRepository,
+        UserRepositoryPort userRepository,
+        com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher,
+        com.phonghub.application.port.out.MediaStoragePort mediaStoragePort
+    ) {
+        return new com.phonghub.application.service.ChatService(
+            chatRoomRepository, chatMessageRepository, userRepository, sseChatEventPublisher, mediaStoragePort
+        );
+    }
+
+    @Bean
+    public com.phonghub.application.port.in.ChatRoomUseCase chatRoomUseCase(com.phonghub.application.service.ChatService chatService) {
+        return chatService;
+    }
+
+    @Bean
+    public com.phonghub.application.port.in.ChatMessageUseCase chatMessageUseCase(com.phonghub.application.service.ChatService chatService) {
+        return chatService;
     }
 }

@@ -316,7 +316,17 @@ public class MaintenanceService implements MaintenanceUseCase {
         ticket.attributeEventsTo(currentUser.id());
         MaintenanceTicket savedTicket = maintenanceTicketRepository.save(ticket);
 
-        if (feeContract != null && savedTicket.getStatus() == MaintenanceStatus.AWAITING_PAYMENT) {
+        Optional<Invoice> existingFee = feeContract != null && savedTicket.getStatus() == MaintenanceStatus.AWAITING_PAYMENT
+            ? invoiceRepository.findActiveByTicketId(savedTicket.getId())
+            : Optional.empty();
+        if (existingFee.isPresent()) {
+            // Sửa lại sau phản hồi chưa đạt của người thuê: không thu phí lần hai; phí đã trả thì phiếu hoàn tất luôn.
+            if (feeSettled(existingFee.get())) {
+                savedTicket.markFeePaid();
+                savedTicket.attributeEventsTo(currentUser.id());
+                savedTicket = maintenanceTicketRepository.save(savedTicket);
+            }
+        } else if (feeContract != null && savedTicket.getStatus() == MaintenanceStatus.AWAITING_PAYMENT) {
             Invoice fee = Invoice.issueMaintenanceFee(
                 feeContract, savedTicket.getId(), savedTicket.getRepairCost(),
                 invoiceRepository.newUniquePaymentCode(), LocalDate.now()
@@ -382,6 +392,85 @@ public class MaintenanceService implements MaintenanceUseCase {
                 action, actor.id(), "MAINTENANCE_TICKET", ticket.getId().toString(), details
             ));
         }
+    }
+
+    /** Phí đã trả: hóa đơn phí PAID, hoặc đã gộp vào hóa đơn tháng và hóa đơn tháng đã PAID. */
+    private boolean feeSettled(Invoice fee) {
+        if (fee.getStatus() == com.phonghub.domain.model.InvoiceStatus.PAID) {
+            return true;
+        }
+        return fee.isConsolidated() && invoiceRepository.findById(fee.getConsolidatedIntoInvoiceId())
+            .map(monthly -> monthly.getStatus() == com.phonghub.domain.model.InvoiceStatus.PAID)
+            .orElse(false);
+    }
+
+    @Override
+    public MaintenanceTicket quoteTicket(UUID ticketId, BigDecimal amount, String note) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
+            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+        if (currentUser != null && currentUser.role() == UserRole.TECHNICIAN) {
+            authorizationService.assertTechnicianCanWorkOnProperty(currentUser, ticket.getPropertyId());
+            assertAssignedToTechnician(currentUser, ticket);
+        } else {
+            authorizationService.assertCanManageProperty(currentUser, ticket.getPropertyId());
+        }
+        ticket.quote(amount, note, currentUser.id());
+        ticket.attributeEventsTo(currentUser.id());
+        MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
+        audit("MAINTENANCE_QUOTED", currentUser, saved, Map.of("amount", amount.toPlainString()));
+        return saved;
+    }
+
+    @Override
+    public MaintenanceTicket.Quote visibleQuote(UUID ticketId) {
+        MaintenanceTicket ticket = getTicket(ticketId);
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        if (currentUser.role() == UserRole.TENANT && ticket.getLiableParty() != LiableParty.TENANT) {
+            return null;
+        }
+        return ticket.getQuote();
+    }
+
+    @Override
+    public MaintenanceTicket verifyTicket(UUID ticketId) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = tenantOwnedTicket(currentUser, ticketId);
+        ticket.verifyByTenant();
+        ticket.attributeEventsTo(currentUser.id());
+        MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
+        audit("MAINTENANCE_VERIFIED", currentUser, saved, Map.of());
+        return saved;
+    }
+
+    @Override
+    public MaintenanceTicket reopenTicket(UUID ticketId, String feedback) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = tenantOwnedTicket(currentUser, ticketId);
+        ticket.reopenByTenant(feedback);
+        ticket.attributeEventsTo(currentUser.id());
+        MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
+        audit("MAINTENANCE_REOPENED_BY_TENANT", currentUser, saved, Map.of("status", saved.getStatus().name()));
+        return saved;
+    }
+
+    /**
+     * Chỉ người thuê của phòng (người báo hoặc đang ở theo hợp đồng ACTIVE) xác nhận/phản hồi kết quả sửa; quyền được
+     * kiểm tra trước trạng thái để người ngoài nhận 403.
+     */
+    private MaintenanceTicket tenantOwnedTicket(CurrentUser currentUser, UUID ticketId) {
+        if (currentUser == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (currentUser.role() != UserRole.TENANT) {
+            throw new UnauthorizedPropertyAccessException("Chỉ người thuê của phòng mới xác nhận kết quả sửa chữa.");
+        }
+        MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
+            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+        if (!authorizationService.canTenantViewTicket(currentUser, ticket.getRoomId(), ticket.getRequestedByTenantId())) {
+            throw new UnauthorizedPropertyAccessException("Tenant can only confirm tickets of their own room");
+        }
+        return ticket;
     }
 
     @Override

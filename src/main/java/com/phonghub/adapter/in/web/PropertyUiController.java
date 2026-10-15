@@ -7,6 +7,9 @@ import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.Room;
+import com.phonghub.domain.model.RoomPage;
+import com.phonghub.domain.model.RoomSearchCriteria;
+import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.PropertyApprovalStatus;
 import java.math.BigDecimal;
 import java.util.List;
@@ -121,19 +124,92 @@ public class PropertyUiController {
     }
 
     @GetMapping("/{id}")
-    public String viewProperty(@PathVariable UUID id, Model model, RedirectAttributes redirectAttributes) {
+    public String viewProperty(
+        @PathVariable UUID id,
+        @RequestParam(required = false) String status,
+        @RequestParam(required = false) String minPrice,
+        @RequestParam(required = false) String maxPrice,
+        @RequestParam(required = false) String floor,
+        @RequestParam(defaultValue = "0") int page,
+        Model model,
+        RedirectAttributes redirectAttributes
+    ) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         try {
             Property property = propertyUseCase.getProperty(id);
-            List<Room> rooms = roomUseCase.listRoomsForProperty(id);
+
+            RoomPage roomPage;
+            try {
+                roomPage = roomUseCase.searchRooms(new RoomSearchCriteria(
+                    id, parseStatus(status), parseDecimal(minPrice), parseDecimal(maxPrice), parseInteger(floor),
+                    null, Math.max(0, page), ROOM_PAGE_SIZE));
+            } catch (IllegalArgumentException ex) {
+                model.addAttribute("errorMessage", ex.getMessage());
+                roomPage = roomUseCase.searchRooms(new RoomSearchCriteria(
+                    id, null, null, null, null, null, 0, ROOM_PAGE_SIZE));
+                status = minPrice = maxPrice = floor = null;
+            }
+            if (roomPage.items().isEmpty() && roomPage.page() > 0 && roomPage.totalElements() > 0) {
+                // Trang vượt quá số trang hiện có (ví dụ link cũ sau khi xóa phòng): về trang cuối.
+                roomPage = roomUseCase.searchRooms(new RoomSearchCriteria(
+                    id, parseStatus(status), parseDecimal(minPrice), parseDecimal(maxPrice), parseInteger(floor),
+                    null, roomPage.totalPages() - 1, ROOM_PAGE_SIZE));
+            }
 
             model.addAttribute("currentUser", currentUser);
             model.addAttribute("property", property);
-            model.addAttribute("rooms", rooms);
+            model.addAttribute("rooms", roomPage.items());
+            model.addAttribute("roomPage", roomPage);
+            model.addAttribute("roomStatuses", RoomStatus.values());
+            model.addAttribute("filterStatus", status);
+            model.addAttribute("filterMinPrice", minPrice);
+            model.addAttribute("filterMaxPrice", maxPrice);
+            model.addAttribute("filterFloor", floor);
+            model.addAttribute("roomFilterActive", isPresent(status) || isPresent(minPrice) || isPresent(maxPrice)
+                || isPresent(floor));
             return "properties/detail";
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
             return "redirect:/properties";
+        }
+    }
+
+    private static final int ROOM_PAGE_SIZE = 10;
+
+    private static boolean isPresent(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private static RoomStatus parseStatus(String value) {
+        if (!isPresent(value)) {
+            return null;
+        }
+        try {
+            return RoomStatus.valueOf(value.trim());
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Trạng thái phòng không hợp lệ.");
+        }
+    }
+
+    private static BigDecimal parseDecimal(String value) {
+        if (!isPresent(value)) {
+            return null;
+        }
+        try {
+            return new BigDecimal(value.trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Giá lọc không hợp lệ.");
+        }
+    }
+
+    private static Integer parseInteger(String value) {
+        if (!isPresent(value)) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(value.trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Tầng lọc không hợp lệ.");
         }
     }
 

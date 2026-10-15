@@ -18,6 +18,10 @@ public record CurrentUser(
         return role == UserRole.ADMIN;
     }
 
+    public boolean isOwner() {
+        return role == UserRole.OWNER;
+    }
+
     public boolean isStaff() {
         return role == UserRole.STAFF;
     }

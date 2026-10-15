@@ -6,6 +6,7 @@
 application-local.yml
 application-local.properties
 secrets/
+uploads/
 
 # Java & Build Tools
 *.class
@@ -50,6 +51,7 @@ out/
 !**/src/test/**/out/
 
 # Eclipse
+bin/
 .apt_generated
 .classpath
 .factorypath

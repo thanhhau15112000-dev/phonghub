@@ -1,4 +1,6 @@
 phonghub:
+  rate-limit:
+    enabled: false
   demo:
     enabled: true
   invoicing:
@@ -6,6 +8,9 @@ phonghub:
   contracts:
     # Test gọi ContractLifecycleUseCase trực tiếp với ngày cố định thay vì để job chạy theo giờ máy.
     expiry-job-enabled: false
+  # Nhiều test sửa thẳng repository in-memory (không qua service/transaction) nên tắt cache; test cache bật riêng.
+  cache:
+    enabled: false
   sepay:
     allow-unsigned-webhook: true
     simulation-enabled: true

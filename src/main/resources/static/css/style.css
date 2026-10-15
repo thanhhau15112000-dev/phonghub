@@ -209,6 +209,13 @@ h2 {
   font-weight: 500;
 }
 
+/* Cột chữ tự do (tên, địa chỉ, mô tả): chuỗi dài không khoảng trắng xuống dòng thay vì kéo giãn bảng (#91).
+   Chỉ dùng cho cột có min-width để chữ thường không bị bẻ vụn. */
+.data-table td.col-wrap {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 /* Modern Pill Badges */
 .badge {
   display: inline-flex;
@@ -298,19 +305,6 @@ h2 {
 .badge-DRAFT::before,
 .badge-TERMINATED::before {
   background-color: #94a3b8;
-}
-
-/* Status cell with reason badge */
-.status-cell-wrapper {
-  display: flex;
-  align-items: center;
-}
-
-.status-badge-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: nowrap;
 }
 
 .btn-reason-pill {
