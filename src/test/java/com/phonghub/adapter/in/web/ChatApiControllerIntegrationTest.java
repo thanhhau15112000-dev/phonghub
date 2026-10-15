@@ -202,7 +202,7 @@ class ChatApiControllerIntegrationTest {
     @Test
     @DisplayName("Upload ảnh thành công qua endpoint POST /api/chat/rooms/{roomId}/media")
     void uploadMediaSuccess() throws Exception {
-        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_TENANT_1);
+        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_ADMIN);
         org.springframework.mock.web.MockMultipartFile mockFile = new org.springframework.mock.web.MockMultipartFile(
             "file", "room_sample.jpg", "image/jpeg", "image-content".getBytes()
         );
@@ -215,5 +215,20 @@ class ChatApiControllerIntegrationTest {
             .andExpect(jsonPath("$.mediaUrl").isNotEmpty())
             .andExpect(jsonPath("$.mediaType", is("IMAGE")))
             .andExpect(jsonPath("$.content", is("Ảnh phòng thực tế")));
+    }
+
+    @Test
+    @DisplayName("[Issue-129] Tenant upload media vào Kênh Chung phải bị chặn 403 Forbidden")
+    void tenantUploadMediaToGlobalRoomReturns403() throws Exception {
+        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_TENANT_1);
+        org.springframework.mock.web.MockMultipartFile mockFile = new org.springframework.mock.web.MockMultipartFile(
+            "file", "room_sample.jpg", "image/jpeg", "image-content".getBytes()
+        );
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/chat/rooms/" + ChatRoom.GLOBAL_ROOM_ID + "/media")
+                .file(mockFile)
+                .param("caption", "Tenant cố upload"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.detail", is("Khách thuê không có quyền gửi tin vào Kênh Chung. Kênh Chung chỉ dành cho Ban Quản Lý.")));
     }
 }
