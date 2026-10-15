@@ -40,6 +40,8 @@
                th:href="@{'/properties/' + ${property.id()} + '/tenants'}" class="btn btn-sm btn-secondary">Người thuê</a>
             <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                th:href="@{'/properties/' + ${property.id()} + '/staff'}" class="btn btn-sm btn-secondary">Nhân sự</a>
+            <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+               th:href="@{'/properties/' + ${property.id()} + '/late-fee'}" class="btn btn-sm btn-secondary">Phạt trả trễ</a>
             <a th:href="@{/properties}" class="btn btn-sm">&larr; Quay lại danh sách nhà trọ</a>
         </div>
     </div>

@@ -98,7 +98,8 @@ public class RoomApiController {
             request.floor(),
             request.areaSqm(),
             request.basePrice(),
-            request.maxOccupants()
+            request.maxOccupants(),
+            request.version()
         ));
         return ResponseEntity.ok(RoomResponse.from(room));
     }
@@ -143,8 +144,15 @@ public class RoomApiController {
         BigDecimal basePrice,
 
         @Min(value = 1, message = "Max occupants must be at least 1")
-        int maxOccupants
-    ) {}
+        int maxOccupants,
+
+        /** Phiên bản phòng khi client đọc; bỏ trống thì không kiểm tra xung đột ở tầng ứng dụng. */
+        Long version
+    ) {
+        public UpdateRoomRequest(String roomNumber, int floor, BigDecimal areaSqm, BigDecimal basePrice, int maxOccupants) {
+            this(roomNumber, floor, areaSqm, basePrice, maxOccupants, null);
+        }
+    }
 
     public record UpdateRoomStatusRequest(
         @NotNull(message = "Status is required")

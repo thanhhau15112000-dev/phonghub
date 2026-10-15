@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Phạt trả trễ')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Phạt trả trễ</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">
+                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Khi hóa đơn tiền thuê quá hạn hơn số ngày ân hạn,
+                hệ thống thêm một dòng phạt riêng vào hóa đơn. Mỗi hóa đơn chỉ bị phạt một lần; hệ thống chạy lại không cộng dồn.
+            </p>
+        </div>
+        <div>
+            <a th:href="@{'/properties/' + ${property.id()}}" class="btn">&larr; Quay lại nhà trọ</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <form th:action="@{'/properties/' + ${property.id()} + '/late-fee'}" method="post" autocomplete="off">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group">
+                <label style="font-size: 14px;">
+                    <input type="checkbox" name="enabled" value="true" th:checked="${policy.enabled()}"> Bật phạt trả trễ cho nhà trọ này
+                </label>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 16px;">
+                <div class="form-group" style="min-width: 200px;">
+                    <label class="form-label" for="feeType">Cách tính</label>
+                    <select id="feeType" name="feeType" class="form-control">
+                        <option value="PERCENT" th:selected="${policy.feeType().name() == 'PERCENT'}">Phần trăm tiền hóa đơn (%)</option>
+                        <option value="FIXED" th:selected="${policy.feeType().name() == 'FIXED'}">Số tiền cố định (đ)</option>
+                    </select>
+                </div>
+                <div class="form-group" style="min-width: 200px;">
+                    <label class="form-label" for="feeValue">Mức phạt</label>
+                    <input id="feeValue" type="number" name="feeValue" step="0.01" min="0" class="form-control"
+                           th:value="${policy.feeValue()}">
+                </div>
+                <div class="form-group" style="min-width: 200px;">
+                    <label class="form-label" for="graceDays">Số ngày ân hạn</label>
+                    <input id="graceDays" type="number" name="graceDays" min="0" max="365" class="form-control"
+                           th:value="${policy.graceDays()}">
+                </div>
+                <div class="form-group" style="min-width: 200px;">
+                    <label class="form-label" for="capAmount">Phạt tối đa (đ, để trống nếu không giới hạn)</label>
+                    <input id="capAmount" type="number" name="capAmount" step="1" min="0" class="form-control"
+                           th:value="${policy.capAmount()}">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Lưu cấu hình</button>
+        </form>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

@@ -239,7 +239,24 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
-    public AuditPort auditPort(
+    public com.phonghub.application.port.out.LateFeePolicyRepositoryPort lateFeePolicyRepository(
+        NamedParameterJdbcTemplate jdbcTemplate
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresLateFeePolicyRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.ChatRoomRepositoryPort chatRoomRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresChatRoomRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.ChatMessageRepositoryPort chatMessageRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresChatMessageRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public PostgresAuditAdapter auditPort(
         NamedParameterJdbcTemplate jdbcTemplate,
         TenantDataProtectionPort tenantDataProtection
     ) {

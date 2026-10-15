@@ -54,8 +54,20 @@ public interface RoomUseCase {
         int floor,
         BigDecimal areaSqm,
         BigDecimal basePrice,
-        int maxOccupants
+        int maxOccupants,
+        Long expectedVersion
     ) {
+        public UpdateRoomCommand(
+            UUID roomId,
+            String roomNumber,
+            int floor,
+            BigDecimal areaSqm,
+            BigDecimal basePrice,
+            int maxOccupants
+        ) {
+            this(roomId, roomNumber, floor, areaSqm, basePrice, maxOccupants, null);
+        }
+
         public UpdateRoomCommand {
             if (roomId == null) {
                 throw new IllegalArgumentException("Room id cannot be null");

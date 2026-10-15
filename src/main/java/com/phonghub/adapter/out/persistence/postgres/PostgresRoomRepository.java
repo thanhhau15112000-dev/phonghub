@@ -1,5 +1,6 @@
 package com.phonghub.adapter.out.persistence.postgres;
 
+import com.phonghub.domain.exception.OptimisticLockConflictException;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomPage;
@@ -27,7 +28,7 @@ public class PostgresRoomRepository implements RoomRepositoryPort {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    private static final RowMapper<Room> ROW_MAPPER = (rs, rowNum) -> new Room(
+    private static final RowMapper<Room> ROW_MAPPER = (rs, rowNum) -> withVersion(new Room(
         UUID.fromString(rs.getString("id")),
         UUID.fromString(rs.getString("property_id")),
         rs.getString("room_number"),
@@ -38,7 +39,12 @@ public class PostgresRoomRepository implements RoomRepositoryPort {
         RoomStatus.valueOf(rs.getString("status")),
         toInstant(rs.getTimestamp("created_at")),
         toInstant(rs.getTimestamp("updated_at"))
-    );
+    ), rs.getLong("version"));
+
+    private static Room withVersion(Room room, long version) {
+        room.restoreVersion(version);
+        return room;
+    }
 
     private static Instant toInstant(Timestamp ts) {
         return ts != null ? ts.toInstant() : Instant.now();
@@ -47,8 +53,8 @@ public class PostgresRoomRepository implements RoomRepositoryPort {
     @Override
     public Room save(Room room) {
         String sql = """
-            INSERT INTO rooms (id, property_id, room_number, floor, area_sqm, base_price, max_occupants, status, created_at, updated_at)
-            VALUES (:id, :propertyId, :roomNumber, :floor, :areaSqm, :basePrice, :maxOccupants, :status, :createdAt, :updatedAt)
+            INSERT INTO rooms (id, property_id, room_number, floor, area_sqm, base_price, max_occupants, status, created_at, updated_at, version)
+            VALUES (:id, :propertyId, :roomNumber, :floor, :areaSqm, :basePrice, :maxOccupants, :status, :createdAt, :updatedAt, :version)
             ON CONFLICT (id) DO UPDATE SET
                 room_number = EXCLUDED.room_number,
                 floor = EXCLUDED.floor,
@@ -56,11 +62,15 @@ public class PostgresRoomRepository implements RoomRepositoryPort {
                 base_price = EXCLUDED.base_price,
                 max_occupants = EXCLUDED.max_occupants,
                 status = EXCLUDED.status,
-                updated_at = EXCLUDED.updated_at
+                updated_at = EXCLUDED.updated_at,
+                version = rooms.version + 1
+            WHERE rooms.version = :version
+            RETURNING version
             """;
 
         MapSqlParameterSource params = new MapSqlParameterSource()
             .addValue("id", room.getId())
+            .addValue("version", room.getVersion())
             .addValue("propertyId", room.getPropertyId())
             .addValue("roomNumber", room.getRoomNumber())
             .addValue("floor", room.getFloor())
@@ -71,7 +81,11 @@ public class PostgresRoomRepository implements RoomRepositoryPort {
             .addValue("createdAt", Timestamp.from(room.getCreatedAt()))
             .addValue("updatedAt", Timestamp.from(room.getUpdatedAt()));
 
-        jdbcTemplate.update(sql, params);
+        List<Long> versions = jdbcTemplate.queryForList(sql, params, Long.class);
+        if (versions.isEmpty()) {
+            throw new OptimisticLockConflictException("Room");
+        }
+        room.restoreVersion(versions.getFirst());
         return room;
     }
 

@@ -1,4 +1,6 @@
 phonghub:
+  rate-limit:
+    enabled: false
   demo:
     enabled: true
   invoicing:

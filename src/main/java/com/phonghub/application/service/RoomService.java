@@ -1,6 +1,7 @@
 package com.phonghub.application.service;
 
 import com.phonghub.application.port.in.RoomUseCase;
+import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
@@ -12,6 +13,7 @@ import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateRoomNumberException;
 import com.phonghub.domain.exception.InvalidPropertyStatusException;
 import com.phonghub.domain.exception.InvalidRoomCapacityException;
+import com.phonghub.domain.exception.OptimisticLockConflictException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.RoomNotFoundException;
@@ -29,7 +31,9 @@ import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.UserRole;
 import java.time.LocalDate;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -42,6 +46,7 @@ public class RoomService implements RoomUseCase {
     private final TenantRepositoryPort tenantRepository;
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
+    private final AuditPort auditPort;
 
     public RoomService(
         RoomRepositoryPort roomRepository,
@@ -52,6 +57,21 @@ public class RoomService implements RoomUseCase {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService
     ) {
+        this(roomRepository, propertyRepository, maintenanceTicketRepository, contractRepository, tenantRepository,
+            currentUserPort, authorizationService, null);
+    }
+
+    public RoomService(
+        RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
+        MaintenanceTicketRepositoryPort maintenanceTicketRepository,
+        ContractRepositoryPort contractRepository,
+        TenantRepositoryPort tenantRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort
+    ) {
+        this.auditPort = auditPort;
         this.roomRepository = roomRepository;
         this.propertyRepository = propertyRepository;
         this.maintenanceTicketRepository = maintenanceTicketRepository;
@@ -92,6 +112,9 @@ public class RoomService implements RoomUseCase {
         );
 
         Room saved = roomRepository.save(room);
+        audit("ROOM_CREATED", currentUser, saved, Map.of(
+            "roomNumber", saved.getRoomNumber(), "floor", saved.getFloor(),
+            "basePrice", saved.getBasePrice().toPlainString(), "maxOccupants", saved.getMaxOccupants()));
 
         // Tự động đồng bộ total_rooms nếu số phòng thực tế vượt quá ước lượng ban đầu
         int currentRoomCount = roomRepository.findByPropertyId(command.propertyId()).size();
@@ -121,6 +144,10 @@ public class RoomService implements RoomUseCase {
 
         authorizationService.assertOwnerOrAdmin(currentUser, room.getPropertyId());
 
+        if (command.expectedVersion() != null && command.expectedVersion() != room.getVersion()) {
+            throw new OptimisticLockConflictException("Phòng");
+        }
+
         Optional<Room> duplicate = roomRepository.findByPropertyIdAndRoomNumber(room.getPropertyId(), command.roomNumber().trim());
         if (duplicate.isPresent() && !duplicate.get().getId().equals(room.getId())) {
             throw new DuplicateRoomNumberException(String.format(
@@ -145,6 +172,7 @@ public class RoomService implements RoomUseCase {
             }
         }
 
+        Map<String, Object> before = describe(room);
         room.updateInfo(
             command.roomNumber(),
             command.floor(),
@@ -153,7 +181,9 @@ public class RoomService implements RoomUseCase {
             command.maxOccupants()
         );
 
-        return roomRepository.save(room);
+        Room saved = roomRepository.save(room);
+        audit("ROOM_UPDATED", currentUser, saved, Map.of("before", before, "after", describe(saved)));
+        return saved;
     }
 
     @Override
@@ -264,7 +294,28 @@ public class RoomService implements RoomUseCase {
             }
         }
 
+        RoomStatus oldStatus = room.getStatus();
         room.transitionTo(targetStatus);
-        return roomRepository.save(room);
+        Room saved = roomRepository.save(room);
+        audit("ROOM_STATUS_CHANGED", currentUser, saved, Map.of(
+            "oldStatus", oldStatus.name(), "newStatus", saved.getStatus().name()));
+        return saved;
+    }
+
+    private static Map<String, Object> describe(Room room) {
+        Map<String, Object> state = new LinkedHashMap<>();
+        state.put("roomNumber", room.getRoomNumber());
+        state.put("floor", room.getFloor());
+        state.put("areaSqm", room.getAreaSqm() == null ? null : room.getAreaSqm().toPlainString());
+        state.put("basePrice", room.getBasePrice().toPlainString());
+        state.put("maxOccupants", room.getMaxOccupants());
+        return state;
+    }
+
+    private void audit(String action, CurrentUser actor, Room room, Map<String, Object> details) {
+        if (auditPort != null) {
+            auditPort.recordEvent(AuditPort.AuditEvent.of(action, actor == null ? null : actor.id(), "ROOM",
+                room.getId().toString(), room.getPropertyId(), details));
+        }
     }
 }
