@@ -97,6 +97,8 @@ class CacheIntegrationTest extends SeededWebTest {
         assertEquals("AVAILABLE", roomStatus(OWNER_1, "P104"));
         int occupiedBefore = occupied(OWNER_1);
         assertEquals("AVAILABLE", roomStatus(OWNER_1, "P104"), "đọc lại từ cache");
+        mockMvc.perform(get(ROOMS).param("status", "AVAILABLE").header("X-User-Id", OWNER_1))
+            .andExpect(jsonPath("$[*].roomNumber", hasItem("P104")));
 
         String created = mockMvc.perform(post("/api/contracts").header("X-User-Id", OWNER_1)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -114,5 +116,7 @@ class CacheIntegrationTest extends SeededWebTest {
 
         assertEquals("OCCUPIED", roomStatus(OWNER_1, "P104"));
         assertEquals(occupiedBefore + 1, occupied(OWNER_1));
+        mockMvc.perform(get(ROOMS).param("status", "AVAILABLE").header("X-User-Id", OWNER_1))
+            .andExpect(jsonPath("$[*].roomNumber", not(hasItem("P104"))));
     }
 }

@@ -4,14 +4,17 @@ import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.domain.model.Room;
+import com.phonghub.domain.model.RoomPage;
+import com.phonghub.domain.model.RoomSearchCriteria;
 import com.phonghub.domain.model.RoomStatus;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * Cache danh sách phòng theo (người dùng, nhà trọ) (#88); thao tác ghi phòng xóa cache. Trạng thái phòng còn đổi theo
- * hợp đồng/bảo trì/bàn giao — các luồng đó chạy trong transaction nên được xóa cache khi commit.
+ * Cache danh sách phòng theo (người dùng, nhà trọ) và kết quả lọc/phân trang phòng (#84) theo (người dùng, điều kiện
+ * lọc) (#88); thao tác ghi phòng xóa cache. Trạng thái phòng còn đổi theo hợp đồng/bảo trì/bàn giao — các luồng đó
+ * chạy trong transaction nên được xóa cache khi commit.
  */
 public class CachingRoomUseCase implements RoomUseCase {
 
@@ -33,6 +36,17 @@ public class CachingRoomUseCase implements RoomUseCase {
         }
         return caches.get(new PhongHubCaches.Key("rooms", user.id(), propertyId),
             () -> delegate.listRoomsForProperty(propertyId));
+    }
+
+    /** Trang nhà trọ và API danh sách phòng dùng hàm này (#84). */
+    @Override
+    public RoomPage searchRooms(RoomSearchCriteria criteria) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        if (user == null) {
+            return delegate.searchRooms(criteria);
+        }
+        return caches.get(new PhongHubCaches.Key("rooms.search", user.id(), criteria),
+            () -> delegate.searchRooms(criteria));
     }
 
     @Override

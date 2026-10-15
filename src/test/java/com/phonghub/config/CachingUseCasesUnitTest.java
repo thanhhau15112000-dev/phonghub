@@ -14,6 +14,9 @@ import com.phonghub.application.port.in.StatisticsUseCase;
 import com.phonghub.application.port.in.StatisticsUseCase.StatsQuery;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
+import com.phonghub.domain.model.RoomPage;
+import com.phonghub.domain.model.RoomSearchCriteria;
+import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.UserRole;
 import java.time.Duration;
 import java.util.List;
@@ -79,6 +82,31 @@ class CachingUseCasesUnitTest {
         useCase.changeRoomStatus(UUID.randomUUID(), com.phonghub.domain.model.RoomStatus.MAINTENANCE);
         useCase.listRoomsForProperty(propertyA);
         verify(delegate, times(3)).listRoomsForProperty(propertyA);
+    }
+
+    @Test
+    @DisplayName("lọc phòng (#84) cache theo (người dùng, điều kiện lọc); thêm phòng xóa cache")
+    void roomSearch() {
+        UUID property = UUID.randomUUID();
+        RoomSearchCriteria available = new RoomSearchCriteria(property, RoomStatus.AVAILABLE, null, null, null, null, 0,
+            10);
+        RoomSearchCriteria page2 = new RoomSearchCriteria(property, RoomStatus.AVAILABLE, null, null, null, null, 1, 10);
+        RoomUseCase delegate = mock(RoomUseCase.class);
+        when(delegate.searchRooms(any())).thenReturn(new RoomPage(List.of(), 0, 0, 10));
+        CachingRoomUseCase useCase = new CachingRoomUseCase(delegate, caches, caller::get);
+
+        useCase.searchRooms(available);
+        useCase.searchRooms(new RoomSearchCriteria(property, RoomStatus.AVAILABLE, null, null, null, null, 0, 10));
+        useCase.searchRooms(page2);
+        verify(delegate, times(1)).searchRooms(available);
+        verify(delegate, times(1)).searchRooms(page2);
+        caller.set(owner2);
+        useCase.searchRooms(available);
+        verify(delegate, times(2)).searchRooms(available);
+
+        useCase.createRoom(new RoomUseCase.CreateRoomCommand(property, "P1", 1, null, java.math.BigDecimal.ONE, 1));
+        useCase.searchRooms(available);
+        verify(delegate, times(3)).searchRooms(available);
     }
 
     @Test
