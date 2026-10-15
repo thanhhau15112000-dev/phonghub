@@ -3224,6 +3224,101 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  # ==========================================
+  # MAINTENANCE QUOTE & TENANT CONFIRMATION (#83)
+  # ==========================================
+  /api/maintenance/{id}/quote:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Maintenance]
+      summary: Nhập/cập nhật báo giá khi phiếu chưa sửa xong (kỹ thuật viên được giao, owner/staff quản lý, admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: { type: number, minimum: 0 }
+                note: { type: string, maxLength: 1000 }
+      responses:
+        '200':
+          description: Báo giá đã lưu
+        '400':
+          description: Số tiền thiếu hoặc âm
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Phiếu đã sửa xong, đang chờ thanh toán hoặc đã bị từ chối
+    get:
+      tags: [Maintenance]
+      summary: Báo giá người xem được thấy (người thuê chỉ thấy khi là bên chịu phí)
+      responses:
+        '200':
+          description: Báo giá
+        '204':
+          description: Chưa có báo giá hoặc người thuê không phải bên chịu phí
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/maintenance/{id}/verify:
+    post:
+      tags: [Maintenance]
+      summary: Người thuê của phòng xác nhận đã sửa xong (RESOLVED -> VERIFIED)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Phiếu ở trạng thái VERIFIED
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Phiếu chưa sửa xong, còn phí chờ thanh toán hoặc đã xác nhận
+
+  /api/maintenance/{id}/reopen:
+    post:
+      tags: [Maintenance]
+      summary: Người thuê phản hồi chưa đạt; phiếu về ASSIGNED (có kỹ thuật viên) hoặc REPORTED, sửa lại không thu phí lần hai
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [feedback]
+              properties:
+                feedback: { type: string, maxLength: 1000 }
+      responses:
+        '200':
+          description: Phiếu được mở lại
+        '400':
+          description: Thiếu lý do chưa đạt
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Phiếu chưa sửa xong
+
 # ==========================================
 # COMPONENTS (REUSABLE SCHEMAS & CONTRACTS)
 # ==========================================

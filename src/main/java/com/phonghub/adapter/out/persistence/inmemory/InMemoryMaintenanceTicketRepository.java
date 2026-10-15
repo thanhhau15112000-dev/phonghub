@@ -18,7 +18,7 @@ public class InMemoryMaintenanceTicketRepository implements MaintenanceTicketRep
 
     private MaintenanceTicket clone(MaintenanceTicket t) {
         if (t == null) return null;
-        return new MaintenanceTicket(
+        MaintenanceTicket copy = new MaintenanceTicket(
             t.getId(),
             t.getRoomId(),
             t.getPropertyId(),
@@ -38,6 +38,8 @@ public class InMemoryMaintenanceTicketRepository implements MaintenanceTicketRep
             t.getCreatedAt(),
             t.getUpdatedAt()
         );
+        copy.restoreQuote(t.getQuote());
+        return copy;
     }
 
     @Override

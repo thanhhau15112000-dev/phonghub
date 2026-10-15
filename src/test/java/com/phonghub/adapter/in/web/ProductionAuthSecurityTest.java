@@ -616,6 +616,17 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void maintenanceQuoteAndConfirmationRequireBearerTokenInProd() throws Exception {
+        String ticket = "/api/maintenance/dddddddd-dddd-dddd-dddd-dddddddddddd";
+        mockMvc.perform(post(ticket + "/quote").contentType(MediaType.APPLICATION_JSON).content("{\"amount\": 1}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(ticket + "/quote")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post(ticket + "/verify")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post(ticket + "/reopen").contentType(MediaType.APPLICATION_JSON).content("{\"feedback\": \"x\"}"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void tenantDocumentEndpointsRequireBearerTokenInProd() throws Exception {
         String base = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/tenants/44444444-0000-0000-0000-444444444441/documents";
         mockMvc.perform(get(base)).andExpect(status().isUnauthorized());

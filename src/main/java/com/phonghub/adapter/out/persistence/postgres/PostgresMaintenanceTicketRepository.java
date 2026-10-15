@@ -34,7 +34,7 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
         UUID techId = techIdStr != null ? UUID.fromString(techIdStr) : null;
         String causeStr = rs.getString("cause_category");
 
-        return new MaintenanceTicket(
+        MaintenanceTicket ticket = new MaintenanceTicket(
             UUID.fromString(rs.getString("id")),
             UUID.fromString(rs.getString("room_id")),
             UUID.fromString(rs.getString("property_id")),
@@ -54,6 +54,13 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
             toInstant(rs.getTimestamp("created_at")),
             toInstant(rs.getTimestamp("updated_at"))
         );
+        java.math.BigDecimal quoteAmount = rs.getBigDecimal("quote_amount");
+        if (quoteAmount != null) {
+            String quotedBy = rs.getString("quoted_by");
+            ticket.restoreQuote(new MaintenanceTicket.Quote(quoteAmount, rs.getString("quote_note"),
+                quotedBy != null ? UUID.fromString(quotedBy) : null, nullableInstant(rs.getTimestamp("quoted_at"))));
+        }
+        return ticket;
     };
 
     private static Instant nullableInstant(Timestamp ts) {
@@ -67,8 +74,8 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
     @Override
     public MaintenanceTicket save(MaintenanceTicket ticket) {
         String sql = """
-            INSERT INTO maintenance_tickets (id, room_id, requested_by_tenant_id, assigned_technician_id, title, description, priority, status, repair_cost, resolution_notes, cause_category, liable_party, reject_reason, due_at, sla_notified_at, created_at, updated_at)
-            VALUES (:id, :roomId, :tenantId, :technicianId, :title, :description, :priority, :status, :repairCost, :resolutionNotes, :causeCategory, :liableParty, :rejectReason, :dueAt, :slaNotifiedAt, :createdAt, :updatedAt)
+            INSERT INTO maintenance_tickets (id, room_id, requested_by_tenant_id, assigned_technician_id, title, description, priority, status, repair_cost, resolution_notes, cause_category, liable_party, reject_reason, due_at, sla_notified_at, quote_amount, quote_note, quoted_by, quoted_at, created_at, updated_at)
+            VALUES (:id, :roomId, :tenantId, :technicianId, :title, :description, :priority, :status, :repairCost, :resolutionNotes, :causeCategory, :liableParty, :rejectReason, :dueAt, :slaNotifiedAt, :quoteAmount, :quoteNote, :quotedBy, :quotedAt, :createdAt, :updatedAt)
             ON CONFLICT (id) DO UPDATE SET
                 assigned_technician_id = EXCLUDED.assigned_technician_id,
                 title = EXCLUDED.title,
@@ -81,6 +88,10 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
                 reject_reason = EXCLUDED.reject_reason,
                 due_at = EXCLUDED.due_at,
                 sla_notified_at = EXCLUDED.sla_notified_at,
+                quote_amount = EXCLUDED.quote_amount,
+                quote_note = EXCLUDED.quote_note,
+                quoted_by = EXCLUDED.quoted_by,
+                quoted_at = EXCLUDED.quoted_at,
                 updated_at = EXCLUDED.updated_at
             """;
 
@@ -100,6 +111,11 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
             .addValue("rejectReason", ticket.getRejectionReason())
             .addValue("dueAt", ticket.getDueAt() == null ? null : Timestamp.from(ticket.getDueAt()))
             .addValue("slaNotifiedAt", ticket.getSlaNotifiedAt() == null ? null : Timestamp.from(ticket.getSlaNotifiedAt()))
+            .addValue("quoteAmount", ticket.getQuote() == null ? null : ticket.getQuote().amount())
+            .addValue("quoteNote", ticket.getQuote() == null ? null : ticket.getQuote().note())
+            .addValue("quotedBy", ticket.getQuote() == null ? null : ticket.getQuote().quotedBy())
+            .addValue("quotedAt", ticket.getQuote() == null || ticket.getQuote().quotedAt() == null ? null
+                : Timestamp.from(ticket.getQuote().quotedAt()))
             .addValue("createdAt", Timestamp.from(ticket.getCreatedAt()))
             .addValue("updatedAt", Timestamp.from(ticket.getUpdatedAt()));
 
