@@ -160,10 +160,28 @@ public class PhongHubConfiguration {
         return new TransactionalRoomAssetUseCase(service);
     }
 
+    /**
+     * OCR chỉ số đồng hồ (#67): {@code phonghub.ocr.engine=tesseract} dùng lệnh tesseract (image Docker đã cài). Chọn
+     * tesseract mà máy không có lệnh thì ghi cảnh báo và quay về nhập tay, không làm app lỗi khi khởi động.
+     */
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(MeterOcrPort.class)
-    public MeterOcrPort meterOcrPort() {
-        return new com.phonghub.adapter.out.ocr.DisabledMeterOcrAdapter();
+    public MeterOcrPort meterOcrPort(
+        @org.springframework.beans.factory.annotation.Value("${phonghub.ocr.engine:disabled}") String engine,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.ocr.tesseract.command:tesseract}") String command,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.ocr.tesseract.timeout-seconds:15}") long timeoutSeconds,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.ocr.tesseract.max-concurrent:1}") int maxConcurrent
+    ) {
+        if (!com.phonghub.adapter.out.ocr.TesseractMeterOcrAdapter.ENGINE.equalsIgnoreCase(engine.trim())) {
+            return new com.phonghub.adapter.out.ocr.DisabledMeterOcrAdapter();
+        }
+        java.time.Duration timeout = java.time.Duration.ofSeconds(timeoutSeconds);
+        if (!com.phonghub.adapter.out.ocr.TesseractMeterOcrAdapter.isAvailable(command, timeout)) {
+            org.slf4j.LoggerFactory.getLogger(PhongHubConfiguration.class).warn(
+                "phonghub.ocr.engine=tesseract nhưng không chạy được lệnh '{}'; OCR chỉ số tắt, người dùng nhập tay", command);
+            return new com.phonghub.adapter.out.ocr.DisabledMeterOcrAdapter();
+        }
+        return new com.phonghub.adapter.out.ocr.TesseractMeterOcrAdapter(command, timeout, maxConcurrent);
     }
 
     @Bean
