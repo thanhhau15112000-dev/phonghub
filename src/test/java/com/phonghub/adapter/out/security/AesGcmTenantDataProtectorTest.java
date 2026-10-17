@@ -58,6 +58,13 @@ class AesGcmTenantDataProtectorTest {
         );
         TenantDataProtectionPort.ProtectedValue val2 = protector2.protect("079201002222");
         assertEquals("079201002222", protector2.reveal(val2));
+
+        // Test with null and empty keys
+        AesGcmTenantDataProtector protector3 = new AesGcmTenantDataProtector(
+            null, null, "  "
+        );
+        TenantDataProtectionPort.ProtectedValue val3 = protector3.protect("079201003333");
+        assertEquals("079201003333", protector3.reveal(val3));
     }
 
     private static byte[] filledBytes(byte value) {
