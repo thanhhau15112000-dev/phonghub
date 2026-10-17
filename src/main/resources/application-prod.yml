@@ -20,6 +20,7 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    out-of-order: true
 
 server:
   forward-headers-strategy: framework

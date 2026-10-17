@@ -91,6 +91,7 @@ public class PostgresPersistenceConfig {
                 .filter(location -> !location.isEmpty())
                 .toArray(String[]::new))
             .baselineOnMigrate(true)
+            .outOfOrder(true)
             .load();
     }
 
