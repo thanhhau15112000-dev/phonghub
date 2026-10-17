@@ -148,7 +148,7 @@ public class PostgresStatisticsQueryAdapter implements StatisticsQueryPort {
 
     @Override
     public List<ApprovalCount> propertyApprovalCounts() {
-        return jdbc.query("SELECT approval_status, COUNT(*) AS cnt FROM properties GROUP BY approval_status",
+        return jdbc.query("SELECT approval_status, COUNT(*) AS cnt FROM properties WHERE archived_at IS NULL GROUP BY approval_status",
             new MapSqlParameterSource(), (rs, n) -> new ApprovalCount(
                 PropertyApprovalStatus.fromString(rs.getString("approval_status")), rs.getLong("cnt")));
     }
@@ -159,7 +159,7 @@ public class PostgresStatisticsQueryAdapter implements StatisticsQueryPort {
             SELECT p.id, p.name, p.address, p.owner_id, p.created_at, u.full_name, u.email
             FROM properties p
             LEFT JOIN users u ON u.id = p.owner_id
-            WHERE p.approval_status = 'PENDING'
+            WHERE p.approval_status = 'PENDING' AND p.archived_at IS NULL
             ORDER BY p.created_at, p.name
             """;
         return jdbc.query(sql, new MapSqlParameterSource(), (rs, n) -> {

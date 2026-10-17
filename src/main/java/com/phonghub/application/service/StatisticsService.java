@@ -195,7 +195,9 @@ public class StatisticsService implements StatisticsUseCase {
             return List.of(propertyRepository.findById(propertyId)
                 .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + propertyId)));
         }
-        return user.role() == UserRole.ADMIN ? propertyRepository.findAll() : propertyRepository.findByOwnerId(user.id());
+        // Nhà trọ đã ẩn (#89) không tính vào thống kê chung; vẫn xem được khi chọn đích danh nhà trọ đó.
+        return (user.role() == UserRole.ADMIN ? propertyRepository.findAll() : propertyRepository.findByOwnerId(user.id()))
+            .stream().filter(p -> !p.isArchived()).toList();
     }
 
     private List<MaintenanceAggregate> completedMaintenance(Collection<UUID> ids, StatsQuery query) {

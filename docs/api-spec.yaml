@@ -281,7 +281,14 @@ paths:
     get:
       tags: [Properties]
       summary: Danh sách các nhà trọ/tòa nhà
+      description: Mặc định chỉ nhà trọ đang hoạt động; `archived=true` trả nhà trọ đã ẩn mà chủ trọ/admin quản lý (#89).
       parameters:
+        - name: archived
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/LimitParam'
         - $ref: '#/components/parameters/SortParam'
@@ -375,6 +382,65 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/properties/{propertyId}/archive:
+    parameters:
+      - name: propertyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Properties]
+      summary: Ẩn (xóa mềm) nhà trọ (owner của nhà trọ hoặc admin) (#89)
+      description: >
+        Nhà trọ đã ẩn không hiện trong danh sách, không tạo thêm phòng/hợp đồng; hợp đồng, hóa đơn cũ vẫn giữ nguyên.
+        Từ chối (409) khi còn hợp đồng chưa kết thúc (DRAFT, ACTIVE, EXPIRED chưa trả phòng) hoặc hóa đơn chưa thu xong.
+      responses:
+        '200':
+          description: Đã ẩn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Property'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/properties/{propertyId}/restore:
+    parameters:
+      - name: propertyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Properties]
+      summary: Khôi phục nhà trọ đã ẩn (owner của nhà trọ hoặc admin) (#89)
+      responses:
+        '200':
+          description: Đã khôi phục
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Property'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /api/properties/{propertyId}/rooms:
     parameters:
@@ -4037,6 +4103,11 @@ components:
         createdAt:
           type: string
           format: date-time
+        archivedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Thời điểm nhà trọ bị ẩn (#89); null là đang hoạt động
 
     PropertyInput:
       type: object
