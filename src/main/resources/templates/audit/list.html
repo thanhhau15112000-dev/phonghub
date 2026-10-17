@@ -30,7 +30,7 @@
                 <label class="form-label" for="targetType">Đối tượng</label>
                 <select id="targetType" name="targetType" class="form-control">
                     <option value="">Tất cả</option>
-                    <option th:each="t : ${targetTypes}" th:value="${t}" th:text="${t}"
+                    <option th:each="t : ${targetTypes}" th:value="${t}" th:text="${uiText.auditTarget(t)}"
                             th:selected="${t == targetType}">ROOM</option>
                 </select>
             </div>
@@ -75,16 +75,16 @@
             <tr th:each="e : ${entries}">
                 <td th:text="${#temporals.format(e.createdAt(), 'dd/MM/yyyy HH:mm:ss')}">01/01/2026 00:00:00</td>
                 <td><code th:text="${e.action()}">ACTION</code></td>
-                <td>
+                <td class="col-wrap">
                     <span th:if="${e.actorName() != null}" th:text="${e.actorName()}">Tên</span>
                     <span th:if="${e.actorName() == null and e.actorId() != null}" th:text="${e.actorId()}">id</span>
                     <span th:if="${e.actorId() == null}" style="color: var(--text-secondary);">Hệ thống</span>
                 </td>
                 <td>
-                    <span th:text="${e.targetType()}">ROOM</span>
+                    <span th:text="${uiText.auditTarget(e.targetType())}">Phòng</span>
                     <div style="font-size: 11px; color: var(--text-secondary); word-break: break-all;" th:text="${e.targetId()}">id</div>
                 </td>
-                <td style="max-width: 360px; word-break: break-word; font-size: 12px;" th:text="${e.details()}">{}</td>
+                <td class="col-wrap" style="max-width: 360px; font-size: 12px;" th:text="${e.details()}">{}</td>
             </tr>
             </tbody>
         </table>

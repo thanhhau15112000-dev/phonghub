@@ -45,7 +45,7 @@
     <div class="card">
         <h2>Lịch sử gửi chỉ số</h2>
         <p th:if="${submissions.isEmpty()}" style="color: var(--text-secondary);">Chưa có lượt gửi nào.</p>
-        <table th:if="${!submissions.isEmpty()}" class="table">
+        <table th:if="${!submissions.isEmpty()}" class="data-table">
             <thead><tr><th>Đồng hồ</th><th>Số khai</th><th>Đọc từ ảnh</th><th>Đối chiếu</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
             <tbody>
                 <tr th:each="s : ${submissions}">

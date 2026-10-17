@@ -181,7 +181,7 @@
                     <td>
                         <span class="badge"
                               th:classappend="${user.status() != null and user.status().name() == 'ACTIVE' ? 'badge-ACTIVE' : 'badge-DRAFT'}"
-                              th:text="${user.status()}">ACTIVE</span>
+                              th:text="${uiText.userStatus(user.status())}">Đang hoạt động</span>
                     </td>
                     <td class="col-actions">
                         <div th:if="${user.role().name() != 'ADMIN'}" class="table-actions">

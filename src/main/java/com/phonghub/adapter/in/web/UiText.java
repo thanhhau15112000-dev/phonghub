@@ -11,6 +11,7 @@ import com.phonghub.domain.model.MaintenanceCause;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.RoomStatus;
+import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.time.LocalDate;
 
@@ -190,6 +191,40 @@ public final class UiText {
             case RESOLVED -> "Đã xử lý";
             case VERIFIED -> "Đã xác nhận";
             case REJECTED -> "Đã từ chối";
+        };
+    }
+
+    public String userStatus(User.UserStatus status) {
+        if (status == null) {
+            return "Chưa xác định";
+        }
+        return switch (status) {
+            case ACTIVE -> "Đang hoạt động";
+            case INACTIVE -> "Ngừng hoạt động";
+            case SUSPENDED -> "Tạm khóa";
+        };
+    }
+
+    /** Loại đối tượng trong nhật ký; mã lạ (sự kiện mới chưa có nhãn) hiện nguyên mã. */
+    public String auditTarget(String targetType) {
+        if (targetType == null || targetType.isBlank()) {
+            return "—";
+        }
+        return switch (targetType) {
+            case "USER" -> "Tài khoản";
+            case "PROPERTY" -> "Nhà trọ";
+            case "ROOM" -> "Phòng";
+            case "CONTRACT" -> "Hợp đồng";
+            case "CONTRACT_OCCUPANT" -> "Người ở cùng";
+            case "TENANT" -> "Người thuê";
+            case "TENANT_DOCUMENT" -> "Giấy tờ người thuê";
+            case "MAINTENANCE_TICKET" -> "Phiếu bảo trì";
+            case "ROOM_ASSET" -> "Tài sản phòng";
+            case "HANDOVER" -> "Biên bản bàn giao";
+            case "SERVICE_RATE" -> "Đơn giá dịch vụ";
+            case "INVOICE" -> "Hóa đơn";
+            case "EXPORT" -> "Xuất dữ liệu";
+            default -> targetType;
         };
     }
 }

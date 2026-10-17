@@ -25,7 +25,7 @@
 
     <div class="card" style="margin-bottom: 20px;">
         <h2>Trạng thái biên bản</h2>
-        <table class="table">
+        <table class="data-table">
             <thead><tr><th></th><th>Nhận phòng</th><th>Trả phòng</th></tr></thead>
             <tbody>
                 <tr><td>Trạng thái</td>
@@ -50,7 +50,7 @@
     <div class="card" style="margin-bottom: 20px;">
         <h2>Tài sản</h2>
         <p th:if="${comparison.rows().isEmpty()}" style="color: var(--text-secondary);">Phòng không có tài sản nào trong biên bản.</p>
-        <table th:if="${!comparison.rows().isEmpty()}" class="table">
+        <table th:if="${!comparison.rows().isEmpty()}" class="data-table">
             <thead><tr><th>Tài sản</th><th>SL</th><th>Lúc nhận</th><th>Lúc trả</th><th>Khấu trừ đề xuất</th></tr></thead>
             <tbody>
                 <tr th:each="row : ${comparison.rows()}" th:style="${row.changed()} ? 'font-weight: 600; background: rgba(239, 68, 68, 0.08);'">
