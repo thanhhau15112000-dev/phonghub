@@ -144,7 +144,8 @@ public class RestExceptionHandler {
         StaffAssignmentConflictException.class,
         TenantProfileLockedException.class,
         AttachmentLimitException.class,
-        OptimisticLockConflictException.class
+        OptimisticLockConflictException.class,
+        com.phonghub.domain.exception.ConflictException.class
     })
     public ProblemDetail handleDuplicateAccountConflict(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());

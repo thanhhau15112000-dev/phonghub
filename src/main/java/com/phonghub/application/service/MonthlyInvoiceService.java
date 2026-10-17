@@ -90,8 +90,8 @@ public class MonthlyInvoiceService implements MonthlyInvoiceUseCase {
         if (existing.isEmpty()) {
             return false;
         }
-        // Khóa dòng hóa đơn rồi đọc lại để không ghi đè số tiền vừa được webhook thanh toán cộng vào
-        Invoice invoice = invoiceRepository.findByPaymentCodeForUpdate(existing.get().getPaymentCode())
+        // Khóa dòng hóa đơn theo id để không phụ thuộc payment_code có thể null ở dữ liệu cũ.
+        Invoice invoice = invoiceRepository.findByIdForUpdate(existing.get().getId())
             .orElse(existing.get());
         if (!invoice.canAddCharges()) {
             return false;

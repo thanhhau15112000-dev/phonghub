@@ -25,4 +25,11 @@ public interface InvoiceUseCase {
 
     /** ADMIN / STAFF được phân công / OWNER của nhà trọ phát hành kỳ thanh toán tiền thuê. */
     Invoice issueMonthlyInvoice(UUID contractId, YearMonth period);
+
+    /**
+     * Hủy hóa đơn tiền thuê (#89): chuyển VOIDED, không xóa cứng; sau đó phát hành lại được kỳ đó. Cùng quyền với phát
+     * hành. Bắt buộc có lý do (400). Từ chối (409) khi hóa đơn đã có tiền, đã trả/đã hủy, đã gộp vào hóa đơn khác, đang
+     * gộp phí sửa chữa, hoặc là phí sửa chữa (dùng "miễn phí" ở phiếu bảo trì).
+     */
+    Invoice voidInvoice(UUID invoiceId, String reason);
 }
