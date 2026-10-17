@@ -33,6 +33,15 @@
                     onclick="openRejectModal(this.getAttribute('data-id'), this.getAttribute('data-name'))">
                 Từ chối
             </button>
+            <button th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                    type="button" id="editPropertyBtn" class="btn btn-sm btn-secondary"
+                    onclick="document.getElementById('editPropertyModal').showModal()">Sửa thông tin</button>
+            <a th:if="${currentUser != null and currentUser.role().name() != 'TENANT' and currentUser.role().name() != 'TECHNICIAN'}"
+               th:href="@{'/properties/' + ${property.id()} + '/tenants'}" class="btn btn-sm btn-secondary">Người thuê</a>
+            <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+               th:href="@{'/properties/' + ${property.id()} + '/staff'}" class="btn btn-sm btn-secondary">Nhân sự</a>
+            <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+               th:href="@{'/properties/' + ${property.id()} + '/late-fee'}" class="btn btn-sm btn-secondary">Phạt trả trễ</a>
             <a th:href="@{/properties}" class="btn btn-sm">&larr; Quay lại danh sách nhà trọ</a>
         </div>
     </div>
@@ -115,8 +124,39 @@
     <div class="card">
         <h2>Danh sách phòng thuộc nhà trọ</h2>
 
-        <div th:if="${#lists.isEmpty(rooms)}" class="empty-state">
+        <form th:action="@{'/properties/' + ${property.id()}}" method="get" id="roomFilterForm"
+              style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 16px;">
+            <div class="form-group" style="min-width: 150px; margin: 0;">
+                <label class="form-label" for="filterStatus">Trạng thái</label>
+                <select id="filterStatus" name="status" class="form-control">
+                    <option value="">Tất cả</option>
+                    <option th:each="s : ${roomStatuses}" th:value="${s.name()}" th:text="${uiText.roomStatus(s)}"
+                            th:selected="${s.name() == filterStatus}">Trống</option>
+                </select>
+            </div>
+            <div class="form-group" style="min-width: 140px; margin: 0;">
+                <label class="form-label" for="filterMinPrice">Giá từ (đ)</label>
+                <input id="filterMinPrice" type="number" name="minPrice" min="0" step="1000" class="form-control" th:value="${filterMinPrice}">
+            </div>
+            <div class="form-group" style="min-width: 140px; margin: 0;">
+                <label class="form-label" for="filterMaxPrice">Giá đến (đ)</label>
+                <input id="filterMaxPrice" type="number" name="maxPrice" min="0" step="1000" class="form-control" th:value="${filterMaxPrice}">
+            </div>
+            <div class="form-group" style="min-width: 90px; margin: 0;">
+                <label class="form-label" for="filterFloor">Tầng</label>
+                <input id="filterFloor" type="number" name="floor" class="form-control" th:value="${filterFloor}">
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary btn-sm">Lọc</button>
+                <a th:if="${roomFilterActive}" th:href="@{'/properties/' + ${property.id()}}" class="btn btn-sm" style="text-decoration: none;">Xóa lọc</a>
+            </div>
+        </form>
+
+        <div th:if="${#lists.isEmpty(rooms) and !roomFilterActive}" class="empty-state">
             <p>Nhà trọ này chưa có phòng nào.</p>
+        </div>
+        <div th:if="${#lists.isEmpty(rooms) and roomFilterActive}" class="empty-state">
+            <p>Không có phòng nào khớp bộ lọc.</p>
         </div>
 
         <table th:if="${!#lists.isEmpty(rooms)}" class="data-table">
@@ -164,6 +204,16 @@
                 </tr>
             </tbody>
         </table>
+
+        <div th:if="${roomPage.totalPages() > 1}" style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px;">
+            <a th:if="${roomPage.hasPrevious()}" class="btn btn-sm" style="text-decoration: none;"
+               th:href="@{'/properties/' + ${property.id()}(status=${filterStatus}, minPrice=${filterMinPrice}, maxPrice=${filterMaxPrice}, floor=${filterFloor}, page=${roomPage.page() - 1})}">&larr; Trang trước</a>
+            <span th:unless="${roomPage.hasPrevious()}"></span>
+            <span style="color: var(--text-secondary);"
+                  th:text="'Trang ' + ${roomPage.page() + 1} + '/' + ${roomPage.totalPages()} + ' · ' + ${roomPage.totalElements()} + ' phòng'">Trang 1/2</span>
+            <a th:if="${roomPage.hasNext()}" class="btn btn-sm" style="text-decoration: none;"
+               th:href="@{'/properties/' + ${property.id()}(status=${filterStatus}, minPrice=${filterMinPrice}, maxPrice=${filterMaxPrice}, floor=${filterFloor}, page=${roomPage.page() + 1})}">Trang sau &rarr;</a>
+        </div>
     </div>
 
     <!-- Dialog từ chối duyệt nhà trọ (Quản trị viên) -->
@@ -199,6 +249,36 @@
             modal.showModal();
         }
     </script>
+    <dialog th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            id="editPropertyModal" class="modal-dialog" style="max-width: 520px;">
+        <h3 style="margin-top: 0;">Sửa thông tin nhà trọ</h3>
+        <form th:action="@{'/properties/' + ${property.id()} + '/edit'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group">
+                <label class="form-label" for="editPropertyName">Tên nhà trọ *</label>
+                <input type="text" id="editPropertyName" name="name" class="form-control" th:value="${property.name()}" required maxlength="200">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="editPropertyAddress">Địa chỉ *</label>
+                <input type="text" id="editPropertyAddress" name="address" class="form-control" th:value="${property.address()}" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="editPropertyDescription">Mô tả</label>
+                <textarea id="editPropertyDescription" name="description" class="form-control" rows="3" th:text="${property.description()}"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="editPropertyRooms">Tổng số phòng</label>
+                <input type="number" id="editPropertyRooms" name="totalRooms" class="form-control" min="0" th:value="${property.totalRooms()}">
+            </div>
+            <p th:if="${currentUser.role().name() == 'OWNER'}" style="font-size: 12px; color: var(--text-secondary);">
+                Đổi tên hoặc địa chỉ sẽ đưa nhà trọ về trạng thái chờ duyệt; trong thời gian đó không tạo được phòng hoặc hợp đồng mới.
+            </p>
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('editPropertyModal').close()">Hủy</button>
+                <button type="submit" class="btn btn-sm btn-primary">Lưu</button>
+            </div>
+        </form>
+    </dialog>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>

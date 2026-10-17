@@ -143,7 +143,10 @@ public class AuthUiController {
         } catch (AccountDisabledException ex) {
             return loginError(request, model, username, "Tài khoản hiện không hoạt động.");
         } catch (IdentityProviderUnavailableException ex) {
-            return loginError(request, model, username, "Dịch vụ xác thực tạm thời không khả dụng. Vui lòng thử lại sau.");
+            String msg = (ex.getMessage() != null && ex.getMessage().contains("Quá nhiều yêu cầu"))
+                ? ex.getMessage()
+                : "Dịch vụ xác thực tạm thời không khả dụng. Vui lòng thử lại sau.";
+            return loginError(request, model, username, msg);
         } catch (IllegalStateException ex) {
             return loginError(request, model, username, "Không thể hoàn tất đăng nhập. Vui lòng thử lại sau.");
         } catch (DomainException ex) {
@@ -169,27 +172,24 @@ public class AuthUiController {
             return "auth/forgot-password";
         }
 
+        // Thông báo trung lập — KHÔNG tiết lộ tài khoản có tồn tại hay không (anti-enumeration)
+        final String NEUTRAL_SUCCESS =
+            "Nếu thông tin bạn nhập khớp với một tài khoản trong hệ thống, Quản trị viên sẽ được thông báo " +
+            "và liên hệ với bạn để cấp lại mật khẩu tạm thời.";
+
         Optional<User> userOpt = cleanIdentifier.contains("@")
             ? userRepository.findByEmail(cleanIdentifier.toLowerCase())
             : userRepository.findByUsername(cleanIdentifier.toLowerCase());
 
-        if (userOpt.isEmpty()) {
-            model.addAttribute("errorMessage", "Không tìm thấy tài khoản tương ứng với thông tin đã nhập.");
-            model.addAttribute("identifier", cleanIdentifier);
-            return "auth/forgot-password";
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            // ADMIN tự xử lý mật khẩu qua Supabase dashboard — không gửi notification
+            if (user.role() != UserRole.ADMIN) {
+                notificationUseCase.ifPresent(n -> n.requestPasswordReset(user));
+            }
         }
-
-        User user = userOpt.get();
-        String message;
-        if (user.role() == UserRole.ADMIN) {
-            message = "Tài khoản <strong>" + user.username() + "</strong> có vai trò Quản trị viên (ADMIN). Vui lòng sử dụng tài khoản Supabase Auth / Render Dashboard hoặc liên hệ chủ sở hữu hệ thống để thiết lập lại mật khẩu.";
-        } else {
-            notificationUseCase.ifPresent(n -> n.requestPasswordReset(user));
-            String roleText = UiText.INSTANCE.role(user.role());
-            message = "Đã gửi yêu cầu cấp lại mật khẩu cho tài khoản <strong>" + user.username() + "</strong> (" + roleText + ") tới <strong>Quản trị viên</strong>. Vui lòng liên hệ Quản trị viên để nhận mật khẩu tạm thời sau khi yêu cầu được xử lý.";
-        }
-
-        model.addAttribute("successMessage", message);
+        // Luôn trả về cùng một thông báo dù tài khoản có tồn tại hay không
+        model.addAttribute("successMessage", NEUTRAL_SUCCESS);
         return "auth/forgot-password";
     }
 
@@ -346,7 +346,7 @@ public class AuthUiController {
         }
         return new CurrentUser(
             userInfo.id(),
-            "",
+            userInfo.email() != null ? userInfo.email() : "",
             userInfo.fullName(),
             role,
             userInfo.mustChangePassword()

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Người thuê')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Người thuê</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">
+                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Số CCCD được che; xem đầy đủ ở trang giấy tờ (cần nhập lại mật khẩu).
+            </p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+            <a th:href="@{'/properties/' + ${property.id()} + '/tenants/new'}" class="btn btn-primary">Thêm người thuê</a>
+            <a th:href="@{'/properties/' + ${property.id()}}" class="btn">&larr; Quay lại nhà trọ</a>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <form th:action="@{'/properties/' + ${property.id()} + '/tenants'}" method="get" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <input type="text" name="q" th:value="${q}" class="form-control" style="max-width: 320px;"
+                   placeholder="Tìm theo tên, số điện thoại hoặc CCCD (đủ số)" autocomplete="off">
+            <label style="font-size: 13px;"><input type="checkbox" name="includeHidden" value="true" th:checked="${includeHidden}"> Hiện cả người đã ẩn</label>
+            <button type="submit" class="btn btn-secondary">Tìm</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <p th:if="${result.items().isEmpty()}" style="color: var(--text-secondary);">Không có người thuê nào.</p>
+        <table th:if="${!result.items().isEmpty()}" class="table">
+            <thead>
+                <tr><th>Họ tên</th><th>Số điện thoại</th><th>CCCD</th><th>Trạng thái</th><th>Thao tác</th></tr>
+            </thead>
+            <tbody>
+                <tr th:each="v : ${result.items()}">
+                    <td th:text="${v.tenant().fullName()}">Nguyễn Văn A</td>
+                    <td th:text="${v.tenant().phone()}">0901234567</td>
+                    <td th:text="${v.tenant().maskedIdentityCardNumber()}">****1111</td>
+                    <td>
+                        <span th:if="${v.hasActiveContract()}" class="badge">Đang thuê</span>
+                        <span th:if="${v.hidden()}" class="badge">Đã ẩn</span>
+                        <span th:if="${!v.hasActiveContract() and !v.hidden()}" style="color: var(--text-secondary);">—</span>
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <a th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${v.tenant().id()} + '/edit'}" class="btn btn-sm btn-secondary">Sửa</a>
+                            <a th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${v.tenant().id()} + '/documents'}" class="btn btn-sm btn-secondary">Giấy tờ</a>
+                            <form th:if="${!v.hidden() and !v.hasActiveContract()}"
+                                  th:action="@{'/properties/' + ${property.id()} + '/tenants/' + ${v.tenant().id()} + '/hide'}"
+                                  method="post" style="margin: 0;" onsubmit="return confirm('Ẩn người thuê này khỏi danh sách?');">
+                                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                <button type="submit" class="btn btn-sm btn-danger">Ẩn</button>
+                            </form>
+                            <form th:if="${v.hidden()}"
+                                  th:action="@{'/properties/' + ${property.id()} + '/tenants/' + ${v.tenant().id()} + '/restore'}"
+                                  method="post" style="margin: 0;">
+                                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                <button type="submit" class="btn btn-sm btn-primary">Khôi phục</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div th:if="${result.totalPages() > 1}" style="display: flex; gap: 8px; align-items: center; margin-top: 12px;">
+            <a th:if="${result.page() > 0}" class="btn btn-sm"
+               th:href="@{'/properties/' + ${property.id()} + '/tenants'(q=${q}, includeHidden=${includeHidden}, page=${result.page() - 1})}">&larr; Trước</a>
+            <span style="font-size: 13px;" th:text="'Trang ' + ${result.page() + 1} + ' / ' + ${result.totalPages()} + ' (' + ${result.total()} + ' người)'">Trang 1 / 2</span>
+            <a th:if="${result.page() + 1 < result.totalPages()}" class="btn btn-sm"
+               th:href="@{'/properties/' + ${property.id()} + '/tenants'(q=${q}, includeHidden=${includeHidden}, page=${result.page() + 1})}">Sau &rarr;</a>
+        </div>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

@@ -9,8 +9,15 @@ public record StaffPropertyAssignment(
     UUID propertyId,
     boolean canCollectPayment,
     boolean canManageContracts,
+    boolean canViewDocuments,
     Instant assignedAt
 ) {
+    /** Tương thích: quyền xem giấy tờ đi theo quyền hợp đồng (dùng cho dữ liệu mẫu và code cũ). */
+    public StaffPropertyAssignment(UUID id, UUID staffUserId, UUID propertyId, boolean canCollectPayment,
+                                   boolean canManageContracts, Instant assignedAt) {
+        this(id, staffUserId, propertyId, canCollectPayment, canManageContracts, canManageContracts, assignedAt);
+    }
+
     public StaffPropertyAssignment {
         if (id == null) {
             throw new IllegalArgumentException("Assignment id cannot be null");

@@ -57,6 +57,24 @@ public class MaintenanceApiController {
         return ResponseEntity.ok(MaintenanceTicketResponse.from(ticket));
     }
 
+    @PostMapping("/maintenance/{id}/assign")
+    public ResponseEntity<MaintenanceTicketResponse> assignTicket(
+        @PathVariable UUID id,
+        @Valid @RequestBody AssignTicketRequest request
+    ) {
+        return ResponseEntity.ok(MaintenanceTicketResponse.from(
+            maintenanceUseCase.assignTechnician(id, request.technicianId())));
+    }
+
+    @PostMapping("/maintenance/{id}/reject")
+    public ResponseEntity<MaintenanceTicketResponse> rejectTicket(
+        @PathVariable UUID id,
+        @Valid @RequestBody RejectTicketRequest request
+    ) {
+        return ResponseEntity.ok(MaintenanceTicketResponse.from(
+            maintenanceUseCase.rejectTicket(id, request.reason())));
+    }
+
     @PostMapping("/maintenance/{id}/resolve")
     public ResponseEntity<MaintenanceTicketResponse> resolveTicket(
         @PathVariable UUID id,
@@ -69,6 +87,44 @@ public class MaintenanceApiController {
             request.releaseRoomToAvailable()
         ));
         return ResponseEntity.ok(MaintenanceTicketResponse.from(ticket));
+    }
+
+    /** Báo giá trước khi sửa (#83): kỹ thuật viên được giao, owner/staff quản lý nhà trọ hoặc admin. */
+    @PostMapping("/maintenance/{id}/quote")
+    public ResponseEntity<QuoteResponse> quoteTicket(@PathVariable UUID id, @Valid @RequestBody QuoteRequest request) {
+        MaintenanceTicket ticket = maintenanceUseCase.quoteTicket(id, request.amount(), request.note());
+        return ResponseEntity.ok(QuoteResponse.from(ticket.getId(), ticket.getQuote()));
+    }
+
+    /** Báo giá người xem được thấy; 204 khi chưa có hoặc người thuê không phải bên chịu phí. */
+    @GetMapping("/maintenance/{id}/quote")
+    public ResponseEntity<QuoteResponse> getQuote(@PathVariable UUID id) {
+        MaintenanceTicket.Quote quote = maintenanceUseCase.visibleQuote(id);
+        return quote == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(QuoteResponse.from(id, quote));
+    }
+
+    /** Người thuê xác nhận đã sửa đạt. */
+    @PostMapping("/maintenance/{id}/verify")
+    public ResponseEntity<MaintenanceTicketResponse> verifyTicket(@PathVariable UUID id) {
+        return ResponseEntity.ok(MaintenanceTicketResponse.from(maintenanceUseCase.verifyTicket(id)));
+    }
+
+    /** Người thuê phản hồi chưa đạt, phiếu mở lại để sửa tiếp. */
+    @PostMapping("/maintenance/{id}/reopen")
+    public ResponseEntity<MaintenanceTicketResponse> reopenTicket(
+        @PathVariable UUID id,
+        @Valid @RequestBody ReopenTicketRequest request
+    ) {
+        return ResponseEntity.ok(MaintenanceTicketResponse.from(maintenanceUseCase.reopenTicket(id, request.feedback())));
+    }
+
+    /** Timeline trạng thái của phiếu: ai chuyển trạng thái nào, lúc nào. */
+    @GetMapping("/maintenance/{id}/timeline")
+    public ResponseEntity<List<TimelineEntry>> timeline(@PathVariable UUID id) {
+        return ResponseEntity.ok(maintenanceUseCase.getTimeline(id).stream()
+            .map(event -> new TimelineEntry(event.fromStatus() == null ? null : event.fromStatus().name(),
+                event.toStatus().name(), event.actorId(), event.note(), event.at()))
+            .toList());
     }
 
     @GetMapping("/maintenance/{id}")
@@ -91,6 +147,28 @@ public class MaintenanceApiController {
 
         boolean setRoomMaintenance
     ) {}
+
+    public record TimelineEntry(String from, String to, UUID actorId, String note, java.time.Instant at) {}
+
+    public record AssignTicketRequest(@NotNull(message = "Technician ID is required") UUID technicianId) {}
+
+    public record RejectTicketRequest(@NotBlank(message = "Reason is required") String reason) {}
+
+    public record QuoteRequest(
+        @NotNull(message = "Amount is required")
+        @DecimalMin(value = "0.0", message = "Amount cannot be negative")
+        BigDecimal amount,
+
+        String note
+    ) {}
+
+    public record QuoteResponse(UUID ticketId, BigDecimal amount, String note, UUID quotedBy, java.time.Instant quotedAt) {
+        static QuoteResponse from(UUID ticketId, MaintenanceTicket.Quote quote) {
+            return new QuoteResponse(ticketId, quote.amount(), quote.note(), quote.quotedBy(), quote.quotedAt());
+        }
+    }
+
+    public record ReopenTicketRequest(@NotBlank(message = "Feedback is required") String feedback) {}
 
     public record ResolveTicketRequest(
         @NotBlank(message = "Resolution notes are required")

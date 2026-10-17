@@ -54,6 +54,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 @ActiveProfiles("prod")
 @TestPropertySource(properties = {
+    "phonghub.rate-limit.enabled=false",
     "supabase.url=https://mock.supabase.co",
     "supabase.anon-key=mock-anon-key",
     "supabase.service-role-key=mock-service-role-key",
@@ -62,7 +63,10 @@ import org.springframework.test.web.servlet.MockMvc;
     "supabase.jwt-audience=authenticated",
     "spring.datasource.url=jdbc:postgresql://localhost:5432/mock",
     "spring.datasource.username=mock",
-    "spring.datasource.password=mock"
+    "spring.datasource.password=mock",
+    "phonghub.security.tenant-data.key-id=v1",
+    "phonghub.security.tenant-data.encryption-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "phonghub.security.tenant-data.hmac-key=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="
 })
 class ProductionAuthSecurityTest {
 
@@ -93,6 +97,16 @@ class ProductionAuthSecurityTest {
     @MockitoBean
     private com.phonghub.application.port.in.SepayWebhookUseCase sepayWebhookUseCase;
 
+    // Thông báo lưu trên Postgres (#86); header của mọi trang đọc số thông báo nên cần thay DB bằng mock.
+    @MockitoBean
+    private com.phonghub.application.port.out.NotificationRepositoryPort notificationRepository;
+
+    @MockitoBean
+    private com.phonghub.application.port.in.ChatRoomUseCase chatRoomUseCase;
+
+    @MockitoBean
+    private com.phonghub.application.port.in.ChatMessageUseCase chatMessageUseCase;
+
     @Test
     void healthEndpointIsPermittedWithoutAuthenticationInProd() throws Exception {
         mockMvc.perform(get("/health"))
@@ -114,7 +128,7 @@ class ProductionAuthSecurityTest {
             "mock-refresh-token",
             "Bearer",
             3600L,
-            new AuthTokenResponse.UserInfo(userId, "admin", "Admin User", UserRole.ADMIN, false)
+            new AuthTokenResponse.UserInfo(userId, "admin", "admin@example.com", "Admin User", UserRole.ADMIN, false)
         ));
 
         mockMvc.perform(post("/login")
@@ -233,7 +247,7 @@ class ProductionAuthSecurityTest {
             "temporary-refresh-token",
             "Bearer",
             3600L,
-            new AuthTokenResponse.UserInfo(userId, "temporary", "Temporary User", UserRole.TENANT, true)
+            new AuthTokenResponse.UserInfo(userId, "temporary", "temporary@example.com", "Temporary User", UserRole.TENANT, true)
         ));
         when(userRepository.findById(userId)).thenReturn(Optional.of(new User(
             userId, "temporary", "temporary@phonghub.local", "Temporary User", "0900000001",
@@ -514,7 +528,8 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
-    void forgotPasswordWithUnknownUserReturnsErrorMessage() throws Exception {
+    void forgotPasswordWithUnknownUserReturnsNeutralSuccessMessage() throws Exception {
+        // Anti-enumeration: không tiết lộ tài khoản có tồn tại hay không — luôn trả successMessage trung lập
         when(userRepository.findByUsername("unknown_user")).thenReturn(Optional.empty());
         when(userRepository.findByEmail("unknown_user")).thenReturn(Optional.empty());
 
@@ -522,8 +537,8 @@ class ProductionAuthSecurityTest {
                 .with(csrf())
                 .param("identifier", "unknown_user"))
             .andExpect(status().isOk())
-            .andExpect(model().attribute("errorMessage", "Không tìm thấy tài khoản tương ứng với thông tin đã nhập."))
-            .andExpect(model().attribute("identifier", "unknown_user"));
+            .andExpect(model().attributeExists("successMessage"))
+            .andExpect(model().attributeDoesNotExist("errorMessage"));
     }
 
     @Test
@@ -593,6 +608,136 @@ class ProductionAuthSecurityTest {
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/account/profile"))
             .andExpect(flash().attribute("errorMessage", "Số điện thoại không hợp lệ (phải gồm 10 chữ số bắt đầu bằng 0)"));
+    }
+
+    @Test
+    void fileStorageEndpointsRequireBearerTokenInProd() throws Exception {
+        String files = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/files";
+        mockMvc.perform(get(files + "/signed-url").param("objectKey", "x"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(delete(files).param("objectKey", "x"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void notificationCenterRequiresAuthenticationInProd() throws Exception {
+        String id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+        mockMvc.perform(get("/api/notifications")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/notifications/" + id + "/read")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/notifications/read-all")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/notifications"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void roomAssetEndpointsRequireBearerTokenInProd() throws Exception {
+        String roomId = "10101010-1010-1010-1010-101010101010";
+        mockMvc.perform(get("/api/rooms/" + roomId + "/assets")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/assets/" + roomId)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/assets/" + roomId + "/qr")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void maintenanceQuoteAndConfirmationRequireBearerTokenInProd() throws Exception {
+        String ticket = "/api/maintenance/dddddddd-dddd-dddd-dddd-dddddddddddd";
+        mockMvc.perform(post(ticket + "/quote").contentType(MediaType.APPLICATION_JSON).content("{\"amount\": 1}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(ticket + "/quote")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post(ticket + "/verify")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post(ticket + "/reopen").contentType(MediaType.APPLICATION_JSON).content("{\"feedback\": \"x\"}"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void contractHandoverAndInvoiceEndpointsRequireAuthenticationInProd() throws Exception {
+        String contract = "/api/contracts/cccccccc-cccc-cccc-cccc-cccccccccccc";
+        mockMvc.perform(get("/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/contracts"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/contracts").contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(contract)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/contracts/my-active")).andExpect(status().isUnauthorized());
+        for (String action : new String[] {"/activate", "/terminate", "/handover/send", "/handover/confirm",
+            "/handover/approve", "/check-out/approve"}) {
+            mockMvc.perform(post(contract + action)).andExpect(status().isUnauthorized());
+        }
+        mockMvc.perform(post(contract + "/check-in").contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(contract + "/handover")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/payments/transactions")).andExpect(status().isUnauthorized());
+
+        String invoice = "/invoices/eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+        mockMvc.perform(get(invoice + "/pay"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+        mockMvc.perform(post("/contracts/cccccccc-cccc-cccc-cccc-cccccccccccc/invoices").with(csrf())
+                .param("period", "2026-10"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void statisticsEndpointsRequireBearerTokenInProd() throws Exception {
+        for (String path : new String[] {"owner/summary", "owner/revenue", "owner/properties", "admin/overview",
+            "admin/pending-properties", "admin/accounts"}) {
+            mockMvc.perform(get("/api/stats/" + path)).andExpect(status().isUnauthorized());
+            mockMvc.perform(get("/api/stats/" + path)
+                    .header("X-Demo-User-Id", "11111111-1111-1111-1111-111111111111"))
+                .andExpect(status().isUnauthorized());
+        }
+        mockMvc.perform(get("/api/stats/owner/summary").param("propertyId", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+                .param("from", "2026-01").param("to", "2026-06"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void roomFilterEndpointRequiresBearerTokenInProd() throws Exception {
+        String rooms = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/rooms";
+        mockMvc.perform(get(rooms)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get(rooms).param("status", "AVAILABLE").param("minPrice", "1000000")
+                .param("page", "0").param("size", "10"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(rooms).param("status", "AVAILABLE")
+                .header("X-Demo-User-Id", "11111111-1111-1111-1111-111111111111"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void reconciliationAndReceiptRequireAuthenticationInProd() throws Exception {
+        String invoiceId = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+        mockMvc.perform(get("/api/v1/payments/reconciliation")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/payments/reconciliation").param("status", "MATCHED")
+                .header("X-Demo-User-Id", "11111111-1111-1111-1111-111111111111"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/invoices/" + invoiceId + "/receipt")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/payments")).andExpect(status().is3xxRedirection()).andExpect(redirectedUrl("/login"));
+        mockMvc.perform(get("/invoices/" + invoiceId + "/receipt"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void exportsRequireAuthenticationInProd() throws Exception {
+        for (String dataset : new String[] {"invoices", "debts", "contracts"}) {
+            mockMvc.perform(get("/api/exports/" + dataset)).andExpect(status().isUnauthorized());
+        }
+        mockMvc.perform(get("/api/exports/contracts").header("X-Demo-User-Id", "11111111-1111-1111-1111-111111111111"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/exports")).andExpect(status().is3xxRedirection()).andExpect(redirectedUrl("/login"));
+        mockMvc.perform(get("/exports/download").param("dataset", "contracts"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void tenantDocumentEndpointsRequireBearerTokenInProd() throws Exception {
+        String base = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/tenants/44444444-0000-0000-0000-444444444441/documents";
+        mockMvc.perform(get(base)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get(base + "/GPLX")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post(base + "/GPLX/reveal").contentType("application/json").content("{\"password\":\"x\"}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(delete(base + "/GPLX")).andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -796,7 +941,7 @@ class ProductionAuthSecurityTest {
             "mock-refresh-token",
             "Bearer",
             3600L,
-            new AuthTokenResponse.UserInfo(userId, "tenant1", "Nguyen Van A", UserRole.TENANT, false)
+            new AuthTokenResponse.UserInfo(userId, "tenant1", "tenant1@example.com", "Nguyen Van A", UserRole.TENANT, false)
         ));
 
         mockMvc.perform(post("/api/auth/login")
@@ -1117,6 +1262,28 @@ class ProductionAuthSecurityTest {
             .andExpect(jsonPath("$.success").value(true));
     }
 
+    @Test
+    void unauthenticatedRequestCannotAccessChatApiInProd() throws Exception {
+        mockMvc.perform(get("/api/chat/rooms"))
+            .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/chat/contacts"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void browserSessionCanAccessChatApiInProd() throws Exception {
+        MockHttpSession session = loginAsAdmin();
+        when(chatRoomUseCase.getRoomsForUser(any())).thenReturn(List.of());
+        when(chatRoomUseCase.getAvailableContacts(any())).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/chat/rooms").session(session))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/chat/contacts").session(session))
+            .andExpect(status().isOk());
+    }
+
     private MockHttpSession loginAsAdmin() throws Exception {
         UUID adminId = UUID.randomUUID();
         when(authUseCase.login("admin", "secret123")).thenReturn(new AuthTokenResponse(
@@ -1124,7 +1291,7 @@ class ProductionAuthSecurityTest {
             "admin-refresh-token-" + adminId,
             "Bearer",
             3600L,
-            new AuthTokenResponse.UserInfo(adminId, "admin", "Admin User", UserRole.ADMIN, false)
+            new AuthTokenResponse.UserInfo(adminId, "admin", "admin@example.com", "Admin User", UserRole.ADMIN, false)
         ));
         when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
             adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",

@@ -923,7 +923,7 @@ class PhongHubApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("STAFF updating tenant information returns 403 Forbidden")
+    @DisplayName("STAFF not assigned to the tenant's property cannot update tenant information (403)")
     void testStaffUpdatesTenantForbidden() throws Exception {
         TenantApiController.UpdateTenantRequest req = new TenantApiController.UpdateTenantRequest(
             "Nguyễn Văn A (Hack)",
@@ -934,7 +934,7 @@ class PhongHubApiIntegrationTest {
         );
 
         mockMvc.perform(put("/api/tenants/" + DataSeeder.TENANT_RECORD_ID)
-                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString())
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_2_ID.toString())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isForbidden())

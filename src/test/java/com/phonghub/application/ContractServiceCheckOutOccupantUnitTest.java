@@ -172,8 +172,10 @@ class ContractServiceCheckOutOccupantUnitTest {
         assertEquals(checkOutDate, savedOccupant.checkOutDate());
 
         // Verify audit event
-        assertEquals(1, recordedEvents.size());
-        AuditPort.AuditEvent event = recordedEvents.getFirst();
+        List<AuditPort.AuditEvent> checkoutEvents = recordedEvents.stream()
+            .filter(e -> "OCCUPANT_CHECKOUT".equals(e.action())).toList();
+        assertEquals(1, checkoutEvents.size());
+        AuditPort.AuditEvent event = checkoutEvents.getFirst();
         assertEquals("OCCUPANT_CHECKOUT", event.action());
         assertEquals(LocalDemoAuthenticationAdapter.OWNER_1_ID, event.actorId());
         assertEquals("CONTRACT_OCCUPANT", event.targetType());

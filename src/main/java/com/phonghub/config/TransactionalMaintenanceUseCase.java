@@ -2,6 +2,7 @@ package com.phonghub.config;
 
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.domain.model.MaintenanceTicket;
+import com.phonghub.domain.model.MaintenanceTicketEvent;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,9 +28,51 @@ public class TransactionalMaintenanceUseCase implements MaintenanceUseCase {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<MaintenanceTicketEvent> getTimeline(UUID ticketId) {
+        return delegate.getTimeline(ticketId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket assignTechnician(UUID ticketId, UUID technicianId) {
+        return delegate.assignTechnician(ticketId, technicianId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket rejectTicket(UUID ticketId, String reason) {
+        return delegate.rejectTicket(ticketId, reason);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public MaintenanceTicket resolveTicket(ResolveMaintenanceTicketCommand command) {
         return delegate.resolveTicket(command);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket quoteTicket(UUID ticketId, java.math.BigDecimal amount, String note) {
+        return delegate.quoteTicket(ticketId, amount, note);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public MaintenanceTicket.Quote visibleQuote(UUID ticketId) {
+        return delegate.visibleQuote(ticketId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket verifyTicket(UUID ticketId) {
+        return delegate.verifyTicket(ticketId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket reopenTicket(UUID ticketId, String feedback) {
+        return delegate.reopenTicket(ticketId, feedback);
     }
 
     @Override

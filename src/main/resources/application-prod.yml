@@ -1,6 +1,15 @@
 phonghub:
   demo:
     enabled: false
+  rate-limit:
+    # Prod chạy sau reverse proxy (Render): IP khách lấy từ X-Forwarded-For do proxy thêm vào.
+    trust-forwarded-for: ${RATE_LIMIT_TRUST_FORWARDED_FOR:true}
+    trusted-proxy-hops: ${RATE_LIMIT_TRUSTED_PROXY_HOPS:1}
+  security:
+    tenant-data:
+      key-id: ${TENANT_DATA_KEY_ID}
+      encryption-key: ${TENANT_DATA_ENCRYPTION_KEY}
+      hmac-key: ${TENANT_DATA_HMAC_KEY}
 
 spring:
   datasource:

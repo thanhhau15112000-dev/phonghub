@@ -23,7 +23,7 @@ public class Invoice {
     private final int month;
     private final int year;
     private final BigDecimal rentAmount;
-    private final BigDecimal totalAmount;
+    private BigDecimal totalAmount;
     private BigDecimal paidAmount;
     private final LocalDate dueDate;
     private InvoiceStatus status;
@@ -35,6 +35,7 @@ public class Invoice {
     private Instant paidAt;
     private final Instant createdAt;
     private Instant updatedAt;
+    private long version;
 
     public Invoice(
         UUID id,
@@ -140,8 +141,9 @@ public class Invoice {
         if (contract == null || period == null) {
             throw new IllegalArgumentException("Contract and period are required");
         }
-        if (!contract.isActive()) {
-            throw new DomainException("Chỉ có thể tạo kỳ thanh toán cho hợp đồng đang hiệu lực.");
+        // Hợp đồng đã hết hạn mà chưa trả phòng (#87) vẫn lập được hóa đơn các kỳ trong thời hạn hợp đồng.
+        if (!contract.isResiding()) {
+            throw new DomainException("Chỉ có thể tạo kỳ thanh toán cho hợp đồng đang hiệu lực hoặc chưa trả phòng.");
         }
         YearMonth firstPeriod = YearMonth.from(contract.getStartDate());
         YearMonth lastPeriod = YearMonth.from(contract.getEndDate());
@@ -202,6 +204,83 @@ public class Invoice {
         return invoice;
     }
 
+    /**
+     * Còn thêm được dòng điện/nước/dịch vụ: hóa đơn tiền thuê chưa ai trả đồng nào (tổng tiền chưa bị người thuê
+     * chuyển khoản theo), chưa gộp, chưa hủy.
+     */
+    public boolean canAddCharges() {
+        return type == InvoiceType.RENT
+            && consolidatedIntoInvoiceId == null
+            && paidAmount.signum() == 0
+            && (status == InvoiceStatus.ISSUED || status == InvoiceStatus.OVERDUE);
+    }
+
+    /** Đã có dòng tính từ chỉ số {@code readingId} theo đơn giá {@code rateId}. */
+    public boolean hasCharge(UUID readingId, UUID rateId) {
+        return items.stream().anyMatch(item -> rateId.equals(item.rateId())
+            && java.util.Objects.equals(readingId, item.readingId()));
+    }
+
+    /** Tổng tiền điện, nước, dịch vụ (các dòng tính theo đơn giá). */
+    public BigDecimal utilityAmount() {
+        return items.stream().filter(InvoiceItem::isUtilityCharge).map(InvoiceItem::totalAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Thêm các dòng điện/nước/dịch vụ và cộng vào tổng tiền. Dòng đã có (cùng chỉ số, cùng đơn giá) bị bỏ qua nên
+     * gọi lặp lại không tính tiền hai lần. Trả về số dòng thực sự được thêm.
+     */
+    public int addCharges(List<InvoiceItem> charges) {
+        List<InvoiceItem> fresh = charges.stream().filter(InvoiceItem::isUtilityCharge)
+            .filter(item -> !hasCharge(item.readingId(), item.rateId())).toList();
+        if (fresh.isEmpty()) {
+            return 0;
+        }
+        if (!canAddCharges()) {
+            throw new DomainException("Hóa đơn đã có thanh toán hoặc đã đóng, không thể thêm khoản mới.");
+        }
+        for (InvoiceItem item : fresh) {
+            items.add(item);
+            totalAmount = totalAmount.add(item.totalAmount());
+        }
+        this.updatedAt = Instant.now();
+        return fresh.size();
+    }
+
+    /** Dòng phạt trả trễ hiện có (tối đa một dòng). */
+    public java.util.Optional<InvoiceItem> lateFeeItem() {
+        return items.stream().filter(InvoiceItem::isLateFee).findFirst();
+    }
+
+    /** Tiền hóa đơn chưa tính phạt trả trễ; phạt theo phần trăm được tính trên số này. */
+    public BigDecimal principalAmount() {
+        return totalAmount.subtract(lateFeeItem().map(InvoiceItem::totalAmount).orElse(BigDecimal.ZERO));
+    }
+
+    /**
+     * Đặt dòng phạt trả trễ bằng đúng {@code fee} (thay chứ không cộng dồn nên gọi lặp lại cho cùng số tiền không
+     * đổi gì). Chỉ áp dụng cho hóa đơn tiền thuê còn phải thanh toán; không bao giờ xóa phạt đã tính.
+     * Trả về true nếu hóa đơn thực sự thay đổi.
+     */
+    public boolean applyLateFee(BigDecimal fee) {
+        if (fee == null || fee.signum() <= 0 || type != InvoiceType.RENT || !isPayable()) {
+            return false;
+        }
+        java.util.Optional<InvoiceItem> existing = lateFeeItem();
+        if (existing.isPresent() && existing.get().totalAmount().compareTo(fee) == 0) {
+            return false;
+        }
+        existing.ifPresent(item -> {
+            items.remove(item);
+            totalAmount = totalAmount.subtract(item.totalAmount());
+        });
+        items.add(InvoiceItem.lateFee(fee));
+        totalAmount = totalAmount.add(fee);
+        this.updatedAt = Instant.now();
+        return true;
+    }
+
     /** Khoản phí sửa chữa chưa trả đồng nào và chưa được gộp: đủ điều kiện gộp vào hóa đơn tháng. */
     public boolean isRollableFee() {
         return type == InvoiceType.MAINTENANCE
@@ -238,8 +317,8 @@ public class Invoice {
         if (contract == null || ticketId == null || today == null) {
             throw new IllegalArgumentException("Contract, ticket and date are required");
         }
-        if (!contract.isActive()) {
-            throw new DomainException("Chỉ có thể tạo khoản phí cho hợp đồng đang hiệu lực.");
+        if (!contract.isResiding()) {
+            throw new DomainException("Chỉ có thể tạo khoản phí cho hợp đồng đang hiệu lực hoặc chưa trả phòng.");
         }
         if (amount == null || amount.signum() <= 0) {
             throw new IllegalArgumentException("Fee amount must be greater than zero");
@@ -297,6 +376,9 @@ public class Invoice {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Payment amount must be greater than zero");
         }
+        if (amount.compareTo(remainingAmount()) > 0) {
+            throw new DomainException("Số tiền vượt quá số còn nợ của hóa đơn; phần dư phải được tách ra trước khi ghi nhận.");
+        }
         Instant at = receivedAt != null ? receivedAt : Instant.now();
         this.paidAmount = this.paidAmount.add(amount);
         if (this.paidAmount.compareTo(totalAmount) >= 0) {
@@ -349,4 +431,13 @@ public class Invoice {
     public Instant getPaidAt() { return paidAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+
+    /** Phiên bản dùng cho khóa lạc quan; do tầng lưu trữ gán sau khi đọc/ghi. */
+    public long getVersion() {
+        return version;
+    }
+
+    public void restoreVersion(long version) {
+        this.version = version;
+    }
 }

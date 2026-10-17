@@ -128,8 +128,10 @@ class AuthLoginIdentityAndNotificationTest {
             .andExpect(content().string(containsString("Người thuê")))
             // Should not show Admin-only "Tài khoản" link
             .andExpect(content().string(not(containsString("href=\"/admin/users\""))))
-            // Should not show Admin notification bell
-            .andExpect(content().string(not(containsString("id=\"notifBellBtn\""))));
+            // Should not show Admin system notification bell, only the personal one (#86)
+            .andExpect(content().string(not(containsString("title=\"Thông báo hệ thống\""))))
+            .andExpect(content().string(not(containsString("href=\"/admin/notifications\""))))
+            .andExpect(content().string(containsString("title=\"Thông báo của bạn\"")));
     }
 
     @Test
@@ -141,7 +143,7 @@ class AuthLoginIdentityAndNotificationTest {
                 .with(csrf())
                 .param("identifier", "tenant1"))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Đã gửi yêu cầu cấp lại mật khẩu cho tài khoản <strong>tenant1</strong>")));
+            .andExpect(content().string(containsString("Nếu thông tin bạn nhập khớp với một tài khoản trong hệ thống")));
 
         assertEquals(1, notificationUseCase.countUnreadAdminNotifications());
         List<Notification> list = notificationRepository.findAll();

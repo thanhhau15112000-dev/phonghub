@@ -24,6 +24,7 @@ public class Contract {
     private final List<ContractOccupant> occupants;
     private final Instant createdAt;
     private Instant updatedAt;
+    private long version;
 
     public Contract(
         UUID id,
@@ -211,10 +212,11 @@ public class Contract {
         this.updatedAt = Instant.now();
     }
 
+    /** Kết thúc hợp đồng (trả phòng/chấm dứt); hợp đồng đã hết hạn nhưng chưa trả phòng cũng kết thúc qua đây. */
     public void terminate() {
-        if (this.status != ContractStatus.ACTIVE) {
+        if (!isResiding()) {
             throw new DomainException(String.format(
-                "Contract %s cannot be terminated because it is in status %s (must be ACTIVE)",
+                "Contract %s cannot be terminated because it is in status %s (must be ACTIVE or EXPIRED)",
                 id, status
             ));
         }
@@ -235,6 +237,24 @@ public class Contract {
 
     public boolean isActive() {
         return this.status == ContractStatus.ACTIVE;
+    }
+
+    /**
+     * Người thuê còn ở phòng theo hợp đồng này: đang hiệu lực, hoặc đã hết hạn (#87) nhưng chưa check-out. Hết hạn
+     * không tự trả phòng — phòng chỉ trống khi check-out được duyệt và hợp đồng chuyển TERMINATED.
+     */
+    public boolean isResiding() {
+        return this.status == ContractStatus.ACTIVE || this.status == ContractStatus.EXPIRED;
+    }
+
+    /** Chưa kết thúc: nháp hoặc người thuê còn ở. Hồ sơ tenant chưa bị khóa/ẩn khi còn hợp đồng như vậy. */
+    public boolean isOpen() {
+        return this.status == ContractStatus.DRAFT || isResiding();
+    }
+
+    /** Hợp đồng đang hiệu lực đã qua ngày kết thúc (ngày kết thúc vẫn còn hiệu lực trọn ngày). */
+    public boolean isPastEndDate(LocalDate today) {
+        return isActive() && endDate != null && endDate.isBefore(today);
     }
 
     public UUID getId() {
@@ -300,5 +320,14 @@ public class Contract {
     @Override
     public int hashCode() {
         return Objects.hash(id);
+    }
+
+    /** Phiên bản dùng cho khóa lạc quan; do tầng lưu trữ gán sau khi đọc/ghi. */
+    public long getVersion() {
+        return version;
+    }
+
+    public void restoreVersion(long version) {
+        this.version = version;
     }
 }

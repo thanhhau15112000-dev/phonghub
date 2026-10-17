@@ -51,7 +51,13 @@ public class ProductionSecurityConfig {
         http
             .securityMatcher("/api/**")
             .csrf(csrf -> csrf.disable())
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.NEVER))
+            .securityContext(securityContext -> securityContext
+                .securityContextRepository(new org.springframework.security.web.context.DelegatingSecurityContextRepository(
+                    new org.springframework.security.web.context.RequestAttributeSecurityContextRepository(),
+                    new org.springframework.security.web.context.HttpSessionSecurityContextRepository()
+                ))
+            )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                     "/api/auth/login",

@@ -2,6 +2,7 @@ package com.phonghub.adapter.in.web;
 
 import com.phonghub.adapter.in.security.DomainAuthenticationToken;
 import com.phonghub.application.port.in.DemoActorPort;
+import com.phonghub.application.port.in.NotificationInboxUseCase;
 import com.phonghub.application.port.in.NotificationUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.domain.model.Notification;
@@ -24,18 +25,35 @@ public class GlobalUiAdvice {
     private final boolean demoEnabled;
     private final Optional<DemoActorPort> demoActorPort;
     private final Optional<NotificationUseCase> notificationUseCase;
+    private final Optional<NotificationInboxUseCase> notificationInbox;
     private final Optional<com.phonghub.application.port.in.ChatMessageUseCase> chatMessageUseCase;
 
     public GlobalUiAdvice(
         @Value("${phonghub.demo.enabled:true}") boolean demoEnabled,
         Optional<DemoActorPort> demoActorPort,
         Optional<NotificationUseCase> notificationUseCase,
+        Optional<NotificationInboxUseCase> notificationInbox,
         Optional<com.phonghub.application.port.in.ChatMessageUseCase> chatMessageUseCase
     ) {
         this.demoEnabled = demoEnabled;
         this.demoActorPort = demoActorPort;
         this.notificationUseCase = notificationUseCase;
+        this.notificationInbox = notificationInbox;
         this.chatMessageUseCase = chatMessageUseCase;
+    }
+
+    /**
+     * Chuông thông báo cá nhân trên header cho mọi vai trò trừ quản trị viên (quản trị viên giữ chuông việc hệ thống):
+     * 5 thông báo mới nhất và số chưa đọc (#86). Bỏ qua request API vì không render header.
+     */
+    @ModelAttribute("myNotifications")
+    public NotificationInboxUseCase.InboxPage myNotifications(HttpServletRequest request) {
+        CurrentUser user = currentUser(request);
+        if (user == null || user.role() == UserRole.ADMIN || notificationInbox.isEmpty()
+            || request.getRequestURI().startsWith(request.getContextPath() + "/api/")) {
+            return null;
+        }
+        return notificationInbox.get().inbox(false, 1, 5);
     }
 
     @ModelAttribute("demoEnabled")

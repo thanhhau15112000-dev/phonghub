@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Biên bản bàn giao')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1 th:text="${checkOut} ? 'Biên bản check-out (trả phòng)' : 'Biên bản check-in'">Biên bản check-in</h1>
+            <p th:unless="${checkOut}" style="color: var(--text-secondary); font-size: 13px;">
+                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Check-in thực hiện sau khi hợp đồng đã hiệu lực;
+                duyệt biên bản không thay đổi trạng thái hợp đồng hay phòng.
+            </p>
+            <p th:if="${checkOut}" style="color: var(--text-secondary); font-size: 13px;">
+                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Check-out cần biên bản check-in đã duyệt.
+                Chủ trọ chốt khoản khấu trừ khi duyệt; duyệt sẽ kết thúc hợp đồng và trả phòng
+                (phòng chuyển sang bảo trì nếu có tài sản hỏng hoặc mất).
+            </p>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <a th:if="${details != null}" th:href="@{'/contracts/' + ${contract.getId()} + '/handover-report'}" class="btn btn-secondary">Đối chiếu &amp; PDF</a>
+            <a th:href="@{'/contracts/' + ${contract.getId()}}" class="btn">&larr; Quay lại hợp đồng</a>
+        </div>
+    </div>
+
+    <!-- Chưa có biên bản -->
+    <div class="card" th:if="${details == null}">
+        <h2 th:text="${checkOut} ? 'Chưa có biên bản check-out' : 'Chưa có biên bản check-in'">Chưa có biên bản</h2>
+        <div th:if="${!canManage}" class="empty-state"><p>Chủ trọ hoặc nhân viên sẽ tạo biên bản khi bàn giao phòng.</p></div>
+        <p th:if="${canManage and contract.getStatus().name() != 'ACTIVE' and !(checkOut and contract.getStatus().name() == 'EXPIRED')}" style="color: var(--danger-color, #dc2626);">
+            Chỉ lập biên bản cho hợp đồng đang hiệu lực (ACTIVE); riêng check-out được lập cả khi hợp đồng đã hết hạn.
+        </p>
+        <form th:if="${canManage and (contract.getStatus().name() == 'ACTIVE' or (checkOut and contract.getStatus().name() == 'EXPIRED'))}" th:action="@{${base}}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 520px;">
+                <div class="form-group">
+                    <label class="form-label">Chỉ số điện đầu kỳ *</label>
+                    <input type="number" step="0.01" min="0" name="initialElectricMeter" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Chỉ số nước đầu kỳ *</label>
+                    <input type="number" step="0.01" min="0" name="initialWaterMeter" class="form-control" required>
+                </div>
+            </div>
+            <div class="form-group" style="max-width: 520px;">
+                <label class="form-label">Tình trạng phòng *</label>
+                <textarea name="roomCondition" class="form-control" rows="3" required></textarea>
+            </div>
+            <div class="form-group" style="max-width: 520px;">
+                <label class="form-label">Chìa khóa, thẻ bàn giao</label>
+                <input type="text" name="keysProvided" class="form-control">
+            </div>
+            <button type="submit" class="btn btn-primary">Tạo biên bản</button>
+        </form>
+    </div>
+
+    <th:block th:if="${details != null}">
+        <div class="card">
+            <div class="flex-between" style="margin-bottom: 12px;">
+                <h2 style="margin: 0;">Trạng thái</h2>
+                <span class="badge" th:classappend="${details.handover().status().name() == 'APPROVED'} ? 'badge-ACTIVE' : (${details.handover().status().name() == 'REJECTED'} ? 'badge-REJECTED' : 'badge-PENDING')"
+                      th:text="${details.handover().status()}">DRAFT</span>
+            </div>
+            <ol style="font-size: 13px; color: var(--text-secondary); padding-left: 18px;">
+                <li>Nháp: chủ trọ nhập chỉ số, tình trạng phòng và ảnh.</li>
+                <li>Chờ khách: khách xem và xác nhận (cần đã tải CCCD).</li>
+                <li>Chờ duyệt: chủ trọ hoặc nhân viên duyệt hoặc từ chối.</li>
+            </ol>
+            <div th:if="${details.handover().status().name() == 'REJECTED'}" style="margin-top: 8px;">
+                <strong>Lý do từ chối:</strong> <span th:text="${details.handover().rejectionReason()}">Lý do</span>
+            </div>
+            <div th:if="${details.handover().status().name() == 'APPROVED'}" style="margin-top: 8px;">
+                Đã duyệt lúc <strong th:text="${#temporals.format(details.handover().approvedAt(), 'dd/MM/yyyy HH:mm')}">01/01/2026</strong>
+            </div>
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
+                <form th:if="${canManage and details.handover().status().name() == 'DRAFT'}" th:action="@{${base} + '/send'}" method="post" style="margin: 0;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <button type="submit" class="btn btn-primary">Gửi cho khách thuê</button>
+                </form>
+                <form th:if="${primaryTenant and details.handover().status().name() == 'PENDING_TENANT'}" th:action="@{${base} + '/confirm'}" method="post" style="margin: 0;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <button type="submit" class="btn btn-primary">Tôi xác nhận biên bản</button>
+                </form>
+                <a th:if="${primaryTenant and details.handover().status().name() == 'PENDING_TENANT'}"
+                   th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${contract.getPrimaryTenantId()} + '/documents'}"
+                   class="btn btn-secondary">Tải giấy tờ</a>
+                <form th:if="${(checkOut ? ownerOrAdmin : canManage) and details.handover().status().name() == 'PENDING_APPROVAL'}" th:action="@{${base} + '/approve'}" method="post" style="display: flex; gap: 6px; margin: 0;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <input th:if="${checkOut}" type="number" min="0" step="1000" name="finalDeduction" class="form-control"
+                           th:value="${details.proposedDeduction()}" title="Khoản khấu trừ chốt" style="width: 150px;">
+                    <button type="submit" class="btn btn-primary">Duyệt</button>
+                </form>
+                <form th:if="${canManage and details.handover().status().name() == 'PENDING_APPROVAL'}" th:action="@{${base} + '/reject'}" method="post" style="display: flex; gap: 6px; margin: 0;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <input type="text" name="reason" class="form-control" placeholder="Lý do từ chối" required style="width: 220px;">
+                    <button type="submit" class="btn btn-danger">Từ chối</button>
+                </form>
+                <form th:if="${canManage and details.handover().status().name() == 'REJECTED'}" th:action="@{${base} + '/reopen'}" method="post" style="margin: 0;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <button type="submit" class="btn btn-secondary">Mở lại để chỉnh sửa</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Chỉ số và tình trạng phòng</h2>
+            <form th:if="${canManage and details.handover().status().name() == 'DRAFT'}" th:action="@{${base} + '/update'}" method="post">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 520px;">
+                    <div class="form-group">
+                        <label class="form-label">Chỉ số điện đầu kỳ *</label>
+                        <input type="number" step="0.01" min="0" name="initialElectricMeter" class="form-control" th:value="${details.handover().initialElectricMeter()}" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Chỉ số nước đầu kỳ *</label>
+                        <input type="number" step="0.01" min="0" name="initialWaterMeter" class="form-control" th:value="${details.handover().initialWaterMeter()}" required>
+                    </div>
+                </div>
+                <div class="form-group" style="max-width: 520px;">
+                    <label class="form-label">Tình trạng phòng *</label>
+                    <textarea name="roomCondition" class="form-control" rows="3" required th:text="${details.handover().roomCondition()}"></textarea>
+                </div>
+                <div class="form-group" style="max-width: 520px;">
+                    <label class="form-label">Chìa khóa, thẻ bàn giao</label>
+                    <input type="text" name="keysProvided" class="form-control" th:value="${details.handover().keysProvided()}">
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">Lưu thay đổi</button>
+            </form>
+            <table th:if="${!(canManage and details.handover().status().name() == 'DRAFT')}" class="data-table">
+                <tbody>
+                    <tr><td>Chỉ số điện đầu kỳ</td><td th:text="${details.handover().initialElectricMeter()}">0</td></tr>
+                    <tr><td>Chỉ số nước đầu kỳ</td><td th:text="${details.handover().initialWaterMeter()}">0</td></tr>
+                    <tr><td>Tình trạng phòng</td><td th:text="${details.handover().roomCondition()}">Sạch</td></tr>
+                    <tr><td>Chìa khóa, thẻ</td><td th:text="${details.handover().keysProvided() != null ? details.handover().keysProvided() : '—'}">—</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Ảnh bàn giao</h2>
+            <div th:if="${#lists.isEmpty(details.photos())}" class="empty-state"><p>Chưa có ảnh nào.</p></div>
+            <ul th:if="${!#lists.isEmpty(details.photos())}" style="list-style: none; padding: 0; display: flex; gap: 8px; flex-wrap: wrap;">
+                <li th:each="p : ${details.photos()}" style="border: 1px solid var(--border-color); padding: 6px; font-size: 12px;">
+                    <div th:text="${p.kind() == T(com.phonghub.domain.model.HandoverPhotoKind).ROOM ? 'Phòng' : (p.kind() == T(com.phonghub.domain.model.HandoverPhotoKind).METER_ELECTRIC ? 'Đồng hồ điện' : 'Đồng hồ nước')}">Phòng</div>
+                    <a th:href="@{${base} + '/photos/' + ${p.id()}}" target="_blank" rel="noopener noreferrer">Xem ảnh</a>
+                    <form th:if="${canManage and details.handover().status().name() == 'DRAFT'}" th:action="@{${base} + '/photos/' + ${p.id()} + '/delete'}" method="post" style="display: inline; margin: 0;">
+                        <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                        <button type="submit" class="btn btn-sm btn-danger" style="padding: 0 6px;">Xóa</button>
+                    </form>
+                </li>
+            </ul>
+            <form th:if="${canManage and details.handover().status().name() == 'DRAFT'}" th:action="@{${base} + '/photos'}" method="post" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: end; flex-wrap: wrap;">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label">Loại ảnh</label>
+                    <select name="kind" class="form-control">
+                        <option value="ROOM">Phòng</option>
+                        <option value="METER_ELECTRIC">Đồng hồ điện</option>
+                        <option value="METER_WATER">Đồng hồ nước</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label">Tệp ảnh (jpeg, png, webp)</label>
+                    <input type="file" name="file" class="form-control" accept="image/jpeg,image/png,image/webp" required>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">Thêm ảnh</button>
+            </form>
+            <p style="font-size: 11px; color: var(--text-secondary);">Cần ít nhất một ảnh phòng, một ảnh đồng hồ điện và một ảnh đồng hồ nước trước khi gửi.</p>
+        </div>
+
+        <div class="card">
+            <h2 th:text="${checkOut} ? 'Tình trạng tài sản khi trả phòng' : 'Tài sản bàn giao'">Tài sản bàn giao</h2>
+            <p th:if="${#lists.isEmpty(details.items())}" style="font-size: 13px; color: var(--text-secondary);"
+               th:text="${checkOut} ? 'Biên bản check-in không có tài sản nào.' : 'Danh sách tài sản được chụp lại từ trang phòng khi gửi biên bản cho khách.'">
+                Danh sách tài sản
+            </p>
+            <table th:if="${!#lists.isEmpty(details.items())}" class="data-table">
+                <thead>
+                    <tr><th>Tài sản</th><th>Số lượng</th><th>Tình trạng</th><th>Ghi chú</th><th th:if="${checkOut}">Khấu trừ đề xuất</th><th th:if="${checkOut and canManage and details.handover().status().name() == 'DRAFT'}"></th></tr>
+                </thead>
+                <tbody>
+                    <tr th:each="i : ${details.items()}">
+                        <th:block th:if="${checkOut and canManage and details.handover().status().name() == 'DRAFT'}">
+                            <td th:text="${i.assetName()}">Giường</td>
+                            <td th:text="${i.quantity()}">1</td>
+                            <td colspan="4">
+                                <form th:action="@{'/contracts/' + ${contract.getId()} + '/check-out/items/' + ${i.id()}}" method="post" style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0;">
+                                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                    <select name="status" class="form-control" style="width: auto;">
+                                        <option th:each="st : ${assetStatuses}" th:value="${st}" th:text="${uiText.assetStatus(st)}" th:selected="${st == i.status()}"></option>
+                                    </select>
+                                    <input type="text" name="conditionNote" class="form-control" placeholder="Ghi chú" th:value="${i.conditionNote()}" style="width: 200px;">
+                                    <input type="number" name="deductionAmount" min="0" step="1000" class="form-control" th:value="${i.deductionAmount()}" style="width: 130px;">
+                                    <button type="submit" class="btn btn-sm btn-secondary">Lưu</button>
+                                </form>
+                            </td>
+                        </th:block>
+                        <th:block th:unless="${checkOut and canManage and details.handover().status().name() == 'DRAFT'}">
+                            <td th:text="${i.assetName()}">Giường</td>
+                            <td th:text="${i.quantity()}">1</td>
+                            <td th:text="${uiText.assetStatus(i.status())}">Tốt</td>
+                            <td th:text="${i.conditionNote() != null ? i.conditionNote() : '—'}">—</td>
+                            <td th:if="${checkOut}" th:text="${#numbers.formatDecimal(i.deductionAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</td>
+                        </th:block>
+                    </tr>
+                </tbody>
+            </table>
+            <div th:if="${checkOut}" style="margin-top: 8px; font-size: 13px;">
+                Tổng khấu trừ đề xuất: <strong th:text="${#numbers.formatDecimal(details.proposedDeduction(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</strong>
+                <span th:if="${details.handover().finalDeduction() != null}">
+                    | Khoản chủ trọ đã chốt: <strong th:text="${#numbers.formatDecimal(details.handover().finalDeduction(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</strong>
+                </span>
+            </div>
+        </div>
+
+        <div class="card" th:if="${details.handover().contractTermsHash() != null}">
+            <h2>Điều khoản đã gửi cho khách</h2>
+            <p style="font-size: 12px; word-break: break-all;">Mã băm điều khoản hợp đồng: <code th:text="${details.handover().contractTermsHash()}">hash</code></p>
+            <div th:if="${details.handover().houseRulesText() != null}">
+                <p style="font-size: 12px; word-break: break-all;">Mã băm nội quy: <code th:text="${details.handover().houseRulesHash()}">hash</code></p>
+                <pre style="white-space: pre-wrap; font-size: 13px;" th:text="${details.handover().houseRulesText()}">Nội quy</pre>
+            </div>
+            <p th:if="${details.handover().houseRulesText() == null}" style="font-size: 13px;">Nhà trọ chưa có nội quy chung tại thời điểm gửi.</p>
+        </div>
+    </th:block>
+
+    <div class="card" th:if="${canManage}">
+        <h2>Nội quy chung của nhà trọ</h2>
+        <p style="font-size: 12px; color: var(--text-secondary);">
+            Biên bản lưu bản chụp nội quy và mã băm tại thời điểm gửi; sửa nội quy sau đó không làm đổi biên bản đã gửi.
+            <span th:if="${houseRules != null}" th:text="'Phiên bản hiện tại: ' + ${houseRules.version()}"></span>
+        </p>
+        <form th:action="@{${base} + '/house-rules'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <textarea name="content" class="form-control" rows="4" required th:text="${houseRules != null ? houseRules.content() : ''}"></textarea>
+            <button type="submit" class="btn btn-sm btn-secondary" style="margin-top: 8px;">Lưu nội quy</button>
+        </form>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

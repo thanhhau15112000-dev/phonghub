@@ -10,6 +10,10 @@ spring:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
       - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
       - org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration
+  servlet:
+    multipart:
+      max-file-size: ${STORAGE_MAX_FILE_SIZE_BYTES:10485760}
+      max-request-size: ${STORAGE_MAX_FILE_SIZE_BYTES:10485760}
   thymeleaf:
     cache: false
     mode: HTML
@@ -30,8 +34,23 @@ management:
 phonghub:
   demo:
     enabled: false
+  storage:
+    bucket: ${SUPABASE_STORAGE_BUCKET:private-files}
+    max-file-size-bytes: ${STORAGE_MAX_FILE_SIZE_BYTES:10485760}
+    signed-url-ttl-seconds: ${STORAGE_SIGNED_URL_TTL_SECONDS:600}
   invoicing:
     auto-generate: true
+    # Nhắc người thuê hóa đơn sắp đến hạn lúc 07:00 hằng ngày (#86)
+    due-reminder-enabled: ${INVOICE_DUE_REMINDER_ENABLED:true}
+    due-reminder-days: ${INVOICE_DUE_REMINDER_DAYS:3}
+  contracts:
+    expiry-job-enabled: ${CONTRACT_EXPIRY_JOB_ENABLED:true}
+    expiry-reminder-days: ${CONTRACT_EXPIRY_REMINDER_DAYS:30}
+  # Cache danh sách nhà trọ/phòng và dashboard owner (#88); xóa khi dữ liệu đổi, TTL là lưới an toàn
+  cache:
+    enabled: ${CACHE_ENABLED:true}
+    ttl-seconds: ${CACHE_TTL_SECONDS:300}
+    max-size: ${CACHE_MAX_SIZE:1000}
   sepay:
     webhook-api-key: ${SEPAY_WEBHOOK_API_KEY:}
     allow-unsigned-webhook: false
@@ -41,4 +60,3 @@ phonghub:
     bank-account-name: ${SEPAY_BANK_ACCOUNT_NAME:}
   chat:
     supabase-bucket: ${SUPABASE_CHAT_BUCKET:chat-media}
-

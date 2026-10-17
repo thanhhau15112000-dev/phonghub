@@ -11,6 +11,11 @@ spring:
 phonghub:
   demo:
     enabled: true
+  security:
+    tenant-data:
+      key-id: ${TENANT_DATA_KEY_ID}
+      encryption-key: ${TENANT_DATA_ENCRYPTION_KEY}
+      hmac-key: ${TENANT_DATA_HMAC_KEY}
   invoicing:
     auto-generate: false
   sepay:

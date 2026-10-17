@@ -53,6 +53,9 @@ class ProductionConfigValidatorTest {
         env.setProperty("supabase.jwks-uri", "https://example.supabase.co/auth/v1/.well-known/jwks.json");
         env.setProperty("supabase.jwt-issuer", "https://example.supabase.co/auth/v1");
         env.setProperty("supabase.jwt-audience", "authenticated");
+        env.setProperty("phonghub.security.tenant-data.key-id", "v1");
+        env.setProperty("phonghub.security.tenant-data.encryption-key", "test-encryption-key");
+        env.setProperty("phonghub.security.tenant-data.hmac-key", "test-hmac-key");
 
         ProductionConfigValidator validator = new ProductionConfigValidator(env);
 

@@ -64,9 +64,9 @@ public class InMemoryContractRepository implements ContractRepositoryPort {
     @Override
     public Optional<Contract> findActiveByRoomId(UUID roomId) {
         return store.values().stream()
-            .filter(c -> c.getRoomId().equals(roomId) && c.getStatus() == ContractStatus.ACTIVE)
-            .map(this::clone)
-            .findFirst();
+            .filter(c -> c.getRoomId().equals(roomId) && c.isResiding())
+            .min(java.util.Comparator.comparing((Contract c) -> c.getStatus() != ContractStatus.ACTIVE))
+            .map(this::clone);
     }
 
     @Override

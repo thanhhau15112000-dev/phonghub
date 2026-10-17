@@ -7,14 +7,25 @@ import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomAssetEventRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverItemRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryMeterReadingRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryServiceRateRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverPhotoRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyHouseRulesRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomAssetRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantDocumentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryStatisticsQueryAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
 import com.phonghub.application.port.in.DemoActorPort;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
+import com.phonghub.application.port.out.StatisticsQueryPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -29,9 +40,13 @@ public class InMemoryPersistenceConfig {
         InMemoryRoomRepository roomRepo,
         InMemoryMaintenanceTicketRepository ticketRepo,
         InMemoryContractRepository contractRepo,
-        InMemoryTenantRepository tenantRepo
+        InMemoryTenantRepository tenantRepo,
+        CacheEvictingTransactionListener cacheEvictingTransactionListener
     ) {
-        return new SnapshottingTransactionManager(roomRepo, ticketRepo, contractRepo, tenantRepo);
+        SnapshottingTransactionManager manager =
+            new SnapshottingTransactionManager(roomRepo, ticketRepo, contractRepo, tenantRepo);
+        manager.addListener(cacheEvictingTransactionListener);
+        return manager;
     }
 
     @Bean
@@ -55,7 +70,7 @@ public class InMemoryPersistenceConfig {
     }
 
     @Bean
-    public AuditPort auditPort() {
+    public InMemoryAuditAdapter auditPort() {
         return new InMemoryAuditAdapter();
     }
 
@@ -67,6 +82,78 @@ public class InMemoryPersistenceConfig {
     @Bean
     public InMemoryRoomRepository roomRepository() {
         return new InMemoryRoomRepository();
+    }
+
+    @Bean
+    public InMemoryMeterReadingRepository meterReadingRepository() {
+        return new InMemoryMeterReadingRepository();
+    }
+
+    @Bean
+    public InMemoryServiceRateRepository serviceRateRepository() {
+        return new InMemoryServiceRateRepository();
+    }
+
+    @Bean
+    public InMemoryHandoverRepository handoverRepository() {
+        return new InMemoryHandoverRepository();
+    }
+
+    @Bean
+    public InMemoryHandoverPhotoRepository handoverPhotoRepository() {
+        return new InMemoryHandoverPhotoRepository();
+    }
+
+    @Bean
+    public InMemoryHandoverItemRepository handoverItemRepository() {
+        return new InMemoryHandoverItemRepository();
+    }
+
+    @Bean
+    public InMemoryPropertyHouseRulesRepository propertyHouseRulesRepository() {
+        return new InMemoryPropertyHouseRulesRepository();
+    }
+
+    @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantPrivacyRepository tenantPrivacyRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantPrivacyRepository();
+    }
+
+    @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceAttachmentRepository maintenanceAttachmentRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceAttachmentRepository();
+    }
+
+    @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryMeterSubmissionRepository meterSubmissionRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryMeterSubmissionRepository();
+    }
+
+    @Bean
+    public InMemoryTenantDocumentRepository tenantDocumentRepository() {
+        return new InMemoryTenantDocumentRepository();
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.TenantDataProtectionPort tenantDataProtection() {
+        // Khóa cố định chỉ dùng cho profile test, không bao giờ dùng ở môi trường thật.
+        java.util.Base64.Encoder base64 = java.util.Base64.getEncoder();
+        byte[] encryptionKey = new byte[32];
+        byte[] hmacKey = new byte[32];
+        java.util.Arrays.fill(encryptionKey, (byte) 3);
+        java.util.Arrays.fill(hmacKey, (byte) 5);
+        return new com.phonghub.adapter.out.security.AesGcmTenantDataProtector(
+            "test", base64.encodeToString(encryptionKey), base64.encodeToString(hmacKey));
+    }
+
+    @Bean
+    public InMemoryRoomAssetRepository roomAssetRepository() {
+        return new InMemoryRoomAssetRepository();
+    }
+
+    @Bean
+    public InMemoryRoomAssetEventRepository roomAssetEventRepository() {
+        return new InMemoryRoomAssetEventRepository();
     }
 
     @Bean
@@ -100,8 +187,42 @@ public class InMemoryPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryContractReminderRepository contractReminderRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryContractReminderRepository();
+    }
+
+    @Bean
     public com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository invoiceRepository() {
         return new com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository();
+    }
+
+    @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository notificationRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository();
+    }
+
+    @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceReminderRepository invoiceReminderRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceReminderRepository();
+    }
+
+    @Bean
+    public StatisticsQueryPort statisticsQueryPort(
+        com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository invoiceRepo,
+        InMemoryContractRepository contractRepo,
+        InMemoryRoomRepository roomRepo,
+        InMemoryPropertyRepository propertyRepo,
+        InMemoryMaintenanceTicketRepository ticketRepo,
+        InMemoryUserRepository userRepo,
+        AuditPort auditPort
+    ) {
+        return new InMemoryStatisticsQueryAdapter(
+            invoiceRepo, contractRepo, roomRepo, propertyRepo, ticketRepo, userRepo, auditPort);
+    }
+
+    @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryLateFeePolicyRepository lateFeePolicyRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryLateFeePolicyRepository();
     }
 
     @Bean

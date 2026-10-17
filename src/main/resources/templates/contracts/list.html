@@ -12,7 +12,9 @@
             <h1>Hợp đồng</h1>
             <p style="color: var(--text-secondary); font-size: 13px;">Quản lý hợp đồng thuê, kích hoạt, người ở và chấm dứt hợp đồng.</p>
         </div>
-        <div>
+        <div style="display: flex; gap: 8px;">
+            <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'OWNER')}"
+               th:href="@{/exports}" class="btn" id="export-link">Xuất dữ liệu</a>
             <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'OWNER')}"
                th:href="@{/contracts/new}" class="btn btn-primary">+ Tạo hợp đồng</a>
         </div>

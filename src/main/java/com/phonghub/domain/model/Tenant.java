@@ -88,4 +88,26 @@ public record Tenant(
             Instant.now()
         );
     }
+
+    /** Số CCCD thật đã bị xóa theo chính sách lưu trữ và thay bằng giá trị đánh dấu (vẫn duy nhất, không dùng để tra cứu). */
+    public static final String PURGED_IDENTITY_PREFIX = "PURGED-";
+
+    public static String purgedIdentityMarker(UUID tenantId) {
+        return PURGED_IDENTITY_PREFIX + tenantId.toString().replace("-", "");
+    }
+
+    public boolean identityPurged() {
+        return identityCardNumber != null && identityCardNumber.startsWith(PURGED_IDENTITY_PREFIX);
+    }
+
+    public String maskedIdentityCardNumber() {
+        if (identityPurged()) {
+            return "Đã xóa";
+        }
+        String normalized = identityCardNumber.trim();
+        if (normalized.length() <= 4) {
+            return "****";
+        }
+        return "****" + normalized.substring(normalized.length() - 4);
+    }
 }

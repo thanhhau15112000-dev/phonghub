@@ -27,10 +27,13 @@
                 <span th:class="'badge badge-' + ${ticket.getStatus()}" style="font-size: 13px; padding: 4px 8px;" th:text="${uiText.maintenanceStatus(ticket.getStatus())}">Đã báo</span>
                 <span style="font-weight: 600; margin-left: 12px;">Mức độ:</span>
                 <span class="badge" th:text="${uiText.maintenancePriority(ticket.getPriority())}">Cao</span>
+                <span th:if="${ticket.getDueAt() != null}" style="font-weight: 600; margin-left: 12px;">Hạn xử lý:</span>
+                <span th:if="${ticket.getDueAt() != null}" th:text="${#temporals.format(ticket.getDueAt(), 'dd/MM/yyyy HH:mm')}">01/01/2026 10:00</span>
+                <span th:if="${ticket.isOverdue(now)}" class="badge badge-danger" style="background: #ef4444; color: #fff;">Quá hạn</span>
             </div>
 
             <!-- Thao tác của kỹ thuật viên: tiếp nhận yêu cầu -->
-            <div th:if="${(currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED')}">
+            <div th:if="${((currentUser.role().name() == 'TECHNICIAN' and ticket.getAssignedTechnicianId() == currentUser.id()) or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED')}">
                 <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/accept'}" method="post">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <button type="submit" class="btn btn-primary">Tiếp nhận và bắt đầu xử lý</button>
@@ -67,6 +70,43 @@
                 <strong th:text="${uiText.liableParty(ticket.getLiableParty())}">Chủ trọ</strong>
             </div>
         </div>
+    </div>
+
+    <!-- Báo giá sửa chữa (#83): người thuê chỉ thấy khi là bên chịu phí -->
+    <div th:if="${quote != null or ((currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED' or ticket.getStatus().name() == 'IN_PROGRESS'))}"
+         class="card" style="margin-bottom: 20px;" id="quote">
+        <h2>Báo giá sửa chữa</h2>
+        <div th:if="${quote != null}" style="font-size: 13px; margin-bottom: 12px;" id="quote-detail">
+            <div style="margin-bottom: 4px;">
+                <span style="color: var(--text-secondary);">Số tiền dự kiến:</span>
+                <strong th:text="${#numbers.formatDecimal(quote.amount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">500,000 đ</strong>
+            </div>
+            <div th:if="${quote.note() != null}" style="margin-bottom: 4px;">
+                <span style="color: var(--text-secondary);">Ghi chú:</span>
+                <span th:text="${quote.note()}">Thay vòi nước</span>
+            </div>
+            <div th:if="${quote.quotedAt() != null}">
+                <span style="color: var(--text-secondary);">Báo giá lúc:</span>
+                <span th:text="${#temporals.format(quote.quotedAt(), 'dd/MM/yyyy HH:mm')}">01/10/2026 10:00</span>
+            </div>
+        </div>
+        <p th:if="${quote == null}" style="color: var(--text-secondary); font-size: 13px;">Chưa có báo giá.</p>
+        <form th:if="${(currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED' or ticket.getStatus().name() == 'IN_PROGRESS')}"
+              th:action="@{'/maintenance/' + ${ticket.getId()} + '/quote'}" method="post" id="quote-form"
+              style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group" style="margin: 0; min-width: 160px;">
+                <label class="form-label" for="quoteAmount">Số tiền (VND)</label>
+                <input type="number" id="quoteAmount" name="amount" class="form-control" min="0" step="1000" required
+                       th:value="${quote != null ? quote.amount() : ''}">
+            </div>
+            <div class="form-group" style="margin: 0; flex: 1; min-width: 200px;">
+                <label class="form-label" for="quoteNote">Ghi chú</label>
+                <input type="text" id="quoteNote" name="note" class="form-control" maxlength="1000" placeholder="Linh kiện, công thay thế..."
+                       th:value="${quote != null ? quote.note() : ''}">
+            </div>
+            <button type="submit" class="btn btn-primary" th:text="${quote != null ? 'Cập nhật báo giá' : 'Lưu báo giá'}">Lưu báo giá</button>
+        </form>
     </div>
 
     <!-- Khoản phí sửa chữa chờ thanh toán -->
@@ -125,8 +165,97 @@
         </div>
     </div>
 
+    <!-- Người thuê xác nhận kết quả sửa (#83) -->
+    <div th:if="${currentUser.role().name() == 'TENANT' and ticket.getStatus().name() == 'RESOLVED'}" class="card" style="margin-bottom: 20px;" id="tenant-confirm">
+        <h2>Xác nhận kết quả sửa chữa</h2>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">Hãy kiểm tra lại và xác nhận đã sửa xong, hoặc cho biết chỗ chưa đạt để kỹ thuật viên sửa tiếp.</p>
+        <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/verify'}" method="post" style="margin-bottom: 12px;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button type="submit" class="btn btn-primary">Xác nhận đã sửa xong</button>
+        </form>
+        <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/reopen'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <label class="form-label" for="reopenFeedback">Chưa đạt? Mô tả vấn đề còn lại</label>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="reopenFeedback" name="feedback" class="form-control" maxlength="1000" placeholder="Ví dụ: vòi vẫn còn rỉ nước" required>
+                <button type="submit" class="btn">Báo chưa đạt</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Timeline trạng thái -->
+    <div class="card" style="margin-bottom: 20px;">
+        <h2>Lịch sử xử lý</h2>
+        <p th:if="${timeline.isEmpty()}" style="color: var(--text-secondary); font-size: 13px;">Chưa có lịch sử cho phiếu này.</p>
+        <ol th:if="${!timeline.isEmpty()}" style="margin: 0; padding-left: 18px; font-size: 13px;">
+            <li th:each="e : ${timeline}" style="margin-bottom: 6px;">
+                <strong th:text="${uiText.maintenanceStatus(e.toStatus())}">Đã báo</strong>
+                <span th:text="'· ' + ${#temporals.format(e.at(), 'dd/MM/yyyy HH:mm')}">· 01/01/2026 10:00</span>
+                <span th:text="'· ' + (${e.actorId() != null} ? ${actorNames.get(e.actorId())} : 'Hệ thống')">· Hệ thống</span>
+                <span th:if="${e.note() != null}" style="color: var(--text-secondary);" th:text="'— ' + ${e.note()}">— ghi chú</span>
+            </li>
+        </ol>
+    </div>
+
+    <!-- Ảnh / video đính kèm -->
+    <div class="card" style="margin-bottom: 20px;">
+        <h2>Ảnh và video đính kèm</h2>
+        <p th:if="${attachments.isEmpty()}" style="color: var(--text-secondary); font-size: 13px;">Chưa có tệp đính kèm.</p>
+        <ul th:if="${!attachments.isEmpty()}" style="list-style: none; padding: 0; margin: 0 0 12px 0;">
+            <li th:each="a : ${attachments}" style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
+                <a th:href="@{'/maintenance/' + ${ticket.getId()} + '/attachments/' + ${a.id()}}" target="_blank" rel="noopener noreferrer"
+                   th:text="${a.kind().name() == 'VIDEO' ? 'Video' : 'Ảnh'} + ' · ' + ${#numbers.formatDecimal(a.sizeBytes() / 1024.0, 0, 0)} + ' KB · ' + ${#temporals.format(a.createdAt(), 'dd/MM/yyyy HH:mm')}">Ảnh</a>
+                <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/attachments/' + ${a.id()} + '/delete'}" method="post"
+                      style="margin: 0;" onsubmit="return confirm('Xóa tệp này?');">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <button type="submit" class="btn btn-sm btn-danger"
+                            th:if="${currentUser.role().name() != 'TECHNICIAN' and (currentUser.id() == a.uploadedBy() or currentUser.role().name() != 'TENANT')}">Xóa</button>
+                </form>
+            </li>
+        </ul>
+        <form th:if="${currentUser.role().name() != 'TECHNICIAN' and !ticket.isWorkFinished()}"
+              th:action="@{'/maintenance/' + ${ticket.getId()} + '/attachments'}" method="post" enctype="multipart/form-data"
+              style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <input type="file" name="file" class="form-control" style="max-width: 320px;" required
+                   accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime">
+            <button type="submit" class="btn btn-secondary">Đính kèm</button>
+            <span style="font-size: 12px; color: var(--text-secondary);">Tối đa 5 ảnh và 1 video ngắn (≤ 10 MB mỗi tệp).</span>
+        </form>
+    </div>
+
+    <!-- Owner/staff: giao kỹ thuật viên hoặc từ chối phiếu chưa xử lý -->
+    <div th:if="${(currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED')}" class="card" style="margin-bottom: 20px;">
+        <h2>Phân công và từ chối</h2>
+        <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/assign'}" method="post" style="margin-bottom: 16px;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <label class="form-label" for="technicianId">Giao cho kỹ thuật viên</label>
+            <div style="display: flex; gap: 8px;">
+                <select id="technicianId" name="technicianId" class="form-control" required>
+                    <option value="" disabled selected>Chọn kỹ thuật viên của nhà trọ</option>
+                    <option th:each="tech : ${technicians}" th:value="${tech.id()}" th:text="${tech.fullName()}"
+                            th:selected="${tech.id() == ticket.getAssignedTechnicianId()}">Kỹ thuật viên</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Giao việc</button>
+            </div>
+        </form>
+        <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/reject'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <label class="form-label" for="rejectReason">Từ chối yêu cầu (người thuê sẽ nhận được lý do)</label>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="rejectReason" name="reason" class="form-control" placeholder="Lý do từ chối" required>
+                <button type="submit" class="btn">Từ chối</button>
+            </div>
+        </form>
+    </div>
+
+    <div th:if="${ticket.getStatus().name() == 'REJECTED'}" class="card" style="margin-bottom: 20px;">
+        <h2>Yêu cầu đã bị từ chối</h2>
+        <p th:text="${ticket.getRejectionReason()}">Lý do</p>
+    </div>
+
     <!-- Biểu mẫu hoàn tất xử lý -->
-    <div th:if="${!ticket.isResolved() and ticket.getStatus().name() != 'AWAITING_PAYMENT' and (currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" class="card">
+    <div th:if="${!ticket.isResolved() and ticket.getStatus().name() != 'AWAITING_PAYMENT' and ticket.getStatus().name() != 'REJECTED' and (currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" class="card">
         <h2>Xử lý yêu cầu bảo trì</h2>
         <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 16px;">
             Gửi báo cáo này sẽ hoàn tất yêu cầu và tùy chọn đưa phòng từ trạng thái BẢO TRÌ về trạng thái TRỐNG.
@@ -142,7 +271,8 @@
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label">Chi phí sửa chữa (VND)</label>
-                    <input type="number" name="repairCost" class="form-control" value="0" min="0">
+                    <input type="number" name="repairCost" class="form-control" min="0"
+                           th:value="${quote != null ? quote.amount() : 0}">
                 </div>
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label">Bên chịu phí</label>

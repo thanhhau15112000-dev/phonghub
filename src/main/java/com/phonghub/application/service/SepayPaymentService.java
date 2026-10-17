@@ -21,6 +21,7 @@ import com.phonghub.domain.model.InvoiceType;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.Notification;
 import com.phonghub.domain.model.PaymentCode;
+import com.phonghub.domain.model.PaymentReviewReason;
 import com.phonghub.domain.model.PaymentStatus;
 import com.phonghub.domain.model.PaymentTransaction;
 import com.phonghub.domain.model.Property;
@@ -153,6 +154,28 @@ public class SepayPaymentService implements SepayWebhookUseCase {
                 : extractAndMatchContractId(command.content(), command.code());
         }
 
+        // 3b. Chia số tiền: phần cộng vào hóa đơn (tối đa số còn nợ) và phần dư cần người quản lý xem xét.
+        // Hóa đơn đã được khóa dòng ở bước khớp nên số còn nợ không đổi giữa lúc tính và lúc cộng.
+        BigDecimal amount = command.transferAmount() != null ? command.transferAmount() : BigDecimal.ZERO;
+        BigDecimal applied = BigDecimal.ZERO;
+        BigDecimal excess = BigDecimal.ZERO;
+        PaymentReviewReason reviewReason = null;
+        if (status == PaymentStatus.SUCCESS && amount.signum() > 0) {
+            if (invoice == null) {
+                excess = amount;
+                reviewReason = PaymentReviewReason.UNMATCHED;
+            } else if (!invoice.isPayable()) {
+                excess = amount;
+                reviewReason = PaymentReviewReason.INVOICE_NOT_PAYABLE;
+            } else {
+                applied = amount.min(invoice.remainingAmount());
+                excess = amount.subtract(applied);
+                if (excess.signum() > 0) {
+                    reviewReason = PaymentReviewReason.OVERPAID;
+                }
+            }
+        }
+
         // 4. Lưu vết giao dịch. Ràng buộc UNIQUE(sepay_id) chặn trường hợp hai request trùng chạy đồng thời.
         PaymentTransaction tx = new PaymentTransaction(
             UUID.randomUUID(),
@@ -171,18 +194,24 @@ public class SepayPaymentService implements SepayWebhookUseCase {
             status,
             contractId,
             invoice != null ? invoice.getId() : null,
-            Instant.now()
+            Instant.now(),
+            applied,
+            excess,
+            reviewReason
         );
         if (!paymentRepository.saveIfNew(tx)) {
             PaymentTransaction duplicate = paymentRepository.findBySepayId(command.id()).orElse(null);
             return new WebhookProcessResult(true, "Giao dịch đã được ghi nhận trước đó", duplicate);
         }
-        log.info("Sepay webhook: Đã lưu giao dịch ID={}, SePayId={}, Số tiền={}, Status={}, Invoice={}",
-            tx.id(), tx.sepayId(), tx.transferAmount(), tx.status(), tx.invoiceId());
+        log.info("Sepay webhook: Đã lưu giao dịch ID={}, SePayId={}, Số tiền={}, Đã cộng={}, Dư={}, Status={}, Invoice={}",
+            tx.id(), tx.sepayId(), tx.transferAmount(), applied, excess, tx.status(), tx.invoiceId());
+        if (reviewReason != null) {
+            log.warn("Sepay webhook: giao dịch SePayId={} cần xem xét ({}), số tiền dư {}", tx.sepayId(), reviewReason, excess);
+        }
 
         // 5. Cộng tiền vào kỳ thanh toán (chỉ khi giao dịch mới và kỳ còn nợ)
-        if (invoice != null && invoice.isPayable() && tx.transferAmount().signum() > 0) {
-            invoice.applyPayment(tx.transferAmount(), tx.createdAt());
+        if (invoice != null && applied.signum() > 0) {
+            invoice.applyPayment(applied, tx.createdAt());
             invoiceRepository.save(invoice);
             completeMaintenanceTicketIfPaid(invoice);
         }
@@ -345,6 +374,19 @@ public class SepayPaymentService implements SepayWebhookUseCase {
                 ". %s (mã %s): đã thu %,.0f / %,.0f đ.",
                 label, invoice.getPaymentCode(), invoice.getPaidAmount(), invoice.getTotalAmount()
             );
+        }
+
+        if (tx.needsReview()) {
+            title = "Cần xem xét giao dịch SePay: " + String.format("%,.0f đ", amount);
+            message += switch (tx.reviewReason()) {
+                case OVERPAID -> String.format(" Người thuê chuyển dư %,.0f đ so với số còn nợ; cần hoàn lại hoặc cấn trừ kỳ sau.",
+                    tx.excessAmount());
+                case INVOICE_NOT_PAYABLE -> String.format(
+                    " Hóa đơn này không còn nhận tiền (đã trả đủ, hủy hoặc đã gộp); %,.0f đ chưa được ghi nhận, cần hoàn lại.",
+                    tx.excessAmount());
+                case UNMATCHED -> String.format(
+                    " Không khớp được hóa đơn nào theo nội dung chuyển khoản; %,.0f đ chưa được ghi nhận.", tx.excessAmount());
+            };
         }
 
         Notification notification = Notification.createPaymentReceived(

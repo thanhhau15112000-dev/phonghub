@@ -4,6 +4,7 @@ import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.InvoiceStatus;
 import com.phonghub.domain.model.InvoiceType;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,6 +34,13 @@ public class InMemoryInvoiceRepository implements InvoiceRepositoryPort {
     }
 
     @Override
+    public List<Invoice> findPayableDueBetween(LocalDate from, LocalDate to) {
+        return store.values().stream()
+            .filter(i -> i.isPayable() && !i.getDueDate().isBefore(from) && !i.getDueDate().isAfter(to))
+            .toList();
+    }
+
+    @Override
     public Optional<Invoice> findActiveByTicketId(UUID ticketId) {
         return store.values().stream()
             .filter(i -> ticketId.equals(i.getTicketId()) && i.getStatus() != InvoiceStatus.VOIDED)
@@ -51,6 +59,19 @@ public class InMemoryInvoiceRepository implements InvoiceRepositoryPort {
     }
 
     @Override
+    public Optional<Invoice> findByIdForUpdate(UUID id) {
+        return findById(id);
+    }
+
+    @Override
+    public List<UUID> findOverdueRentInvoiceIds(java.time.LocalDate today) {
+        return store.values().stream()
+            .filter(i -> i.getType() == InvoiceType.RENT && i.isOverdue(today))
+            .map(Invoice::getId)
+            .toList();
+    }
+
+    @Override
     public Optional<Invoice> findByPaymentCodeForUpdate(String paymentCode) {
         return store.values().stream()
             .filter(i -> paymentCode.equals(i.getPaymentCode()))
@@ -60,6 +81,11 @@ public class InMemoryInvoiceRepository implements InvoiceRepositoryPort {
     @Override
     public boolean existsByPaymentCode(String paymentCode) {
         return findByPaymentCodeForUpdate(paymentCode).isPresent();
+    }
+
+    /** Toàn bộ hóa đơn, dùng cho thống kê in-memory (#93). */
+    public List<Invoice> findAll() {
+        return List.copyOf(store.values());
     }
 
     public void clear() {

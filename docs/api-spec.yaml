@@ -24,6 +24,8 @@ servers:
     description: Local Development
 
 tags:
+  - name: Storage
+    description: Kho tệp riêng tư (ảnh, giấy tờ) với link ký có hạn
   - name: Auth
     description: Xác thực, phiên đăng nhập và quản lý mật khẩu
   - name: Me
@@ -42,12 +44,16 @@ tags:
     description: Quản lý công tơ và ghi nhận chỉ số điện/nước
   - name: Billing & Invoices
     description: Kỳ tính cước, lập hóa đơn, phát hành và hủy hóa đơn
+  - name: Notifications
+    description: Trung tâm thông báo cá nhân cho mọi vai trò (#86)
   - name: Payments
     description: Ghi nhận thanh toán và phân bổ tiền vào hóa đơn
   - name: Maintenance
     description: Quy trình xử lý sự cố/bảo trì phòng trọ
   - name: Checkout & Settlement
     description: Quy trình trả phòng, nghiệm thu và thanh lý tiền cọc
+  - name: Statistics
+    description: Thống kê doanh thu, chi phí, công nợ, lấp đầy (owner) và tổng quan hệ thống (admin)
 
 security:
   - bearerAuth: []
@@ -344,7 +350,10 @@ paths:
           $ref: '#/components/responses/NotFound'
     patch:
       tags: [Properties]
-      summary: Cập nhật thông tin nhà trọ
+      summary: Cập nhật thông tin nhà trọ (owner của nhà trọ hoặc admin)
+      description: >
+        Owner đổi tên hoặc địa chỉ của nhà trọ đã duyệt thì nhà trọ quay về PENDING chờ duyệt lại (không tạo được phòng
+        hoặc hợp đồng mới cho đến khi được duyệt); nhà trọ bị từ chối được gửi duyệt lại khi owner sửa. Admin sửa không đổi trạng thái.
       requestBody:
         required: true
         content:
@@ -360,6 +369,10 @@ paths:
                 $ref: '#/components/schemas/Property'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -486,6 +499,10 @@ paths:
                   $ref: '#/components/schemas/Asset'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       tags: [Rooms]
       summary: Thêm tài sản mới vào phòng
@@ -502,8 +519,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Asset'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/rooms/{roomId}/assets/from-template:
+    parameters:
+      - name: roomId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Rooms]
+      summary: Thêm hàng loạt tài sản từ mẫu (BASIC 5 món, FULL 9 món)
+      parameters:
+        - name: template
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [BASIC, FULL]
+      responses:
+        '201':
+          description: Danh sách tài sản đã tạo
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/assets/{assetId}:
     parameters:
@@ -513,9 +574,27 @@ paths:
         schema:
           type: string
           format: uuid
+    get:
+      tags: [Rooms]
+      summary: Chi tiết tài sản (owner/staff của nhà trọ, hoặc người thuê phòng đang ở)
+      responses:
+        '200':
+          description: Chi tiết tài sản
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     patch:
       tags: [Rooms]
-      summary: Cập nhật hiện trạng tài sản (hỏng hóc, sửa chữa, thay mới)
+      summary: Cập nhật thông tin tài sản (owner/staff của nhà trọ)
       requestBody:
         required: true
         content:
@@ -529,8 +608,220 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Asset'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Rooms]
+      summary: Xóa mềm tài sản (dữ liệu và lịch sử vẫn được giữ)
+      responses:
+        '204':
+          description: Đã xóa
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/assets/{assetId}/events:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Rooms]
+      summary: Lịch sử hư hỏng, sửa chữa, thay mới của tài sản (mới nhất trước)
+      responses:
+        '200':
+          description: Danh sách sự kiện
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AssetEvent'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Rooms]
+      summary: Ghi nhận sự kiện tài sản; trạng thái tài sản tự cập nhật theo loại sự kiện
+      description: >
+        DAMAGED chuyển tài sản sang DAMAGED; REPAIRED và REPLACED chuyển sang GOOD; LOST_REPORTED chuyển sang LOST.
+        Nếu có maintenanceTicketId thì phiếu phải thuộc cùng phòng với tài sản.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetEventInput'
+      responses:
+        '201':
+          description: Đã ghi nhận
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetEvent'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/assets/{assetId}/qr:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Rooms]
+      summary: Ảnh QR PNG của tài sản, sinh khi gọi và không lưu; nội dung là đường dẫn trang phòng (cần đăng nhập)
+      responses:
+        '200':
+          description: Ảnh QR
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/properties/{propertyId}/files:
+    parameters:
+      - name: propertyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Storage]
+      summary: Tải tệp lên kho riêng tư (jpeg, png, webp, pdf)
+      description: >
+        Kiểm tra loại tệp bằng magic bytes, giới hạn dung lượng theo STORAGE_MAX_FILE_SIZE_BYTES (vượt mức trả 400),
+        loại bỏ EXIF/GPS của ảnh, đặt tên ngẫu nhiên. Chỉ owner/staff của nhà trọ được tải lên.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [category, file]
+              properties:
+                category:
+                  type: string
+                  pattern: '^[a-z0-9][a-z0-9-]{0,39}$'
+                  example: documents
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Đã lưu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoredFile'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Storage]
+      summary: Xóa tệp khỏi kho riêng tư
+      parameters:
+        - name: objectKey
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Đã xóa
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/properties/{propertyId}/files/signed-url:
+    parameters:
+      - name: propertyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Storage]
+      summary: Link ký có hạn tới tệp (tối đa 10 phút)
+      parameters:
+        - name: objectKey
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: ttlSeconds
+          in: query
+          schema:
+            type: integer
+            default: 600
+            maximum: 600
+      responses:
+        '200':
+          description: Link ký
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   # ==========================================
   # 3. TENANTS
@@ -626,6 +917,192 @@ paths:
                 $ref: '#/components/schemas/Tenant'
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /api/properties/{propertyId}/tenants/{tenantId}/documents:
+    parameters:
+      - name: propertyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: tenantId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Tenants]
+      summary: Danh sách giấy tờ của người thuê (che số, không kèm ảnh); mỗi lần gọi ghi một sự kiện audit
+      description: >
+        Chỉ admin, owner/staff của nhà trọ hoặc chính người thuê (người thuê phải có hợp đồng tại nhà trọ).
+        Kỹ thuật viên không có quyền. Phản hồi luôn có Cache-Control no-store.
+      responses:
+        '200':
+          description: Danh sách giấy tờ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TenantDocumentSummary'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/properties/{propertyId}/tenants/{tenantId}/documents/{type}:
+    parameters:
+      - name: propertyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: tenantId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [CCCD, GPLX]
+    get:
+      tags: [Tenants]
+      summary: Xem một giấy tờ ở dạng che số; ghi một sự kiện audit
+      responses:
+        '200':
+          description: Thông tin giấy tờ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDocumentSummary'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Tenants]
+      summary: Tải lên hoặc thay giấy tờ (ảnh được xóa metadata rồi mã hóa AES-256-GCM trước khi lưu)
+      description: >
+        Ảnh chỉ nhận jpeg, png, webp. GPLX bắt buộc có số giấy tờ; số GPLX trùng với người thuê khác trả 409.
+        Số CCCD lấy từ hồ sơ người thuê (đã mã hóa ở V14).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [front]
+              properties:
+                number:
+                  type: string
+                  description: Bắt buộc với GPLX, bị bỏ qua với CCCD
+                front:
+                  type: string
+                  format: binary
+                back:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Đã lưu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDocumentSummary'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Tenants]
+      summary: Xóa giấy tờ và ảnh đã mã hóa (owner/staff/admin; người thuê không tự xóa)
+      responses:
+        '204':
+          description: Đã xóa
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/properties/{propertyId}/tenants/{tenantId}/documents/{type}/reveal:
+    parameters:
+      - name: propertyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: tenantId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [CCCD, GPLX]
+    post:
+      tags: [Tenants]
+      summary: Xem đầy đủ số và ảnh sau khi nhập lại mật khẩu của chính người xem
+      description: >
+        Mật khẩu sai trả 403 và được ghi audit; sau 5 lần sai trong 10 phút trả 429. Phản hồi có Cache-Control
+        no-store và không bao giờ được ghi vào nhật ký. Ảnh trả dạng base64 đã giải mã.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Thông tin đầy đủ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDocumentReveal'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          description: Nhập sai mật khẩu quá nhiều lần
 
   /api/tenants/{tenantId}/residencies:
     parameters:
@@ -1022,42 +1499,34 @@ paths:
           type: string
           format: uuid
     post:
-      tags: [Handover]
-      summary: Tạo biên bản bàn giao phòng khi khách dọn vào
+      tags: [Contracts]
+      summary: Tạo biên bản check-in (bản nháp) cho hợp đồng đang hiệu lực
+      description: >
+        Check-in diễn ra sau khi hợp đồng đã ACTIVE (kích hoạt hợp đồng trước). Mỗi hợp đồng chỉ có một biên bản
+        check-in; tạo lần hai trả 409. Chỉ owner/staff của nhà trọ và admin được tạo.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [initialElectricMeter, initialWaterMeter, roomCondition]
-              properties:
-                initialElectricMeter:
-                  type: number
-                  example: 1420.5
-                initialWaterMeter:
-                  type: number
-                  example: 35.0
-                roomCondition:
-                  type: string
-                  example: Phòng sạch sẽ, tài sản bàn giao nguyên vẹn
-                keysProvided:
-                  type: string
-                  example: 2 chìa khóa phòng, 1 thẻ từ cửa cuốn
-                photoUrls:
-                  type: array
-                  items:
-                    type: string
-                    format: uri
+              $ref: '#/components/schemas/HandoverInput'
       responses:
         '201':
-          description: Biên bản bàn giao đã lập
+          description: Đã tạo biên bản ở trạng thái DRAFT
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /api/contracts/{contractId}/handover:
     parameters:
@@ -1068,19 +1537,164 @@ paths:
           type: string
           format: uuid
     get:
-      tags: [Handover]
-      summary: Xem biên bản bàn giao phòng hiện tại
+      tags: [Contracts]
+      summary: Xem biên bản check-in (owner/staff của nhà trọ, hoặc người thuê của hợp đồng)
       responses:
         '200':
-          description: OK
+          description: Biên bản kèm ảnh và danh sách tài sản đã chụp
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    patch:
+      tags: [Contracts]
+      summary: Sửa chỉ số và tình trạng phòng (chỉ khi biên bản ở trạng thái DRAFT)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandoverInput'
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/handover/photos:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Tải ảnh phòng hoặc ảnh đồng hồ (jpeg, png, webp; tối đa 20 ảnh; chỉ khi DRAFT)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, file]
+              properties:
+                kind:
+                  type: string
+                  enum: [ROOM, METER_ELECTRIC, METER_WATER]
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Đã lưu ảnh
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  kind:
+                    type: string
+                  contentType:
+                    type: string
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/handover/photos/{photoId}:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: photoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags: [Contracts]
+      summary: Xóa ảnh (chỉ khi DRAFT)
+      responses:
+        '204':
+          description: Đã xóa
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/handover/send:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Gửi biên bản cho khách - DRAFT thành PENDING_TENANT
+      description: >
+        Cần ít nhất một ảnh mỗi loại ROOM, METER_ELECTRIC, METER_WATER. Khi gửi hệ thống chụp danh sách tài sản của phòng, nội quy hiện hành và mã băm SHA-256 của điều khoản hợp đồng và nội quy.
+      responses:
+        '200':
+          description: Biên bản sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /api/contracts/{contractId}/handover/confirm:
     parameters:
@@ -1091,25 +1705,510 @@ paths:
           type: string
           format: uuid
     post:
-      tags: [Handover]
-      summary: Khách thuê xác nhận chấp thuận biên bản bàn giao
+      tags: [Contracts]
+      summary: Người thuê chính xác nhận - PENDING_TENANT thành PENDING_APPROVAL
+      description: >
+        Chỉ người thuê chính của hợp đồng; cần đã tải giấy tờ CCCD (xem API giấy tờ).
       responses:
         '200':
-          description: Biên bản bàn giao đã được ký xác nhận
+          description: Biên bản sau khi chuyển trạng thái
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
-  # ==========================================
-  # 6. METERS & SERVICE RATES
-  # ==========================================
+  /api/contracts/{contractId}/handover/approve:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Duyệt biên bản - PENDING_APPROVAL thành APPROVED
+      description: >
+        Không thay đổi trạng thái hợp đồng hay phòng (đã đổi lúc kích hoạt). Duyệt hai lần trả 409.
+      responses:
+        '200':
+          description: Biên bản sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/handover/reject:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Từ chối biên bản kèm lý do - PENDING_APPROVAL thành REJECTED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Biên bản sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/handover/reopen:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Mở lại biên bản bị từ chối để chỉnh sửa - REJECTED thành DRAFT
+      responses:
+        '200':
+          description: Biên bản sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Tạo biên bản check-out (nháp) khi khách trả phòng
+      description: >
+        Chỉ cho hợp đồng ACTIVE đã có biên bản check-in được duyệt. Danh sách tài sản khởi tạo từ bản chụp check-in;
+        nhân viên cập nhật tình trạng lúc trả và khoản khấu trừ đề xuất cho từng tài sản. Chỉ số điện nước là chỉ số cuối kỳ.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandoverInput'
+      responses:
+        '201':
+          description: Đã tạo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      tags: [Contracts]
+      summary: Xem biên bản check-out
+      responses:
+        '200':
+          description: Biên bản check-out sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    patch:
+      tags: [Contracts]
+      summary: Sửa chỉ số cuối kỳ và tình trạng phòng (chỉ khi DRAFT)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandoverInput'
+      responses:
+        '200':
+          description: Biên bản check-out sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out/items/{itemId}:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Contracts]
+      summary: Cập nhật tình trạng một tài sản lúc trả phòng và khoản khấu trừ đề xuất (chỉ khi DRAFT)
+      description: Tài sản còn tốt (GOOD) không được đề xuất khấu trừ.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [GOOD, DAMAGED, LOST, RETIRED]
+                conditionNote:
+                  type: string
+                deductionAmount:
+                  type: number
+                  minimum: 0
+      responses:
+        '200':
+          description: Đã cập nhật
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out/photos:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Tải ảnh phòng và đồng hồ lúc trả (cùng quy tắc với check-in; cần đủ ba loại ảnh trước khi gửi)
+      responses:
+        '201':
+          description: Đã lưu ảnh
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out/send:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Gửi biên bản check-out cho khách - DRAFT thành PENDING_TENANT
+      responses:
+        '200':
+          description: Biên bản check-out sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out/confirm:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Người thuê chính xác nhận biên bản check-out
+      responses:
+        '200':
+          description: Biên bản check-out sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out/approve:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Duyệt check-out - chỉ owner hoặc admin
+      description: >
+        Owner chốt khoản khấu trừ (mặc định bằng tổng đề xuất). Trong một transaction: biên bản APPROVED, hợp đồng TERMINATED và phòng chuyển AVAILABLE, hoặc MAINTENANCE nếu có tài sản hỏng hoặc mất. Lỗi bất kỳ thì hoàn tác tất cả.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                finalDeduction:
+                  type: number
+                  minimum: 0
+      responses:
+        '200':
+          description: Biên bản check-out sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out/reject:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Từ chối biên bản check-out kèm lý do
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Biên bản check-out sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/check-out/reopen:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Mở lại biên bản check-out bị từ chối để chỉnh sửa
+      responses:
+        '200':
+          description: Biên bản check-out sau khi chuyển trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/properties/{propertyId}/house-rules:
+    parameters:
+      - name: propertyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Properties]
+      summary: Nội quy chung hiện hành của nhà trọ
+      responses:
+        '200':
+          description: Nội quy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseRules'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    put:
+      tags: [Properties]
+      summary: Lưu nội quy chung (tăng phiên bản); biên bản đã gửi giữ bản chụp cũ
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+      responses:
+        '200':
+          description: Đã lưu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseRules'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
   /api/properties/{propertyId}/service-rates:
     parameters:
       - name: propertyId
@@ -1134,7 +2233,7 @@ paths:
           $ref: '#/components/responses/Unauthorized'
     post:
       tags: [Meters]
-      summary: Thiết lập loại phí và đơn giá dịch vụ
+      summary: Thiết lập loại phí và đơn giá dịch vụ (owner của nhà trọ hoặc admin; tên không trùng trong nhà trọ)
       requestBody:
         required: true
         content:
@@ -1161,6 +2260,10 @@ paths:
                 $ref: '#/components/schemas/ServiceRate'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /api/service-rates/{rateId}:
     parameters:
@@ -1172,14 +2275,20 @@ paths:
           format: uuid
     patch:
       tags: [Meters]
-      summary: Cập nhật đơn giá dịch vụ
+      summary: Cập nhật dịch vụ và đơn giá (owner của nhà trọ hoặc admin)
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [serviceName, chargeType, pricePerUnit]
               properties:
+                serviceName:
+                  type: string
+                chargeType:
+                  type: string
+                  enum: [PER_KWH, PER_M3, PER_PERSON, PER_ROOM_FLAT]
                 pricePerUnit:
                   type: number
       responses:
@@ -1191,6 +2300,12 @@ paths:
                 $ref: '#/components/schemas/ServiceRate'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /api/rooms/{roomId}/meter-readings:
     parameters:
@@ -1202,37 +2317,36 @@ paths:
           format: uuid
     get:
       tags: [Meters]
-      summary: Lịch sử ghi nhận chỉ số điện/nước của phòng
-      parameters:
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/LimitParam'
+      summary: Lịch sử chỉ số điện/nước của phòng (kỳ mới nhất trước)
+      description: Owner/staff/kỹ thuật viên của nhà trọ và tenant đang ở phòng được xem; người khác nhận 403.
       responses:
         '200':
           description: Danh sách chỉ số
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/PaginatedMeta'
-                  - type: object
-                    properties:
-                      data:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/MeterReading'
+                type: array
+                items:
+                  $ref: '#/components/schemas/MeterReading'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [Meters]
-      summary: Chốt chỉ số điện/nước hàng tháng
-      description: Tự động tính toán lượng tiêu thụ (consumption = currentValue - previousValue).
+      summary: Ghi chỉ số điện/nước theo kỳ (owner hoặc staff của nhà trọ)
+      description: >
+        Kỳ là tháng của readingDate (mặc định hôm nay, không được ở tương lai). Mỗi phòng/loại/kỳ chỉ một bản ghi và chỉ ghi được
+        kỳ sau kỳ gần nhất (409 nếu trùng hoặc cũ hơn). Chỉ số kỳ trước lấy từ bản ghi gần nhất hoặc biên bản check-in đã duyệt;
+        nếu chưa có thì phải gửi baselineValue. consumption = currentValue - previousValue; currentValue nhỏ hơn previousValue
+        chỉ hợp lệ khi thay đồng hồ (replacement kèm ghi chú), khi đó consumption = (oldFinalValue - previous) + (current - newStartValue).
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [meterType, currentValue, readingDate]
+              required: [meterType, currentValue]
               properties:
                 meterType:
                   type: string
@@ -1243,9 +2357,19 @@ paths:
                 readingDate:
                   type: string
                   format: date
-                photoUrl:
-                  type: string
-                  format: uri
+                baselineValue:
+                  type: number
+                  description: Chỉ số gốc, chỉ dùng cho lần ghi đầu khi chưa có kỳ trước hay check-in.
+                replacement:
+                  type: object
+                  required: [oldFinalValue, newStartValue, note]
+                  properties:
+                    oldFinalValue:
+                      type: number
+                    newStartValue:
+                      type: number
+                    note:
+                      type: string
       responses:
         '201':
           description: Đã lưu chỉ số công tơ
@@ -1253,10 +2377,62 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MeterReading'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+
+  /api/meter-readings/{readingId}/photo:
+    parameters:
+      - name: readingId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Meters]
+      summary: Đính kèm ảnh đồng hồ (jpeg/png/webp, lưu private)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Đã đính kèm ảnh
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeterReading'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    get:
+      tags: [Meters]
+      summary: Xem ảnh đồng hồ (chuyển hướng 302 tới URL ký có hạn)
+      responses:
+        '302':
+          description: Redirect tới signed URL
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   # ==========================================
   # 7. BILLING & INVOICES (CORE)
@@ -2052,6 +3228,454 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  # ==========================================
+  # EXPORTS (#85)
+  # ==========================================
+  /api/exports/{dataset}:
+    get:
+      tags: [Billing & Invoices]
+      summary: Xuất hóa đơn / công nợ / hợp đồng ra Excel hoặc PDF trong phạm vi quyền
+      description: >
+        Hóa đơn và công nợ cần quyền thu tiền, hợp đồng cần quyền quản lý hợp đồng (admin mọi nhà, owner nhà của
+        mình, staff theo quyền được cấp). Kỹ thuật viên và người thuê bị 403. Số CCCD luôn được che (****1234).
+        Mỗi lần xuất được ghi audit DATA_EXPORTED.
+      parameters:
+        - name: dataset
+          in: path
+          required: true
+          schema: { type: string, enum: [invoices, debts, contracts] }
+        - name: format
+          in: query
+          schema: { type: string, enum: [xlsx, pdf], default: xlsx }
+        - name: propertyId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          description: Chỉ cho hóa đơn - tháng bắt đầu (yyyy-MM), mặc định 11 tháng trước tháng kết thúc
+          schema: { type: string, example: '2026-01' }
+        - name: to
+          in: query
+          description: Chỉ cho hóa đơn - tháng kết thúc (yyyy-MM), mặc định tháng hiện tại; tối đa 60 tháng
+          schema: { type: string, example: '2026-12' }
+      responses:
+        '200':
+          description: Tệp đính kèm (Content-Disposition attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+            application/pdf:
+              schema: { type: string, format: binary }
+        '400':
+          description: Loại dữ liệu, định dạng hoặc khoảng tháng không hợp lệ
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==========================================
+  # RECONCILIATION & RECEIPTS (#82)
+  # ==========================================
+  /api/v1/payments/reconciliation:
+    get:
+      tags: [Payments]
+      summary: Giao dịch SePay kèm trạng thái đối soát (khớp / cần xem xét / không khớp / bỏ qua)
+      description: >
+        Admin xem mọi giao dịch (kể cả chưa khớp hợp đồng); owner xem giao dịch hợp đồng nhà mình; staff xem nhà được
+        phân công có quyền thu tiền. Kỹ thuật viên, người thuê, lọc nhà ngoài phạm vi: 403.
+      parameters:
+        - name: propertyId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { type: string, enum: [MATCHED, NEEDS_REVIEW, UNMATCHED, IGNORED] }
+        - name: from
+          in: query
+          description: Ngày bắt đầu (yyyy-MM-dd, giờ Việt Nam, bao gồm)
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          description: Ngày kết thúc (yyyy-MM-dd, bao gồm)
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Danh sách giao dịch mới nhất trước, số lượng theo trạng thái và tổng tiền
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        sepayId: { type: integer }
+                        receivedAt: { type: string, format: date-time }
+                        gateway: { type: string }
+                        referenceCode: { type: string }
+                        amount: { type: number }
+                        appliedAmount: { type: number }
+                        excessAmount: { type: number }
+                        status: { type: string, enum: [MATCHED, NEEDS_REVIEW, UNMATCHED, IGNORED] }
+                        reviewReason: { type: string, nullable: true, enum: [OVERPAID, INVOICE_NOT_PAYABLE, UNMATCHED] }
+                        invoiceId: { type: string, format: uuid, nullable: true }
+                        propertyName: { type: string, nullable: true }
+                        roomNumber: { type: string, nullable: true }
+                  counts:
+                    type: object
+                    additionalProperties: { type: integer }
+                  totalReceived: { type: number }
+                  totalApplied: { type: number }
+                  totalExcess: { type: number }
+        '400':
+          description: Tham số sai (trạng thái không hợp lệ, from > to)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/invoices/{invoiceId}/receipt:
+    get:
+      tags: [Payments]
+      summary: Biên lai thanh toán của hóa đơn (người thuê của hợp đồng hoặc người quản lý nhà trọ)
+      parameters:
+        - name: invoiceId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Biên lai; danh sách lần tiền về không kèm số tài khoản hay nội dung chuyển khoản
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Hóa đơn chưa có khoản thanh toán nào nên chưa có biên lai
+
+  # ==========================================
+  # MAINTENANCE QUOTE & TENANT CONFIRMATION (#83)
+  # ==========================================
+  /api/maintenance/{id}/quote:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Maintenance]
+      summary: Nhập/cập nhật báo giá khi phiếu chưa sửa xong (kỹ thuật viên được giao, owner/staff quản lý, admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: { type: number, minimum: 0 }
+                note: { type: string, maxLength: 1000 }
+      responses:
+        '200':
+          description: Báo giá đã lưu
+        '400':
+          description: Số tiền thiếu hoặc âm
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Phiếu đã sửa xong, đang chờ thanh toán hoặc đã bị từ chối
+    get:
+      tags: [Maintenance]
+      summary: Báo giá người xem được thấy (người thuê chỉ thấy khi là bên chịu phí)
+      responses:
+        '200':
+          description: Báo giá
+        '204':
+          description: Chưa có báo giá hoặc người thuê không phải bên chịu phí
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/maintenance/{id}/verify:
+    post:
+      tags: [Maintenance]
+      summary: Người thuê của phòng xác nhận đã sửa xong (RESOLVED -> VERIFIED)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Phiếu ở trạng thái VERIFIED
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Phiếu chưa sửa xong, còn phí chờ thanh toán hoặc đã xác nhận
+
+  /api/maintenance/{id}/reopen:
+    post:
+      tags: [Maintenance]
+      summary: Người thuê phản hồi chưa đạt; phiếu về ASSIGNED (có kỹ thuật viên) hoặc REPORTED, sửa lại không thu phí lần hai
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [feedback]
+              properties:
+                feedback: { type: string, maxLength: 1000 }
+      responses:
+        '200':
+          description: Phiếu được mở lại
+        '400':
+          description: Thiếu lý do chưa đạt
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Phiếu chưa sửa xong
+
+  # ==========================================
+  # STATISTICS (#93)
+  # Doanh thu tính theo kỳ hóa đơn (bỏ hóa đơn VOIDED và phí đã gộp vào hóa đơn tháng); chi phí là phí sửa chữa
+  # chủ nhà chịu của phiếu hoàn thành trong kỳ; lợi nhuận ước tính = đã thu - chi phí. Tháng theo giờ Việt Nam.
+  # Owner chỉ thấy nhà của mình (403 nếu lọc nhà khác); admin thấy mọi nhà. Staff/kỹ thuật viên/người thuê: 403.
+  # ==========================================
+  /api/stats/owner/summary:
+    get:
+      tags: [Statistics]
+      summary: Tổng hợp doanh thu, công nợ, chi phí, lấp đầy và bảo trì của owner
+      parameters:
+        - $ref: '#/components/parameters/StatsPropertyParam'
+        - $ref: '#/components/parameters/StatsFromParam'
+        - $ref: '#/components/parameters/StatsToParam'
+      responses:
+        '200':
+          description: Số liệu tổng hợp (owner chưa có nhà trọ thì các số bằng 0, tỷ lệ null)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerStatsSummary'
+        '400':
+          description: Khoảng thời gian sai (from > to, quá 60 tháng, sai định dạng yyyy-MM)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/stats/owner/revenue:
+    get:
+      tags: [Statistics]
+      summary: Chuỗi doanh thu, công nợ, chi phí, lợi nhuận theo tháng/quý/năm (đủ kỳ, kỳ trống = 0)
+      parameters:
+        - $ref: '#/components/parameters/StatsPropertyParam'
+        - $ref: '#/components/parameters/StatsFromParam'
+        - $ref: '#/components/parameters/StatsToParam'
+        - name: groupBy
+          in: query
+          schema:
+            type: string
+            enum: [MONTH, QUARTER, YEAR]
+            default: MONTH
+      responses:
+        '200':
+          description: Mỗi phần tử là một kỳ (2026-03, 2026-Q1 hoặc 2026)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StatsPeriod'
+        '400':
+          description: Tham số sai
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/stats/owner/properties:
+    get:
+      tags: [Statistics]
+      summary: Số liệu từng nhà trọ trong phạm vi
+      parameters:
+        - $ref: '#/components/parameters/StatsPropertyParam'
+        - $ref: '#/components/parameters/StatsFromParam'
+        - $ref: '#/components/parameters/StatsToParam'
+      responses:
+        '200':
+          description: Danh sách nhà trọ sắp theo tên
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PropertyStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/stats/admin/overview:
+    get:
+      tags: [Statistics]
+      summary: Admin - tổng quan toàn hệ thống (nhà trọ theo trạng thái xác minh, tài khoản theo vai trò, doanh thu, lấp đầy)
+      parameters:
+        - $ref: '#/components/parameters/StatsFromParam'
+        - $ref: '#/components/parameters/StatsToParam'
+      responses:
+        '200':
+          description: Tổng quan hệ thống
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStatsOverview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/stats/admin/pending-properties:
+    get:
+      tags: [Statistics]
+      summary: Admin - nhà trọ chờ duyệt, cũ nhất trước, kèm chủ nhà
+      responses:
+        '200':
+          description: Danh sách nhà trọ chờ duyệt
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PendingPropertyStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/stats/admin/accounts:
+    get:
+      tags: [Statistics]
+      summary: Admin - tài khoản theo vai trò/trạng thái và hoạt động theo tháng (tài khoản mới, thao tác audit)
+      parameters:
+        - $ref: '#/components/parameters/StatsFromParam'
+        - $ref: '#/components/parameters/StatsToParam'
+      responses:
+        '200':
+          description: Số liệu tài khoản
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ==========================================
+  # 11. NOTIFICATIONS (#86)
+  # ==========================================
+  /api/notifications:
+    get:
+      tags: [Notifications]
+      summary: Thông báo cá nhân của người đang đăng nhập, mới nhất trước
+      description: >
+        Gồm hóa đơn sắp đến hạn, hợp đồng sắp hết hạn, bảo trì quá hạn, biên bản check-in/check-out cần xác nhận
+        hoặc chờ duyệt... Không gồm việc của quản trị viên (yêu cầu cấp lại mật khẩu, tiền về không khớp hóa đơn).
+      parameters:
+        - name: unread
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Chỉ lấy thông báo chưa đọc
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 50
+      responses:
+        '200':
+          description: Một trang thông báo kèm tổng số và số chưa đọc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationInbox'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/notifications/{notificationId}/read:
+    parameters:
+      - name: notificationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Notifications]
+      summary: Đánh dấu một thông báo của mình là đã đọc
+      responses:
+        '200':
+          description: Thông báo sau khi đánh dấu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/notifications/read-all:
+    post:
+      tags: [Notifications]
+      summary: Đánh dấu mọi thông báo chưa đọc của mình là đã đọc
+      responses:
+        '200':
+          description: Số thông báo được cập nhật
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: integer
+                    example: 3
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 # ==========================================
 # COMPONENTS (REUSABLE SCHEMAS & CONTRACTS)
 # ==========================================
@@ -2063,6 +3687,29 @@ components:
       bearerFormat: JWT
 
   parameters:
+    StatsPropertyParam:
+      name: propertyId
+      in: query
+      description: Chỉ thống kê một nhà trọ (owner phải sở hữu, nếu không trả 403)
+      schema:
+        type: string
+        format: uuid
+    StatsFromParam:
+      name: from
+      in: query
+      description: Tháng bắt đầu (yyyy-MM, bao gồm). Mặc định 11 tháng trước tháng kết thúc
+      schema:
+        type: string
+        pattern: '^\d{4}-\d{2}$'
+        example: '2026-01'
+    StatsToParam:
+      name: to
+      in: query
+      description: Tháng kết thúc (yyyy-MM, bao gồm). Mặc định tháng hiện tại; khoảng tối đa 60 tháng
+      schema:
+        type: string
+        pattern: '^\d{4}-\d{2}$'
+        example: '2026-12'
     PageParam:
       name: page
       in: query
@@ -2153,6 +3800,115 @@ components:
       type: string
       enum: [LOW, MEDIUM, HIGH, URGENT]
 
+    StatsRevenue:
+      type: object
+      properties:
+        invoiceCount: { type: integer }
+        billed: { type: number, description: Tổng tiền hóa đơn phát sinh trong kỳ }
+        collected: { type: number, description: Số đã thu của các hóa đơn đó }
+        outstanding: { type: number, description: Công nợ còn lại của hóa đơn chưa trả đủ }
+        overdueInvoices: { type: integer }
+        overdueAmount: { type: number }
+        collectionRate: { type: number, nullable: true, description: 'Phần trăm đã thu trên phát sinh, null khi chưa phát sinh' }
+    StatsOccupancy:
+      type: object
+      properties:
+        totalRooms: { type: integer }
+        occupied: { type: integer }
+        reserved: { type: integer }
+        maintenance: { type: integer }
+        available: { type: integer }
+        occupancyRate: { type: number, nullable: true }
+    OwnerStatsSummary:
+      type: object
+      properties:
+        from: { type: string, example: '2025-11' }
+        to: { type: string, example: '2026-10' }
+        propertyId: { type: string, format: uuid, nullable: true }
+        propertyCount: { type: integer }
+        revenue: { $ref: '#/components/schemas/StatsRevenue' }
+        repairCost: { type: number, description: Phí sửa chữa chủ nhà chịu của phiếu hoàn thành trong kỳ }
+        estimatedProfit: { type: number }
+        occupancy: { $ref: '#/components/schemas/StatsOccupancy' }
+        maintenance:
+          type: object
+          properties:
+            openTickets: { type: integer }
+            overdueTickets: { type: integer, description: Phiếu đang mở đã quá hạn SLA }
+            roomsUnderMaintenance: { type: integer }
+            completedTickets: { type: integer }
+            repairCost: { type: number }
+            avgResolutionHours: { type: number, nullable: true }
+    StatsPeriod:
+      type: object
+      properties:
+        period: { type: string, example: '2026-Q1' }
+        billed: { type: number }
+        collected: { type: number }
+        outstanding: { type: number }
+        repairCost: { type: number }
+        estimatedProfit: { type: number }
+    PropertyStats:
+      type: object
+      properties:
+        propertyId: { type: string, format: uuid }
+        name: { type: string }
+        approvalStatus: { type: string, enum: [PENDING, VERIFIED, REJECTED] }
+        revenue: { $ref: '#/components/schemas/StatsRevenue' }
+        repairCost: { type: number }
+        estimatedProfit: { type: number }
+        occupancy: { $ref: '#/components/schemas/StatsOccupancy' }
+    AdminStatsOverview:
+      type: object
+      properties:
+        from: { type: string }
+        to: { type: string }
+        properties: { type: integer }
+        propertiesByApproval:
+          type: object
+          additionalProperties: { type: integer }
+          example: { PENDING: 1, VERIFIED: 10, REJECTED: 2 }
+        accountsByRole:
+          type: object
+          additionalProperties: { type: integer }
+          example: { ADMIN: 1, OWNER: 5, STAFF: 3, TECHNICIAN: 2, TENANT: 40 }
+        revenue: { $ref: '#/components/schemas/StatsRevenue' }
+        occupancy: { $ref: '#/components/schemas/StatsOccupancy' }
+    PendingPropertyStats:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        address: { type: string }
+        ownerId: { type: string, format: uuid, nullable: true }
+        ownerName: { type: string, nullable: true }
+        ownerEmail: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    AccountStats:
+      type: object
+      properties:
+        from: { type: string }
+        to: { type: string }
+        totalAccounts: { type: integer }
+        byRole:
+          type: object
+          additionalProperties: { type: integer }
+        byStatus:
+          type: object
+          additionalProperties: { type: integer }
+          example: { ACTIVE: 50, INACTIVE: 1, SUSPENDED: 0 }
+        activity:
+          type: array
+          items:
+            type: object
+            properties:
+              period: { type: string, example: '2026-10' }
+              newAccounts: { type: integer }
+              newAccountsByRole:
+                type: object
+                additionalProperties: { type: integer }
+              actions: { type: integer, description: Số thao tác ghi trong audit log }
+              activeUsers: { type: integer, description: Số người có thao tác }
     Error:
       type: object
       required: [code, message]
@@ -2292,6 +4048,9 @@ components:
           type: string
         description:
           type: string
+        totalRooms:
+          type: integer
+          minimum: 0
 
     Room:
       type: object
@@ -2341,7 +4100,7 @@ components:
 
     Asset:
       type: object
-      required: [id, roomId, name, quantity, condition]
+      required: [id, roomId, assetCode, name, quantity, status]
       properties:
         id:
           type: string
@@ -2349,36 +4108,165 @@ components:
         roomId:
           type: string
           format: uuid
+        assetCode:
+          type: string
+          description: Mã duy nhất dùng cho QR
+          example: TS-1A2B3C4D
         name:
           type: string
           example: Máy lạnh Daikin 1.5 HP
         serialNumber:
           type: string
+          nullable: true
           example: DK-892182
         quantity:
           type: integer
           example: 1
+        status:
+          type: string
+          enum: [GOOD, DAMAGED, LOST, RETIRED]
         condition:
           type: string
+          nullable: true
           example: Mới 98%, hoạt động tốt
+        imageUrl:
+          type: string
+          nullable: true
+          description: Liên kết ảnh hoặc khóa tệp trong kho riêng tư (xem qua link ký có hạn)
         estimatedValue:
           type: number
           example: 8000000
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
 
     AssetInput:
       type: object
-      required: [name, quantity, condition]
+      required: [name, quantity]
       properties:
+        assetCode:
+          type: string
+          maxLength: 40
+          description: Tùy chọn khi tạo; để trống thì hệ thống tự sinh. Trùng mã trả 409.
         name:
           type: string
+          maxLength: 150
         serialNumber:
           type: string
+          maxLength: 100
         quantity:
           type: integer
+          minimum: 1
         condition:
+          type: string
+          maxLength: 255
+        imageUrl:
           type: string
         estimatedValue:
           type: number
+          minimum: 0
+
+    AssetEventInput:
+      type: object
+      required: [type, description]
+      properties:
+        type:
+          type: string
+          enum: [DAMAGED, REPAIRED, REPLACED, LOST_REPORTED]
+        description:
+          type: string
+        cost:
+          type: number
+          minimum: 0
+        maintenanceTicketId:
+          type: string
+          format: uuid
+          nullable: true
+
+    AssetEvent:
+      type: object
+      required: [id, assetId, type, description, cost, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        assetId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [DAMAGED, REPAIRED, REPLACED, LOST_REPORTED]
+        description:
+          type: string
+        cost:
+          type: number
+        maintenanceTicketId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    StoredFile:
+      type: object
+      required: [objectKey, contentType, size]
+      properties:
+        objectKey:
+          type: string
+          example: properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/documents/6f1c2d3e-0000-0000-0000-000000000000.pdf
+        contentType:
+          type: string
+        size:
+          type: integer
+          format: int64
+
+    TenantDocumentSummary:
+      type: object
+      required: [type, hasFrontImage, hasBackImage, updatedAt]
+      properties:
+        type:
+          type: string
+          enum: [CCCD, GPLX]
+        maskedNumber:
+          type: string
+          example: '****1111'
+        hasFrontImage:
+          type: boolean
+        hasBackImage:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+
+    TenantDocumentImage:
+      type: object
+      required: [contentType, base64]
+      properties:
+        contentType:
+          type: string
+          example: image/png
+        base64:
+          type: string
+          format: byte
+
+    TenantDocumentReveal:
+      type: object
+      required: [type, number, front]
+      properties:
+        type:
+          type: string
+          enum: [CCCD, GPLX]
+        number:
+          type: string
+        front:
+          $ref: '#/components/schemas/TenantDocumentImage'
+        back:
+          $ref: '#/components/schemas/TenantDocumentImage'
+          nullable: true
 
     Tenant:
       type: object
@@ -2490,40 +4378,144 @@ components:
           type: integer
           default: 5
 
-    HandoverRecord:
+    HandoverInput:
       type: object
-      required: [contractId, initialElectricMeter, initialWaterMeter, roomCondition, isConfirmedByTenant]
+      required: [initialElectricMeter, initialWaterMeter, roomCondition]
       properties:
-        contractId:
-          type: string
-          format: uuid
         initialElectricMeter:
           type: number
+          minimum: 0
           example: 1420.5
         initialWaterMeter:
           type: number
+          minimum: 0
           example: 35.0
         roomCondition:
           type: string
-          example: Phòng sơn mới, đèn quạt hoạt động tốt
+          example: Phòng sạch sẽ, tài sản bàn giao nguyên vẹn
         keysProvided:
           type: string
-          example: 2 chìa khóa cơ, 1 thẻ từ
-        photoUrls:
-          type: array
-          items:
-            type: string
-            format: uri
-        isConfirmedByTenant:
-          type: boolean
-          example: true
-        confirmedAt:
+          example: 2 chìa khóa phòng, 1 thẻ từ cửa cuốn
+
+    HouseRules:
+      type: object
+      required: [propertyId, content, version, updatedAt]
+      properties:
+        propertyId:
+          type: string
+          format: uuid
+        content:
+          type: string
+        version:
+          type: integer
+        updatedAt:
           type: string
           format: date-time
 
+    HandoverRecord:
+      type: object
+      required: [id, contractId, status, initialElectricMeter, initialWaterMeter, roomCondition, isConfirmedByTenant]
+      properties:
+        id:
+          type: string
+          format: uuid
+        contractId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [CHECK_IN, CHECK_OUT]
+        status:
+          type: string
+          enum: [DRAFT, PENDING_TENANT, PENDING_APPROVAL, APPROVED, REJECTED]
+        initialElectricMeter:
+          type: number
+        initialWaterMeter:
+          type: number
+        roomCondition:
+          type: string
+        keysProvided:
+          type: string
+          nullable: true
+        contractTermsHash:
+          type: string
+          nullable: true
+          description: SHA-256 của điều khoản chính của hợp đồng tại thời điểm gửi
+        houseRulesText:
+          type: string
+          nullable: true
+        houseRulesHash:
+          type: string
+          nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+        sentAt:
+          type: string
+          format: date-time
+          nullable: true
+        isConfirmedByTenant:
+          type: boolean
+        confirmedAt:
+          type: string
+          format: date-time
+          nullable: true
+        approvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        proposedDeduction:
+          type: number
+          description: Tổng khấu trừ nhân viên đề xuất trên từng tài sản (check-out)
+        finalDeduction:
+          type: number
+          nullable: true
+          description: Khoản khấu trừ owner chốt khi duyệt check-out
+        photos:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              kind:
+                type: string
+                enum: [ROOM, METER_ELECTRIC, METER_WATER]
+              contentType:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+        items:
+          type: array
+          description: Bản chụp tài sản của phòng tại thời điểm gửi
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              deductionAmount:
+                type: number
+              assetId:
+                type: string
+                format: uuid
+                nullable: true
+              assetName:
+                type: string
+              quantity:
+                type: integer
+              status:
+                type: string
+                enum: [GOOD, DAMAGED, LOST, RETIRED]
+              conditionNote:
+                type: string
+                nullable: true
+
     MeterReading:
       type: object
-      required: [id, roomId, meterType, previousValue, currentValue, consumption, readingDate]
+      required: [id, roomId, meterType, periodYear, periodMonth, previousValue, currentValue, consumption, replaced, readingDate, hasPhoto]
       properties:
         id:
           type: string
@@ -2534,6 +4526,12 @@ components:
         meterType:
           type: string
           enum: [ELECTRIC, WATER]
+        periodYear:
+          type: integer
+        periodMonth:
+          type: integer
+          minimum: 1
+          maximum: 12
         previousValue:
           type: number
           example: 1420.5
@@ -2543,12 +4541,25 @@ components:
         consumption:
           type: number
           example: 79.5
+        replaced:
+          type: boolean
+        oldMeterFinalValue:
+          type: number
+          nullable: true
+        newMeterStartValue:
+          type: number
+          nullable: true
+        replacementNote:
+          type: string
+          nullable: true
         readingDate:
           type: string
           format: date
-        photoUrl:
+        hasPhoto:
+          type: boolean
+        createdAt:
           type: string
-          format: uri
+          format: date-time
 
     ServiceRate:
       type: object
@@ -2668,6 +4679,51 @@ components:
           type: string
           format: date-time
 
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: Hóa đơn sắp đến hạn
+        message:
+          type: string
+          example: Hóa đơn kỳ 11/2026 (phòng P101 - Nhà trọ Xanh) còn 3,500,000 đ, hạn thanh toán 05/11/2026 (còn 3 ngày).
+        link:
+          type: string
+          nullable: true
+          description: Đường dẫn nội bộ tới đối tượng liên quan (luôn bắt đầu bằng "/")
+          example: /invoices/7c9e6679-7425-40de-944b-e07fc1f90ae7/pay
+        createdAt:
+          type: string
+          format: date-time
+        read:
+          type: boolean
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+    NotificationInbox:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        total:
+          type: integer
+          description: Tổng số thông báo theo bộ lọc
+        unread:
+          type: integer
+          description: Tổng số thông báo chưa đọc
+        page:
+          type: integer
+        size:
+          type: integer
+        totalPages:
+          type: integer
     MaintenanceTicket:
       type: object
       required: [id, roomId, title, status, priority, createdAt]

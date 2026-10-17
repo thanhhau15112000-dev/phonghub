@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Giao dịch & đối soát')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Giao dịch &amp; đối soát</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">Tiền chuyển khoản qua SePay và kết quả khớp với hóa đơn trong phạm vi bạn được thu tiền.</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <form th:action="@{/payments}" method="get" id="reconciliationFilter"
+              style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 16px;">
+            <div class="form-group" style="min-width: 200px; margin: 0;">
+                <label class="form-label" for="propertyId">Nhà trọ</label>
+                <select id="propertyId" name="propertyId" class="form-control">
+                    <option value="">Tất cả trong phạm vi</option>
+                    <option th:each="p : ${properties}" th:value="${p.id()}" th:text="${p.name()}"
+                            th:selected="${filterPropertyId != null and filterPropertyId == p.id().toString()}">Nhà trọ</option>
+                </select>
+            </div>
+            <div class="form-group" style="min-width: 160px; margin: 0;">
+                <label class="form-label" for="status">Trạng thái</label>
+                <select id="status" name="status" class="form-control">
+                    <option value="">Tất cả</option>
+                    <option th:each="s : ${statuses}" th:value="${s.name()}" th:text="${statusLabels[s.name()]}"
+                            th:selected="${s.name() == filterStatus}">Khớp</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="from">Từ ngày</label>
+                <input id="from" type="date" name="from" class="form-control" th:value="${filterFrom}">
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="to">Đến ngày</label>
+                <input id="to" type="date" name="to" class="form-control" th:value="${filterTo}">
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">Lọc</button>
+        </form>
+
+        <div class="filter-tabs" style="margin-bottom: 12px;" id="reconciliationCounts">
+            <a th:each="s : ${statuses}" class="filter-tab"
+               th:href="@{/payments(propertyId=${filterPropertyId}, status=${s.name()}, from=${filterFrom}, to=${filterTo})}">
+                <span th:text="${statusLabels[s.name()]}">Khớp</span>
+                <span class="badge-count" th:text="${report.count(s.name())}">0</span>
+            </a>
+        </div>
+
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;"
+           th:text="'Đã nhận ' + ${#numbers.formatDecimal(report.totalReceived(), 0, 'COMMA', 0, 'POINT')} + ' đ · đã cộng vào hóa đơn ' + ${#numbers.formatDecimal(report.totalApplied(), 0, 'COMMA', 0, 'POINT')} + ' đ · tiền dư chờ xử lý ' + ${#numbers.formatDecimal(report.totalExcess(), 0, 'COMMA', 0, 'POINT')} + ' đ'">Tổng</p>
+
+        <div th:if="${#lists.isEmpty(report.rows())}" class="empty-state">
+            <p>Không có giao dịch nào khớp bộ lọc.</p>
+        </div>
+
+        <table th:if="${!#lists.isEmpty(report.rows())}" class="data-table" id="transactionTable">
+            <thead>
+                <tr>
+                    <th>Thời gian</th>
+                    <th>Mã tham chiếu</th>
+                    <th>Nhà trọ / phòng</th>
+                    <th class="col-number">Số tiền</th>
+                    <th class="col-number">Đã cộng</th>
+                    <th class="col-number">Dư</th>
+                    <th>Đối soát</th>
+                    <th class="col-actions">Hóa đơn</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="r : ${report.rows()}">
+                    <td th:text="${#temporals.format(r.receivedAt(), 'dd/MM/yyyy HH:mm')}">01/10/2026 08:00</td>
+                    <td style="font-family: monospace;" th:text="${r.referenceCode() != null ? r.referenceCode() : r.sepayId()}">REF</td>
+                    <td>
+                        <span th:text="${r.propertyName() != null ? r.propertyName() : '—'}">Nhà trọ</span>
+                        <span th:if="${r.roomNumber() != null}" style="color: var(--text-secondary);" th:text="' · ' + ${r.roomNumber()}">· P101</span>
+                    </td>
+                    <td class="col-number" th:text="${#numbers.formatDecimal(r.amount(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                    <td class="col-number" th:text="${#numbers.formatDecimal(r.appliedAmount(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                    <td class="col-number" th:text="${#numbers.formatDecimal(r.excessAmount(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                    <td>
+                        <span class="badge" th:text="${statusLabels[r.status().name()]}"
+                              th:style="${r.status().name() == 'MATCHED' ? 'background:#dcfce7;color:#166534;'
+                                  : (r.status().name() == 'NEEDS_REVIEW' ? 'background:#fef3c7;color:#b45309;'
+                                  : (r.status().name() == 'UNMATCHED' ? 'background:#fee2e2;color:#b91c1c;' : ''))}">Khớp</span>
+                        <div th:if="${r.reviewReason() != null}" style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;"
+                             th:text="${reasonLabels[r.reviewReason().name()]}">Lý do</div>
+                    </td>
+                    <td class="col-actions">
+                        <div class="table-actions" th:if="${r.invoiceId() != null}">
+                            <a th:href="@{'/invoices/' + ${r.invoiceId()} + '/pay'}" class="btn btn-sm btn-secondary">Hóa đơn</a>
+                            <a th:if="${r.appliedAmount().signum() > 0}" th:href="@{'/invoices/' + ${r.invoiceId()} + '/receipt'}" class="btn btn-sm">Biên lai</a>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

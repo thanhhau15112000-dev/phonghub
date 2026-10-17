@@ -3,6 +3,19 @@ package com.phonghub.adapter.in.web;
 import com.phonghub.domain.exception.ContractNotFoundException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
+import com.phonghub.domain.exception.NotificationNotFoundException;
+import com.phonghub.domain.exception.DocumentRevealDeniedException;
+import com.phonghub.domain.exception.DuplicateAssetCodeException;
+import com.phonghub.domain.exception.DuplicateServiceRateException;
+import com.phonghub.domain.exception.MeterReadingConflictException;
+import com.phonghub.domain.exception.OptimisticLockConflictException;
+import com.phonghub.domain.exception.UtilityNotFoundException;
+import com.phonghub.domain.exception.HandoverAlreadyExistsException;
+import com.phonghub.domain.exception.HandoverNotFoundException;
+import com.phonghub.domain.exception.InvalidContractStateException;
+import com.phonghub.domain.exception.InvalidHandoverStateException;
+import com.phonghub.domain.exception.InvalidMaintenanceStateException;
+import com.phonghub.domain.exception.DuplicateDocumentNumberException;
 import com.phonghub.domain.exception.DuplicateEmailException;
 import com.phonghub.domain.exception.DuplicateIdentityCardException;
 import com.phonghub.domain.exception.DuplicateRoomNumberException;
@@ -14,7 +27,16 @@ import com.phonghub.domain.exception.MaintenanceTicketException;
 import com.phonghub.domain.exception.PasswordChangeRequiredException;
 import com.phonghub.domain.exception.PrimaryOccupantRemovalException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
+import com.phonghub.domain.exception.InvoiceNotFoundException;
+import com.phonghub.domain.exception.ReceiptNotAvailableException;
+import com.phonghub.domain.exception.RoomAssetNotFoundException;
+import com.phonghub.domain.exception.TenantDocumentNotFoundException;
+import com.phonghub.domain.exception.TooManyRevealAttemptsException;
 import com.phonghub.domain.exception.RoomNotFoundException;
+import com.phonghub.domain.exception.AttachmentLimitException;
+import com.phonghub.domain.exception.StaffAssignmentConflictException;
+import com.phonghub.domain.exception.TenantProfileLockedException;
+import com.phonghub.domain.exception.TenantHasActiveContractException;
 import com.phonghub.domain.exception.TenantNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.exception.UserNotFoundException;
@@ -108,7 +130,21 @@ public class RestExceptionHandler {
 
     @ExceptionHandler({
         DuplicateEmailException.class,
-        DuplicateUsernameException.class
+        DuplicateUsernameException.class,
+        DuplicateAssetCodeException.class,
+        DuplicateDocumentNumberException.class,
+        InvalidHandoverStateException.class,
+        ReceiptNotAvailableException.class,
+        InvalidMaintenanceStateException.class,
+        InvalidContractStateException.class,
+        HandoverAlreadyExistsException.class,
+        MeterReadingConflictException.class,
+        DuplicateServiceRateException.class,
+        TenantHasActiveContractException.class,
+        StaffAssignmentConflictException.class,
+        TenantProfileLockedException.class,
+        AttachmentLimitException.class,
+        OptimisticLockConflictException.class
     })
     public ProblemDetail handleDuplicateAccountConflict(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
@@ -174,10 +210,16 @@ public class RestExceptionHandler {
 
     @ExceptionHandler({
         PropertyNotFoundException.class,
+        InvoiceNotFoundException.class,
         RoomNotFoundException.class,
+        RoomAssetNotFoundException.class,
+        TenantDocumentNotFoundException.class,
+        HandoverNotFoundException.class,
+        UtilityNotFoundException.class,
         ContractNotFoundException.class,
         UserNotFoundException.class,
         TenantNotFoundException.class,
+        NotificationNotFoundException.class,
         com.phonghub.domain.exception.ChatRoomNotFoundException.class
     })
     public ProblemDetail handleNotFound(DomainException ex) {
@@ -219,6 +261,35 @@ public class RestExceptionHandler {
             sb.append(fieldError.getField()).append(": ").append(fieldError.getDefaultMessage());
         }
         problem.setProperty("errors", sb.toString());
+        return problem;
+    }
+
+    @ExceptionHandler(DocumentRevealDeniedException.class)
+    public ProblemDetail handleRevealDenied(DocumentRevealDeniedException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        problem.setTitle("Reveal Denied");
+        problem.setType(URI.create("https://phonghub.local/errors/reveal-denied"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(TooManyRevealAttemptsException.class)
+    public ProblemDetail handleTooManyReveals(TooManyRevealAttemptsException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+        problem.setTitle("Too Many Requests");
+        problem.setType(URI.create("https://phonghub.local/errors/too-many-requests"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    /** Vi phạm ràng buộc duy nhất ở tầng cơ sở dữ liệu (ví dụ hai yêu cầu cùng lúc) được trả về là xung đột. */
+    @ExceptionHandler(org.springframework.dao.DuplicateKeyException.class)
+    public ProblemDetail handleDuplicateKey(org.springframework.dao.DuplicateKeyException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+            "Dữ liệu đã tồn tại hoặc vừa được cập nhật bởi một yêu cầu khác");
+        problem.setTitle("Conflict");
+        problem.setType(URI.create("https://phonghub.local/errors/conflict"));
+        problem.setProperty("timestamp", Instant.now());
         return problem;
     }
 

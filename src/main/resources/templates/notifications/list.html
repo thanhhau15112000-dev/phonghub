@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Thông báo')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Thông báo</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">
+                Hóa đơn sắp đến hạn, hợp đồng sắp hết hạn, bảo trì quá hạn, biên bản cần xác nhận và các cập nhật khác gửi cho bạn.
+            </p>
+        </div>
+        <form th:if="${inbox.unread() > 0}" th:action="@{/notifications/read-all}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button type="submit" class="btn btn-sm btn-secondary">Đánh dấu tất cả đã đọc</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <div class="filter-tabs" style="margin-bottom: 16px;">
+            <a th:href="@{/notifications}" th:classappend="${selectedStatus == 'ALL' ? 'active' : ''}" class="filter-tab">
+                <span>Tất cả</span>
+            </a>
+            <a th:href="@{/notifications(status='UNREAD')}" th:classappend="${selectedStatus == 'UNREAD' ? 'active' : ''}" class="filter-tab">
+                <span>Chưa đọc</span>
+                <span class="badge-count" th:text="${inbox.unread()}">0</span>
+            </a>
+        </div>
+
+        <div th:if="${#lists.isEmpty(inbox.items())}" class="empty-state">
+            <p th:text="${selectedStatus == 'UNREAD' ? 'Bạn đã đọc hết thông báo.' : 'Chưa có thông báo nào.'}">Chưa có thông báo nào.</p>
+        </div>
+
+        <ul th:if="${!#lists.isEmpty(inbox.items())}" class="notification-list">
+            <li th:each="n : ${inbox.items()}" class="notification-item" th:classappend="${!n.isRead() ? 'unread' : ''}">
+                <div class="notification-body">
+                    <div class="notification-title">
+                        <span th:if="${!n.isRead()}" class="notification-dot" aria-label="Chưa đọc"></span>
+                        <span th:text="${n.title()}">Tiêu đề</span>
+                    </div>
+                    <p class="notification-message" th:text="${n.message()}">Nội dung</p>
+                    <span class="notification-time" th:text="${#temporals.format(n.createdAt(), 'dd/MM/yyyy HH:mm')}">01/01/2026 08:00</span>
+                </div>
+                <div class="table-actions">
+                    <form th:if="${!n.isRead()}" th:action="@{/notifications/{id}/read(id=${n.id()})}" method="post">
+                        <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                        <input type="hidden" name="status" th:value="${selectedStatus}">
+                        <input type="hidden" name="page" th:value="${inbox.page()}">
+                        <button type="submit" class="btn btn-sm btn-secondary">Đã đọc</button>
+                    </form>
+                    <form th:if="${n.link() != null}" th:action="@{/notifications/{id}/open(id=${n.id()})}" method="post">
+                        <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                        <button type="submit" class="btn btn-sm btn-primary">Xem</button>
+                    </form>
+                </div>
+            </li>
+        </ul>
+
+        <div th:if="${inbox.totalPages() > 1}" class="pagination" style="display: flex; justify-content: center; gap: 8px; margin-top: 20px;">
+            <a th:if="${inbox.page() > 1}" th:href="@{/notifications(page=${inbox.page() - 1}, status=${selectedStatus})}" class="btn btn-sm">&laquo; Trước</a>
+            <span style="font-size: 13px; align-self: center;">Trang <strong th:text="${inbox.page()}">1</strong> / <span th:text="${inbox.totalPages()}">1</span></span>
+            <a th:if="${inbox.page() < inbox.totalPages()}" th:href="@{/notifications(page=${inbox.page() + 1}, status=${selectedStatus})}" class="btn btn-sm">Sau &raquo;</a>
+        </div>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

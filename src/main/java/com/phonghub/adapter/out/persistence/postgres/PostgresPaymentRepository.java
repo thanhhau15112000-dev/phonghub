@@ -1,12 +1,16 @@
 package com.phonghub.adapter.out.persistence.postgres;
 
+import com.phonghub.adapter.out.security.PersonalDataFields;
 import com.phonghub.application.port.out.PaymentRepositoryPort;
+import com.phonghub.application.port.out.TenantDataProtectionPort;
+import com.phonghub.domain.model.PaymentReviewReason;
 import com.phonghub.domain.model.PaymentStatus;
 import com.phonghub.domain.model.PaymentTransaction;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -18,9 +22,11 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 public class PostgresPaymentRepository implements PaymentRepositoryPort {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final TenantDataProtectionPort protector;
 
-    public PostgresPaymentRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+    public PostgresPaymentRepository(NamedParameterJdbcTemplate jdbcTemplate, TenantDataProtectionPort protector) {
         this.jdbcTemplate = jdbcTemplate;
+        this.protector = protector;
     }
 
     private static Instant toInstant(Timestamp ts) {
@@ -38,19 +44,22 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
             rs.getLong("sepay_id"),
             rs.getString("gateway"),
             rs.getString("transaction_date"),
-            rs.getString("account_number"),
-            rs.getString("sub_account"),
+            protector.decryptField(PersonalDataFields.SEPAY_ACCOUNT_NUMBER, rs.getString("account_number")),
+            protector.decryptField(PersonalDataFields.SEPAY_SUB_ACCOUNT, rs.getString("sub_account")),
             rs.getString("transfer_type"),
             rs.getBigDecimal("transfer_amount"),
             rs.getBigDecimal("accumulated"),
             rs.getString("code"),
-            rs.getString("content"),
+            protector.decryptField(PersonalDataFields.SEPAY_CONTENT, rs.getString("content")),
             rs.getString("reference_code"),
-            rs.getString("description"),
+            protector.decryptField(PersonalDataFields.SEPAY_DESCRIPTION, rs.getString("description")),
             PaymentStatus.valueOf(rs.getString("status")),
             contractId,
             invoiceId,
-            toInstant(rs.getTimestamp("created_at"))
+            toInstant(rs.getTimestamp("created_at")),
+            rs.getBigDecimal("applied_amount"),
+            rs.getBigDecimal("excess_amount"),
+            rs.getString("review_reason") != null ? PaymentReviewReason.valueOf(rs.getString("review_reason")) : null
         );
     }
 
@@ -60,11 +69,13 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
             INSERT INTO sepay_transactions (
                 id, sepay_id, gateway, transaction_date, account_number, sub_account,
                 transfer_type, transfer_amount, accumulated, code, content,
-                reference_code, description, status, contract_id, invoice_id, created_at
+                reference_code, description, status, contract_id, invoice_id, created_at,
+                applied_amount, excess_amount, review_reason
             ) VALUES (
                 :id, :sepayId, :gateway, :transactionDate, :accountNumber, :subAccount,
                 :transferType, :transferAmount, :accumulated, :code, :content,
-                :referenceCode, :description, :status, :contractId, :invoiceId, :createdAt
+                :referenceCode, :description, :status, :contractId, :invoiceId, :createdAt,
+                :appliedAmount, :excessAmount, :reviewReason
             )
             ON CONFLICT (sepay_id) DO NOTHING
             """;
@@ -74,19 +85,22 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
             .addValue("sepayId", tx.sepayId())
             .addValue("gateway", tx.gateway())
             .addValue("transactionDate", tx.transactionDate())
-            .addValue("accountNumber", tx.accountNumber())
-            .addValue("subAccount", tx.subAccount())
+            .addValue("accountNumber", protector.encryptField(PersonalDataFields.SEPAY_ACCOUNT_NUMBER, tx.accountNumber()))
+            .addValue("subAccount", protector.encryptField(PersonalDataFields.SEPAY_SUB_ACCOUNT, tx.subAccount()))
             .addValue("transferType", tx.transferType())
             .addValue("transferAmount", tx.transferAmount())
             .addValue("accumulated", tx.accumulated())
             .addValue("code", tx.code())
-            .addValue("content", tx.content())
+            .addValue("content", protector.encryptField(PersonalDataFields.SEPAY_CONTENT, tx.content()))
             .addValue("referenceCode", tx.referenceCode())
-            .addValue("description", tx.description())
+            .addValue("description", protector.encryptField(PersonalDataFields.SEPAY_DESCRIPTION, tx.description()))
             .addValue("status", tx.status().name())
             .addValue("contractId", tx.contractId())
             .addValue("invoiceId", tx.invoiceId())
-            .addValue("createdAt", Timestamp.from(tx.createdAt()));
+            .addValue("createdAt", Timestamp.from(tx.createdAt()))
+            .addValue("appliedAmount", tx.appliedAmount())
+            .addValue("excessAmount", tx.excessAmount())
+            .addValue("reviewReason", tx.reviewReason() != null ? tx.reviewReason().name() : null);
 
         return jdbcTemplate.update(sql, params) == 1;
     }
@@ -128,5 +142,20 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
     public List<PaymentTransaction> findAll() {
         String sql = "SELECT * FROM sepay_transactions ORDER BY created_at DESC";
         return jdbcTemplate.query(sql, this::mapRow);
+    }
+
+    @Override
+    public List<PaymentTransaction> findByContractIds(Collection<UUID> contractIds) {
+        if (contractIds == null || contractIds.isEmpty()) {
+            return List.of();
+        }
+        String sql = "SELECT * FROM sepay_transactions WHERE contract_id IN (:ids) ORDER BY created_at DESC";
+        return jdbcTemplate.query(sql, Map.of("ids", contractIds), this::mapRow);
+    }
+
+    @Override
+    public List<PaymentTransaction> findByInvoiceId(UUID invoiceId) {
+        String sql = "SELECT * FROM sepay_transactions WHERE invoice_id = :invoiceId ORDER BY created_at, id";
+        return jdbcTemplate.query(sql, Map.of("invoiceId", invoiceId), this::mapRow);
     }
 }

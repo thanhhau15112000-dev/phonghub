@@ -2,6 +2,7 @@ package com.phonghub.application.port.out;
 
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
+import com.phonghub.domain.model.MaintenanceTicketEvent;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,4 +15,9 @@ public interface MaintenanceTicketRepositoryPort {
     List<MaintenanceTicket> findByRoomIdAndStatusNot(UUID roomId, MaintenanceStatus status);
     List<MaintenanceTicket> findByAssignedTechnicianId(UUID technicianId);
     List<MaintenanceTicket> findAll();
+
+    /** Timeline của phiếu, cũ trước. */
+    default List<MaintenanceTicketEvent> findEvents(UUID ticketId) {
+        return List.of();
+    }
 }

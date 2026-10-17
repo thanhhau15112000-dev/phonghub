@@ -25,7 +25,11 @@ import org.slf4j.LoggerFactory;
 public class AuthService implements AuthUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
-    private static final String TEMP_PASSWORD_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    private static final String UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    private static final String LOWER = "abcdefghijklmnopqrstuvwxyz";
+    private static final String DIGITS = "0123456789";
+    private static final String SPECIAL = "!@#$%^&*";
+    private static final String ALL_CHARS = UPPER + LOWER + DIGITS + SPECIAL;
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final UserRepositoryPort userRepository;
@@ -64,14 +68,30 @@ public class AuthService implements AuthUseCase {
         }
 
         String normalizedUsername = username.trim().toLowerCase();
-        User user = userRepository.findByUsername(normalizedUsername)
-            .orElseThrow(() -> new InvalidCredentialsException("Invalid username or password"));
+        User user = userRepository.findByUsername(normalizedUsername).orElse(null);
+        if (user == null) {
+            auditLoginFailed(null, "UNKNOWN_USER", normalizedUsername);
+            throw new InvalidCredentialsException("Invalid username or password");
+        }
 
+        // Bước 1: Xác thực password với Supabase TRƯỚC khi check status.
+        // Lý do: nếu check status trước, attacker biết tài khoản tồn tại & bị khoá chỉ từ username.
+        IdentityProviderPort.RawTokenResponse rawToken;
+        try {
+            rawToken = identityProviderPort.login(user.email(), password);
+        } catch (InvalidCredentialsException ex) {
+            auditLoginFailed(user, "INVALID_CREDENTIALS", null);
+            throw ex;
+        }
+
+        // Bước 2: Password đúng — giờ mới kiểm tra trạng thái tài khoản.
         if (user.status() != User.UserStatus.ACTIVE) {
+            auditLoginFailed(user, "ACCOUNT_DISABLED", null);
             throw new AccountDisabledException("User account is " + user.status() + " (not ACTIVE)");
         }
 
-        IdentityProviderPort.RawTokenResponse rawToken = identityProviderPort.login(user.email(), password);
+        auditPort.recordEvent(AuditPort.AuditEvent.of("LOGIN_SUCCEEDED", user.id(), "USER", user.id().toString(),
+            Map.of("username", user.username(), "role", user.role().name())));
 
         return new AuthTokenResponse(
             rawToken.accessToken(),
@@ -81,11 +101,38 @@ public class AuthService implements AuthUseCase {
             new AuthTokenResponse.UserInfo(
                 user.id(),
                 user.username(),
+                user.email(),
                 user.fullName(),
                 user.role(),
                 user.mustChangePassword()
             )
         );
+    }
+
+    /**
+     * Ghi đăng nhập thất bại. Tên đăng nhập gõ vào chỉ được lưu dưới dạng băm ngắn khi không tìm thấy tài khoản,
+     * vì người dùng có thể gõ nhầm mật khẩu vào ô tên đăng nhập.
+     */
+    private void auditLoginFailed(User user, String reason, String unknownIdentifier) {
+        Map<String, Object> details = new java.util.LinkedHashMap<>();
+        details.put("reason", reason);
+        if (user != null) {
+            details.put("username", user.username());
+        } else if (unknownIdentifier != null) {
+            details.put("identifierHash", shortHash(unknownIdentifier));
+        }
+        auditPort.recordEvent(AuditPort.AuditEvent.of("LOGIN_FAILED", null, "USER",
+            user != null ? user.id().toString() : null, details));
+    }
+
+    private static String shortHash(String value) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest, 0, 4);
+        } catch (java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     @Override
@@ -145,7 +192,7 @@ public class AuthService implements AuthUseCase {
             currentUser.id(),
             "USER",
             currentUser.id().toString(),
-            Map.of("username", user.username())
+            Map.of("userId", user.id().toString())
         ));
     }
 
@@ -182,7 +229,7 @@ public class AuthService implements AuthUseCase {
             caller.id(),
             "USER",
             targetUserId.toString(),
-            Map.of("targetUsername", targetUser.username(), "targetRole", targetUser.role().name())
+            Map.of("targetUserId", targetUser.id().toString(), "targetRole", targetUser.role().name())
         ));
 
         log.info("Admin [{}] (ID: {}) successfully reset password for user [{}] (ID: {}, Role: {})",
@@ -215,6 +262,11 @@ public class AuthService implements AuthUseCase {
 
         String normalizedUsername = command.username().trim().toLowerCase();
         String normalizedEmail = command.email().trim().toLowerCase();
+
+        if (!normalizedUsername.matches("^[a-z0-9._-]{3,50}$")) {
+            throw new IllegalArgumentException(
+                "Tên đăng nhập không hợp lệ: phải từ 3 đến 50 ký tự và chỉ chứa chữ thường, chữ số, '.', '_' hoặc '-'");
+        }
 
         if (!normalizedEmail.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
             throw new IllegalArgumentException("Định dạng email không hợp lệ: " + command.email());
@@ -274,7 +326,7 @@ public class AuthService implements AuthUseCase {
             caller.id(),
             "USER",
             authUserId.toString(),
-            Map.of("username", savedUser.username(), "role", savedUser.role().name())
+            Map.of("userId", savedUser.id().toString(), "role", savedUser.role().name())
         ));
 
         return new AdminCreateUserResult(
@@ -324,17 +376,31 @@ public class AuthService implements AuthUseCase {
             "USER",
             targetUserId.toString(),
             Map.of(
-                "username", targetUser.username() != null ? targetUser.username() : "",
+                "userId", targetUser.id().toString(),
                 "role", targetUser.role().name()
             )
         ));
     }
 
-    private String generateSecureTemporaryPassword(int length) {
-        StringBuilder sb = new StringBuilder(length);
-        for (int i = 0; i < length; i++) {
-            sb.append(TEMP_PASSWORD_CHARS.charAt(RANDOM.nextInt(TEMP_PASSWORD_CHARS.length())));
+    public static String generateSecureTemporaryPassword(int length) {
+        if (length < 8) {
+            length = 8;
         }
-        return sb.toString();
+        char[] password = new char[length];
+        password[0] = UPPER.charAt(RANDOM.nextInt(UPPER.length()));
+        password[1] = LOWER.charAt(RANDOM.nextInt(LOWER.length()));
+        password[2] = DIGITS.charAt(RANDOM.nextInt(DIGITS.length()));
+        password[3] = SPECIAL.charAt(RANDOM.nextInt(SPECIAL.length()));
+        for (int i = 4; i < length; i++) {
+            password[i] = ALL_CHARS.charAt(RANDOM.nextInt(ALL_CHARS.length()));
+        }
+        // Fisher-Yates shuffle
+        for (int i = length - 1; i > 0; i--) {
+            int j = RANDOM.nextInt(i + 1);
+            char temp = password[i];
+            password[i] = password[j];
+            password[j] = temp;
+        }
+        return new String(password);
     }
 }

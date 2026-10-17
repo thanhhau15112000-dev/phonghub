@@ -42,7 +42,8 @@ class ChatServiceUnitTest {
         userRepo = new InMemoryUserRepository();
         eventPublisher = (roomId, message) -> {}; // no-op for unit test
 
-        chatService = new ChatService(chatRoomRepo, chatMessageRepo, userRepo, eventPublisher);
+        chatService = new ChatService(chatRoomRepo, chatMessageRepo, userRepo, eventPublisher,
+            new com.phonghub.adapter.out.storage.LocalMediaStorageAdapter());
 
         UUID idA = UUID.randomUUID();
         UUID idB = UUID.randomUUID();

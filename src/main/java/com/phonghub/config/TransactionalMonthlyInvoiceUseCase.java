@@ -26,4 +26,16 @@ public class TransactionalMonthlyInvoiceUseCase implements MonthlyInvoiceUseCase
     public boolean issueForContract(UUID contractId, YearMonth period) {
         return delegate.issueForContract(contractId, period);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> findContractsNeedingUtilityCharges(YearMonth period) {
+        return delegate.findContractsNeedingUtilityCharges(period);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean attachUtilityCharges(UUID contractId, YearMonth period) {
+        return delegate.attachUtilityCharges(contractId, period);
+    }
 }
