@@ -34,6 +34,18 @@ public class TransactionalContractUseCase implements ContractUseCase {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Contract updateDraftContract(UpdateDraftContractCommand command) {
+        return delegate.updateDraftContract(command);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Contract cancelDraftContract(UUID contractId) {
+        return delegate.cancelDraftContract(contractId);
+    }
+
+    @Override
     public Contract getContract(UUID contractId) {
         return delegate.getContract(contractId);
     }

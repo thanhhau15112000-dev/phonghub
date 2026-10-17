@@ -1266,6 +1266,84 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Contracts]
+      summary: Sửa điều khoản hợp đồng nháp (#89)
+      description: >
+        Chỉ hợp đồng DRAFT; người được quản lý hợp đồng của nhà trọ (admin, owner, staff có quyền). Gửi kèm `version`
+        lấy từ lần đọc trước để phát hiện sửa chồng. Ngày vào ở của người ở trùng ngày bắt đầu cũ được dời theo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [depositAmount, rentAmount, startDate, endDate, paymentDay]
+              properties:
+                depositAmount:
+                  type: number
+                  minimum: 0
+                rentAmount:
+                  type: number
+                  exclusiveMinimum: 0
+                startDate:
+                  type: string
+                  format: date
+                endDate:
+                  type: string
+                  format: date
+                paymentDay:
+                  type: integer
+                  minimum: 1
+                  maximum: 31
+                version:
+                  type: integer
+                  format: int64
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/contracts/{contractId}/cancel:
+    parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Contracts]
+      summary: Hủy hợp đồng nháp (#89)
+      description: Chuyển DRAFT sang CANCELLED (không xóa cứng). Hợp đồng không còn nháp thì 409.
+      responses:
+        '200':
+          description: Đã hủy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /api/contracts/{contractId}/activate:
     parameters:
@@ -3782,7 +3860,7 @@ components:
 
     ContractStatus:
       type: string
-      enum: [DRAFT, ACTIVE, EXPIRED, TERMINATED]
+      enum: [DRAFT, ACTIVE, EXPIRED, TERMINATED, CANCELLED]
 
     InvoiceStatus:
       type: string
@@ -4350,6 +4428,10 @@ components:
         createdAt:
           type: string
           format: date-time
+        version:
+          type: integer
+          format: int64
+          description: Gửi lại khi sửa hợp đồng nháp để phát hiện sửa chồng (#76, #89)
 
     ContractInput:
       type: object

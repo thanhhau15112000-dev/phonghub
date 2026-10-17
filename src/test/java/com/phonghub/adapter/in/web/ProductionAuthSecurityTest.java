@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
@@ -647,6 +648,14 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(post(ticket + "/verify")).andExpect(status().isUnauthorized());
         mockMvc.perform(post(ticket + "/reopen").contentType(MediaType.APPLICATION_JSON).content("{\"feedback\": \"x\"}"))
             .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void contractDraftEditEndpointsRequireBearerTokenInProd() throws Exception {
+        String contract = "/api/contracts/cccccccc-cccc-cccc-cccc-cccccccccccc";
+        mockMvc.perform(patch(contract).contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(post(contract + "/cancel")).andExpect(status().isUnauthorized());
     }
 
     @Test
