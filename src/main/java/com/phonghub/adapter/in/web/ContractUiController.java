@@ -308,6 +308,38 @@ public class ContractUiController {
         return "redirect:/contracts/" + id;
     }
 
+    @PostMapping("/{id}/edit")
+    public String updateDraftContract(
+        @PathVariable UUID id,
+        @RequestParam java.math.BigDecimal depositAmount,
+        @RequestParam java.math.BigDecimal rentAmount,
+        @RequestParam java.time.LocalDate startDate,
+        @RequestParam java.time.LocalDate endDate,
+        @RequestParam int paymentDay,
+        @RequestParam(required = false) Long version,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            contractUseCase.updateDraftContract(new ContractUseCase.UpdateDraftContractCommand(
+                id, depositAmount, rentAmount, startDate, endDate, paymentDay, version));
+            redirectAttributes.addFlashAttribute("successMessage", "Đã cập nhật điều khoản hợp đồng nháp.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
+    }
+
+    @PostMapping("/{id}/cancel")
+    public String cancelDraftContract(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        try {
+            contractUseCase.cancelDraftContract(id);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã hủy hợp đồng nháp. Hợp đồng vẫn được lưu để tra cứu.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
+    }
+
     @PostMapping("/{id}/terminate")
     public String terminateContract(
         @PathVariable UUID id,

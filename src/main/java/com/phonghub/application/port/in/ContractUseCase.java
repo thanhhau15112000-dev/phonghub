@@ -12,6 +12,31 @@ public interface ContractUseCase {
     Contract createContract(CreateContractCommand command);
     Contract activateContract(UUID contractId);
     Contract terminateContract(UUID contractId, boolean requiresMaintenance);
+
+    /**
+     * Sửa điều khoản hợp đồng nháp (#89): tiền cọc, tiền thuê, ngày bắt đầu/kết thúc, ngày thanh toán. Hợp đồng không còn
+     * nháp thì 409; {@code expectedVersion} lệch (người khác vừa sửa) cũng 409.
+     */
+    Contract updateDraftContract(UpdateDraftContractCommand command);
+
+    /** Hủy hợp đồng nháp (#89): chuyển CANCELLED, không xóa cứng. Hợp đồng không còn nháp thì 409. */
+    Contract cancelDraftContract(UUID contractId);
+
+    record UpdateDraftContractCommand(
+        UUID contractId,
+        java.math.BigDecimal depositAmount,
+        java.math.BigDecimal rentAmount,
+        java.time.LocalDate startDate,
+        java.time.LocalDate endDate,
+        int paymentDay,
+        Long expectedVersion
+    ) {
+        public UpdateDraftContractCommand {
+            if (contractId == null) {
+                throw new IllegalArgumentException("Contract id is required");
+            }
+        }
+    }
     Contract getContract(UUID contractId);
     List<Contract> listContractsForProperty(UUID propertyId);
     Optional<Contract> getActiveContractForTenant(UUID tenantUserId);

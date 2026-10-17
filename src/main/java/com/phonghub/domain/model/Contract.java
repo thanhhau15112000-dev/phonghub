@@ -1,6 +1,7 @@
 package com.phonghub.domain.model;
 
 import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.exception.InvalidContractStateException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -15,11 +16,11 @@ public class Contract {
     private final UUID propertyId;
     private final UUID roomId;
     private final UUID primaryTenantId;
-    private final BigDecimal depositAmount;
-    private final BigDecimal rentAmount;
-    private final LocalDate startDate;
-    private final LocalDate endDate;
-    private final int paymentDay;
+    private BigDecimal depositAmount;
+    private BigDecimal rentAmount;
+    private LocalDate startDate;
+    private LocalDate endDate;
+    private int paymentDay;
     private ContractStatus status;
     private final List<ContractOccupant> occupants;
     private final Instant createdAt;
@@ -199,6 +200,57 @@ public class Contract {
         this.occupants.set(targetIndex, updated);
         this.updatedAt = Instant.now();
         return updated;
+    }
+
+    /**
+     * Sửa điều khoản hợp đồng nháp (#89). Ngày vào ở của người ở trùng ngày bắt đầu cũ được dời theo ngày bắt đầu mới.
+     */
+    public void updateDraftTerms(
+        BigDecimal newDeposit,
+        BigDecimal newRent,
+        LocalDate newStartDate,
+        LocalDate newEndDate,
+        int newPaymentDay
+    ) {
+        if (this.status != ContractStatus.DRAFT) {
+            throw new InvalidContractStateException(String.format(
+                "Chỉ sửa được hợp đồng ở trạng thái nháp. Trạng thái hiện tại: '%s'.", status));
+        }
+        if (newDeposit == null || newDeposit.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Tiền cọc không được âm.");
+        }
+        if (newRent == null || newRent.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Tiền thuê phải lớn hơn 0.");
+        }
+        if (newStartDate == null || newEndDate == null) {
+            throw new IllegalArgumentException("Ngày bắt đầu và ngày kết thúc không được để trống.");
+        }
+        if (!newEndDate.isAfter(newStartDate)) {
+            throw new IllegalArgumentException("Ngày kết thúc phải sau ngày bắt đầu.");
+        }
+        if (newPaymentDay < 1 || newPaymentDay > 31) {
+            throw new IllegalArgumentException("Ngày thanh toán phải từ 1 đến 31.");
+        }
+        LocalDate oldStart = this.startDate;
+        this.occupants.replaceAll(o -> o.checkOutDate() == null && o.checkInDate().equals(oldStart)
+            ? new ContractOccupant(o.id(), o.contractId(), o.tenantId(), o.isPrimary(), newStartDate, null)
+            : o);
+        this.depositAmount = newDeposit;
+        this.rentAmount = newRent;
+        this.startDate = newStartDate;
+        this.endDate = newEndDate;
+        this.paymentDay = newPaymentDay;
+        this.updatedAt = Instant.now();
+    }
+
+    /** Hủy hợp đồng nháp (#89): không xóa cứng, chuyển sang CANCELLED để còn lịch sử. */
+    public void cancelDraft() {
+        if (this.status != ContractStatus.DRAFT) {
+            throw new InvalidContractStateException(String.format(
+                "Chỉ hủy được hợp đồng ở trạng thái nháp. Trạng thái hiện tại: '%s'.", status));
+        }
+        this.status = ContractStatus.CANCELLED;
+        this.updatedAt = Instant.now();
     }
 
     public void activate() {

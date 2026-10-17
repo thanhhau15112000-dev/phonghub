@@ -39,6 +39,15 @@
                     <button type="submit" class="btn btn-primary">Kích hoạt hợp đồng (chuyển phòng sang đang thuê)</button>
                 </form>
 
+                <!-- Hợp đồng nháp sửa / hủy được (#89); hủy giữ lại bản ghi với trạng thái "Đã hủy" -->
+                <button th:if="${contract.getStatus().name() == 'DRAFT'}" type="button" id="editDraftBtn" class="btn btn-secondary"
+                        onclick="document.getElementById('editDraftModal').showModal()">Sửa điều khoản</button>
+                <form th:if="${contract.getStatus().name() == 'DRAFT'}" th:action="@{'/contracts/' + ${contract.getId()} + '/cancel'}" method="post">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <button type="submit" class="btn btn-danger"
+                            onclick="return confirm('Hủy hợp đồng nháp này? Hợp đồng sẽ chuyển sang trạng thái Đã hủy và không kích hoạt được nữa.');">Hủy hợp đồng nháp</button>
+                </form>
+
                 <!-- Nút chấm dứt khi đang có hiệu lực hoặc đã hết hạn mà chưa trả phòng (#87) -->
                 <form th:if="${contract.isResiding()}" th:action="@{'/contracts/' + ${contract.getId()} + '/terminate'}" method="post" style="display: flex; align-items: center; gap: 8px;">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -511,6 +520,47 @@
             document.getElementById('checkOutModal').showModal();
         }
     </script>
+
+    <!-- Dialog sửa điều khoản hợp đồng nháp (#89) -->
+    <dialog th:if="${contract.getStatus().name() == 'DRAFT' and currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            id="editDraftModal" class="modal-dialog" style="max-width: 520px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Sửa điều khoản hợp đồng nháp</h3>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('editDraftModal').close()">✕</button>
+        </div>
+        <form th:action="@{'/contracts/' + ${contract.getId()} + '/edit'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <input type="hidden" name="version" th:value="${contract.getVersion()}">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="draftRent">Tiền thuê / tháng (VNĐ) *</label>
+                    <input type="number" id="draftRent" name="rentAmount" class="form-control" min="1" step="1000" required th:value="${contract.getRentAmount()}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="draftDeposit">Tiền cọc (VNĐ) *</label>
+                    <input type="number" id="draftDeposit" name="depositAmount" class="form-control" min="0" step="1000" required th:value="${contract.getDepositAmount()}">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="draftStart">Ngày bắt đầu *</label>
+                    <input type="date" id="draftStart" name="startDate" class="form-control" required th:value="${contract.getStartDate()}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="draftEnd">Ngày kết thúc *</label>
+                    <input type="date" id="draftEnd" name="endDate" class="form-control" required th:value="${contract.getEndDate()}">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="draftPaymentDay">Ngày thanh toán hằng tháng (1–31) *</label>
+                <input type="number" id="draftPaymentDay" name="paymentDay" class="form-control" min="1" max="31" required th:value="${contract.getPaymentDay()}">
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('editDraftModal').close()">Đóng</button>
+                <button type="submit" class="btn btn-sm btn-primary">Lưu thay đổi</button>
+            </div>
+        </form>
+    </dialog>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>
