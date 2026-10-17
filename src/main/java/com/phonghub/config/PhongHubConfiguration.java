@@ -640,11 +640,12 @@ public class PhongHubConfiguration {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
         MeterReadingRepositoryPort meterReadingRepository,
-        ServiceRateRepositoryPort serviceRateRepository
+        ServiceRateRepositoryPort serviceRateRepository,
+        AuditPort auditPort
     ) {
         InvoiceService service = new InvoiceService(
             invoiceRepository, ticketRepository, contractUseCase, currentUserPort, authorizationService,
-            meterReadingRepository, serviceRateRepository
+            meterReadingRepository, serviceRateRepository, auditPort
         );
         return new TransactionalInvoiceUseCase(service);
     }
