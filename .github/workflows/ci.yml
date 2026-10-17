@@ -37,3 +37,32 @@ jobs:
 
       - name: Verify application
         run: ./mvnw --batch-mode --no-transfer-progress clean verify
+
+      # Chạy cả khi verify đỏ vì dưới ngưỡng JaCoCo: đó là lúc cần xem số liệu nhất.
+      - name: Coverage summary
+        if: ${{ !cancelled() && hashFiles('target/site/jacoco/jacoco.csv') != '' }}
+        run: |
+          csv=target/site/jacoco/jacoco.csv
+          {
+            echo "### JaCoCo coverage"
+            echo
+            awk -F, 'NR > 1 { im += $4; ic += $5; bm += $6; bc += $7; lm += $8; lc += $9 }
+              END { printf "| Instruction | Branch | Line |\n|---|---|---|\n| %.1f%% | %.1f%% | %.1f%% |\n",
+                100 * ic / (im + ic), 100 * bc / (bm + bc), 100 * lc / (lm + lc) }' "$csv"
+            echo
+            echo "10 package có độ phủ dòng thấp nhất (báo cáo HTML đầy đủ ở artifact \`jacoco-report\`):"
+            echo
+            echo "| Package | Line | Missed lines |"
+            echo "|---|---|---|"
+            awk -F, 'NR > 1 { lm[$2] += $8; lc[$2] += $9 }
+              END { for (p in lm) if (lm[p] + lc[p] > 0) printf "%.1f|%s|%d\n", 100 * lc[p] / (lm[p] + lc[p]), p, lm[p] }' "$csv" \
+              | sort -t'|' -k1,1n | head -10 | awk -F'|' '{ printf "| `%s` | %s%% | %s |\n", $2, $1, $3 }'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: ${{ !cancelled() && hashFiles('target/site/jacoco/index.html') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
+          retention-days: 14
