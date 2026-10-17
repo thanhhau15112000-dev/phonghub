@@ -238,10 +238,29 @@ public class AesGcmTenantDataProtector implements TenantDataProtectionPort {
         if (encoded == null || encoded.isBlank()) {
             throw new IllegalArgumentException("Tenant " + purpose + " key is required");
         }
+        String clean = encoded.trim();
+        if ((clean.startsWith("\"") && clean.endsWith("\"")) || (clean.startsWith("'") && clean.endsWith("'"))) {
+            clean = clean.substring(1, clean.length() - 1).trim();
+        }
         try {
-            return Base64.getDecoder().decode(encoded.trim());
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("Tenant " + purpose + " key must be Base64 encoded", ex);
+            byte[] decoded = Base64.getDecoder().decode(clean);
+            if (decoded.length == 32 || (purpose.equalsIgnoreCase("HMAC") && decoded.length >= 32)) {
+                return decoded;
+            }
+        } catch (IllegalArgumentException ignored) {
+        }
+        try {
+            byte[] decoded = Base64.getUrlDecoder().decode(clean);
+            if (decoded.length == 32 || (purpose.equalsIgnoreCase("HMAC") && decoded.length >= 32)) {
+                return decoded;
+            }
+        } catch (IllegalArgumentException ignored) {
+        }
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            return md.digest(clean.getBytes(StandardCharsets.UTF_8));
+        } catch (java.security.NoSuchAlgorithmException nsae) {
+            throw new IllegalStateException("SHA-256 algorithm not available", nsae);
         }
     }
 }
