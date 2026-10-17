@@ -134,11 +134,12 @@ public class PhongHubConfiguration {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
         AuditPort auditPort,
-        PhongHubCaches caches
+        PhongHubCaches caches,
+        InvoiceRepositoryPort invoiceRepo
     ) {
         return new CachingRoomUseCase(new RoomService(
             roomRepo, propertyRepo, ticketRepo, contractRepo, tenantRepo, currentUserPort, authorizationService,
-            auditPort
+            auditPort, invoiceRepo
         ), caches, currentUserPort);
     }
 

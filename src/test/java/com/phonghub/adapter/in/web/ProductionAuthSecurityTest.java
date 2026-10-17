@@ -639,6 +639,15 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void roomArchiveEndpointsRequireBearerTokenInProd() throws Exception {
+        String room = "/api/rooms/10401040-1040-1040-1040-104010401040";
+        mockMvc.perform(post(room + "/archive")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post(room + "/restore")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/rooms").param("archived", "true"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void maintenanceQuoteAndConfirmationRequireBearerTokenInProd() throws Exception {
         String ticket = "/api/maintenance/dddddddd-dddd-dddd-dddd-dddddddddddd";
         mockMvc.perform(post(ticket + "/quote").contentType(MediaType.APPLICATION_JSON).content("{\"amount\": 1}"))

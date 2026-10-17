@@ -21,6 +21,15 @@ public interface RoomUseCase {
     Room getRoom(UUID roomId);
     Room changeRoomStatus(UUID roomId, RoomStatus targetStatus);
 
+    /**
+     * Ngừng sử dụng (xóa mềm) phòng (#89), chỉ chủ nhà trọ hoặc admin. Phòng phải trống hoặc đang bảo trì; còn hợp đồng
+     * chưa kết thúc, hóa đơn chưa thu hay phiếu bảo trì chưa xong thì từ chối (409).
+     */
+    Room archiveRoom(UUID roomId);
+
+    /** Dùng lại phòng đã ngừng sử dụng (chủ nhà trọ hoặc admin). */
+    Room restoreRoom(UUID roomId);
+
     record CreateRoomCommand(
         UUID propertyId,
         String roomNumber,
