@@ -43,6 +43,23 @@ class AesGcmTenantDataProtectorTest {
         ));
     }
 
+    @Test
+    void handlesNonBase64FallbackAndBase64UrlKeys() {
+        // Test with non-base64 placeholder string
+        AesGcmTenantDataProtector protector1 = new AesGcmTenantDataProtector(
+            "v1", "base64_encoded_32_byte_key", "base64_encoded_32_byte_key"
+        );
+        TenantDataProtectionPort.ProtectedValue val1 = protector1.protect("079201001111");
+        assertEquals("079201001111", protector1.reveal(val1));
+
+        // Test with quoted base64 key
+        AesGcmTenantDataProtector protector2 = new AesGcmTenantDataProtector(
+            "v1", "\"" + ENCRYPTION_KEY + "\"", "'" + HMAC_KEY + "'"
+        );
+        TenantDataProtectionPort.ProtectedValue val2 = protector2.protect("079201002222");
+        assertEquals("079201002222", protector2.reveal(val2));
+    }
+
     private static byte[] filledBytes(byte value) {
         byte[] bytes = new byte[32];
         java.util.Arrays.fill(bytes, value);
