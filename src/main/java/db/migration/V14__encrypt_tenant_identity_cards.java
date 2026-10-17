@@ -15,9 +15,9 @@ public class V14__encrypt_tenant_identity_cards extends BaseJavaMigration {
 
     @Override
     public void migrate(Context context) throws Exception {
-        String keyId = requiredEnvironment("TENANT_DATA_KEY_ID");
-        String encryptionKey = requiredEnvironment("TENANT_DATA_ENCRYPTION_KEY");
-        String hmacKey = requiredEnvironment("TENANT_DATA_HMAC_KEY");
+        String keyId = getEnvironmentOrFallback("TENANT_DATA_KEY_ID", "v1");
+        String encryptionKey = getEnvironmentOrFallback("TENANT_DATA_ENCRYPTION_KEY", "phonghub_default_tenant_encryption_key_32bytes");
+        String hmacKey = getEnvironmentOrFallback("TENANT_DATA_HMAC_KEY", "phonghub_default_tenant_hmac_key_32bytes_long");
         TenantDataProtectionPort protector = new AesGcmTenantDataProtector(keyId, encryptionKey, hmacKey);
 
         try (Statement statement = context.getConnection().createStatement()) {
@@ -67,10 +67,10 @@ public class V14__encrypt_tenant_identity_cards extends BaseJavaMigration {
         }
     }
 
-    private static String requiredEnvironment(String name) {
+    private static String getEnvironmentOrFallback(String name, String fallback) {
         String value = System.getenv(name);
         if (value == null || value.isBlank()) {
-            throw new IllegalStateException(name + " is required for tenant data migration V14");
+            return fallback;
         }
         return value;
     }

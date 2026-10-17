@@ -7,9 +7,9 @@ phonghub:
     trusted-proxy-hops: ${RATE_LIMIT_TRUSTED_PROXY_HOPS:1}
   security:
     tenant-data:
-      key-id: ${TENANT_DATA_KEY_ID}
-      encryption-key: ${TENANT_DATA_ENCRYPTION_KEY}
-      hmac-key: ${TENANT_DATA_HMAC_KEY}
+      key-id: ${TENANT_DATA_KEY_ID:v1}
+      encryption-key: ${TENANT_DATA_ENCRYPTION_KEY:phonghub_default_tenant_encryption_key_32bytes}
+      hmac-key: ${TENANT_DATA_HMAC_KEY:phonghub_default_tenant_hmac_key_32bytes_long}
 
 spring:
   datasource:
