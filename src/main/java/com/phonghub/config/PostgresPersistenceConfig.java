@@ -55,6 +55,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -82,8 +84,16 @@ public class PostgresPersistenceConfig {
     @Bean(initMethod = "migrate")
     public Flyway flyway(
         DataSource dataSource,
-        @Value("${spring.flyway.locations:classpath:db/migration}") String flywayLocations
+        @Value("${spring.flyway.locations:classpath:db/migration}") String flywayLocations,
+        Environment environment
     ) {
+        // V14/V17 are historical Java migrations with legacy key fallbacks. Never let
+        // production run Flyway unless the configured data-protection keys are explicit.
+        if (environment.acceptsProfiles(Profiles.of("prod"))) {
+            requireEnvironmentVariable("TENANT_DATA_KEY_ID");
+            requireEnvironmentVariable("TENANT_DATA_ENCRYPTION_KEY");
+            requireEnvironmentVariable("TENANT_DATA_HMAC_KEY");
+        }
         return Flyway.configure()
             .dataSource(dataSource)
             .locations(Arrays.stream(flywayLocations.split(","))
@@ -93,6 +103,16 @@ public class PostgresPersistenceConfig {
             .baselineOnMigrate(true)
             .outOfOrder(true)
             .load();
+    }
+
+    private static void requireEnvironmentVariable(String name) {
+        String value = System.getenv(name);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(
+                "Production configuration failure: required environment variable '" + name
+                    + "' is missing or blank; refusing to run Flyway migrations."
+            );
+        }
     }
 
     @Bean

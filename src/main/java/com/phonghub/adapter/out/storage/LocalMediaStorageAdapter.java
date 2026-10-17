@@ -20,11 +20,6 @@ public class LocalMediaStorageAdapter implements MediaStoragePort {
 
     public LocalMediaStorageAdapter(Path uploadDir) {
         this.uploadDir = uploadDir;
-        try {
-            Files.createDirectories(uploadDir);
-        } catch (IOException e) {
-            log.error("Không thể khởi tạo thư mục lưu trữ media: {}", uploadDir, e);
-        }
     }
 
     @Override
