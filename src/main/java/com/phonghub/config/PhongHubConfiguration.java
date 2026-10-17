@@ -427,10 +427,13 @@ public class PhongHubConfiguration {
         UserRepositoryPort userRepo,
         StaffPropertyAssignmentPort assignmentRepo,
         CurrentUserPort currentUserPort,
-        AuthorizationService authorizationService
+        AuthorizationService authorizationService,
+        PropertyRepositoryPort propertyRepo,
+        TenantRepositoryPort tenantRepo,
+        AuditPort auditPort
     ) {
         return new UserService(
-            userRepo, assignmentRepo, currentUserPort, authorizationService
+            userRepo, assignmentRepo, currentUserPort, authorizationService, propertyRepo, tenantRepo, auditPort
         );
     }
 

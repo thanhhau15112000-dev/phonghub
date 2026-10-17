@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Sửa tài khoản')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Sửa tài khoản</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">
+                <span th:text="${target.username() != null ? target.username() : '—'}">username</span> ·
+                <span th:text="${target.email()}">email</span>
+            </p>
+        </div>
+        <a th:href="@{/admin/users}" class="btn btn-sm">&larr; Quay lại quản lý tài khoản</a>
+    </div>
+
+    <div class="card" style="max-width: 640px;">
+        <form th:action="@{'/admin/users/' + ${target.id()} + '/edit'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group">
+                <label class="form-label" for="fullName">Họ và tên *</label>
+                <input type="text" id="fullName" name="fullName" class="form-control" required maxlength="150" th:value="${target.fullName()}">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="phone">Số điện thoại</label>
+                <input type="text" id="phone" name="phone" class="form-control" placeholder="Ví dụ: 0912345678" th:value="${target.phone()}">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="role">Vai trò *</label>
+                    <select id="role" name="role" class="form-control">
+                        <option th:each="r : ${roles}" th:value="${r}" th:text="${uiText.role(r)}" th:selected="${r == target.role()}">Chủ trọ</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="status">Trạng thái *</label>
+                    <select id="status" name="status" class="form-control">
+                        <option th:each="s : ${statuses}" th:value="${s}" th:text="${s.name() == 'ACTIVE' ? 'Đang hoạt động' : (s.name() == 'INACTIVE' ? 'Ngừng hoạt động' : 'Tạm khóa')}"
+                                th:selected="${s == target.status()}">Đang hoạt động</option>
+                    </select>
+                </div>
+            </div>
+            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
+                Email dùng để đăng nhập nên không sửa ở đây. Tài khoản không ở trạng thái "Đang hoạt động" sẽ không đăng nhập được.
+                Chỉ đổi được vai trò khi tài khoản không còn nhà trọ đang sở hữu, phân công nhà trọ hoặc hồ sơ người thuê.
+            </p>
+            <div style="display: flex; gap: 8px;">
+                <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
+                <a th:href="@{/admin/users}" class="btn btn-secondary">Hủy</a>
+            </div>
+        </form>
+    </div>
+</main>
+</body>
+</html>
