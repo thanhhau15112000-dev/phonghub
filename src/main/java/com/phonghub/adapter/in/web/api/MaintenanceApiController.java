@@ -75,6 +75,35 @@ public class MaintenanceApiController {
             maintenanceUseCase.rejectTicket(id, request.reason())));
     }
 
+    /** Sửa phiếu chưa xử lý (#89): người báo phiếu hoặc người quản lý nhà trọ. */
+    @org.springframework.web.bind.annotation.PatchMapping("/maintenance/{id}")
+    public ResponseEntity<MaintenanceTicketResponse> updateTicket(
+        @PathVariable UUID id,
+        @Valid @RequestBody UpdateTicketRequest request
+    ) {
+        return ResponseEntity.ok(MaintenanceTicketResponse.from(maintenanceUseCase.updateTicket(
+            new MaintenanceUseCase.UpdateMaintenanceTicketCommand(
+                id, request.title(), request.description(), request.priority()))));
+    }
+
+    /** Hủy phiếu chưa xử lý (#89); lý do không bắt buộc. */
+    @PostMapping("/maintenance/{id}/cancel")
+    public ResponseEntity<MaintenanceTicketResponse> cancelTicket(
+        @PathVariable UUID id,
+        @RequestBody(required = false) CancelTicketRequest request
+    ) {
+        return ResponseEntity.ok(MaintenanceTicketResponse.from(
+            maintenanceUseCase.cancelTicket(id, request == null ? null : request.reason())));
+    }
+
+    public record UpdateTicketRequest(
+        @NotBlank(message = "Title is required") String title,
+        @NotBlank(message = "Description is required") String description,
+        com.phonghub.domain.model.MaintenancePriority priority
+    ) {}
+
+    public record CancelTicketRequest(String reason) {}
+
     @PostMapping("/maintenance/{id}/resolve")
     public ResponseEntity<MaintenanceTicketResponse> resolveTicket(
         @PathVariable UUID id,

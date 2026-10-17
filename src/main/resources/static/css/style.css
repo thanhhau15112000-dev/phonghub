@@ -297,13 +297,15 @@ h2 {
 }
 
 .badge-DRAFT,
-.badge-TERMINATED {
+.badge-TERMINATED,
+.badge-CANCELLED {
   background-color: #f1f5f9;
   color: #475569;
   border-color: #cbd5e1;
 }
 .badge-DRAFT::before,
-.badge-TERMINATED::before {
+.badge-TERMINATED::before,
+.badge-CANCELLED::before {
   background-color: #94a3b8;
 }
 

@@ -8,5 +8,7 @@ public enum MaintenanceStatus {
     AWAITING_PAYMENT,
     RESOLVED,
     VERIFIED,
-    REJECTED
+    REJECTED,
+    /** Người báo hoặc người quản lý hủy phiếu trước khi bắt đầu xử lý (#89); giữ lại bản ghi và mốc thời gian. */
+    CANCELLED
 }
