@@ -18,8 +18,15 @@ public record RoomSearchCriteria(
     Integer floor,
     Collection<UUID> restrictToRoomIds,
     int page,
-    Integer size
+    Integer size,
+    /** true: chỉ phòng đã ngừng sử dụng (#89); false (mặc định): chỉ phòng đang dùng. */
+    boolean archived
 ) {
+    public RoomSearchCriteria(UUID propertyId, RoomStatus status, BigDecimal minPrice, BigDecimal maxPrice,
+                              Integer floor, Collection<UUID> restrictToRoomIds, int page, Integer size) {
+        this(propertyId, status, minPrice, maxPrice, floor, restrictToRoomIds, page, size, false);
+    }
+
     public static final int MAX_PAGE_SIZE = 100;
 
     public RoomSearchCriteria {
@@ -52,10 +59,10 @@ public record RoomSearchCriteria(
     }
 
     public boolean isUnfiltered() {
-        return status == null && minPrice == null && maxPrice == null && floor == null && size == null;
+        return status == null && minPrice == null && maxPrice == null && floor == null && size == null && !archived;
     }
 
     public RoomSearchCriteria restrictedTo(Collection<UUID> roomIds) {
-        return new RoomSearchCriteria(propertyId, status, minPrice, maxPrice, floor, roomIds, page, size);
+        return new RoomSearchCriteria(propertyId, status, minPrice, maxPrice, floor, roomIds, page, size, archived);
     }
 }

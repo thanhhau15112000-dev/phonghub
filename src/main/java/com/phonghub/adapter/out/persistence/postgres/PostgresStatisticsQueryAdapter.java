@@ -81,7 +81,7 @@ public class PostgresStatisticsQueryAdapter implements StatisticsQueryPort {
             return List.of();
         }
         MapSqlParameterSource params = new MapSqlParameterSource();
-        String sql = "SELECT property_id, status, COUNT(*) AS cnt FROM rooms WHERE 1 = 1"
+        String sql = "SELECT property_id, status, COUNT(*) AS cnt FROM rooms WHERE archived_at IS NULL"
             + propertyFilter("property_id", propertyIds, params)
             + " GROUP BY property_id, status";
         return jdbc.query(sql, params, (rs, n) -> new RoomStatusCount(

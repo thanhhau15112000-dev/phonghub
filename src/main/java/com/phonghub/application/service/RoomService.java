@@ -5,6 +5,8 @@ import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.InvoiceRepositoryPort;
+import com.phonghub.domain.exception.ConflictException;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
@@ -47,6 +49,7 @@ public class RoomService implements RoomUseCase {
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
     private final AuditPort auditPort;
+    private final InvoiceRepositoryPort invoiceRepository;
 
     public RoomService(
         RoomRepositoryPort roomRepository,
@@ -71,6 +74,22 @@ public class RoomService implements RoomUseCase {
         AuthorizationService authorizationService,
         AuditPort auditPort
     ) {
+        this(roomRepository, propertyRepository, maintenanceTicketRepository, contractRepository, tenantRepository,
+            currentUserPort, authorizationService, auditPort, null);
+    }
+
+    public RoomService(
+        RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
+        MaintenanceTicketRepositoryPort maintenanceTicketRepository,
+        ContractRepositoryPort contractRepository,
+        TenantRepositoryPort tenantRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        InvoiceRepositoryPort invoiceRepository
+    ) {
+        this.invoiceRepository = invoiceRepository;
         this.auditPort = auditPort;
         this.roomRepository = roomRepository;
         this.propertyRepository = propertyRepository;
@@ -96,10 +115,13 @@ public class RoomService implements RoomUseCase {
             ));
         }
 
-        if (roomRepository.findByPropertyIdAndRoomNumber(command.propertyId(), command.roomNumber().trim()).isPresent()) {
-            throw new DuplicateRoomNumberException(String.format(
-                "Số phòng '%s' đã tồn tại trong nhà trọ này.", command.roomNumber().trim()
-            ));
+        Optional<Room> sameNumber = roomRepository.findByPropertyIdAndRoomNumber(
+            command.propertyId(), command.roomNumber().trim());
+        if (sameNumber.isPresent()) {
+            throw new DuplicateRoomNumberException(String.format(sameNumber.get().isArchived()
+                    ? "Số phòng '%s' thuộc một phòng đã ngừng sử dụng; hãy khôi phục phòng đó thay vì tạo mới."
+                    : "Số phòng '%s' đã tồn tại trong nhà trọ này.",
+                command.roomNumber().trim()));
         }
 
         Room room = Room.create(
@@ -143,6 +165,7 @@ public class RoomService implements RoomUseCase {
             .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + command.roomId()));
 
         authorizationService.assertOwnerOrAdmin(currentUser, room.getPropertyId());
+        assertInUse(room, "sửa thông tin");
 
         if (command.expectedVersion() != null && command.expectedVersion() != room.getVersion()) {
             throw new OptimisticLockConflictException("Phòng");
@@ -264,6 +287,7 @@ public class RoomService implements RoomUseCase {
             .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
 
         authorizationService.assertCanManageProperty(currentUser, room.getPropertyId());
+        assertInUse(room, "đổi trạng thái");
 
         // Invariant F2: Cannot manually set an OCCUPIED room to AVAILABLE
         if (room.getStatus() == RoomStatus.OCCUPIED && targetStatus == RoomStatus.AVAILABLE) {
@@ -300,6 +324,70 @@ public class RoomService implements RoomUseCase {
         audit("ROOM_STATUS_CHANGED", currentUser, saved, Map.of(
             "oldStatus", oldStatus.name(), "newStatus", saved.getStatus().name()));
         return saved;
+    }
+
+    @Override
+    public Room archiveRoom(UUID roomId) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        Room room = roomRepository.findById(roomId)
+            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
+        authorizationService.assertOwnerOrAdmin(currentUser, room.getPropertyId());
+        if (room.isArchived()) {
+            throw new ConflictException("Phòng '" + room.getRoomNumber() + "' đã ngừng sử dụng trước đó.");
+        }
+
+        List<Contract> contracts = contractRepository.findByRoomId(roomId);
+        long openContracts = contracts.stream().filter(Contract::isOpen).count();
+        if (openContracts > 0) {
+            throw new ConflictException(String.format(
+                "Không thể ngừng sử dụng phòng '%s': còn %d hợp đồng chưa kết thúc (nháp, đang hiệu lực hoặc chưa trả "
+                    + "phòng).", room.getRoomNumber(), openContracts));
+        }
+        if (invoiceRepository != null) {
+            long unpaid = contracts.stream()
+                .flatMap(c -> invoiceRepository.findByContractId(c.getId()).stream())
+                .filter(com.phonghub.domain.model.Invoice::isPayable)
+                .count();
+            if (unpaid > 0) {
+                throw new ConflictException(String.format(
+                    "Không thể ngừng sử dụng phòng '%s': còn %d hóa đơn chưa thu xong.", room.getRoomNumber(), unpaid));
+            }
+        }
+        long openTickets = maintenanceTicketRepository.findByRoomIdAndStatusNot(roomId, MaintenanceStatus.RESOLVED)
+            .stream().filter(t -> !t.isWorkFinished()).count();
+        if (openTickets > 0) {
+            throw new ConflictException(String.format(
+                "Không thể ngừng sử dụng phòng '%s': còn %d phiếu bảo trì chưa xử lý xong.",
+                room.getRoomNumber(), openTickets));
+        }
+
+        RoomStatus status = room.getStatus();
+        room.archive(java.time.Instant.now());
+        Room saved = roomRepository.save(room);
+        audit("ROOM_ARCHIVED", currentUser, saved, Map.of("roomNumber", saved.getRoomNumber(), "status", status.name()));
+        return saved;
+    }
+
+    @Override
+    public Room restoreRoom(UUID roomId) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        Room room = roomRepository.findById(roomId)
+            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
+        authorizationService.assertOwnerOrAdmin(currentUser, room.getPropertyId());
+        if (!room.isArchived()) {
+            throw new ConflictException("Phòng '" + room.getRoomNumber() + "' đang được sử dụng, không cần khôi phục.");
+        }
+        room.restore();
+        Room saved = roomRepository.save(room);
+        audit("ROOM_RESTORED", currentUser, saved, Map.of("roomNumber", saved.getRoomNumber()));
+        return saved;
+    }
+
+    private static void assertInUse(Room room, String action) {
+        if (room.isArchived()) {
+            throw new ConflictException(String.format(
+                "Phòng '%s' đã ngừng sử dụng, không thể %s. Hãy khôi phục phòng trước.", room.getRoomNumber(), action));
+        }
     }
 
     private static Map<String, Object> describe(Room room) {

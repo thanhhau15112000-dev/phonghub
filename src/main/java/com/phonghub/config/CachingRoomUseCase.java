@@ -69,6 +69,16 @@ public class CachingRoomUseCase implements RoomUseCase {
         return write(() -> delegate.changeRoomStatus(roomId, targetStatus));
     }
 
+    @Override
+    public Room archiveRoom(UUID roomId) {
+        return write(() -> delegate.archiveRoom(roomId));
+    }
+
+    @Override
+    public Room restoreRoom(UUID roomId) {
+        return write(() -> delegate.restoreRoom(roomId));
+    }
+
     /** RoomService không chạy trong transaction nên xóa cache cả khi lỗi (có thể đã ghi một phần). */
     private <T> T write(Supplier<T> action) {
         try {

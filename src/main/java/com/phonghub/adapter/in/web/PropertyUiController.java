@@ -167,6 +167,8 @@ public class PropertyUiController {
             model.addAttribute("filterFloor", floor);
             model.addAttribute("roomFilterActive", isPresent(status) || isPresent(minPrice) || isPresent(maxPrice)
                 || isPresent(floor));
+            model.addAttribute("archivedRooms", roomUseCase.searchRooms(new RoomSearchCriteria(
+                id, null, null, null, null, null, 0, null, true)).items());
             return "properties/detail";
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());

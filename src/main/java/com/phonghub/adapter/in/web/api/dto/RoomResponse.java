@@ -16,7 +16,8 @@ public record RoomResponse(
     int maxOccupants,
     RoomStatus status,
     Instant createdAt,
-    Instant updatedAt
+    Instant updatedAt,
+    Instant archivedAt
 ) {
     public static RoomResponse from(Room room) {
         return new RoomResponse(
@@ -29,7 +30,8 @@ public record RoomResponse(
             room.getMaxOccupants(),
             room.getStatus(),
             room.getCreatedAt(),
-            room.getUpdatedAt()
+            room.getUpdatedAt(),
+            room.getArchivedAt()
         );
     }
 }

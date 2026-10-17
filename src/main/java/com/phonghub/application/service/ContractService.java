@@ -113,6 +113,10 @@ public class ContractService implements ContractUseCase {
         }
 
         Room room = validateOwnershipOfRoom(currentUser, command.propertyId(), command.roomId());
+        if (room.isArchived()) {
+            throw new com.phonghub.domain.exception.ConflictException(
+                "Phòng '" + room.getRoomNumber() + "' đã ngừng sử dụng, không thể tạo hợp đồng.");
+        }
 
         // Room must not already have an active contract
         Optional<Contract> existingActive = contractRepository.findActiveByRoomId(room.getId());
