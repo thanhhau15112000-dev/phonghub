@@ -10,9 +10,15 @@ ALTER TABLE room_assets
     ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ADD COLUMN updated_by UUID REFERENCES users(id) ON DELETE SET NULL;
 
-UPDATE room_assets
-SET asset_code = 'TS-' || upper(substr(replace(id::text, '-', ''), 1, 8))
-WHERE asset_code IS NULL;
+WITH numbered AS (
+    SELECT id, ROW_NUMBER() OVER (ORDER BY created_at, id) AS rn
+    FROM room_assets
+    WHERE asset_code IS NULL
+)
+UPDATE room_assets ra
+SET asset_code = 'TS-' || lpad(n.rn::text, 6, '0')
+FROM numbered n
+WHERE ra.id = n.id AND ra.asset_code IS NULL;
 
 ALTER TABLE room_assets ALTER COLUMN asset_code SET NOT NULL;
 CREATE UNIQUE INDEX uk_room_assets_asset_code ON room_assets (asset_code);

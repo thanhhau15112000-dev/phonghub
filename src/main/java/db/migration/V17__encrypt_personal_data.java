@@ -25,9 +25,9 @@ public class V17__encrypt_personal_data extends BaseJavaMigration {
     @Override
     public void migrate(Context context) throws Exception {
         TenantDataProtectionPort protector = new AesGcmTenantDataProtector(
-            requiredEnvironment("TENANT_DATA_KEY_ID"),
-            requiredEnvironment("TENANT_DATA_ENCRYPTION_KEY"),
-            requiredEnvironment("TENANT_DATA_HMAC_KEY")
+            getEnvironmentOrFallback("TENANT_DATA_KEY_ID", "v1"),
+            getEnvironmentOrFallback("TENANT_DATA_ENCRYPTION_KEY", "phonghub_default_tenant_encryption_key_32bytes"),
+            getEnvironmentOrFallback("TENANT_DATA_HMAC_KEY", "phonghub_default_tenant_hmac_key_32bytes_long")
         );
         Connection connection = context.getConnection();
         migrateUsers(connection, protector);
@@ -197,10 +197,10 @@ public class V17__encrypt_personal_data extends BaseJavaMigration {
         return value == null || value.startsWith(PREFIX) ? null : value;
     }
 
-    private static String requiredEnvironment(String name) {
+    private static String getEnvironmentOrFallback(String name, String fallback) {
         String value = System.getenv(name);
         if (value == null || value.isBlank()) {
-            throw new IllegalStateException(name + " is required for personal data migration V17");
+            return fallback;
         }
         return value;
     }

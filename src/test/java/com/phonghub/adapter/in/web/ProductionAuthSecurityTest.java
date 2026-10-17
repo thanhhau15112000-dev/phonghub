@@ -101,6 +101,12 @@ class ProductionAuthSecurityTest {
     @MockitoBean
     private com.phonghub.application.port.out.NotificationRepositoryPort notificationRepository;
 
+    @MockitoBean
+    private com.phonghub.application.port.in.ChatRoomUseCase chatRoomUseCase;
+
+    @MockitoBean
+    private com.phonghub.application.port.in.ChatMessageUseCase chatMessageUseCase;
+
     @Test
     void healthEndpointIsPermittedWithoutAuthenticationInProd() throws Exception {
         mockMvc.perform(get("/health"))
@@ -1254,6 +1260,28 @@ class ProductionAuthSecurityTest {
                 .content(payload))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    void unauthenticatedRequestCannotAccessChatApiInProd() throws Exception {
+        mockMvc.perform(get("/api/chat/rooms"))
+            .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/chat/contacts"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void browserSessionCanAccessChatApiInProd() throws Exception {
+        MockHttpSession session = loginAsAdmin();
+        when(chatRoomUseCase.getRoomsForUser(any())).thenReturn(List.of());
+        when(chatRoomUseCase.getAvailableContacts(any())).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/chat/rooms").session(session))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/chat/contacts").session(session))
+            .andExpect(status().isOk());
     }
 
     private MockHttpSession loginAsAdmin() throws Exception {
