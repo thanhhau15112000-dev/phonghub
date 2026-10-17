@@ -4,12 +4,14 @@ ALTER TABLE maintenance_tickets
     ADD COLUMN due_at TIMESTAMPTZ,
     ADD COLUMN sla_notified_at TIMESTAMPTZ;
 
--- Phiếu cũ: dùng hạn mặc định của từng mức ưu tiên (khớp cấu hình mặc định của ứng dụng).
+-- Chỉ phiếu còn đang xử lý có SLA; cập nhật phiếu đã đóng có thể kích hoạt
+-- constraint dữ liệu cũ (ví dụ REJECTED thiếu reject_reason) ở V24.
 UPDATE maintenance_tickets SET due_at = created_at + CASE priority
     WHEN 'URGENT' THEN INTERVAL '4 hours'
     WHEN 'HIGH' THEN INTERVAL '24 hours'
     WHEN 'MEDIUM' THEN INTERVAL '72 hours'
-    ELSE INTERVAL '168 hours' END;
+    ELSE INTERVAL '168 hours' END
+WHERE status IN ('REPORTED', 'ASSIGNED', 'IN_PROGRESS');
 
 -- Phiếu cũ đã quá hạn nhưng chưa xong sẽ không bị báo hàng loạt khi triển khai: coi như đã báo.
 UPDATE maintenance_tickets SET sla_notified_at = CURRENT_TIMESTAMP
