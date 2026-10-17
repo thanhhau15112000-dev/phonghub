@@ -17,6 +17,9 @@ import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
 import com.phonghub.domain.model.ContractStatus;
 import com.phonghub.domain.model.Invoice;
+import com.phonghub.domain.model.InvoiceItem;
+import com.phonghub.domain.model.InvoiceStatus;
+import com.phonghub.domain.model.InvoiceType;
 import com.phonghub.domain.model.MeterReading;
 import com.phonghub.domain.model.MeterType;
 import com.phonghub.domain.model.ServiceRate;
@@ -140,6 +143,26 @@ class UtilityInvoicingUnitTest {
         assertFalse(service.attachUtilityCharges(contract.getId(), PERIOD));
         assertTrue(service.findContractsNeedingUtilityCharges(PERIOD).isEmpty());
         assertEquals(2, invoices.findById(issued.getId()).orElseThrow().getItems().size());
+    }
+
+    @Test
+    @DisplayName("A legacy invoice without a payment code can still receive late utility charges")
+    void lateReadingIsAttachedToLegacyInvoiceWithoutPaymentCode() {
+        rate("Điện", ChargeType.PER_KWH, "3500");
+        reading(MeterType.ELECTRIC, "100", "150", PERIOD, contract.getId());
+        Instant now = Instant.now();
+        Invoice legacyInvoice = new Invoice(
+            UUID.randomUUID(), contract.getId(), contract.getRoomId(), contract.getPrimaryTenantId(),
+            PERIOD.getMonthValue(), PERIOD.getYear(), contract.getRentAmount(), contract.getRentAmount(),
+            BigDecimal.ZERO, PERIOD.atDay(5), InvoiceStatus.ISSUED, null, InvoiceType.RENT, null,
+            null, List.of(InvoiceItem.of("Tiền thuê", contract.getRentAmount(), null)), null, now, now);
+        invoices.save(legacyInvoice);
+
+        assertTrue(service.attachUtilityCharges(contract.getId(), PERIOD));
+
+        Invoice updated = invoices.findById(legacyInvoice.getId()).orElseThrow();
+        assertEquals(2, updated.getItems().size());
+        assertEquals(0, new BigDecimal("3675000").compareTo(updated.getTotalAmount()));
     }
 
     @Test

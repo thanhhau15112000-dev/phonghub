@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
@@ -266,6 +267,14 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(get("/properties").session(session))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/account/password"));
+    }
+
+    @Test
+    void adminUserEditRequiresBearerTokenInProd() throws Exception {
+        mockMvc.perform(patch("/api/admin/users/55555555-0000-0000-0000-000000000002")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fullName\":\"x\",\"role\":\"OWNER\",\"status\":\"ACTIVE\"}"))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test

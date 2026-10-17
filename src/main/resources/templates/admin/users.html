@@ -185,6 +185,8 @@
                     </td>
                     <td class="col-actions">
                         <div th:if="${user.role().name() != 'ADMIN'}" class="table-actions">
+                            <a th:href="@{'/admin/users/' + ${user.id()} + '/edit'}" class="btn btn-sm btn-secondary"
+                               th:title="'Sửa thông tin, vai trò, trạng thái của ' + ${user.fullName()}">Sửa</a>
                             <form th:action="@{'/admin/users/' + ${user.id()} + '/reset-password'}" method="post" style="margin: 0;">
                                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                                 <button type="submit" class="btn btn-sm btn-secondary" th:title="'Sinh mật khẩu tạm thời mới cho ' + ${user.fullName()}">Reset mật khẩu</button>
