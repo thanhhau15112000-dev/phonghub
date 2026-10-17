@@ -190,6 +190,7 @@ public final class UiText {
             case RESOLVED -> "Đã xử lý";
             case VERIFIED -> "Đã xác nhận";
             case REJECTED -> "Đã từ chối";
+            case CANCELLED -> "Đã hủy";
         };
     }
 }

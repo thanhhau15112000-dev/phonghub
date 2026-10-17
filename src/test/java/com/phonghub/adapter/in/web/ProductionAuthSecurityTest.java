@@ -49,6 +49,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -628,6 +629,15 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(get("/notifications"))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void maintenanceEditAndCancelRequireBearerTokenInProd() throws Exception {
+        String ticket = "/api/maintenance/dddddddd-dddd-dddd-dddd-dddddddddddd";
+        mockMvc.perform(MockMvcRequestBuilders.patch(ticket).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"x\",\"description\":\"y\"}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(post(ticket + "/cancel")).andExpect(status().isUnauthorized());
     }
 
     @Test

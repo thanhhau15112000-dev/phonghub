@@ -215,6 +215,7 @@ public class MaintenanceUiController {
             model.addAttribute("actorNames", actorNames);
             model.addAttribute("now", java.time.Instant.now());
             model.addAttribute("liableParties", LiableParty.values());
+            model.addAttribute("priorities", MaintenancePriority.values());
             model.addAttribute("today", LocalDate.now());
             model.addAttribute("feeInvoice", invoiceUseCase.findFeeInvoiceForTicket(id).orElse(null));
             model.addAttribute("quote", maintenanceUseCase.visibleQuote(id));
@@ -308,6 +309,41 @@ public class MaintenanceUiController {
             redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
                 ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
                 : ex.getMessage());
+        }
+        return "redirect:/maintenance/" + id;
+    }
+
+    @PostMapping("/{id}/edit")
+    public String updateTicket(
+        @PathVariable UUID id,
+        @RequestParam String title,
+        @RequestParam String description,
+        @RequestParam(required = false) com.phonghub.domain.model.MaintenancePriority priority,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            maintenanceUseCase.updateTicket(new MaintenanceUseCase.UpdateMaintenanceTicketCommand(
+                id, title, description, priority));
+            redirectAttributes.addFlashAttribute("successMessage", "Đã cập nhật nội dung phiếu bảo trì.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
+                ? "Bạn không có quyền sửa phiếu bảo trì này." : ex.getMessage());
+        }
+        return "redirect:/maintenance/" + id;
+    }
+
+    @PostMapping("/{id}/cancel")
+    public String cancelTicket(
+        @PathVariable UUID id,
+        @RequestParam(required = false) String reason,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            maintenanceUseCase.cancelTicket(id, reason);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã hủy phiếu bảo trì.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
+                ? "Bạn không có quyền hủy phiếu bảo trì này." : ex.getMessage());
         }
         return "redirect:/maintenance/" + id;
     }
