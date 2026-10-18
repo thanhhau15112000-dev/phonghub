@@ -108,6 +108,13 @@ class ProductionAuthSecurityTest {
     private com.phonghub.application.port.in.ChatMessageUseCase chatMessageUseCase;
 
     @Test
+    void roomAssetBatchRequiresBearerTokenInProd() throws Exception {
+        mockMvc.perform(post("/api/rooms/10401040-1040-1040-1040-104010401040/assets/batch")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"items\":[{\"name\":\"Giường\"}]}"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void healthEndpointIsPermittedWithoutAuthenticationInProd() throws Exception {
         mockMvc.perform(get("/health"))
             .andExpect(status().isOk());

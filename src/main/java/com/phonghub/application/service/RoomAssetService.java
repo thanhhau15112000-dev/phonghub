@@ -112,6 +112,47 @@ public class RoomAssetService implements RoomAssetUseCase {
     }
 
     @Override
+    public List<RoomAsset> createBatch(CreateBatchCommand command) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        Room primary = findRoom(command.roomId());
+        authorizationService.assertCanManageProperty(user, primary.getPropertyId());
+
+        java.util.LinkedHashSet<UUID> roomIds = new java.util.LinkedHashSet<>();
+        roomIds.add(primary.getId());
+        roomIds.addAll(command.alsoRoomIds());
+        List<Room> rooms = new ArrayList<>();
+        for (UUID roomId : roomIds) {
+            Room room = findRoom(roomId);
+            if (!room.getPropertyId().equals(primary.getPropertyId())) {
+                throw new IllegalArgumentException("Chỉ áp dụng được cho các phòng cùng một nhà trọ.");
+            }
+            rooms.add(room);
+        }
+
+        // Dựng (và kiểm tra) toàn bộ tài sản trước khi lưu để một dòng sai không để lại phòng được thêm dở.
+        java.util.Set<String> codes = new java.util.HashSet<>();
+        List<RoomAsset> assets = new ArrayList<>();
+        for (Room room : rooms) {
+            for (BatchItem item : command.items()) {
+                String code;
+                do {
+                    code = generateAssetCode();
+                } while (!codes.add(code));
+                assets.add(newAsset(room.getId(), code, item.name(), null, item.quantity(), null, null,
+                    item.estimatedValue(), user));
+            }
+        }
+        List<RoomAsset> saved = assets.stream().map(assetRepository::save).toList();
+        for (Room room : rooms) {
+            List<RoomAsset> inRoom = saved.stream().filter(a -> a.roomId().equals(room.getId())).toList();
+            audit("ROOM_ASSET_BATCH_CREATED", user, inRoom.getFirst(), Map.of(
+                "roomId", room.getId().toString(), "count", inRoom.size(),
+                "names", inRoom.stream().map(RoomAsset::name).toList()));
+        }
+        return saved;
+    }
+
+    @Override
     public RoomAsset update(UpdateAssetCommand command) {
         CurrentUser user = currentUserPort.getCurrentUser();
         RoomAsset asset = findActiveAsset(command.assetId());

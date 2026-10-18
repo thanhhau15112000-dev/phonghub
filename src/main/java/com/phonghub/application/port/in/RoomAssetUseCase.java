@@ -14,6 +14,12 @@ public interface RoomAssetUseCase {
 
     List<RoomAsset> createFromTemplate(UUID roomId, String template);
 
+    /**
+     * Thêm nhiều tài sản một lần (người dùng tự nhập danh sách) vào một phòng, có thể áp thêm cho các phòng khác cùng nhà
+     * trọ. Kiểm tra hết quyền và dữ liệu trước khi lưu: một dòng sai thì không phòng nào được thêm.
+     */
+    List<RoomAsset> createBatch(CreateBatchCommand command);
+
     RoomAsset update(UpdateAssetCommand command);
 
     void delete(UUID assetId);
@@ -39,6 +45,30 @@ public interface RoomAssetUseCase {
         String imageUrl,
         BigDecimal estimatedValue
     ) {}
+
+    record BatchItem(String name, int quantity, BigDecimal estimatedValue) {}
+
+    record CreateBatchCommand(UUID roomId, List<UUID> alsoRoomIds, List<BatchItem> items) {
+        public static final int MAX_ITEMS = 30;
+        public static final int MAX_ROOMS = 50;
+
+        public CreateBatchCommand {
+            if (roomId == null) {
+                throw new IllegalArgumentException("Room id is required");
+            }
+            alsoRoomIds = alsoRoomIds == null ? List.of() : List.copyOf(alsoRoomIds);
+            items = items == null ? List.of() : List.copyOf(items);
+            if (items.isEmpty()) {
+                throw new IllegalArgumentException("Cần nhập ít nhất một tài sản.");
+            }
+            if (items.size() > MAX_ITEMS) {
+                throw new IllegalArgumentException("Mỗi lần thêm tối đa " + MAX_ITEMS + " tài sản.");
+            }
+            if (alsoRoomIds.size() + 1 > MAX_ROOMS) {
+                throw new IllegalArgumentException("Mỗi lần áp dụng cho tối đa " + MAX_ROOMS + " phòng.");
+            }
+        }
+    }
 
     record UpdateAssetCommand(
         UUID assetId,

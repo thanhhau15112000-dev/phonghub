@@ -566,6 +566,61 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/rooms/{roomId}/assets/batch:
+    parameters:
+      - name: roomId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Rooms]
+      summary: Thêm nhiều tài sản một lần, tự nhập danh sách (Jira "Add Facilities to Room in Batch")
+      description: >
+        Chủ nhà trọ, quản trị viên hoặc nhân viên được phân công. Có thể áp thêm cho các phòng khác cùng nhà trọ
+        (`alsoRoomIds`). Kiểm tra hết quyền và dữ liệu trước khi lưu: một dòng sai thì không phòng nào được thêm.
+        Tối đa 30 tài sản và 50 phòng mỗi lần.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 30
+                  items:
+                    type: object
+                    required: [name]
+                    properties:
+                      name: { type: string, maxLength: 150 }
+                      quantity: { type: integer, minimum: 1, default: 1 }
+                      estimatedValue: { type: number, minimum: 0 }
+                alsoRoomIds:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Tài sản đã tạo (của tất cả các phòng)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/assets/{assetId}:
     parameters:
       - name: assetId
