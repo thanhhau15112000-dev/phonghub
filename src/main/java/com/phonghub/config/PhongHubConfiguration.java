@@ -118,10 +118,12 @@ public class PhongHubConfiguration {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
         AuditPort auditPort,
-        PhongHubCaches caches
+        PhongHubCaches caches,
+        RoomRepositoryPort roomRepo
     ) {
         return new CachingPropertyUseCase(
-            new PropertyService(propertyRepo, currentUserPort, authorizationService, auditPort), caches, currentUserPort);
+            new PropertyService(propertyRepo, currentUserPort, authorizationService, auditPort, roomRepo),
+            caches, currentUserPort);
     }
 
     @Bean

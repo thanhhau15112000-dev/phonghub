@@ -22,15 +22,7 @@ public interface PropertyUseCase {
             if (propertyId == null) {
                 throw new IllegalArgumentException("Property id is required");
             }
-            if (name == null || name.isBlank()) {
-                throw new IllegalArgumentException("Property name cannot be blank");
-            }
-            if (address == null || address.isBlank()) {
-                throw new IllegalArgumentException("Property address cannot be blank");
-            }
-            if (totalRooms != null && totalRooms < 0) {
-                throw new IllegalArgumentException("Total rooms must be non-negative");
-            }
+            Property.validateInfo(name, address, totalRooms);
         }
     }
 
@@ -41,15 +33,7 @@ public interface PropertyUseCase {
         int totalRooms
     ) {
         public CreatePropertyCommand {
-            if (name == null || name.isBlank()) {
-                throw new IllegalArgumentException("Property name cannot be blank");
-            }
-            if (address == null || address.isBlank()) {
-                throw new IllegalArgumentException("Property address cannot be blank");
-            }
-            if (totalRooms < 0) {
-                throw new IllegalArgumentException("Total rooms must be non-negative");
-            }
+            Property.validateInfo(name, address, totalRooms);
         }
     }
 }

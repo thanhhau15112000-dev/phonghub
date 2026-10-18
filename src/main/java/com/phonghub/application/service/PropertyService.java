@@ -4,6 +4,7 @@ import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
+import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.model.Property;
 import java.time.Instant;
@@ -23,6 +24,7 @@ public class PropertyService implements PropertyUseCase {
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
     private final AuditPort auditPort;
+    private final RoomRepositoryPort roomRepository;
 
     public PropertyService(
         PropertyRepositoryPort propertyRepository,
@@ -38,10 +40,21 @@ public class PropertyService implements PropertyUseCase {
         AuthorizationService authorizationService,
         AuditPort auditPort
     ) {
+        this(propertyRepository, currentUserPort, authorizationService, auditPort, null);
+    }
+
+    public PropertyService(
+        PropertyRepositoryPort propertyRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        RoomRepositoryPort roomRepository
+    ) {
         this.propertyRepository = propertyRepository;
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
         this.auditPort = auditPort != null ? auditPort : event -> {};
+        this.roomRepository = roomRepository;
     }
 
     @Override
@@ -79,6 +92,14 @@ public class PropertyService implements PropertyUseCase {
             .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + command.propertyId()));
 
         int totalRooms = command.totalRooms() == null ? property.totalRooms() : command.totalRooms();
+        // Tổng số phòng là con số khai báo; không cho thấp hơn số phòng đã tạo để danh sách và thông tin khớp nhau.
+        if (roomRepository != null && command.totalRooms() != null) {
+            int existingRooms = roomRepository.findByPropertyId(property.id()).size();
+            if (totalRooms < existingRooms) {
+                throw new IllegalArgumentException(String.format(
+                    "Tổng số phòng không được nhỏ hơn số phòng đã tạo (%d phòng).", existingRooms));
+            }
+        }
         String description = command.description() == null || command.description().isBlank()
             ? null : command.description().trim();
         boolean coreChanged = property.changesCoreInfo(command.name(), command.address());
