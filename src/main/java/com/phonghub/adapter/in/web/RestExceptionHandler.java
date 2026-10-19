@@ -44,17 +44,26 @@ import com.phonghub.domain.exception.AccountDisabledException;
 import com.phonghub.domain.exception.IdentityProviderUnavailableException;
 import com.phonghub.domain.exception.InvalidCredentialsException;
 import com.phonghub.domain.exception.PasswordChangeRequiredException;
+import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.http.converter.HttpMessageNotWritableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice(basePackages = "com.phonghub.adapter.in.web.api")
 public class RestExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(RestExceptionHandler.class);
 
     @ExceptionHandler(InvalidCredentialsException.class)
     public ProblemDetail handleInvalidCredentials(InvalidCredentialsException ex) {
@@ -298,6 +307,26 @@ public class RestExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problem.setTitle("Invalid Argument");
         problem.setType(URI.create("https://phonghub.local/errors/invalid-argument"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    /**
+     * Lỗi ngoài dự kiến (#164): trả ProblemDetail 500 cùng định dạng với các lỗi khác, không lộ thông điệp hay stack
+     * trace; chi tiết chỉ ghi log. Lỗi chuẩn của Spring MVC (400 sai kiểu/thiếu tham số, 405, 415...) được ném lại để
+     * Spring trả đúng mã như trước.
+     */
+    @ExceptionHandler(Exception.class)
+    public ProblemDetail handleUnexpected(Exception ex, HttpServletRequest request) throws Exception {
+        if (ex instanceof ErrorResponse || ex instanceof TypeMismatchException
+            || ex instanceof HttpMessageNotReadableException || ex instanceof HttpMessageNotWritableException) {
+            throw ex;
+        }
+        log.error("Lỗi không xử lý ở API {} {}", request.getMethod(), request.getRequestURI(), ex);
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+            "Hệ thống gặp lỗi, vui lòng thử lại sau.");
+        problem.setTitle("Internal Server Error");
+        problem.setType(URI.create("https://phonghub.local/errors/internal"));
         problem.setProperty("timestamp", Instant.now());
         return problem;
     }
