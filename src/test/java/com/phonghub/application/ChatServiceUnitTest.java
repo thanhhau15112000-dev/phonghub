@@ -91,7 +91,7 @@ class ChatServiceUnitTest {
     }
 
     @Test
-    @DisplayName("Gửi tin nhắn vào Kênh Chung thành công và lưu vào repository")
+    @DisplayName("Chủ trọ gửi tin vào Kênh Chung thành công")
     void sendMessageToGlobalRoomSuccess() {
         ChatMessage msg = chatService.sendMessage(userA, ChatRoom.GLOBAL_ROOM_ID, "Xin chào mọi người");
         assertNotNull(msg);
@@ -101,6 +101,24 @@ class ChatServiceUnitTest {
         List<ChatMessage> list = chatService.getMessages(userB, ChatRoom.GLOBAL_ROOM_ID, null, 10);
         assertEquals(1, list.size());
         assertEquals("Xin chào mọi người", list.get(0).content());
+    }
+
+    @Test
+    @DisplayName("[Issue-129] Tenant không có quyền gửi tin vào Kênh Chung (403 Forbidden)")
+    void tenantSendToGlobalRoomThrowsForbidden() {
+        // userB là TENANT
+        assertThrows(UnauthorizedChatAccessException.class, () -> {
+            chatService.sendMessage(userB, ChatRoom.GLOBAL_ROOM_ID, "Tenant cố gửi");
+        });
+    }
+
+    @Test
+    @DisplayName("[Issue-129] Tenant không có quyền gửi media vào Kênh Chung (403 Forbidden)")
+    void tenantSendMediaToGlobalRoomThrowsForbidden() {
+        byte[] fakeImage = new byte[] { 1, 2, 3 };
+        assertThrows(UnauthorizedChatAccessException.class, () -> {
+            chatService.sendMediaMessage(userB, ChatRoom.GLOBAL_ROOM_ID, "photo.png", "image/png", fakeImage, null);
+        });
     }
 
     @Test
