@@ -20,8 +20,11 @@
             <div class="form-group" style="min-width: 180px; margin: 0;">
                 <label class="form-label" for="dataset">Dữ liệu</label>
                 <select id="dataset" name="dataset" class="form-control">
-                    <option value="invoices">Hóa đơn theo kỳ</option>
-                    <option value="debts">Công nợ hiện tại</option>
+                    <!-- Quản trị viên không xem số liệu tiền nên chỉ xuất hợp đồng (#163) -->
+                    <th:block th:unless="${currentUser != null and currentUser.role().name() == 'ADMIN'}">
+                        <option value="invoices">Hóa đơn theo kỳ</option>
+                        <option value="debts">Công nợ hiện tại</option>
+                    </th:block>
                     <option value="contracts">Hợp đồng</option>
                 </select>
             </div>

@@ -208,8 +208,8 @@
         </div>
     </div>
 
-    <!-- Thanh toán tiền thuê -->
-    <div class="card" id="payments" style="margin-top: 20px;">
+    <!-- Thanh toán tiền thuê (quản trị viên không xem số liệu tiền, #163) -->
+    <div th:if="${invoices != null}" class="card" id="payments" style="margin-top: 20px;">
         <div class="flex-between" style="margin-bottom: 12px;">
             <h2 style="margin: 0;">Thanh toán tiền thuê</h2>
             <form th:if="${canIssueInvoice}" th:action="@{'/contracts/' + ${contract.getId()} + '/invoices'}" method="post" style="display: flex; align-items: center; gap: 8px;">

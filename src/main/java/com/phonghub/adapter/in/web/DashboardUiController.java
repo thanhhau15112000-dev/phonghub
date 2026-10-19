@@ -74,8 +74,10 @@ public class DashboardUiController {
         Model model
     ) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
-        if (currentUser.role() == UserRole.OWNER || currentUser.role() == UserRole.ADMIN) {
-            addOperationsAttributes(model, currentUser, statsPropertyId, statsFrom, statsTo);
+        if (currentUser.role() == UserRole.OWNER) {
+            addOperationsAttributes(model, statsPropertyId, statsFrom, statsTo);
+        } else if (currentUser.role() == UserRole.ADMIN) {
+            addAdminAttributes(model);
         }
         List<Property> properties = propertyUseCase.listAccessibleProperties();
 
@@ -128,12 +130,10 @@ public class DashboardUiController {
     }
 
     /**
-     * Dashboard vận hành (#75) cho owner/admin: số liệu lấy từ {@link StatisticsUseCase}, nơi đã kiểm tra phạm vi nhà
-     * trọ. Bộ lọc sai hoặc nhà trọ ngoài phạm vi thì báo lỗi và quay về số liệu mặc định thay vì làm hỏng trang.
+     * Dashboard vận hành (#75) cho owner: số liệu lấy từ {@link StatisticsUseCase}, nơi đã kiểm tra phạm vi nhà trọ.
+     * Bộ lọc sai hoặc nhà trọ ngoài phạm vi thì báo lỗi và quay về số liệu mặc định thay vì làm hỏng trang.
      */
-    private void addOperationsAttributes(
-        Model model, CurrentUser currentUser, String propertyParam, String fromParam, String toParam
-    ) {
+    private void addOperationsAttributes(Model model, String propertyParam, String fromParam, String toParam) {
         YearMonth current = YearMonth.now(StatisticsQueryPort.ZONE);
         StatsQuery query;
         try {
@@ -160,10 +160,13 @@ public class DashboardUiController {
         model.addAttribute("opsRevenueBars", bars);
         model.addAttribute("opsProperties", statisticsUseCase.ownerProperties(
             new StatsQuery(null, query.from(), query.to(), Granularity.MONTH)));
-        if (currentUser.role() == UserRole.ADMIN) {
-            model.addAttribute("adminOverview", statisticsUseCase.adminOverview(query));
-            model.addAttribute("pendingProperties", statisticsUseCase.pendingProperties());
-        }
+    }
+
+    /** Admin vận hành nền tảng: nhà trọ, tài khoản, lấp đầy và nhà chờ duyệt; không có số liệu tiền (#163). */
+    private void addAdminAttributes(Model model) {
+        StatsQuery query = StatsQuery.of(null, null, null, Granularity.MONTH, YearMonth.now(StatisticsQueryPort.ZONE));
+        model.addAttribute("adminOverview", statisticsUseCase.adminOverview(query));
+        model.addAttribute("pendingProperties", statisticsUseCase.pendingProperties());
     }
 
     private static UUID parseUuid(String value) {

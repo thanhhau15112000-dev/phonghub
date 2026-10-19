@@ -15,6 +15,17 @@ public final class AuditSanitizer {
 
     public static final String REDACTED = "[REDACTED]";
 
+    /** Giá trị thay cho số tiền khi người xem không được biết số liệu tài chính (admin xem nhật ký, #163). */
+    public static final String MONEY_HIDDEN = "***";
+
+    /** Khóa chứa số tiền: amount, totalAmount, rentAmount, depositAmount, basePrice, pricePerUnit, feeValue, cost... */
+    private static final String MONEY_KEY = "[A-Za-z]*(?i:amount|price|priceperunit|cost|feevalue|rent|deposit)";
+    /** Chi tiết dạng JSON (PostgreSQL): {@code "rentAmount":"3000000"} hoặc {@code "amount":150000}. */
+    private static final Pattern MONEY_JSON = Pattern.compile(
+        "(\"" + MONEY_KEY + "\"\\s*:\\s*)(\"(?:[^\"\\\\]|\\\\.)*\"|-?\\d+(?:\\.\\d+)?)");
+    /** Chi tiết dạng {@code Map.toString()} (bộ nhớ trong): {@code rentAmount=3000000}. */
+    private static final Pattern MONEY_MAP = Pattern.compile("((?:^|[{,\\s])" + MONEY_KEY + "=)([^,}\\]]*)");
+
     private static final Pattern SECRET_KEY = Pattern.compile(
         "(pass(word|wd)?|token|secret|api[-_]?key|authorization|cookie|credential|private[-_]?key|otp)",
         Pattern.CASE_INSENSITIVE);
@@ -58,6 +69,15 @@ public final class AuditSanitizer {
             return maskKeepingLastFour(text.toString());
         }
         return value;
+    }
+
+    /** Che mọi giá trị tiền trong chi tiết nhật ký đã lưu (JSON hoặc Map.toString), giữ nguyên các trường khác. */
+    public static String maskMoney(String details) {
+        if (details == null || details.isEmpty()) {
+            return details;
+        }
+        String masked = MONEY_JSON.matcher(details).replaceAll("$1\"" + MONEY_HIDDEN + "\"");
+        return MONEY_MAP.matcher(masked).replaceAll("$1" + MONEY_HIDDEN);
     }
 
     static String maskKeepingLastFour(String text) {

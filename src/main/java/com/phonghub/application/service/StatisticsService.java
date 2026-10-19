@@ -134,7 +134,6 @@ public class StatisticsService implements StatisticsUseCase {
 
         return new AdminOverview(query.from().toString(), query.to().toString(),
             byApproval.values().stream().mapToLong(Long::longValue).sum(), byApproval, byRole,
-            revenue(statsQuery.invoiceAggregates(null, query.from(), query.to(), today())),
             occupancy(statsQuery.roomStatusCounts(null)));
     }
 
@@ -179,23 +178,26 @@ public class StatisticsService implements StatisticsUseCase {
     }
 
     /**
-     * Phạm vi nhà trọ được xem số liệu tài chính: owner chỉ nhà của mình, admin mọi nhà. Staff, kỹ thuật viên và
-     * người thuê không xem thống kê tài chính.
+     * Phạm vi nhà trọ được xem số liệu tài chính: chỉ owner, và chỉ nhà của mình. Admin không xem tiền (#163); staff,
+     * kỹ thuật viên và người thuê không xem thống kê tài chính.
      */
     private List<Property> ownerScope(UUID propertyId) {
         CurrentUser user = currentUserPort.getCurrentUser();
         if (user == null) {
             throw new UnauthorizedPropertyAccessException("Authentication required");
         }
-        if (user.role() != UserRole.OWNER && user.role() != UserRole.ADMIN) {
-            throw new UnauthorizedPropertyAccessException("Chỉ chủ nhà trọ hoặc quản trị viên được xem thống kê.");
+        if (user.role() == UserRole.ADMIN) {
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.ADMIN_FINANCE_DENIED);
+        }
+        if (user.role() != UserRole.OWNER) {
+            throw new UnauthorizedPropertyAccessException("Chỉ chủ nhà trọ được xem thống kê tài chính.");
         }
         if (propertyId != null) {
             authorizationService.assertOwnerOrAdmin(user, propertyId);
             return List.of(propertyRepository.findById(propertyId)
                 .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + propertyId)));
         }
-        return user.role() == UserRole.ADMIN ? propertyRepository.findAll() : propertyRepository.findByOwnerId(user.id());
+        return propertyRepository.findByOwnerId(user.id());
     }
 
     private List<MaintenanceAggregate> completedMaintenance(Collection<UUID> ids, StatsQuery query) {

@@ -3236,8 +3236,9 @@ paths:
       tags: [Billing & Invoices]
       summary: Xuất hóa đơn / công nợ / hợp đồng ra Excel hoặc PDF trong phạm vi quyền
       description: >
-        Hóa đơn và công nợ cần quyền thu tiền, hợp đồng cần quyền quản lý hợp đồng (admin mọi nhà, owner nhà của
-        mình, staff theo quyền được cấp). Kỹ thuật viên và người thuê bị 403. Số CCCD luôn được che (****1234).
+        Hóa đơn và công nợ cần quyền thu tiền, hợp đồng cần quyền quản lý hợp đồng (owner nhà của mình, staff theo
+        quyền được cấp). Admin chỉ xuất hợp đồng (mọi nhà); hóa đơn/công nợ trả 403 vì admin không xem số liệu tiền
+        (#163). Kỹ thuật viên và người thuê bị 403. Số CCCD luôn được che (****1234).
         Mỗi lần xuất được ghi audit DATA_EXPORTED.
       parameters:
         - name: dataset
@@ -3283,7 +3284,8 @@ paths:
       tags: [Payments]
       summary: Giao dịch SePay kèm trạng thái đối soát (khớp / cần xem xét / không khớp / bỏ qua)
       description: >
-        Admin xem mọi giao dịch (kể cả chưa khớp hợp đồng); owner xem giao dịch hợp đồng nhà mình; staff xem nhà được
+        Admin xem mọi giao dịch (kể cả chưa khớp hợp đồng) nhưng không xem số tiền: amount, appliedAmount,
+        excessAmount và các tổng tiền trả về null (#163). Owner xem giao dịch hợp đồng nhà mình; staff xem nhà được
         phân công có quyền thu tiền. Kỹ thuật viên, người thuê, lọc nhà ngoài phạm vi: 403.
       parameters:
         - name: propertyId
@@ -3459,7 +3461,8 @@ paths:
   # STATISTICS (#93)
   # Doanh thu tính theo kỳ hóa đơn (bỏ hóa đơn VOIDED và phí đã gộp vào hóa đơn tháng); chi phí là phí sửa chữa
   # chủ nhà chịu của phiếu hoàn thành trong kỳ; lợi nhuận ước tính = đã thu - chi phí. Tháng theo giờ Việt Nam.
-  # Owner chỉ thấy nhà của mình (403 nếu lọc nhà khác); admin thấy mọi nhà. Staff/kỹ thuật viên/người thuê: 403.
+  # Owner chỉ thấy nhà của mình (403 nếu lọc nhà khác). Admin không xem số liệu tiền (#163): /owner/* trả 403,
+  # /admin/overview không có doanh thu. Staff/kỹ thuật viên/người thuê: 403.
   # ==========================================
   /api/stats/owner/summary:
     get:
@@ -3540,7 +3543,7 @@ paths:
   /api/stats/admin/overview:
     get:
       tags: [Statistics]
-      summary: Admin - tổng quan toàn hệ thống (nhà trọ theo trạng thái xác minh, tài khoản theo vai trò, doanh thu, lấp đầy)
+      summary: Admin - tổng quan toàn hệ thống (nhà trọ theo trạng thái xác minh, tài khoản theo vai trò, lấp đầy; không có doanh thu)
       parameters:
         - $ref: '#/components/parameters/StatsFromParam'
         - $ref: '#/components/parameters/StatsToParam'
@@ -3872,7 +3875,6 @@ components:
           type: object
           additionalProperties: { type: integer }
           example: { ADMIN: 1, OWNER: 5, STAFF: 3, TECHNICIAN: 2, TENANT: 40 }
-        revenue: { $ref: '#/components/schemas/StatsRevenue' }
         occupancy: { $ref: '#/components/schemas/StatsOccupancy' }
     PendingPropertyStats:
       type: object

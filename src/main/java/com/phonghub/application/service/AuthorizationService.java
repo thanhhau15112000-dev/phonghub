@@ -21,6 +21,8 @@ import java.util.stream.Collectors;
 
 public class AuthorizationService {
 
+    public static final String ADMIN_FINANCE_DENIED = "Quản trị viên không xem số liệu tài chính của nhà trọ.";
+
     private final StaffPropertyAssignmentPort assignmentPort;
     private final PropertyRepositoryPort propertyRepositoryPort;
     private final TenantRepositoryPort tenantRepositoryPort;
@@ -335,8 +337,22 @@ public class AuthorizationService {
         return canTenantViewTicket(user, roomId, null);
     }
 
-    /** Xem hóa đơn: người thuê của hợp đồng (chính hoặc ở cùng), hoặc người có quyền với nhà trọ. */
+    /**
+     * Số liệu tiền của nhà trọ (hóa đơn, giao dịch, doanh thu, công nợ) chỉ dành cho chủ trọ và người được giao; quản
+     * trị viên vận hành nền tảng nên không xem (#163). Phạm vi nhà trọ vẫn do các kiểm tra khác đảm nhận.
+     */
+    public void assertCanViewFinance(CurrentUser user) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (user.role() == UserRole.ADMIN) {
+            throw new UnauthorizedPropertyAccessException(ADMIN_FINANCE_DENIED);
+        }
+    }
+
+    /** Xem hóa đơn: người thuê của hợp đồng (chính hoặc ở cùng), hoặc người có quyền với nhà trọ (trừ admin, #163). */
     public void assertCanViewInvoice(CurrentUser user, com.phonghub.domain.model.Invoice invoice) {
+        assertCanViewFinance(user);
         Contract contract = contractRepositoryPort.findById(invoice.getContractId())
             .orElseThrow(() -> new UnauthorizedPropertyAccessException("Contract not found: " + invoice.getContractId()));
         if (user.role() == UserRole.TENANT) {
@@ -362,8 +378,9 @@ public class AuthorizationService {
         }
     }
 
-    /** Thu tiền: staff cần quyền can_collect_payment. */
+    /** Thu tiền: staff cần quyền can_collect_payment; admin không xem tiền (#163). */
     public void assertCanCollectPayment(CurrentUser user, UUID propertyId) {
+        assertCanViewFinance(user);
         assertCanManageProperty(user, propertyId);
         if (user.role() == UserRole.STAFF && !assignmentPort.find(user.id(), propertyId)
             .map(assignment -> assignment.canCollectPayment()).orElse(false)) {

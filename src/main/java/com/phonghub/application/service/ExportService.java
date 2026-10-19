@@ -125,14 +125,18 @@ public class ExportService implements ExportUseCase {
     }
 
     /**
-     * Phạm vi nhà trọ được xuất: hóa đơn/công nợ cần quyền thu tiền, hợp đồng cần quyền quản lý hợp đồng (admin và
-     * owner luôn có ở nhà của mình). Kỹ thuật viên và người thuê không được xuất.
+     * Phạm vi nhà trọ được xuất: hóa đơn/công nợ cần quyền thu tiền, hợp đồng cần quyền quản lý hợp đồng (owner luôn có
+     * ở nhà của mình). Admin chỉ xuất hợp đồng vì không xem số liệu tiền (#163). Kỹ thuật viên và người thuê không được
+     * xuất.
      */
     private List<Property> scope(CurrentUser user, ExportRequest request) {
         if (user == null) {
             throw new UnauthorizedPropertyAccessException("Authentication required");
         }
         boolean contracts = request.dataset() == Dataset.CONTRACTS;
+        if (!contracts) {
+            authorizationService.assertCanViewFinance(user);
+        }
         if (request.propertyId() != null) {
             if (contracts) {
                 authorizationService.assertCanManageContracts(user, request.propertyId());
