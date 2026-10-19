@@ -207,11 +207,4 @@ class RentPaymentFlowIntegrationTest {
             .andExpect(content().string(not(containsString("Nơi ở của tôi"))))
             .andExpect(content().string(containsString("Sửa vòi nước và kiểm tra máy lạnh")));
     }
-
-    @Test
-    @DisplayName("Raw SePay transaction listing is forbidden for tenants")
-    void tenantCannotListTransactions() throws Exception {
-        mockMvc.perform(get("/api/v1/payments/transactions").header("X-User-Id", TENANT))
-            .andExpect(status().isForbidden());
-    }
 }

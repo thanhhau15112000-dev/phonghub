@@ -665,7 +665,6 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(post(contract + "/check-in").contentType(MediaType.APPLICATION_JSON).content("{}"))
             .andExpect(status().isUnauthorized());
         mockMvc.perform(get(contract + "/handover")).andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/api/v1/payments/transactions")).andExpect(status().isUnauthorized());
 
         String invoice = "/invoices/eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
         mockMvc.perform(get(invoice + "/pay"))

@@ -225,18 +225,6 @@ public class SepayPaymentService implements SepayWebhookUseCase {
         return new WebhookProcessResult(true, "Xử lý giao dịch SePay thành công", tx);
     }
 
-    @Override
-    public List<PaymentTransaction> getAllTransactions() {
-        authorizationService.assertAdmin(currentUserPort.getCurrentUser());
-        return paymentRepository.findAll();
-    }
-
-    @Override
-    public Optional<PaymentTransaction> getTransactionById(UUID id) {
-        authorizationService.assertAdmin(currentUserPort.getCurrentUser());
-        return paymentRepository.findById(id);
-    }
-
     private void validateAuthorization(String authorizationHeader) {
         String configuredKey = sepayProperties != null ? sepayProperties.getWebhookApiKey() : null;
         if (configuredKey == null || configuredKey.isBlank()) {
