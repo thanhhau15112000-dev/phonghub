@@ -19,7 +19,7 @@ public class AuditLogUiController {
 
     static final List<String> TARGET_TYPES = List.of(
         "USER", "PROPERTY", "ROOM", "CONTRACT", "CONTRACT_OCCUPANT", "TENANT", "TENANT_DOCUMENT",
-        "MAINTENANCE_TICKET", "ROOM_ASSET", "HANDOVER", "SERVICE_RATE");
+        "MAINTENANCE_TICKET", "ROOM_ASSET", "HANDOVER", "SERVICE_RATE", "INVOICE", "EXPORT");
 
     private final AuditLogUseCase auditLogUseCase;
 
