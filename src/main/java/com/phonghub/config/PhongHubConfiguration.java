@@ -690,7 +690,8 @@ public class PhongHubConfiguration {
         com.phonghub.application.port.out.MediaStoragePort mediaStoragePort
     ) {
         return new com.phonghub.application.service.ChatService(
-            chatRoomRepository, chatMessageRepository, userRepository, sseChatEventPublisher, mediaStoragePort
+            chatRoomRepository, chatMessageRepository, userRepository, sseChatEventPublisher, mediaStoragePort,
+            java.time.Clock.systemUTC()
         );
     }
 
