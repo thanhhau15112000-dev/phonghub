@@ -184,7 +184,7 @@ public class TenantService implements TenantUseCase {
                 ? null : command.permanentAddress().trim()
         ));
         tenantRepository.linkToProperty(tenant.id(), command.propertyId(), currentUser.id());
-        audit("TENANT_CREATED", currentUser, tenant, Map.of(
+        audit("TENANT_CREATED", currentUser, tenant, command.propertyId(), Map.of(
             "propertyId", command.propertyId().toString(), "identityCardNumber", tenant.maskedIdentityCardNumber()));
         return new PropertyTenantView(tenant, false, false);
     }
@@ -198,7 +198,7 @@ public class TenantService implements TenantUseCase {
             throw new TenantHasActiveContractException("Không thể ẩn người thuê đang có hợp đồng nháp hoặc đang hiệu lực tại nhà trọ này.");
         }
         tenantRepository.setHidden(tenantId, propertyId, Instant.now(), currentUser.id());
-        audit("TENANT_HIDDEN", currentUser, view.tenant(), Map.of("propertyId", propertyId.toString()));
+        audit("TENANT_HIDDEN", currentUser, view.tenant(), propertyId, Map.of("propertyId", propertyId.toString()));
         return new PropertyTenantView(view.tenant(), true, false);
     }
 
@@ -208,7 +208,7 @@ public class TenantService implements TenantUseCase {
         authorizationService.assertCanManageProperty(currentUser, propertyId);
         PropertyTenantView view = getPropertyTenant(propertyId, tenantId);
         tenantRepository.setHidden(tenantId, propertyId, null, currentUser.id());
-        audit("TENANT_RESTORED", currentUser, view.tenant(), Map.of("propertyId", propertyId.toString()));
+        audit("TENANT_RESTORED", currentUser, view.tenant(), propertyId, Map.of("propertyId", propertyId.toString()));
         return new PropertyTenantView(view.tenant(), false, view.hasActiveContract());
     }
 
@@ -247,9 +247,10 @@ public class TenantService implements TenantUseCase {
             .toList();
     }
 
-    private void audit(String action, CurrentUser actor, Tenant tenant, Map<String, Object> details) {
+    /** Gắn nhà trọ đang thao tác: người thuê có thể thuộc nhiều nhà, không để adapter đoán theo nhà gần nhất. */
+    private void audit(String action, CurrentUser actor, Tenant tenant, UUID propertyId, Map<String, Object> details) {
         auditPort.recordEvent(AuditPort.AuditEvent.of(
-            action, actor != null ? actor.id() : null, "TENANT", tenant.id().toString(), details));
+            action, actor != null ? actor.id() : null, "TENANT", tenant.id().toString(), propertyId, details));
     }
 
     @Override
@@ -287,13 +288,15 @@ public class TenantService implements TenantUseCase {
         details.put("identityCardNumber", saved.maskedIdentityCardNumber());
         details.put("changedFields", changedFields(tenant, saved));
 
-        auditPort.recordEvent(AuditPort.AuditEvent.of(
-            "TENANT_UPDATE",
-            currentUser != null ? currentUser.id() : null,
-            "TENANT",
-            saved.id().toString(),
-            details
-        ));
+        // Thông tin người thuê dùng chung giữa các nhà: ghi cho từng nhà mà người sửa có quyền và người thuê thuộc về,
+        // để không lọt sang nhật ký của chủ nhà khác.
+        Set<UUID> accessible = authorizationService.getAccessiblePropertyIds(currentUser);
+        List<UUID> scope = authorizationService.tenantPropertyIds(saved.id()).stream()
+            .filter(accessible::contains).sorted().toList();
+        if (scope.isEmpty()) {
+            audit("TENANT_UPDATE", currentUser, saved, null, details);
+        }
+        scope.forEach(propertyId -> audit("TENANT_UPDATE", currentUser, saved, propertyId, details));
 
         return saved;
     }

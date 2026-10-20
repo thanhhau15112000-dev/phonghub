@@ -58,6 +58,10 @@ public class AuditLogUiController {
                 entries = auditLogUseCase.search(new AuditLogUseCase.SearchCommand(
                     propertyId, actor, targetType, actionCode, fromDate, toDate, page));
             }
+            boolean hasNextPage = entries.size() > AuditLogUseCase.PAGE_SIZE;
+            if (hasNextPage) {
+                entries = entries.subList(0, AuditLogUseCase.PAGE_SIZE);
+            }
             Map<UUID, List<AuditDetailsFormatter.Line>> detailLines = new HashMap<>();
             entries.forEach(e -> detailLines.put(e.id(), AuditDetailsFormatter.format(e.targetType(), e.details())));
             List<AuditLogUseCase.PropertyOption> properties = auditLogUseCase.selectableProperties();
@@ -75,7 +79,7 @@ public class AuditLogUiController {
             model.addAttribute("from", from);
             model.addAttribute("to", to);
             model.addAttribute("page", Math.max(0, page));
-            model.addAttribute("pageSize", AuditLogUseCase.PAGE_SIZE);
+            model.addAttribute("hasNextPage", hasNextPage);
             return "audit/list";
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());

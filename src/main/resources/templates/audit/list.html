@@ -88,7 +88,8 @@
                 <td class="col-wrap">
                     <span th:if="${e.actorName() != null}" th:text="${e.actorName()}">Tên</span>
                     <span th:if="${e.actorName() == null and e.actorId() != null}" th:text="${e.actorId()}">id</span>
-                    <span th:if="${e.actorId() == null}" style="color: var(--text-secondary);">Hệ thống</span>
+                    <span th:if="${e.actorId() == null}" style="color: var(--text-secondary);"
+                          th:text="${e.action() == 'LOGIN_FAILED' ? 'Người chưa đăng nhập' : 'Hệ thống'}">Hệ thống</span>
                 </td>
                 <td>
                     <span th:text="${uiText.auditTarget(e.targetType())}">Phòng</span>
@@ -111,7 +112,7 @@
             <a th:if="${page > 0}" class="btn btn-sm" style="text-decoration: none;"
                th:href="@{/audit(propertyId=${propertyId}, actorId=${actorId}, targetType=${targetType}, action=${action}, from=${from}, to=${to}, page=${page - 1})}">&larr; Trang trước</a>
             <span></span>
-            <a th:if="${#lists.size(entries) == pageSize}" class="btn btn-sm" style="text-decoration: none;"
+            <a th:if="${hasNextPage}" class="btn btn-sm" style="text-decoration: none;"
                th:href="@{/audit(propertyId=${propertyId}, actorId=${actorId}, targetType=${targetType}, action=${action}, from=${from}, to=${to}, page=${page + 1})}">Trang sau &rarr;</a>
         </div>
     </div>

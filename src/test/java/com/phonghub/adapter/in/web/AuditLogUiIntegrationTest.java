@@ -3,11 +3,15 @@ package com.phonghub.adapter.in.web;
 import com.phonghub.adapter.out.audit.InMemoryAuditAdapter;
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
+import com.phonghub.application.port.in.AuditLogUseCase;
+import com.phonghub.application.port.out.AuditPort.AuditEvent;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -74,6 +78,26 @@ class AuditLogUiIntegrationTest extends SeededWebTest {
         assertTrue(html.contains("<optgroup label=\"Người thuê và giấy tờ\">"));
 
         assertTrue(page(OWNER_1, "action", "future_action").contains("<option value=\"FUTURE_ACTION\" selected>"));
+    }
+
+    @Test
+    @DisplayName("nút Trang sau chỉ hiện khi còn sự kiện; đăng nhập sai không ghi người thực hiện là Hệ thống")
+    void paginationAndAnonymousActor() throws Exception {
+        audit.clear();
+        for (int i = 0; i < AuditLogUseCase.PAGE_SIZE; i++) {
+            audit.recordEvent(AuditEvent.of("ROOM_UPDATED", null, "ROOM", "room-" + i, DataSeeder.PROP_1_ID, Map.of()));
+        }
+        assertFalse(page(OWNER_1).contains("Trang sau"), "đúng một trang thì không có trang sau");
+
+        audit.recordEvent(AuditEvent.of("ROOM_UPDATED", null, "ROOM", "room-extra", DataSeeder.PROP_1_ID, Map.of()));
+        String first = page(OWNER_1);
+        assertTrue(first.contains("Trang sau"));
+        assertEquals(AuditLogUseCase.PAGE_SIZE, first.split("<code>ROOM_UPDATED</code>", -1).length - 1,
+            "trang chỉ hiện đủ một trang, dòng thừa thuộc trang sau");
+        assertFalse(page(OWNER_1, "page", "1").contains("Trang sau"));
+
+        audit.recordEvent(AuditEvent.of("LOGIN_FAILED", null, "USER", OWNER_1, Map.of("reason", "INVALID_CREDENTIALS")));
+        assertTrue(page(ADMIN, "action", "LOGIN_FAILED").contains("Người chưa đăng nhập"));
     }
 
     @Test
