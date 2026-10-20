@@ -14,7 +14,10 @@ import com.phonghub.domain.model.ChatRoom;
 import com.phonghub.domain.model.ChatRoomType;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +27,28 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ChatServiceUnitTest {
+
+    /** Đồng hồ luôn tăng: hai tin gửi liền nhau không trùng thời điểm dù đồng hồ máy (Windows) có độ phân giải thấp. */
+    private static final class IncreasingClock extends Clock {
+        private Instant last = Instant.EPOCH;
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public synchronized Instant instant() {
+            Instant now = Instant.now();
+            last = now.isAfter(last) ? now : last.plusNanos(1_000);
+            return last;
+        }
+    }
 
     private InMemoryChatRoomRepository chatRoomRepo;
     private InMemoryChatMessageRepository chatMessageRepo;
@@ -43,7 +68,7 @@ class ChatServiceUnitTest {
         eventPublisher = (roomId, message) -> {}; // no-op for unit test
 
         chatService = new ChatService(chatRoomRepo, chatMessageRepo, userRepo, eventPublisher,
-            new com.phonghub.adapter.out.storage.LocalMediaStorageAdapter());
+            new com.phonghub.adapter.out.storage.LocalMediaStorageAdapter(), new IncreasingClock());
 
         UUID idA = UUID.randomUUID();
         UUID idB = UUID.randomUUID();

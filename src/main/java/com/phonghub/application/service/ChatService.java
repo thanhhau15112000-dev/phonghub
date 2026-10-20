@@ -18,6 +18,7 @@ import com.phonghub.domain.model.ChatRoom;
 import com.phonghub.domain.model.ChatRoomMember;
 import com.phonghub.domain.model.ChatRoomType;
 import com.phonghub.domain.model.User;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -33,19 +34,22 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
     private final UserRepositoryPort userRepositoryPort;
     private final ChatEventPublisherPort chatEventPublisherPort;
     private final com.phonghub.application.port.out.MediaStoragePort mediaStoragePort;
+    private final Clock clock;
 
     public ChatService(
         ChatRoomRepositoryPort chatRoomRepositoryPort,
         ChatMessageRepositoryPort chatMessageRepositoryPort,
         UserRepositoryPort userRepositoryPort,
         ChatEventPublisherPort chatEventPublisherPort,
-        com.phonghub.application.port.out.MediaStoragePort mediaStoragePort
+        com.phonghub.application.port.out.MediaStoragePort mediaStoragePort,
+        Clock clock
     ) {
         this.chatRoomRepositoryPort = Objects.requireNonNull(chatRoomRepositoryPort, "chatRoomRepositoryPort must not be null");
         this.chatMessageRepositoryPort = Objects.requireNonNull(chatMessageRepositoryPort, "chatMessageRepositoryPort must not be null");
         this.userRepositoryPort = Objects.requireNonNull(userRepositoryPort, "userRepositoryPort must not be null");
         this.chatEventPublisherPort = Objects.requireNonNull(chatEventPublisherPort, "chatEventPublisherPort must not be null");
         this.mediaStoragePort = Objects.requireNonNull(mediaStoragePort, "mediaStoragePort must not be null");
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
     private void assertAuthenticated(CurrentUser user) {
@@ -187,11 +191,12 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         // Kiểm tra quyền truy cập phòng trước khi gửi tin
         ChatRoom room = getRoomById(currentUser, roomId);
 
-        ChatMessage message = ChatMessage.create(room.id(), currentUser.id(), currentUser.fullName(), content.trim());
+        ChatMessage message = ChatMessage.create(room.id(), currentUser.id(), currentUser.fullName(), content.trim(),
+            clock.instant());
         ChatMessage saved = chatMessageRepositoryPort.save(message);
 
         // Đánh dấu người gửi đã đọc tại thời điểm gửi
-        chatRoomRepositoryPort.updateLastRead(roomId, currentUser.id(), Instant.now());
+        chatRoomRepositoryPort.updateLastRead(roomId, currentUser.id(), clock.instant());
 
         // Phát sự kiện real-time tới tất cả người dùng đang lắng nghe
         chatEventPublisherPort.publishNewMessage(roomId, saved);
@@ -227,11 +232,12 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
             currentUser.fullName(),
             textContent,
             mediaUrl,
-            mediaType
+            mediaType,
+            clock.instant()
         );
 
         ChatMessage saved = chatMessageRepositoryPort.save(message);
-        chatRoomRepositoryPort.updateLastRead(roomId, currentUser.id(), Instant.now());
+        chatRoomRepositoryPort.updateLastRead(roomId, currentUser.id(), clock.instant());
         chatEventPublisherPort.publishNewMessage(roomId, saved);
         return saved;
     }
@@ -274,7 +280,7 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         if (currentUser == null || roomId == null) {
             return;
         }
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         chatRoomRepositoryPort.updateLastRead(roomId, currentUser.id(), now);
         chatEventPublisherPort.publishReadReceipt(roomId, currentUser.id(), now);
     }
