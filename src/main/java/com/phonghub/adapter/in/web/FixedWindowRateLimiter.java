@@ -12,7 +12,7 @@ public class FixedWindowRateLimiter {
 
     public record Decision(boolean allowed, long retryAfterSeconds) {}
 
-    private record Window(long startMillis, int count) {}
+    private record Window(long startMillis, long windowMillis, int count) {}
 
     private static final int CLEANUP_THRESHOLD = 10_000;
 
@@ -27,13 +27,13 @@ public class FixedWindowRateLimiter {
         long now = clock.millis();
         long windowMillis = windowSeconds * 1000L;
         if (windows.size() > CLEANUP_THRESHOLD) {
-            windows.entrySet().removeIf(e -> now - e.getValue().startMillis() >= windowMillis);
+            windows.entrySet().removeIf(e -> now - e.getValue().startMillis() >= e.getValue().windowMillis());
         }
         Window[] result = new Window[1];
         windows.compute(rule + '|' + key, (k, current) -> {
             Window next = current == null || now - current.startMillis() >= windowMillis
-                ? new Window(now, 1)
-                : new Window(current.startMillis(), current.count() + 1);
+                ? new Window(now, windowMillis, 1)
+                : new Window(current.startMillis(), windowMillis, current.count() + 1);
             result[0] = next;
             return next;
         });
