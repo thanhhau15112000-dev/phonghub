@@ -118,8 +118,7 @@ public class ExportService implements ExportUseCase {
         TableExportPort exporter = request.format() == Format.PDF ? pdfExporter : xlsxExporter;
         byte[] content = exporter.render(table);
         if (auditPort != null) {
-            auditPort.recordEvent(AuditPort.AuditEvent.of("DATA_EXPORTED", user.id(), "EXPORT", request.dataset().name(),
-                Map.of("format", request.format().name(), "properties", scope.size(), "rows", table.rows().size())));
+            audit(user, request, scope, table.rows().size());
         }
         return new ExportFile(name + "." + exporter.extension(), exporter.contentType(), content);
     }
@@ -155,6 +154,27 @@ public class ExportService implements ExportUseCase {
             default -> throw new UnauthorizedPropertyAccessException(
                 "Chỉ quản trị viên, chủ nhà trọ hoặc nhân viên được phân quyền mới xuất được dữ liệu.");
         };
+    }
+
+    /**
+     * Mỗi nhà trọ có trong file một sự kiện, để chủ nhà thấy ai đã xuất dữ liệu nhà mình trong Nhật ký (#78). File gồm
+     * nhiều nhà (admin, nhân sự nhiều nhà) thì không ghi số nhà/số dòng, tránh lộ quy mô nhà khác cho từng chủ; các
+     * sự kiện cùng lần xuất có chung {@code exportId}.
+     */
+    private void audit(CurrentUser user, ExportRequest request, List<Property> scope, int rows) {
+        String dataset = request.dataset().name();
+        String format = request.format().name();
+        if (scope.size() <= 1) {
+            UUID propertyId = scope.isEmpty() ? null : scope.getFirst().id();
+            auditPort.recordEvent(AuditPort.AuditEvent.of("DATA_EXPORTED", user.id(), "EXPORT", dataset, propertyId,
+                Map.of("format", format, "properties", scope.size(), "rows", rows)));
+            return;
+        }
+        String exportId = UUID.randomUUID().toString();
+        for (Property property : scope) {
+            auditPort.recordEvent(AuditPort.AuditEvent.of("DATA_EXPORTED", user.id(), "EXPORT", dataset, property.id(),
+                Map.of("format", format, "exportId", exportId)));
+        }
     }
 
     private record Data(Map<UUID, Property> properties, List<Contract> contracts, Map<UUID, Room> rooms,

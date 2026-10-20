@@ -1,5 +1,6 @@
 package com.phonghub.adapter.in.web;
 
+import com.phonghub.adapter.out.audit.InMemoryAuditAdapter;
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
 import org.junit.jupiter.api.DisplayName;
@@ -23,6 +24,7 @@ class AuditLogUiIntegrationTest extends SeededWebTest {
     private static final String TENANT_1 = LocalDemoAuthenticationAdapter.TENANT_1_ID.toString();
 
     @Autowired private MockMvc mockMvc;
+    @Autowired private InMemoryAuditAdapter audit;
 
     private String page(String userId, String... queryParams) throws Exception {
         var request = get("/audit").header("X-User-Id", userId);
@@ -42,7 +44,8 @@ class AuditLogUiIntegrationTest extends SeededWebTest {
             .andExpect(status().is3xxRedirection());
 
         String ownerOne = page(OWNER_1);
-        assertTrue(ownerOne.contains("ROOM_UPDATED"));
+        assertTrue(ownerOne.contains("<code>ROOM_UPDATED</code>"));
+        assertTrue(ownerOne.contains("<span>Sửa phòng</span>"), "hành động có nhãn tiếng Việt");
         assertTrue(ownerOne.contains("P104-AUDIT"));
 
         assertFalse(page(OWNER_2).contains("P104-AUDIT"), "owner nhà khác không được thấy");
@@ -58,8 +61,33 @@ class AuditLogUiIntegrationTest extends SeededWebTest {
             .andExpect(status().is3xxRedirection());
 
         assertTrue(page(OWNER_1, "action", "ROOM_UPDATED", "targetType", "ROOM").contains("P104-F"));
+        assertTrue(page(OWNER_1, "action", " room_updated ").contains("P104-F"), "mã hành động không phân biệt hoa thường");
         assertFalse(page(OWNER_1, "action", "CONTRACT_CREATED").contains("P104-F"));
         assertFalse(page(OWNER_1, "targetType", "USER").contains("P104-F"));
+    }
+
+    @Test
+    @DisplayName("bộ lọc hành động là danh sách chọn có nhãn; mã lạ trên URL vẫn được giữ trong ô chọn")
+    void actionDropdown() throws Exception {
+        String html = page(OWNER_1);
+        assertTrue(html.contains("<option value=\"ROOM_UPDATED\">Sửa phòng</option>"));
+        assertTrue(html.contains("<optgroup label=\"Người thuê và giấy tờ\">"));
+
+        assertTrue(page(OWNER_1, "action", "future_action").contains("<option value=\"FUTURE_ACTION\" selected>"));
+    }
+
+    @Test
+    @DisplayName("owner thấy lần xuất dữ liệu của chính mình trong nhật ký")
+    void ownerSeesOwnExport() throws Exception {
+        audit.clear(); // nhật ký bộ nhớ dùng chung giữa các lớp test; bỏ lần xuất của test khác
+        mockMvc.perform(get("/exports/download").header("X-User-Id", OWNER_1)
+                .param("dataset", "contracts").param("format", "xlsx"))
+            .andExpect(status().isOk());
+
+        String exports = page(OWNER_1, "targetType", "EXPORT");
+        assertTrue(exports.contains("<code>DATA_EXPORTED</code>"));
+        assertTrue(exports.contains("<span>Xuất Excel/PDF</span>"));
+        assertFalse(page(OWNER_2, "targetType", "EXPORT").contains("<code>DATA_EXPORTED</code>"), "owner khác không thấy");
     }
 
     @Test
