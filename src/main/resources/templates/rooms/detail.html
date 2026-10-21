@@ -66,20 +66,26 @@
         <!-- Biểu mẫu đổi trạng thái (quản trị viên, nhân viên hoặc chủ trọ) -->
         <div th:if="${currentUser != null and !room.isArchived() and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
             <h3 style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Thay đổi trạng thái phòng</h3>
-            <form th:action="@{'/rooms/' + ${room.getId()} + '/status'}" method="post" style="display: flex; gap: 8px; align-items: center;">
+            <p th:if="${activeContract != null}" style="color: var(--text-secondary); font-size: 12px; margin: 0;">
+                Phòng đang có người ở theo hợp đồng nên trạng thái chỉ thay đổi khi kết thúc hợp đồng (trả phòng).
+                Sự cố cần sửa thì tạo phiếu bảo trì, phòng vẫn giữ trạng thái Đang thuê.
+            </p>
+            <p th:if="${activeContract == null and #lists.isEmpty(manualStatuses)}" style="color: var(--text-secondary); font-size: 12px; margin: 0;">
+                Không có trạng thái nào chuyển tay được từ trạng thái hiện tại.
+            </p>
+            <form th:if="${activeContract == null and !#lists.isEmpty(manualStatuses)}" th:action="@{'/rooms/' + ${room.getId()} + '/status'}" method="post" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                 <label class="form-label" style="margin: 0;">Chuyển sang:</label>
                 <select name="status" class="form-control" style="width: auto;">
-                    <option th:each="s : ${allStatuses}"
+                    <option th:each="s : ${manualStatuses}"
                             th:value="${s}"
-                            th:text="${uiText.roomStatus(s)}"
-                            th:selected="${s == room.getStatus()}">
+                            th:text="${uiText.roomStatus(s)}">
                     </option>
                 </select>
                 <button type="submit" class="btn btn-sm btn-primary">Áp dụng thay đổi</button>
             </form>
-            <p style="color: var(--text-secondary); font-size: 11px; margin-top: 4px;">
-                Lưu ý: Các chuyển trạng thái không hợp lệ sẽ bị từ chối theo invariant của domain. Chuyển phòng khỏi trạng thái BẢO TRÌ chỉ được thực hiện khi tất cả yêu cầu đã hoàn tất.
+            <p th:if="${activeContract == null and room.getStatus().name() == 'MAINTENANCE'}" style="color: var(--text-secondary); font-size: 11px; margin-top: 4px;">
+                Phòng chỉ chuyển sang Trống khi các phiếu bảo trì của phòng đã xử lý xong.
             </p>
         </div>
     </div>
@@ -128,7 +134,7 @@
                         <td th:text="${activeContract.getStartDate()}">2026-01-01</td>
                         <td th:text="${activeContract.getEndDate()}">2027-01-01</td>
                         <td th:text="${#numbers.formatDecimal(activeContract.getRentAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
-                        <td><span class="badge badge-ACTIVE" th:text="${uiText.contractStatus(activeContract.getStatus())}">Đang hiệu lực</span></td>
+                        <td><span th:class="${'badge badge-' + activeContract.getStatus().name()}" th:text="${uiText.contractStatus(activeContract.getStatus())}">Đang hiệu lực</span></td>
                         <td>
                             <a th:href="@{'/contracts/' + ${activeContract.getId()}}" class="btn btn-sm">Xem hợp đồng</a>
                         </td>

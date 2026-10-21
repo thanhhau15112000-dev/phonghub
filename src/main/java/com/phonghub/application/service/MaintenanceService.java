@@ -137,18 +137,24 @@ public class MaintenanceService implements MaintenanceUseCase {
                 throw new UnauthorizedPropertyAccessException("Tenant profile not found");
             }
             requestedByTenantId = tenantOpt.get().id();
-            // Tenant can only file tickets for their own property
+            // Người thuê chỉ báo hỏng cho phòng mình đang ở (chủ hợp đồng hoặc người ở cùng)
             authorizationService.assertCanAccessProperty(currentUser, room.getPropertyId());
+            if (!authorizationService.canTenantViewRoom(currentUser, room.getId())) {
+                throw new UnauthorizedPropertyAccessException("Người thuê chỉ báo hỏng được cho phòng mình đang ở.");
+            }
         } else {
             authorizationService.assertCanManageProperty(currentUser, room.getPropertyId());
         }
 
-        // Fix F3: Validate room transition BEFORE creating/saving ticket to prevent phantom tickets
-        if (command.setRoomMaintenance() && room.getStatus() != RoomStatus.MAINTENANCE) {
-            if (!room.canTransitionTo(RoomStatus.MAINTENANCE)) {
+        // Người thuê không đổi trạng thái phòng. Chỉ phòng đang trống mới chuyển sang bảo trì: phòng có người ở vẫn là
+        // "Đang thuê" khi sửa chữa, nếu không hợp đồng sẽ không kết thúc được. Kiểm tra TRƯỚC khi lưu phiếu (F3).
+        boolean setRoomMaintenance = command.setRoomMaintenance() && currentUser.role() != UserRole.TENANT;
+        if (setRoomMaintenance && room.getStatus() != RoomStatus.MAINTENANCE) {
+            if (room.getStatus() != RoomStatus.AVAILABLE) {
                 throw new InvalidRoomStateException(String.format(
-                    "Cannot put room '%s' in status %s under MAINTENANCE",
-                    room.getRoomNumber(), room.getStatus()
+                    "Phòng '%s' đang ở trạng thái %s nên không chuyển sang bảo trì được. Bỏ chọn \"Chuyển trạng thái "
+                        + "phòng sang BẢO TRÌ\" để vẫn tạo phiếu.",
+                    room.getRoomNumber(), room.getStatus() == RoomStatus.OCCUPIED ? "Đang thuê" : "Đã đặt"
                 ));
             }
             room.putUnderMaintenance();
@@ -287,6 +293,11 @@ public class MaintenanceService implements MaintenanceUseCase {
         authorizationService.assertCanManageProperty(user, ticket.getPropertyId());
     }
 
+    private boolean hasResidingContract(UUID roomId) {
+        return contractRepository != null
+            && contractRepository.findByRoomId(roomId).stream().anyMatch(Contract::isResiding);
+    }
+
     private static UUID actorIdOf(CurrentUser user) {
         return user.id();
     }
@@ -358,7 +369,7 @@ public class MaintenanceService implements MaintenanceUseCase {
 
                 if (!otherOpenTickets.isEmpty()) {
                     throw new InvalidRoomStateException(String.format(
-                        "Cannot release room '%s' to AVAILABLE: %d other unresolved ticket(s) exist",
+                        "Chưa thể chuyển phòng '%s' sang Trống: còn %d phiếu bảo trì khác chưa xử lý xong.",
                         room.getRoomNumber(), otherOpenTickets.size()
                     ));
                 }
@@ -398,7 +409,9 @@ public class MaintenanceService implements MaintenanceUseCase {
             ));
         }
 
-        if (command.releaseRoomToAvailable() && room != null && room.getStatus() == RoomStatus.MAINTENANCE) {
+        // Phòng còn người ở theo hợp đồng (dữ liệu cũ) không được đánh dấu Trống
+        if (command.releaseRoomToAvailable() && room != null && room.getStatus() == RoomStatus.MAINTENANCE
+            && !hasResidingContract(room.getId())) {
             room.releaseFromMaintenance();
             roomRepository.save(room);
         }
