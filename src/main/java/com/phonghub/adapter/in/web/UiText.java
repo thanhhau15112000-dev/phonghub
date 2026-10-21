@@ -27,7 +27,15 @@ public final class UiText {
 
     public static final UiText INSTANCE = new UiText();
 
+    private static final java.time.format.DateTimeFormatter DATE =
+        java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
     private UiText() {}
+
+    /** Ngày theo kiểu Việt Nam (dd/MM/yyyy); null hiện "—". */
+    public String date(LocalDate date) {
+        return date == null ? "—" : date.format(DATE);
+    }
 
     public String role(UserRole role) {
         if (role == null) {
@@ -318,8 +326,10 @@ public final class UiText {
             "CONTRACT_CANCELLED", "Hủy hợp đồng nháp",
             "CONTRACT_ACTIVATED", "Kích hoạt hợp đồng",
             "CONTRACT_TERMINATED", "Chấm dứt hợp đồng",
+            "CONTRACT_RENEWED", "Gia hạn hợp đồng",
             "CONTRACT_EXPIRED", "Hợp đồng hết hạn",
-            "OCCUPANT_CHECKOUT", "Người ở cùng trả phòng"));
+            "OCCUPANT_CHECKOUT", "Người ở cùng trả phòng",
+            "OCCUPANT_ACCOUNT_CREATED", "Tạo tài khoản cho người ở cùng"));
         Map<String, String> handover = new LinkedHashMap<>();
         handoverSteps("HANDOVER_", "Nhận phòng", handover);
         handoverSteps("CHECKOUT_", "Trả phòng", handover);

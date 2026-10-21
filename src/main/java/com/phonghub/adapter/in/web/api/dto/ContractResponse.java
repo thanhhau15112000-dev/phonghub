@@ -46,6 +46,28 @@ public record ContractResponse(
         }
     }
 
+    /**
+     * Kết quả thêm người ở cùng. Khi có tạo tài khoản mới: tên đăng nhập và mật khẩu tạm (chỉ trả về lần này, người dùng
+     * phải đổi ở lần đăng nhập đầu); không tạo tài khoản thì hai trường này null.
+     */
+    public record OccupantAddedResponse(
+        UUID id,
+        UUID contractId,
+        UUID tenantId,
+        boolean isPrimary,
+        LocalDate checkInDate,
+        LocalDate checkOutDate,
+        String accountUsername,
+        String temporaryPassword
+    ) {
+        public static OccupantAddedResponse from(ContractOccupant occupant, String accountUsername,
+                                                 String temporaryPassword) {
+            return new OccupantAddedResponse(occupant.id(), occupant.contractId(), occupant.tenantId(),
+                occupant.isPrimary(), occupant.checkInDate(), occupant.checkOutDate(), accountUsername,
+                temporaryPassword);
+        }
+    }
+
     public static ContractResponse from(Contract contract) {
         List<ContractOccupantResponse> occupantResponses = contract.getOccupants() != null
             ? contract.getOccupants().stream().map(ContractOccupantResponse::from).toList()

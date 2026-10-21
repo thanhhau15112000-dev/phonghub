@@ -141,7 +141,7 @@ class ContractServiceAddOccupantUnitTest {
             false
         );
 
-        ContractOccupant occupant = contractService.addOccupant(cmd);
+        ContractOccupant occupant = contractService.addOccupant(cmd).occupant();
 
         assertNotNull(occupant);
         assertNotNull(occupant.id());
@@ -174,7 +174,7 @@ class ContractServiceAddOccupantUnitTest {
             false
         );
 
-        ContractOccupant occupant = contractService.addOccupant(cmd);
+        ContractOccupant occupant = contractService.addOccupant(cmd).occupant();
         assertNotNull(occupant);
         assertEquals(2, contractRepo.findById(activeContract.getId()).orElseThrow().getOccupants().size());
     }
@@ -351,7 +351,7 @@ class ContractServiceAddOccupantUnitTest {
             false
         );
 
-        ContractOccupant occ = contractService.addOccupant(cmd);
+        ContractOccupant occ = contractService.addOccupant(cmd).occupant();
         assertEquals(existing.id(), occ.tenantId());
 
         // Verify no duplicate tenant created in repo
@@ -375,7 +375,7 @@ class ContractServiceAddOccupantUnitTest {
             true
         );
 
-        ContractOccupant occ = contractService.addOccupant(cmd);
+        ContractOccupant occ = contractService.addOccupant(cmd).occupant();
         assertNotNull(occ);
 
         Tenant savedTenant = tenantRepo.findByIdentityCardNumber("079200005555").orElseThrow();

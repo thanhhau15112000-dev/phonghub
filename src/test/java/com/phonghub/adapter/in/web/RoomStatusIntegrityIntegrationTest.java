@@ -153,7 +153,8 @@ class RoomStatusIntegrityIntegrationTest {
         room.transitionTo(RoomStatus.MAINTENANCE);
         roomRepository.save(room);
 
-        mockMvc.perform(asUser(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/terminate"), OWNER_1))
+        mockMvc.perform(asUser(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/terminate"), OWNER_1)
+                .param("reason", "Người thuê bỏ đi"))
             .andExpect(flash().attribute("successMessage", containsString("Bảo trì")));
 
         assertEquals(ContractStatus.TERMINATED,

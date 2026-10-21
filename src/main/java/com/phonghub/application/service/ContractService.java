@@ -223,14 +223,41 @@ public class ContractService implements ContractUseCase {
             .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
 
         Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
+        assertResiding(contract);
+        return terminate(currentUser, contract, room, requiresMaintenance, Map.of());
+    }
 
+    @Override
+    public Contract terminateEarly(UUID contractId, boolean requiresMaintenance, String reason) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        Contract contract = contractRepository.findById(contractId)
+            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
+        // Bỏ qua biên bản check-out (vốn chỉ chủ trọ/admin duyệt) nên cũng chỉ chủ trọ/admin được làm
+        Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
+        authorizationService.assertOwnerOrAdmin(currentUser, contract.getPropertyId());
+        assertResiding(contract);
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Cần nhập lý do chấm dứt hợp đồng.");
+        }
+        String trimmed = reason.trim();
+        if (trimmed.length() > 500) {
+            throw new IllegalArgumentException("Lý do chấm dứt tối đa 500 ký tự.");
+        }
+        return terminate(currentUser, contract, room, requiresMaintenance, Map.of("reason", trimmed, "early", true));
+    }
+
+    private static void assertResiding(Contract contract) {
         if (!contract.isResiding()) {
             throw new InvalidContractStateException(String.format(
                 "Chỉ có thể kết thúc hợp đồng đang hiệu lực hoặc đã hết hạn nhưng chưa trả phòng. Trạng thái hiện tại: '%s'.",
                 contract.getStatus()
             ));
         }
+    }
 
+    private Contract terminate(
+        CurrentUser currentUser, Contract contract, Room room, boolean requiresMaintenance, Map<String, Object> extra
+    ) {
         // Invariant: Ending a contract changes room to AVAILABLE unless maintenance is explicitly required
         ContractStatus oldStatus = contract.getStatus();
         contract.terminate();
@@ -238,9 +265,42 @@ public class ContractService implements ContractUseCase {
 
         roomRepository.save(room);
         Contract saved = contractRepository.save(contract);
-        audit("CONTRACT_TERMINATED", currentUser, saved, Map.of(
+        Map<String, Object> details = new java.util.LinkedHashMap<>();
+        details.put("oldStatus", oldStatus.name());
+        details.put("newStatus", saved.getStatus().name());
+        details.put("requiresMaintenance", requiresMaintenance);
+        details.putAll(extra);
+        audit("CONTRACT_TERMINATED", currentUser, saved, details);
+        return saved;
+    }
+
+    @Override
+    public Contract renewContract(RenewContractCommand command) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        Contract contract = contractRepository.findById(command.contractId())
+            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + command.contractId()));
+        // Quyền trước trạng thái: người ngoài phạm vi nhận 403, không biết được trạng thái hợp đồng.
+        validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
+        if (command.expectedVersion() != null && command.expectedVersion() != contract.getVersion()) {
+            throw new com.phonghub.domain.exception.OptimisticLockConflictException("Hợp đồng");
+        }
+
+        Map<String, Object> before = terms(contract);
+        ContractStatus oldStatus = contract.getStatus();
+        contract.renew(command.newEndDate(), command.newRentAmount(), LocalDate.now());
+        if (oldStatus != ContractStatus.ACTIVE) {
+            // Hợp đồng hết hạn trở lại hiệu lực: phòng không được có hợp đồng hiệu lực khác
+            contractRepository.findActiveByRoomId(contract.getRoomId())
+                .filter(other -> !other.getId().equals(contract.getId()))
+                .ifPresent(other -> {
+                    throw new DuplicateActiveContractException(
+                        "Phòng đã có hợp đồng khác đang hiệu lực nên không gia hạn được hợp đồng này.");
+                });
+        }
+        Contract saved = contractRepository.save(contract);
+        audit("CONTRACT_RENEWED", currentUser, saved, Map.of(
             "oldStatus", oldStatus.name(), "newStatus", saved.getStatus().name(),
-            "requiresMaintenance", requiresMaintenance));
+            "before", before, "after", terms(saved)));
         return saved;
     }
 
@@ -372,7 +432,7 @@ public class ContractService implements ContractUseCase {
     }
 
     @Override
-    public ContractOccupant addOccupant(AddOccupantCommand command) {
+    public AddOccupantResult addOccupant(AddOccupantCommand command) {
         Contract contract = contractRepository.findById(command.contractId())
             .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + command.contractId()));
 
@@ -451,80 +511,112 @@ public class ContractService implements ContractUseCase {
         // Một người không được ở đồng thời ở 2 hợp đồng đang hiệu lực -> 409
         tenantRepository.findByIdForUpdate(tenant.id());
         assertTenantHasNoActiveContract(tenant.id(), today);
+        UUID tenantId = tenant.id();
+        if (contract.getOccupants().stream().anyMatch(o -> o.tenantId().equals(tenantId))) {
+            throw new DomainException("Người này đã có trong danh sách người ở của hợp đồng.");
+        }
 
-        // Tùy chọn: tạo tài khoản TENANT cho người thuê
+        // Tùy chọn: tạo (hoặc liên kết) tài khoản TENANT cho người ở cùng. Làm sau mọi kiểm tra để không tạo tài khoản
+        // đăng nhập thừa khi thêm người bị từ chối.
+        AccountLink account = null;
         if (command.createAccount()) {
-            if (command.email() == null || command.email().isBlank()) {
-                throw new IllegalArgumentException("Cần cung cấp email để tạo tài khoản người dùng");
-            }
-            String normalizedEmail = command.email().trim().toLowerCase();
-            if (!normalizedEmail.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
-                throw new IllegalArgumentException("Định dạng email không hợp lệ: " + command.email());
-            }
-
-            if (tenant.userId() == null && userRepository != null) {
-                Optional<User> existingUser = userRepository.findByEmail(normalizedEmail);
-                UUID linkedUserId = null;
-                if (existingUser.isPresent()) {
-                    linkedUserId = existingUser.get().id();
-                } else if (identityProviderPort != null) {
-                    String temporaryPassword = UUID.randomUUID().toString().substring(0, 8) + "@Abc1";
-                    UUID authUserId = identityProviderPort.adminCreateUser(normalizedEmail, temporaryPassword);
-
-                    String baseUsername = normalizedEmail.split("@")[0].replaceAll("[^a-zA-Z0-9_]", "");
-                    if (baseUsername.length() < 3) baseUsername = "tenant_" + baseUsername;
-                    String username = baseUsername;
-                    int counter = 1;
-                    while (userRepository.findByUsername(username).isPresent()) {
-                        username = baseUsername + counter++;
-                    }
-
-                    User newUser = new User(
-                        authUserId,
-                        username,
-                        normalizedEmail,
-                        tenant.fullName(),
-                        tenant.phone(),
-                        UserRole.TENANT,
-                        User.UserStatus.ACTIVE,
-                        true,
-                        Instant.now()
-                    );
-                    User savedUser = userRepository.save(newUser);
-                    linkedUserId = savedUser.id();
-                }
-
-                if (linkedUserId != null) {
-                    tenant = new Tenant(
-                        tenant.id(),
-                        linkedUserId,
-                        tenant.fullName(),
-                        tenant.identityCardNumber(),
-                        tenant.phone(),
-                        normalizedEmail,
-                        tenant.permanentAddress(),
-                        tenant.createdAt()
-                    );
-                    tenantRepository.save(tenant);
-                }
-            }
+            account = linkTenantAccount(currentUser, tenant, command.email());
+            tenant = account.tenant();
         }
 
         ContractOccupant occupant = contract.addOccupant(tenant.id(), false, command.checkInDate());
         contractRepository.save(contract);
-        return occupant;
+        return account == null ? AddOccupantResult.withoutAccount(occupant)
+            : new AddOccupantResult(occupant, account.username(), account.temporaryPassword());
     }
 
+    private record AccountLink(Tenant tenant, String username, String temporaryPassword) {}
+
+    /**
+     * Gắn hồ sơ người thuê với tài khoản đăng nhập theo email: dùng tài khoản người thuê có sẵn (chưa gắn hồ sơ khác),
+     * hoặc tạo tài khoản mới với mật khẩu tạm trả về một lần. Email của tài khoản vai trò khác bị từ chối.
+     */
+    private AccountLink linkTenantAccount(CurrentUser actor, Tenant tenant, String email) {
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Cần cung cấp email để tạo tài khoản người dùng");
+        }
+        String normalizedEmail = email.trim().toLowerCase();
+        if (!normalizedEmail.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+            throw new IllegalArgumentException("Định dạng email không hợp lệ: " + email);
+        }
+        if (tenant.userId() != null || userRepository == null) {
+            // Hồ sơ đã có tài khoản: không tạo thêm
+            return new AccountLink(tenant, null, null);
+        }
+
+        Optional<User> existingUser = userRepository.findByEmail(normalizedEmail);
+        if (existingUser.isPresent()) {
+            User user = existingUser.get();
+            if (user.role() != UserRole.TENANT) {
+                throw new DomainException(
+                    "Email này thuộc một tài khoản không phải người thuê; hãy dùng email khác hoặc bỏ chọn tạo tài khoản.");
+            }
+            Optional<Tenant> linked = tenantRepository.findByUserId(user.id());
+            if (linked.isPresent() && !linked.get().id().equals(tenant.id())) {
+                throw new DomainException(
+                    "Tài khoản của email này đã gắn với hồ sơ người thuê khác; hãy dùng email khác.");
+            }
+            return new AccountLink(saveLink(tenant, user.id(), normalizedEmail), user.username(), null);
+        }
+        if (identityProviderPort == null) {
+            return new AccountLink(tenant, null, null);
+        }
+
+        String baseUsername = normalizedEmail.split("@")[0].toLowerCase().replaceAll("[^a-z0-9._-]", "");
+        if (baseUsername.length() < 3) {
+            baseUsername = "tenant_" + baseUsername;
+        }
+        String username = baseUsername;
+        int counter = 1;
+        while (userRepository.findByUsername(username).isPresent()) {
+            username = baseUsername + counter++;
+        }
+
+        String temporaryPassword = AuthService.generateSecureTemporaryPassword(16);
+        UUID authUserId = identityProviderPort.adminCreateUser(normalizedEmail, temporaryPassword);
+        User savedUser;
+        try {
+            savedUser = userRepository.save(new User(authUserId, username, normalizedEmail, tenant.fullName(),
+                tenant.phone(), UserRole.TENANT, User.UserStatus.ACTIVE, true, Instant.now()));
+        } catch (RuntimeException ex) {
+            // Không để lại tài khoản đăng nhập mồ côi khi ghi DB thất bại
+            try {
+                identityProviderPort.adminDeleteUser(authUserId);
+            } catch (RuntimeException ignored) {
+                // đã báo lỗi gốc
+            }
+            throw ex;
+        }
+        if (auditPort != null) {
+            auditPort.recordEvent(AuditPort.AuditEvent.of("OCCUPANT_ACCOUNT_CREATED", actor == null ? null : actor.id(),
+                "USER", savedUser.id().toString(), Map.of("userId", savedUser.id().toString(), "role", "TENANT",
+                    "tenantId", tenant.id().toString())));
+        }
+        return new AccountLink(saveLink(tenant, savedUser.id(), normalizedEmail), savedUser.username(),
+            temporaryPassword);
+    }
+
+    private Tenant saveLink(Tenant tenant, UUID userId, String email) {
+        return tenantRepository.save(new Tenant(tenant.id(), userId, tenant.fullName(), tenant.identityCardNumber(),
+            tenant.phone(), email, tenant.permanentAddress(), tenant.createdAt()));
+    }
+
+    /** Một người không ở đồng thời theo hai hợp đồng (kể cả hợp đồng đã hết hạn nhưng chưa trả phòng, #87). */
     private void assertTenantHasNoActiveContract(UUID tenantId, LocalDate today) {
         boolean alreadyActiveAsPrimary = contractRepository.findByPrimaryTenantId(tenantId).stream()
-            .anyMatch(Contract::isActive);
+            .anyMatch(Contract::isResiding);
         boolean alreadyActiveAsOccupant = contractRepository.findByOccupantTenantId(tenantId).stream()
-            .filter(Contract::isActive)
+            .filter(Contract::isResiding)
             .anyMatch(c -> c.getOccupants().stream().anyMatch(o -> o.tenantId().equals(tenantId)
                 && (o.checkOutDate() == null || o.checkOutDate().isAfter(today))));
         if (alreadyActiveAsPrimary || alreadyActiveAsOccupant) {
             throw new DuplicateActiveContractException(
-                "Người thuê hiện đang có hợp đồng hiệu lực tại hệ thống.");
+                "Người thuê hiện đang ở theo một hợp đồng khác (còn hiệu lực hoặc đã hết hạn nhưng chưa trả phòng).");
         }
     }
 

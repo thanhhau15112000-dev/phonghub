@@ -14,6 +14,26 @@ public interface ContractUseCase {
     Contract terminateContract(UUID contractId, boolean requiresMaintenance);
 
     /**
+     * Chấm dứt hợp đồng ngay, không qua biên bản check-out (người thuê bỏ đi, vi phạm...): chỉ chủ nhà trọ hoặc quản trị
+     * viên, bắt buộc có lý do (ghi vào nhật ký). Trả phòng thông thường dùng quy trình check-out.
+     */
+    Contract terminateEarly(UUID contractId, boolean requiresMaintenance, String reason);
+
+    /**
+     * Gia hạn hợp đồng người thuê còn ở: dời ngày kết thúc, có thể đổi tiền thuê cho các kỳ phát hành sau. Hợp đồng đã
+     * hết hạn chưa trả phòng trở lại hiệu lực. {@code expectedVersion} lệch thì 409.
+     */
+    Contract renewContract(RenewContractCommand command);
+
+    record RenewContractCommand(UUID contractId, LocalDate newEndDate, BigDecimal newRentAmount, Long expectedVersion) {
+        public RenewContractCommand {
+            if (contractId == null) {
+                throw new IllegalArgumentException("Contract id is required");
+            }
+        }
+    }
+
+    /**
      * Sửa điều khoản hợp đồng nháp (#89): tiền cọc, tiền thuê, ngày bắt đầu/kết thúc, ngày thanh toán. Hợp đồng không còn
      * nháp thì 409; {@code expectedVersion} lệch (người khác vừa sửa) cũng 409.
      */
@@ -41,8 +61,18 @@ public interface ContractUseCase {
     List<Contract> listContractsForProperty(UUID propertyId);
     Optional<Contract> getActiveContractForTenant(UUID tenantUserId);
     List<Contract> listContractsForTenant(UUID tenantUserId);
-    ContractOccupant addOccupant(AddOccupantCommand command);
+    AddOccupantResult addOccupant(AddOccupantCommand command);
     ContractOccupant checkOutOccupant(CheckOutOccupantCommand command);
+
+    /**
+     * Người ở cùng vừa thêm. Khi có tạo tài khoản mới, kèm tên đăng nhập và mật khẩu tạm (chỉ trả về một lần, người dùng
+     * phải đổi ở lần đăng nhập đầu); liên kết với tài khoản người thuê có sẵn thì chỉ có tên đăng nhập.
+     */
+    record AddOccupantResult(ContractOccupant occupant, String accountUsername, String temporaryPassword) {
+        public static AddOccupantResult withoutAccount(ContractOccupant occupant) {
+            return new AddOccupantResult(occupant, null, null);
+        }
+    }
 
     record CheckOutOccupantCommand(
         UUID contractId,

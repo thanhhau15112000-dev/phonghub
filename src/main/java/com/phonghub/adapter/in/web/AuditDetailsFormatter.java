@@ -69,6 +69,7 @@ public final class AuditDetailsFormatter {
         Map.entry("depositAmount", "Tiền cọc"),
         Map.entry("description", "Mô tả"),
         Map.entry("documents", "Số giấy tờ"),
+        Map.entry("early", "Chấm dứt không qua check-out"),
         Map.entry("email", "Email"),
         Map.entry("enabled", "Bật"),
         Map.entry("endDate", "Ngày kết thúc"),
