@@ -11,6 +11,7 @@ import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.config.SepayProperties;
 import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.Property;
@@ -207,9 +208,14 @@ public class ContractUiController {
             model.addAttribute("room", room);
             model.addAttribute("primaryTenant", primaryTenant);
             model.addAttribute("occupantTenants", occupantTenants);
-            // Hóa đơn và thanh toán là số liệu tiền của nhà trọ: quản trị viên không xem (#163).
-            if (currentUser.role() != UserRole.ADMIN) {
-                addPaymentAttributes(model, currentUser, contract, property);
+            // Hóa đơn và thanh toán là số liệu tiền của nhà trọ: quản trị viên, kỹ thuật viên và nhân viên không có
+            // quyền thu tiền/quản lý hợp đồng không xem (#163); trang hợp đồng vẫn hiện, chỉ ẩn phần thanh toán.
+            if (currentUser.role() != UserRole.ADMIN && currentUser.role() != UserRole.TECHNICIAN) {
+                try {
+                    addPaymentAttributes(model, currentUser, contract, property);
+                } catch (UnauthorizedPropertyAccessException ex) {
+                    // không có quyền xem tiền ở nhà trọ này: bỏ qua phần thanh toán
+                }
             }
 
             return "contracts/detail";

@@ -35,6 +35,9 @@ public class AuthorizationService {
     public static final String MSG_TENANT_NOT_MANAGED =
         "Bạn không quản lý nhà trọ nào mà người thuê này đang hoặc đã từng cư trú.";
     public static final String ADMIN_FINANCE_DENIED = "Quản trị viên không xem số liệu tài chính của nhà trọ.";
+    public static final String TECHNICIAN_FINANCE_DENIED = "Kỹ thuật viên không xem số liệu tài chính của nhà trọ.";
+    public static final String STAFF_FINANCE_DENIED =
+        "Bạn chưa được cấp quyền thu tiền hoặc quản lý hợp đồng tại nhà trọ này nên không xem được hóa đơn.";
 
     private final StaffPropertyAssignmentPort assignmentPort;
     private final PropertyRepositoryPort propertyRepositoryPort;
@@ -306,8 +309,9 @@ public class AuthorizationService {
     }
 
     /**
-     * Số liệu tiền của nhà trọ (hóa đơn, giao dịch, doanh thu, công nợ) chỉ dành cho chủ trọ và người được giao; quản
-     * trị viên vận hành nền tảng nên không xem (#163). Phạm vi nhà trọ vẫn do các kiểm tra khác đảm nhận.
+     * Số liệu tiền của nhà trọ (hóa đơn, giao dịch, doanh thu, công nợ) chỉ dành cho chủ trọ, nhân viên được giao và
+     * người thuê (của chính mình). Quản trị viên vận hành nền tảng (#163) và kỹ thuật viên chỉ lo sửa chữa nên không
+     * xem. Phạm vi nhà trọ do {@link #assertCanViewPropertyFinance} hoặc các kiểm tra khác đảm nhận.
      */
     public void assertCanViewFinance(CurrentUser user) {
         if (user == null) {
@@ -316,9 +320,28 @@ public class AuthorizationService {
         if (user.role() == UserRole.ADMIN) {
             throw new UnauthorizedPropertyAccessException(ADMIN_FINANCE_DENIED);
         }
+        if (user.role() == UserRole.TECHNICIAN) {
+            throw new UnauthorizedPropertyAccessException(TECHNICIAN_FINANCE_DENIED);
+        }
     }
 
-    /** Xem hóa đơn: người thuê của hợp đồng (chính hoặc ở cùng), hoặc người có quyền với nhà trọ (trừ admin, #163). */
+    /**
+     * Xem số liệu tiền của một nhà trọ: chủ nhà trọ đó; nhân viên được giao có quyền thu tiền hoặc quản lý hợp đồng
+     * (quản lý hợp đồng cần thấy hóa đơn mình phát hành). Người thuê do quy tắc xem hợp đồng của họ giới hạn.
+     */
+    public void assertCanViewPropertyFinance(CurrentUser user, UUID propertyId) {
+        assertCanViewFinance(user);
+        if (user.role() == UserRole.TENANT) {
+            return;
+        }
+        assertCanAccessProperty(user, propertyId);
+        if (user.role() == UserRole.STAFF && !assignmentPort.find(user.id(), propertyId)
+            .map(assignment -> assignment.canCollectPayment() || assignment.canManageContracts()).orElse(false)) {
+            throw new UnauthorizedPropertyAccessException(STAFF_FINANCE_DENIED);
+        }
+    }
+
+    /** Xem hóa đơn: người thuê của hợp đồng (chính hoặc ở cùng), hoặc người xem được tiền của nhà trọ đó. */
     public void assertCanViewInvoice(CurrentUser user, com.phonghub.domain.model.Invoice invoice) {
         assertCanViewFinance(user);
         Contract contract = contractRepositoryPort.findById(invoice.getContractId())
@@ -334,7 +357,7 @@ public class AuthorizationService {
             }
             return;
         }
-        assertCanAccessProperty(user, contract.getPropertyId());
+        assertCanViewPropertyFinance(user, contract.getPropertyId());
     }
 
     /** Hợp đồng, bàn giao, phát hành hóa đơn: staff cần được owner cấp quyền can_manage_contracts. */

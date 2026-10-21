@@ -82,7 +82,7 @@ public class InvoiceService implements InvoiceUseCase {
     public List<Invoice> listInvoicesForContract(UUID contractId) {
         assertCanViewFinance();
         // getContract áp dụng quy tắc xem hợp đồng (người thuê chỉ xem hợp đồng của mình).
-        contractUseCase.getContract(contractId);
+        assertCanViewPropertyFinance(contractUseCase.getContract(contractId));
         return invoiceRepository.findByContractId(contractId).stream()
             .sorted(Comparator.comparing(Invoice::getYear).thenComparing(Invoice::getMonth).thenComparing(Invoice::getCreatedAt).reversed())
             .toList();
@@ -94,7 +94,7 @@ public class InvoiceService implements InvoiceUseCase {
             .orElseThrow(() -> new DomainException("Không tìm thấy hóa đơn."));
         assertCanViewFinance();
         // getContract áp dụng quy tắc xem hợp đồng (người thuê chỉ xem hợp đồng của mình).
-        contractUseCase.getContract(invoice.getContractId());
+        assertCanViewPropertyFinance(contractUseCase.getContract(invoice.getContractId()));
         return invoice;
     }
 
@@ -102,6 +102,7 @@ public class InvoiceService implements InvoiceUseCase {
     public Map<UUID, List<String>> utilityWarnings(UUID contractId) {
         assertCanViewFinance();
         Contract contract = contractUseCase.getContract(contractId);
+        assertCanViewPropertyFinance(contract);
         Map<UUID, List<String>> warnings = new HashMap<>();
         for (Invoice invoice : invoiceRepository.findByContractId(contractId)) {
             List<String> found = utilityBilling.warnings(invoice, contract);
@@ -187,11 +188,19 @@ public class InvoiceService implements InvoiceUseCase {
         });
     }
 
-    /** Hóa đơn là số liệu tiền của nhà trọ nên quản trị viên không xem (#163); phạm vi xem do getContract kiểm tra. */
+    /** Hóa đơn là số liệu tiền của nhà trọ nên quản trị viên và kỹ thuật viên không xem (#163). */
     private void assertCanViewFinance() {
         CurrentUser user = currentUserPort.getCurrentUser();
         if (user != null) {
             authorizationService.assertCanViewFinance(user);
+        }
+    }
+
+    /** Nhân viên chỉ xem hóa đơn ở nhà trọ mình có quyền thu tiền hoặc quản lý hợp đồng. */
+    private void assertCanViewPropertyFinance(Contract contract) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        if (user != null) {
+            authorizationService.assertCanViewPropertyFinance(user, contract.getPropertyId());
         }
     }
 }
