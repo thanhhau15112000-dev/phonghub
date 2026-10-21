@@ -64,15 +64,15 @@
                 </tr>
                 <tr>
                     <td style="color: var(--text-secondary);">Tổng tiền hóa đơn:</td>
-                    <td th:text="${#numbers.formatDecimal(receipt.totalAmount(), 0, 'COMMA', 0, 'POINT')} + ' đ'">3,500,000 đ</td>
+                    <td th:text="${#numbers.formatDecimal(receipt.totalAmount(), 0, 'POINT', 0, 'COMMA')} + ' đ'">3,500,000 đ</td>
                 </tr>
                 <tr>
                     <td style="color: var(--text-secondary);">Đã thanh toán:</td>
-                    <td style="font-weight: 700;" th:text="${#numbers.formatDecimal(receipt.paidAmount(), 0, 'COMMA', 0, 'POINT')} + ' đ'">3,500,000 đ</td>
+                    <td style="font-weight: 700;" th:text="${#numbers.formatDecimal(receipt.paidAmount(), 0, 'POINT', 0, 'COMMA')} + ' đ'">3,500,000 đ</td>
                 </tr>
                 <tr th:if="${!receipt.fullyPaid()}">
                     <td style="color: var(--text-secondary);">Còn lại:</td>
-                    <td th:text="${#numbers.formatDecimal(receipt.remainingAmount(), 0, 'COMMA', 0, 'POINT')} + ' đ'">0 đ</td>
+                    <td th:text="${#numbers.formatDecimal(receipt.remainingAmount(), 0, 'POINT', 0, 'COMMA')} + ' đ'">0 đ</td>
                 </tr>
                 <tr th:if="${receipt.paidAt() != null}">
                     <td style="color: var(--text-secondary);">Ngày thanh toán:</td>
@@ -99,7 +99,7 @@
                     <td th:text="${#temporals.format(p.receivedAt(), 'dd/MM/yyyy HH:mm')}">05/10/2026 08:00</td>
                     <td th:text="${p.gateway()}">MBBank</td>
                     <td style="font-family: monospace;" th:text="${p.referenceCode() != null ? p.referenceCode() : '—'}">REF</td>
-                    <td class="col-number" th:text="${#numbers.formatDecimal(p.appliedAmount(), 0, 'COMMA', 0, 'POINT')} + ' đ'">3,500,000 đ</td>
+                    <td class="col-number" th:text="${#numbers.formatDecimal(p.appliedAmount(), 0, 'POINT', 0, 'COMMA')} + ' đ'">3,500,000 đ</td>
                 </tr>
             </tbody>
         </table>

@@ -35,7 +35,7 @@ public record ChatMessage(
         boolean hasContent = content != null && !content.trim().isEmpty();
         boolean hasMedia = mediaUrl != null && !mediaUrl.trim().isEmpty();
         if (!hasContent && !hasMedia) {
-            throw new IllegalArgumentException("Message must have either text content or media");
+            throw new IllegalArgumentException("Tin nhắn phải có nội dung hoặc tệp đính kèm.");
         }
         if (createdAt == null) {
             createdAt = Instant.now();

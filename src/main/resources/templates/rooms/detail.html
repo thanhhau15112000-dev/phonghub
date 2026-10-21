@@ -44,7 +44,7 @@
             </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; font-size: 13px;">
+        <div class="grid-cols" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; font-size: 13px;">
             <div>
                 <span style="color: var(--text-secondary);">Tầng:</span>
                 <strong th:text="${room.getFloor()}">1</strong>
@@ -55,7 +55,7 @@
             </div>
             <div>
                 <span style="color: var(--text-secondary);">Giá thuê cơ bản:</span>
-                <strong th:text="${#numbers.formatDecimal(room.getBasePrice(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</strong>
+                <strong th:text="${#numbers.formatDecimal(room.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</strong>
             </div>
             <div>
                 <span style="color: var(--text-secondary);">Số người tối đa:</span>
@@ -131,9 +131,9 @@
                 <tbody>
                     <tr>
                         <td th:text="${activeContract.getId()}">Mã định danh</td>
-                        <td th:text="${activeContract.getStartDate()}">2026-01-01</td>
-                        <td th:text="${activeContract.getEndDate()}">2027-01-01</td>
-                        <td th:text="${#numbers.formatDecimal(activeContract.getRentAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                        <td th:text="${uiText.date(activeContract.getStartDate())}">2026-01-01</td>
+                        <td th:text="${uiText.date(activeContract.getEndDate())}">2027-01-01</td>
+                        <td th:text="${#numbers.formatDecimal(activeContract.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                         <td><span th:class="${'badge badge-' + activeContract.getStatus().name()}" th:text="${uiText.contractStatus(activeContract.getStatus())}">Đang hiệu lực</span></td>
                         <td>
                             <a th:href="@{'/contracts/' + ${activeContract.getId()}}" class="btn btn-sm">Xem hợp đồng</a>
@@ -194,7 +194,7 @@
                                   th:classappend="${a.status().name() == 'GOOD'} ? 'badge-ACTIVE' : (${a.status().name() == 'DAMAGED'} ? 'badge-REPORTED' : 'badge-REJECTED')"
                                   th:text="${uiText.assetStatus(a.status())}">Tốt</span>
                         </td>
-                        <td th:text="${#numbers.formatDecimal(a.estimatedValue(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</td>
+                        <td th:text="${#numbers.formatDecimal(a.estimatedValue(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</td>
                         <td>
                             <a th:href="@{'/rooms/' + ${room.getId()} + '/assets/' + ${a.id()} + '/qr'}" target="_blank" class="btn btn-sm">Mã QR</a>
                         </td>
@@ -220,7 +220,7 @@
                                     <li th:each="e : ${assetHistory.get(a.id())}">
                                         <strong th:text="${uiText.assetEventType(e.type())}">Hư hỏng</strong>
                                         — <span th:text="${e.description()}">Mô tả</span>
-                                        <span th:if="${e.cost().signum() > 0}" th:text="'(' + ${#numbers.formatDecimal(e.cost(), 0, 'COMMA', 0, 'POINT')} + ' đ)'"></span>
+                                        <span th:if="${e.cost().signum() > 0}" th:text="'(' + ${#numbers.formatDecimal(e.cost(), 0, 'POINT', 0, 'COMMA')} + ' đ)'"></span>
                                         <span style="color: var(--text-secondary);" th:text="${#temporals.format(e.createdAt(), 'dd/MM/yyyy HH:mm')}"></span>
                                     </li>
                                 </ul>
@@ -294,7 +294,7 @@
                 <label class="form-label" for="addAssetName">Tên tài sản *</label>
                 <input type="text" id="addAssetName" name="name" class="form-control" required maxlength="150">
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                 <div class="form-group">
                     <label class="form-label" for="addAssetQuantity">Số lượng *</label>
                     <input type="number" id="addAssetQuantity" name="quantity" class="form-control" min="1" value="1" required>
@@ -337,7 +337,7 @@
                     <label class="form-label">Tên tài sản *</label>
                     <input type="text" name="name" class="form-control" th:value="${a.name()}" required maxlength="150">
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div class="form-group">
                         <label class="form-label">Số lượng *</label>
                         <input type="number" name="quantity" class="form-control" min="1" th:value="${a.quantity()}" required>
@@ -470,7 +470,7 @@
             <input type="hidden" name="version" th:value="${room.getVersion()}">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="editRoomNumber">Số phòng <span style="color: var(--danger-color, #dc2626);">*</span></label>
                     <input type="text" id="editRoomNumber" name="roomNumber" th:value="${room.getRoomNumber()}" class="form-control" required placeholder="VD: 101, P202">
@@ -481,7 +481,7 @@
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="editAreaSqm">Diện tích (m²)</label>
                     <input type="number" step="0.1" min="0" id="editAreaSqm" name="areaSqm" th:value="${room.getAreaSqm()}" class="form-control" placeholder="VD: 25.5">

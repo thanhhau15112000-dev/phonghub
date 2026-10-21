@@ -240,7 +240,7 @@ public class TenantPrivacyService implements TenantPrivacyUseCase {
                 "Tenant chưa đến hạn xóa (hoặc còn hợp đồng đang mở); chưa thể xác nhận xóa.");
         }
         Tenant tenant = tenantRepository.findById(tenantId)
-            .orElseThrow(() -> new TenantNotFoundException("Tenant not found: " + tenantId));
+            .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy người thuê: " + tenantId));
         purge(tenant, privacy, "OWNER_CONFIRMED", actor.id());
         return statusOf(tenantId);
     }
@@ -322,7 +322,7 @@ public class TenantPrivacyService implements TenantPrivacyUseCase {
 
     private void assertTenantInProperty(UUID propertyId, UUID tenantId) {
         if (!authorizationService.tenantPropertyIds(tenantId).contains(propertyId)) {
-            throw new TenantNotFoundException("Tenant not found in property: " + tenantId);
+            throw new TenantNotFoundException("Không tìm thấy người thuê trong nhà trọ: " + tenantId);
         }
     }
 

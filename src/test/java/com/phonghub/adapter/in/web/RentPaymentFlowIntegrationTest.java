@@ -115,7 +115,7 @@ class RentPaymentFlowIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Nội dung chuyển khoản")))
             .andExpect(content().string(containsString(invoice.getPaymentCode())))
-            .andExpect(content().string(containsString("3,500,000 đ")));
+            .andExpect(content().string(containsString("3.500.000 đ")));
 
         String payload = """
             {
@@ -166,7 +166,7 @@ class RentPaymentFlowIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Thanh toán tiền thuê")))
             .andExpect(content().string(containsString(code)))
-            .andExpect(content().string(containsString("3,500,000 đ")))
+            .andExpect(content().string(containsString("3.500.000 đ")))
             .andExpect(content().string(containsString("#payments")));
     }
 

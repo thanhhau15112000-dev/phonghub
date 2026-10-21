@@ -139,7 +139,7 @@ public class PaymentReconciliationService implements PaymentReconciliationUseCas
     public Receipt getReceipt(UUID invoiceId) {
         CurrentUser user = currentUserPort.getCurrentUser();
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
         }
         if (user.role() == UserRole.TECHNICIAN) {
             throw new UnauthorizedPropertyAccessException("Kỹ thuật viên không xem biên lai thanh toán.");
@@ -180,7 +180,7 @@ public class PaymentReconciliationService implements PaymentReconciliationUseCas
      */
     private List<UUID> collectableProperties(CurrentUser user, UUID propertyId) {
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
         }
         if (user.role() == UserRole.ADMIN) {
             // Admin vẫn cần thấy giao dịch để hỗ trợ đối soát (kể cả giao dịch chưa khớp hợp đồng nào), nhưng số tiền

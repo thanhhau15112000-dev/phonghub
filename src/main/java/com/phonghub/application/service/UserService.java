@@ -67,10 +67,10 @@ public class UserService implements UserUseCase {
     public User getUser(UUID userId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         if (currentUser.role() != UserRole.ADMIN && !currentUser.id().equals(userId)) {
-            throw new UnauthorizedPropertyAccessException("Cannot access other user's profile");
+            throw new UnauthorizedPropertyAccessException("Không được xem hồ sơ của tài khoản khác.");
         }
         return userRepository.findById(userId)
-            .orElseThrow(() -> new UserNotFoundException("User not found with ID: " + userId));
+            .orElseThrow(() -> new UserNotFoundException("Không tìm thấy tài khoản: " + userId));
     }
 
     @Override
@@ -94,7 +94,7 @@ public class UserService implements UserUseCase {
     public List<StaffPropertyAssignment> getStaffAssignments(UUID staffUserId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         if (currentUser.role() != UserRole.ADMIN && !currentUser.id().equals(staffUserId)) {
-            throw new UnauthorizedPropertyAccessException("Cannot access other user's assignments");
+            throw new UnauthorizedPropertyAccessException("Không được xem phân công của tài khoản khác.");
         }
         return assignmentPort.findByUserId(staffUserId);
     }
@@ -103,7 +103,7 @@ public class UserService implements UserUseCase {
     public Set<UUID> getAssignedPropertyIds(UUID userId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         if (currentUser.role() != UserRole.ADMIN && !currentUser.id().equals(userId)) {
-            throw new UnauthorizedPropertyAccessException("Cannot access other user's assignments");
+            throw new UnauthorizedPropertyAccessException("Không được xem phân công của tài khoản khác.");
         }
         return assignmentPort.findPropertyIdsByUserId(userId);
     }
@@ -116,7 +116,7 @@ public class UserService implements UserUseCase {
             throw new IllegalStateException("UserService chưa được cấu hình kho nhà trọ/người thuê để sửa tài khoản");
         }
         User existing = userRepository.findById(command.userId())
-            .orElseThrow(() -> new UserNotFoundException("User not found with ID: " + command.userId()));
+            .orElseThrow(() -> new UserNotFoundException("Không tìm thấy tài khoản: " + command.userId()));
 
         if (caller.id().equals(existing.id())) {
             throw new ConflictException("Không tự sửa vai trò/trạng thái của chính mình; hãy dùng trang Hồ sơ để sửa thông tin.");
@@ -198,11 +198,11 @@ public class UserService implements UserUseCase {
     public User updateProfile(UpdateProfileCommand command) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         if (currentUser.role() != UserRole.ADMIN && !currentUser.id().equals(command.userId())) {
-            throw new UnauthorizedPropertyAccessException("Cannot modify other user's profile");
+            throw new UnauthorizedPropertyAccessException("Không được sửa hồ sơ của tài khoản khác.");
         }
 
         User existingUser = userRepository.findById(command.userId())
-            .orElseThrow(() -> new UserNotFoundException("User not found with ID: " + command.userId()));
+            .orElseThrow(() -> new UserNotFoundException("Không tìm thấy tài khoản: " + command.userId()));
 
         if (command.fullName() == null || command.fullName().isBlank()) {
             throw new IllegalArgumentException("Họ và tên không được để trống.");

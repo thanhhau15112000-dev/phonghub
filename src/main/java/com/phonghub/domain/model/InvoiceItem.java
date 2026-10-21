@@ -20,7 +20,7 @@ public record InvoiceItem(
 ) {
     public InvoiceItem {
         if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("Invoice item name cannot be blank");
+            throw new IllegalArgumentException("Tên khoản thu không được để trống.");
         }
         if (id == null) {
             id = UUID.randomUUID();
@@ -29,7 +29,7 @@ public record InvoiceItem(
             quantity = BigDecimal.ONE;
         }
         if (unitPrice == null || unitPrice.signum() < 0) {
-            throw new IllegalArgumentException("Invoice item unit price cannot be negative");
+            throw new IllegalArgumentException("Đơn giá khoản thu không được âm.");
         }
         if (totalAmount == null) {
             totalAmount = unitPrice.multiply(quantity);

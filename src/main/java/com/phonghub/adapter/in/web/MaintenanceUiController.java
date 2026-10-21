@@ -113,6 +113,7 @@ public class MaintenanceUiController {
         List<Property> accessibleProperties = propertyUseCase.listAccessibleProperties();
         java.util.Map<UUID, String> propertyNames = new java.util.HashMap<>();
         accessibleProperties.forEach(p -> propertyNames.put(p.id(), p.name()));
+        model.addAttribute("roomNumbers", roomNumbers(visible));
 
         model.addAttribute("currentUser", currentUser);
         model.addAttribute("tickets", visible);
@@ -128,6 +129,19 @@ public class MaintenanceUiController {
         model.addAttribute("doneCount", common.size() - openTickets.size());
         model.addAttribute("openByStatus", openByStatus);
         return "maintenance/list";
+    }
+
+    /** Số phòng của các phiếu đang hiển thị; phòng người xem không được xem thì để trống. */
+    private java.util.Map<UUID, String> roomNumbers(List<MaintenanceTicket> tickets) {
+        java.util.Map<UUID, String> numbers = new java.util.HashMap<>();
+        for (UUID roomId : tickets.stream().map(MaintenanceTicket::getRoomId).distinct().toList()) {
+            try {
+                numbers.put(roomId, roomUseCase.getRoom(roomId).getRoomNumber());
+            } catch (DomainException ex) {
+                // không có quyền xem phòng này: hiển thị "—"
+            }
+        }
+        return numbers;
     }
 
     @GetMapping("/new")

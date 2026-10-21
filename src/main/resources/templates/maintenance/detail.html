@@ -48,7 +48,7 @@
             </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; font-size: 13px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+        <div class="grid-cols" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; font-size: 13px; border-top: 1px solid var(--border-color); padding-top: 16px;">
             <div>
                 <span style="color: var(--text-secondary);">Trạng thái phòng hiện tại:</span>
                 <span th:class="'badge badge-' + ${room.getStatus()}" th:text="${uiText.roomStatus(room.getStatus())}">Bảo trì</span>
@@ -59,7 +59,7 @@
             </div>
             <div>
                 <span style="color: var(--text-secondary);">Tạo lúc:</span>
-                <span th:text="${#temporals.format(ticket.getCreatedAt(), 'yyyy-MM-dd HH:mm')}">2026-09-17</span>
+                <span th:text="${#temporals.format(ticket.getCreatedAt(), 'dd/MM/yyyy HH:mm')}">2026-09-17</span>
             </div>
             <div>
                 <span style="color: var(--text-secondary);">Nguyên nhân khai báo:</span>
@@ -79,7 +79,7 @@
         <div th:if="${quote != null}" style="font-size: 13px; margin-bottom: 12px;" id="quote-detail">
             <div style="margin-bottom: 4px;">
                 <span style="color: var(--text-secondary);">Số tiền dự kiến:</span>
-                <strong th:text="${#numbers.formatDecimal(quote.amount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">500,000 đ</strong>
+                <strong th:text="${#numbers.formatDecimal(quote.amount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">500,000 đ</strong>
             </div>
             <div th:if="${quote.note() != null}" style="margin-bottom: 4px;">
                 <span style="color: var(--text-secondary);">Ghi chú:</span>
@@ -115,16 +115,16 @@
         <div style="font-size: 13px; margin-bottom: 12px;">
             <div style="margin-bottom: 4px;">
                 <span style="color: var(--text-secondary);">Số tiền:</span>
-                <strong th:text="${#numbers.formatDecimal(ticket.getRepairCost(), 0, 'COMMA', 0, 'POINT') + ' đ'}">150,000 đ</strong>
+                <strong th:text="${#numbers.formatDecimal(ticket.getRepairCost(), 0, 'POINT', 0, 'COMMA') + ' đ'}">150,000 đ</strong>
             </div>
             <div th:if="${feeInvoice != null}" style="margin-bottom: 4px;">
                 <span style="color: var(--text-secondary);">Đã thanh toán:</span>
-                <span th:text="${#numbers.formatDecimal(feeInvoice.getPaidAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</span>
+                <span th:text="${#numbers.formatDecimal(feeInvoice.getPaidAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</span>
                 <span th:class="'badge badge-' + ${uiText.invoiceBadge(feeInvoice, today)}" th:text="${uiText.invoiceState(feeInvoice, today)}">Chưa đến hạn</span>
             </div>
             <div th:if="${feeInvoice != null}" style="margin-bottom: 4px;">
                 <span style="color: var(--text-secondary);">Hạn thanh toán:</span>
-                <span th:text="${feeInvoice.getDueDate()}">2026-10-09</span>
+                <span th:text="${uiText.date(feeInvoice.getDueDate())}">2026-10-09</span>
             </div>
             <div th:if="${feeInvoice != null}">
                 <span style="color: var(--text-secondary);">Nội dung chuyển khoản:</span>
@@ -160,7 +160,7 @@
             </div>
             <div>
                 <span style="color: var(--text-secondary);">Tổng chi phí sửa chữa:</span>
-                <strong th:text="${#numbers.formatDecimal(ticket.getRepairCost(), 0, 'COMMA', 0, 'POINT') + ' đ'}">150,000 đ</strong>
+                <strong th:text="${#numbers.formatDecimal(ticket.getRepairCost(), 0, 'POINT', 0, 'COMMA') + ' đ'}">150,000 đ</strong>
             </div>
         </div>
     </div>

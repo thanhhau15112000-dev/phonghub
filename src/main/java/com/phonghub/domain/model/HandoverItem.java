@@ -26,7 +26,7 @@ public record HandoverItem(
             deductionAmount = BigDecimal.ZERO;
         }
         if (deductionAmount.signum() < 0) {
-            throw new IllegalArgumentException("Deduction amount cannot be negative");
+            throw new IllegalArgumentException("Khoản khấu trừ không được âm.");
         }
     }
 

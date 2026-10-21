@@ -102,7 +102,7 @@ public class PropertyService implements PropertyUseCase {
         authorizationService.assertOwnerOrAdmin(currentUser, command.propertyId());
 
         Property property = propertyRepository.findById(command.propertyId())
-            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + command.propertyId()));
+            .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + command.propertyId()));
         assertNotArchived(property, "sửa thông tin");
 
         int totalRooms = command.totalRooms() == null ? property.totalRooms() : command.totalRooms();
@@ -166,7 +166,7 @@ public class PropertyService implements PropertyUseCase {
     public List<Property> listArchivedProperties() {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         if (currentUser == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
         }
         List<Property> scope = switch (currentUser.role()) {
             case ADMIN -> propertyRepository.findAll();
@@ -185,7 +185,7 @@ public class PropertyService implements PropertyUseCase {
             throw new IllegalStateException("PropertyService chưa được cấu hình kho hợp đồng/hóa đơn để ẩn nhà trọ");
         }
         Property property = propertyRepository.findById(propertyId)
-            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + propertyId));
+            .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + propertyId));
         if (property.isArchived()) {
             throw new ConflictException("Nhà trọ '" + property.name() + "' đã được ẩn trước đó.");
         }
@@ -218,7 +218,7 @@ public class PropertyService implements PropertyUseCase {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         authorizationService.assertOwnerOrAdmin(currentUser, propertyId);
         Property property = propertyRepository.findById(propertyId)
-            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + propertyId));
+            .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + propertyId));
         if (!property.isArchived()) {
             throw new ConflictException("Nhà trọ '" + property.name() + "' đang hoạt động, không cần khôi phục.");
         }
@@ -241,7 +241,7 @@ public class PropertyService implements PropertyUseCase {
         authorizationService.assertCanAccessProperty(currentUser, propertyId);
 
         return propertyRepository.findById(propertyId)
-            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + propertyId));
+            .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + propertyId));
     }
 
     @Override
@@ -250,7 +250,7 @@ public class PropertyService implements PropertyUseCase {
         authorizationService.assertAdmin(currentUser);
 
         Property property = propertyRepository.findById(propertyId)
-            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + propertyId));
+            .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + propertyId));
         assertNotArchived(property, "duyệt");
 
         if (property.approvalStatus() != PropertyApprovalStatus.PENDING) {
@@ -299,7 +299,7 @@ public class PropertyService implements PropertyUseCase {
         }
 
         Property property = propertyRepository.findById(propertyId)
-            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + propertyId));
+            .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + propertyId));
         assertNotArchived(property, "từ chối");
 
         if (property.approvalStatus() != PropertyApprovalStatus.PENDING) {

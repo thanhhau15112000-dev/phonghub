@@ -101,7 +101,7 @@ class RoomTransitionsUnitTest {
             InvalidRoomStateException.class,
             () -> room.transitionTo(RoomStatus.OCCUPIED)
         );
-        assertTrue(ex.getMessage().contains("cannot move from MAINTENANCE to OCCUPIED"));
+        assertTrue(ex.getMessage().contains("từ Bảo trì sang Đang thuê"));
     }
 
     @Test
@@ -112,7 +112,7 @@ class RoomTransitionsUnitTest {
             InvalidRoomStateException.class,
             room::putUnderMaintenance
         );
-        assertTrue(ex.getMessage().contains("must be AVAILABLE or OCCUPIED"));
+        assertTrue(ex.getMessage().contains("không chuyển sang bảo trì được"));
     }
 
     @Test

@@ -47,9 +47,9 @@
                         <strong th:text="${roomNames[c.getRoomId()]}">Phòng</strong>
                         <div th:text="${tenantNames[c.getPrimaryTenantId()]}">Người thuê</div>
                     </td>
-                    <td th:text="${c.getStartDate()} + ' đến ' + ${c.getEndDate()}">2026-01-01 đến 2027-01-01</td>
-                    <td th:text="${#numbers.formatDecimal(c.getRentAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
-                    <td th:text="${#numbers.formatDecimal(c.getDepositAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                    <td th:text="${uiText.date(c.getStartDate()) + ' đến ' + uiText.date(c.getEndDate())}">2026-01-01 đến 2027-01-01</td>
+                    <td th:text="${#numbers.formatDecimal(c.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
+                    <td th:text="${#numbers.formatDecimal(c.getDepositAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     <td th:text="'Ngày ' + ${c.getPaymentDay()}">Ngày 5</td>
                     <td>
                         <span th:class="'badge badge-' + ${c.getStatus()}" th:text="${uiText.contractStatus(c.getStatus())}">Bản nháp</span>

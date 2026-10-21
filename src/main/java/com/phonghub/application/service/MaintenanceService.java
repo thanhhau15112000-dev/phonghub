@@ -128,13 +128,13 @@ public class MaintenanceService implements MaintenanceUseCase {
     public MaintenanceTicket createTicket(CreateMaintenanceTicketCommand command) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Room room = roomRepository.findById(command.roomId())
-            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + command.roomId()));
+            .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + command.roomId()));
 
         UUID requestedByTenantId = null;
         if (currentUser.role() == UserRole.TENANT) {
             Optional<Tenant> tenantOpt = tenantRepository.findByUserId(currentUser.id());
             if (tenantOpt.isEmpty()) {
-                throw new UnauthorizedPropertyAccessException("Tenant profile not found");
+                throw new UnauthorizedPropertyAccessException("Không tìm thấy hồ sơ người thuê của tài khoản này.");
             }
             requestedByTenantId = tenantOpt.get().id();
             // Người thuê chỉ báo hỏng cho phòng mình đang ở (chủ hợp đồng hoặc người ở cùng)
@@ -154,7 +154,7 @@ public class MaintenanceService implements MaintenanceUseCase {
                 throw new InvalidRoomStateException(String.format(
                     "Phòng '%s' đang ở trạng thái %s nên không chuyển sang bảo trì được. Bỏ chọn \"Chuyển trạng thái "
                         + "phòng sang BẢO TRÌ\" để vẫn tạo phiếu.",
-                    room.getRoomNumber(), room.getStatus() == RoomStatus.OCCUPIED ? "Đang thuê" : "Đã đặt"
+                    room.getRoomNumber(), room.getStatus().label()
                 ));
             }
             room.putUnderMaintenance();
@@ -180,7 +180,7 @@ public class MaintenanceService implements MaintenanceUseCase {
     public MaintenanceTicket acceptTicket(UUID ticketId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
-            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + ticketId));
 
         // TECHNICIAN can accept tickets only within assigned property scope
         authorizationService.assertTechnicianCanWorkOnProperty(currentUser, ticket.getPropertyId());
@@ -195,7 +195,7 @@ public class MaintenanceService implements MaintenanceUseCase {
     public MaintenanceTicket assignTechnician(UUID ticketId, UUID technicianId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
-            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + ticketId));
         authorizationService.assertCanManageProperty(currentUser, ticket.getPropertyId());
         if (technicianId == null) {
             throw new IllegalArgumentException("Cần chọn kỹ thuật viên");
@@ -223,7 +223,7 @@ public class MaintenanceService implements MaintenanceUseCase {
     public MaintenanceTicket rejectTicket(UUID ticketId, String reason) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
-            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + ticketId));
         authorizationService.assertCanManageProperty(currentUser, ticket.getPropertyId());
         ticket.reject(reason);
         ticket.attributeEventsTo(currentUser.id());
@@ -237,7 +237,7 @@ public class MaintenanceService implements MaintenanceUseCase {
     public MaintenanceTicket updateTicket(UpdateMaintenanceTicketCommand command) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         MaintenanceTicket ticket = maintenanceTicketRepository.findById(command.ticketId())
-            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + command.ticketId()));
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + command.ticketId()));
         assertCanChangeRequest(currentUser, ticket);
 
         Map<String, Object> before = Map.of("title", ticket.getTitle(), "priority", ticket.getPriority().name());
@@ -253,7 +253,7 @@ public class MaintenanceService implements MaintenanceUseCase {
     public MaintenanceTicket cancelTicket(UUID ticketId, String reason) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
-            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + ticketId));
         assertCanChangeRequest(currentUser, ticket);
 
         MaintenanceStatus before = ticket.getStatus();
@@ -276,11 +276,11 @@ public class MaintenanceService implements MaintenanceUseCase {
      */
     private void assertCanChangeRequest(CurrentUser user, MaintenanceTicket ticket) {
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
         }
         if (user.role() == UserRole.TENANT) {
             Tenant tenant = tenantRepository.findByUserId(user.id())
-                .orElseThrow(() -> new UnauthorizedPropertyAccessException("Tenant profile not found"));
+                .orElseThrow(() -> new UnauthorizedPropertyAccessException("Không tìm thấy hồ sơ người thuê của tài khoản này."));
             if (!tenant.id().equals(ticket.getRequestedByTenantId())) {
                 throw new UnauthorizedPropertyAccessException("Chỉ người báo phiếu được sửa hoặc hủy phiếu này");
             }
@@ -337,7 +337,7 @@ public class MaintenanceService implements MaintenanceUseCase {
     public MaintenanceTicket resolveTicket(ResolveMaintenanceTicketCommand command) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         MaintenanceTicket ticket = maintenanceTicketRepository.findById(command.ticketId())
-            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + command.ticketId()));
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + command.ticketId()));
 
         authorizationService.assertTechnicianCanWorkOnProperty(currentUser, ticket.getPropertyId());
         assertAssignedToTechnician(currentUser, ticket);
@@ -356,7 +356,7 @@ public class MaintenanceService implements MaintenanceUseCase {
         Room room = null;
         if (command.releaseRoomToAvailable()) {
             room = roomRepository.findById(ticket.getRoomId())
-                .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + ticket.getRoomId()));
+                .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + ticket.getRoomId()));
 
             if (room.getStatus() == RoomStatus.MAINTENANCE) {
                 // Fix F3: Check if any other unresolved tickets exist before modifying/saving ticket
@@ -423,7 +423,7 @@ public class MaintenanceService implements MaintenanceUseCase {
     public MaintenanceTicket waiveRepairFee(UUID ticketId, String reason) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
-            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + ticketId));
 
         authorizationService.assertCanManageProperty(currentUser, ticket.getPropertyId());
         if (reason == null || reason.isBlank()) {
@@ -482,7 +482,7 @@ public class MaintenanceService implements MaintenanceUseCase {
     public MaintenanceTicket quoteTicket(UUID ticketId, BigDecimal amount, String note) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
-            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + ticketId));
         if (currentUser != null && currentUser.role() == UserRole.TECHNICIAN) {
             authorizationService.assertTechnicianCanWorkOnProperty(currentUser, ticket.getPropertyId());
             assertAssignedToTechnician(currentUser, ticket);
@@ -534,15 +534,15 @@ public class MaintenanceService implements MaintenanceUseCase {
      */
     private MaintenanceTicket tenantOwnedTicket(CurrentUser currentUser, UUID ticketId) {
         if (currentUser == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
         }
         if (currentUser.role() != UserRole.TENANT) {
             throw new UnauthorizedPropertyAccessException("Chỉ người thuê của phòng mới xác nhận kết quả sửa chữa.");
         }
         MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
-            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + ticketId));
         if (!authorizationService.canTenantViewTicket(currentUser, ticket.getRoomId(), ticket.getRequestedByTenantId())) {
-            throw new UnauthorizedPropertyAccessException("Tenant can only confirm tickets of their own room");
+            throw new UnauthorizedPropertyAccessException("Người thuê chỉ xác nhận được phiếu của phòng mình.");
         }
         return ticket;
     }
@@ -551,12 +551,12 @@ public class MaintenanceService implements MaintenanceUseCase {
     public MaintenanceTicket getTicket(UUID ticketId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
-            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + ticketId));
 
         authorizationService.assertCanAccessProperty(currentUser, ticket.getPropertyId());
         if (currentUser.role() == UserRole.TENANT
             && !authorizationService.canTenantViewTicket(currentUser, ticket.getRoomId(), ticket.getRequestedByTenantId())) {
-            throw new UnauthorizedPropertyAccessException("Tenant can only view tickets of their own room");
+            throw new UnauthorizedPropertyAccessException("Người thuê chỉ xem được phiếu của phòng mình.");
         }
         if (!visibleTo(currentUser, ticket)) {
             throw new UnauthorizedPropertyAccessException("Phiếu bảo trì này chưa được giao cho bạn");
@@ -581,7 +581,7 @@ public class MaintenanceService implements MaintenanceUseCase {
     public List<MaintenanceTicket> listAssignedTicketsForTechnician(UUID technicianId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         if (currentUser.role() != UserRole.ADMIN && !currentUser.id().equals(technicianId)) {
-            throw new UnauthorizedPropertyAccessException("Cannot view tickets assigned to another technician");
+            throw new UnauthorizedPropertyAccessException("Kỹ thuật viên chỉ xem được phiếu được giao cho mình.");
         }
         List<MaintenanceTicket> assigned = maintenanceTicketRepository.findByAssignedTechnicianId(technicianId);
         if (currentUser.role() == UserRole.TECHNICIAN) {
@@ -595,7 +595,7 @@ public class MaintenanceService implements MaintenanceUseCase {
     public List<MaintenanceTicket> listTicketsForRoom(UUID roomId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Room room = roomRepository.findById(roomId)
-            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
+            .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + roomId));
 
         authorizationService.assertCanAccessProperty(currentUser, room.getPropertyId());
         if (currentUser.role() == UserRole.TENANT) {

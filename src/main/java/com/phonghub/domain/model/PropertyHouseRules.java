@@ -9,7 +9,7 @@ public record PropertyHouseRules(UUID propertyId, String content, int version, I
             throw new IllegalArgumentException("Property id is required");
         }
         if (content == null || content.isBlank()) {
-            throw new IllegalArgumentException("House rules cannot be blank");
+            throw new IllegalArgumentException("Nội quy không được để trống.");
         }
         if (version <= 0) {
             throw new IllegalArgumentException("House rules version must be positive");

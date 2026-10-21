@@ -77,10 +77,10 @@ public interface MaintenanceUseCase {
                 throw new IllegalArgumentException("Room id cannot be null");
             }
             if (title == null || title.isBlank()) {
-                throw new IllegalArgumentException("Title cannot be blank");
+                throw new IllegalArgumentException("Tiêu đề không được để trống.");
             }
             if (description == null || description.isBlank()) {
-                throw new IllegalArgumentException("Description cannot be blank");
+                throw new IllegalArgumentException("Mô tả không được để trống.");
             }
             if (priority == null) {
                 priority = MaintenancePriority.MEDIUM;
@@ -106,10 +106,10 @@ public interface MaintenanceUseCase {
                 throw new IllegalArgumentException("Ticket id cannot be null");
             }
             if (resolutionNotes == null || resolutionNotes.isBlank()) {
-                throw new IllegalArgumentException("Resolution notes cannot be blank");
+                throw new IllegalArgumentException("Cần ghi kết quả xử lý.");
             }
             if (repairCost != null && repairCost.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Repair cost cannot be negative");
+                throw new IllegalArgumentException("Chi phí sửa chữa không được âm.");
             }
         }
     }

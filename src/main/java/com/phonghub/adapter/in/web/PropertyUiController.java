@@ -192,6 +192,8 @@ public class PropertyUiController {
             model.addAttribute("filterFloor", floor);
             model.addAttribute("roomFilterActive", isPresent(status) || isPresent(minPrice) || isPresent(maxPrice)
                 || isPresent(floor));
+            // Số phòng đã tạo thật (đang dùng) để so với số phòng chủ trọ khai báo lúc tạo nhà trọ
+            model.addAttribute("createdRoomCount", roomUseCase.listRoomsForProperty(id).size());
             model.addAttribute("archivedRooms", roomUseCase.searchRooms(new RoomSearchCriteria(
                 id, null, null, null, null, null, 0, null, true)).items());
             return "properties/detail";

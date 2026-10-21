@@ -294,7 +294,7 @@ class MaintenanceFeeFlowIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Phí sửa chữa")))
             .andExpect(content().string(containsString("Hỏng vòi sen")))
-            .andExpect(content().string(containsString("180,000 đ")))
+            .andExpect(content().string(containsString("180.000 đ")))
             .andExpect(content().string(containsString(fee.getPaymentCode())));
 
         payByWebhook(fee.getPaymentCode(), "180000");

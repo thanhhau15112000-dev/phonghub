@@ -228,7 +228,7 @@ public class HandoverReportService implements HandoverReportUseCase {
             boolean linked = tenant != null && (contract.getPrimaryTenantId().equals(tenant.id())
                 || contract.getOccupants().stream().map(ContractOccupant::tenantId).anyMatch(tenant.id()::equals));
             if (!linked) {
-                throw new UnauthorizedPropertyAccessException("Tenant is not part of this contract");
+                throw new UnauthorizedPropertyAccessException("Người thuê không thuộc hợp đồng này.");
             }
             return;
         }
@@ -240,6 +240,6 @@ public class HandoverReportService implements HandoverReportUseCase {
             throw new IllegalArgumentException("Contract id is required");
         }
         return contractRepository.findById(contractId)
-            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
+            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
     }
 }

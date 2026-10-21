@@ -54,9 +54,11 @@
                 <span style="color: var(--text-secondary);">Địa chỉ: </span>
                 <strong th:text="${property.address()}">Địa chỉ</strong>
             </div>
-            <div>
-                <span style="color: var(--text-secondary);">Tổng số phòng: </span>
-                <strong th:text="${property.totalRooms()}">10</strong> phòng
+            <div th:if="${currentUser.role().name() != 'TENANT'}">
+                <span style="color: var(--text-secondary);">Số phòng: </span>
+                <strong th:text="${createdRoomCount}">4</strong> phòng đã tạo
+                <span style="color: var(--text-secondary);" th:if="${property.totalRooms() != createdRoomCount}"
+                      th:text="${'(khai báo ' + property.totalRooms() + ')'}">(khai báo 10)</span>
             </div>
             <div>
                 <span style="color: var(--text-secondary);">Mô tả: </span>
@@ -138,7 +140,8 @@
     <div class="card">
         <h2>Danh sách phòng thuộc nhà trọ</h2>
 
-        <form th:action="@{'/properties/' + ${property.id()}}" method="get" id="roomFilterForm"
+        <!-- Người thuê chỉ thấy phòng của mình nên không cần bộ lọc -->
+        <form th:if="${currentUser.role().name() != 'TENANT'}" th:action="@{'/properties/' + ${property.id()}}" method="get" id="roomFilterForm"
               style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 16px;">
             <div class="form-group" style="min-width: 150px; margin: 0;">
                 <label class="form-label" for="filterStatus">Trạng thái</label>
@@ -192,7 +195,7 @@
                     </td>
                     <td class="col-number" th:text="${r.getFloor()}">1</td>
                     <td th:text="${r.getAreaSqm() != null ? r.getAreaSqm() + ' m²' : '—'}">25 m²</td>
-                    <td style="font-weight: 500;" th:text="${#numbers.formatDecimal(r.getBasePrice(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                    <td style="font-weight: 500;" th:text="${#numbers.formatDecimal(r.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     <td th:text="${r.getMaxOccupants()} + ' người'">2 người</td>
                     <td>
                         <span th:class="'badge badge-' + ${r.getStatus()}" th:text="${uiText.roomStatus(r.getStatus())}">Trống</span>

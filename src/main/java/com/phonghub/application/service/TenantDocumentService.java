@@ -117,7 +117,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
     @Override
     public DocumentSummary upload(UploadDocumentCommand command) {
         if (command == null || command.type() == null) {
-            throw new IllegalArgumentException("Document type is required");
+            throw new IllegalArgumentException("Cần chọn loại giấy tờ.");
         }
         CurrentUser user = currentUserPort.getCurrentUser();
         authorizationService.assertCanAccessTenantDocuments(user, command.propertyId(), command.tenantId());
@@ -251,12 +251,12 @@ public class TenantDocumentService implements TenantDocumentUseCase {
     private Prepared prepareImage(DocumentFile file, boolean required) {
         if (file == null || file.content() == null || file.content().length == 0) {
             if (required) {
-                throw new IllegalArgumentException("Front image of the document is required");
+                throw new IllegalArgumentException("Cần ảnh mặt trước giấy tờ.");
             }
             return null;
         }
         if (!FileSanitizer.isImage(file.contentType())) {
-            throw new IllegalArgumentException("Document images must be jpeg, png or webp");
+            throw new IllegalArgumentException("Ảnh giấy tờ phải là JPEG, PNG hoặc WebP.");
         }
         FileSanitizer.SanitizedFile sanitized = FileSanitizer.sanitize(
             file.contentType(), file.content(), maxFileSizeBytes);
@@ -268,7 +268,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
             return null;
         }
         if (command.number() == null || command.number().isBlank()) {
-            throw new IllegalArgumentException("Driving licence number is required");
+            throw new IllegalArgumentException("Cần nhập số giấy phép lái xe.");
         }
         TenantDataProtectionPort.ProtectedValue value = protector.protect(command.number());
         if (documentRepository.existsByTypeAndNumberHmacForOtherTenant(
@@ -314,7 +314,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
 
     private Tenant findTenant(UUID tenantId) {
         return tenantRepository.findById(tenantId)
-            .orElseThrow(() -> new TenantNotFoundException("Tenant not found: " + tenantId));
+            .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy người thuê: " + tenantId));
     }
 
     private TenantDocument findDocument(UUID tenantId, DocumentType type) {
