@@ -714,6 +714,13 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void invoiceVoidRequiresBearerTokenInProd() throws Exception {
+        mockMvc.perform(post("/api/invoices/eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee/void")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"x\"}"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void statisticsEndpointsRequireBearerTokenInProd() throws Exception {
         for (String path : new String[] {"owner/summary", "owner/revenue", "owner/properties", "admin/overview",
             "admin/pending-properties", "admin/accounts"}) {

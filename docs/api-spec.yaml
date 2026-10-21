@@ -2815,7 +2815,11 @@ paths:
           format: uuid
     post:
       tags: [Billing & Invoices]
-      summary: Hủy hóa đơn do sai lệch tính toán (VOIDED)
+      summary: Hủy hóa đơn tiền thuê do sai lệch tính toán (VOIDED) (#89)
+      description: >
+        Cùng quyền với phát hành kỳ thanh toán (admin, owner của nhà trọ, staff có quyền quản lý hợp đồng). Không xóa
+        cứng; hủy xong phát hành lại được kỳ đó. Từ chối (409) khi hóa đơn đã có tiền, đã trả/đã hủy, đã gộp vào hóa đơn
+        tháng, đang gộp phí sửa chữa, hoặc là phí sửa chữa (dùng "miễn phí" ở phiếu bảo trì).
       requestBody:
         required: true
         content:
@@ -2835,11 +2839,20 @@ paths:
               schema:
                 type: object
                 properties:
-                  success:
-                    type: boolean
-                    example: true
+                  id: { type: string, format: uuid }
+                  contractId: { type: string, format: uuid }
+                  year: { type: integer }
+                  month: { type: integer }
+                  totalAmount: { type: number }
+                  status: { type: string, example: VOIDED }
+        '400':
+          description: Thiếu lý do hủy
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
 

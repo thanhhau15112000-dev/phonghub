@@ -237,6 +237,23 @@ public class ContractUiController {
         return "redirect:/contracts/" + id;
     }
 
+    @PostMapping("/{id}/invoices/{invoiceId}/void")
+    public String voidInvoice(
+        @PathVariable UUID id,
+        @PathVariable UUID invoiceId,
+        @RequestParam(required = false) String reason,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            Invoice invoice = invoiceUseCase.voidInvoice(invoiceId, reason);
+            redirectAttributes.addFlashAttribute("successMessage", String.format(
+                "Đã hủy hóa đơn kỳ %02d/%d. Có thể phát hành lại kỳ này nếu cần.", invoice.getMonth(), invoice.getYear()));
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
+    }
+
     private void addPaymentAttributes(Model model, CurrentUser currentUser, Contract contract, Property property) {
         List<Invoice> invoices = invoiceUseCase.listInvoicesForContract(contract.getId());
         LocalDate today = LocalDate.now();
@@ -257,6 +274,11 @@ public class ContractUiController {
         model.addAttribute("today", today);
         model.addAttribute("payableInvoice", payableInvoice);
         model.addAttribute("canIssueInvoice", canIssueInvoice);
+        // Hủy hóa đơn (#89) không phụ thuộc hợp đồng còn hiệu lực: hợp đồng đã kết thúc vẫn có thể còn kỳ lập sai.
+        model.addAttribute("canVoidInvoice", currentUser != null && (
+            currentUser.role() == UserRole.ADMIN
+                || currentUser.role() == UserRole.STAFF
+                || (currentUser.role() == UserRole.OWNER && currentUser.id().equals(property.ownerId()))));
         model.addAttribute("defaultInvoicePeriod", YearMonth.now().toString());
         model.addAttribute("bankConfigured", sepayProperties.hasBankAccount());
         model.addAttribute("bankCode", sepayProperties.getBankCode());
