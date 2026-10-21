@@ -297,13 +297,15 @@ h2 {
 }
 
 .badge-DRAFT,
-.badge-TERMINATED {
+.badge-TERMINATED,
+.badge-CANCELLED {
   background-color: #f1f5f9;
   color: #475569;
   border-color: #cbd5e1;
 }
 .badge-DRAFT::before,
-.badge-TERMINATED::before {
+.badge-TERMINATED::before,
+.badge-CANCELLED::before {
   background-color: #94a3b8;
 }
 
@@ -940,6 +942,11 @@ dialog.modal-dialog::backdrop {
   min-width: 0;
 }
 .header-account { gap: 12px; }
+
+/* Admin có 9 mục menu: ở màn hình ~1366px cụm tài khoản xuống dòng thay vì bẻ đôi từng mục ("Bảng điều / khiển"). */
+.header-bar { flex-wrap: wrap; gap: 12px; }
+.nav-links { flex-wrap: wrap; row-gap: 8px; }
+.nav-links a, .actor-tag { white-space: nowrap; }
 
 @media (max-width: 768px) {
   .header-bar { flex-direction: column; align-items: stretch; gap: 12px; padding: 12px 16px; }

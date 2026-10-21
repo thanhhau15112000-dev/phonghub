@@ -31,7 +31,7 @@
 
     <div class="card">
         <p th:if="${result.items().isEmpty()}" style="color: var(--text-secondary);">Không có người thuê nào.</p>
-        <table th:if="${!result.items().isEmpty()}" class="table">
+        <table th:if="${!result.items().isEmpty()}" class="data-table">
             <thead>
                 <tr><th>Họ tên</th><th>Số điện thoại</th><th>CCCD</th><th>Trạng thái</th><th>Thao tác</th></tr>
             </thead>

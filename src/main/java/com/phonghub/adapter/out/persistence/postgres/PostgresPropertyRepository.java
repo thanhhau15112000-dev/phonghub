@@ -41,7 +41,8 @@ public class PostgresPropertyRepository implements PropertyRepositoryPort {
             ownerId,
             status,
             rejectionReason,
-            toInstant(rs.getTimestamp("created_at"))
+            toInstant(rs.getTimestamp("created_at")),
+            rs.getTimestamp("archived_at") != null ? rs.getTimestamp("archived_at").toInstant() : null
         );
     };
 
@@ -52,8 +53,8 @@ public class PostgresPropertyRepository implements PropertyRepositoryPort {
     @Override
     public Property save(Property property) {
         String sql = """
-            INSERT INTO properties (id, name, address, description, total_rooms, owner_id, approval_status, rejection_reason, created_at, updated_at)
-            VALUES (:id, :name, :address, :description, :totalRooms, :ownerId, :approvalStatus, :rejectionReason, :createdAt, :updatedAt)
+            INSERT INTO properties (id, name, address, description, total_rooms, owner_id, approval_status, rejection_reason, created_at, updated_at, archived_at)
+            VALUES (:id, :name, :address, :description, :totalRooms, :ownerId, :approvalStatus, :rejectionReason, :createdAt, :updatedAt, :archivedAt)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
                 address = EXCLUDED.address,
@@ -62,7 +63,8 @@ public class PostgresPropertyRepository implements PropertyRepositoryPort {
                 owner_id = EXCLUDED.owner_id,
                 approval_status = EXCLUDED.approval_status,
                 rejection_reason = EXCLUDED.rejection_reason,
-                updated_at = EXCLUDED.updated_at
+                updated_at = EXCLUDED.updated_at,
+                archived_at = EXCLUDED.archived_at
             """;
 
         MapSqlParameterSource params = new MapSqlParameterSource()
@@ -75,7 +77,8 @@ public class PostgresPropertyRepository implements PropertyRepositoryPort {
             .addValue("approvalStatus", property.approvalStatus() != null ? property.approvalStatus().name() : PropertyApprovalStatus.VERIFIED.name())
             .addValue("rejectionReason", property.rejectionReason())
             .addValue("createdAt", Timestamp.from(property.createdAt()))
-            .addValue("updatedAt", Timestamp.from(Instant.now()));
+            .addValue("updatedAt", Timestamp.from(Instant.now()))
+            .addValue("archivedAt", property.archivedAt() != null ? Timestamp.from(property.archivedAt()) : null);
 
         jdbcTemplate.update(sql, params);
         return property;
@@ -83,14 +86,14 @@ public class PostgresPropertyRepository implements PropertyRepositoryPort {
 
     @Override
     public Optional<Property> findById(UUID id) {
-        String sql = "SELECT id, name, address, description, total_rooms, owner_id, approval_status, rejection_reason, created_at FROM properties WHERE id = :id";
+        String sql = "SELECT id, name, address, description, total_rooms, owner_id, approval_status, rejection_reason, created_at, archived_at FROM properties WHERE id = :id";
         List<Property> list = jdbcTemplate.query(sql, Map.of("id", id), ROW_MAPPER);
         return list.isEmpty() ? Optional.empty() : Optional.of(list.getFirst());
     }
 
     @Override
     public List<Property> findAll() {
-        String sql = "SELECT id, name, address, description, total_rooms, owner_id, approval_status, rejection_reason, created_at FROM properties ORDER BY created_at DESC";
+        String sql = "SELECT id, name, address, description, total_rooms, owner_id, approval_status, rejection_reason, created_at, archived_at FROM properties ORDER BY created_at DESC";
         return jdbcTemplate.query(sql, ROW_MAPPER);
     }
 
@@ -99,7 +102,7 @@ public class PostgresPropertyRepository implements PropertyRepositoryPort {
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();
         }
-        String sql = "SELECT id, name, address, description, total_rooms, owner_id, approval_status, rejection_reason, created_at FROM properties WHERE id IN (:ids) ORDER BY created_at DESC";
+        String sql = "SELECT id, name, address, description, total_rooms, owner_id, approval_status, rejection_reason, created_at, archived_at FROM properties WHERE id IN (:ids) ORDER BY created_at DESC";
         return jdbcTemplate.query(sql, Map.of("ids", ids), ROW_MAPPER);
     }
 
@@ -108,7 +111,7 @@ public class PostgresPropertyRepository implements PropertyRepositoryPort {
         if (ownerId == null) {
             return Collections.emptyList();
         }
-        String sql = "SELECT id, name, address, description, total_rooms, owner_id, approval_status, rejection_reason, created_at FROM properties WHERE owner_id = :ownerId ORDER BY created_at DESC";
+        String sql = "SELECT id, name, address, description, total_rooms, owner_id, approval_status, rejection_reason, created_at, archived_at FROM properties WHERE owner_id = :ownerId ORDER BY created_at DESC";
         return jdbcTemplate.query(sql, Map.of("ownerId", ownerId), ROW_MAPPER);
     }
 

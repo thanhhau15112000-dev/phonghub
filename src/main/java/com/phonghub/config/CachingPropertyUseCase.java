@@ -55,6 +55,21 @@ public class CachingPropertyUseCase implements PropertyUseCase {
         return write(() -> delegate.updateProperty(command));
     }
 
+    @Override
+    public List<Property> listArchivedProperties() {
+        return delegate.listArchivedProperties();
+    }
+
+    @Override
+    public Property archiveProperty(UUID propertyId) {
+        return write(() -> delegate.archiveProperty(propertyId));
+    }
+
+    @Override
+    public Property restoreProperty(UUID propertyId) {
+        return write(() -> delegate.restoreProperty(propertyId));
+    }
+
     /** PropertyService không chạy trong transaction nên xóa cache cả khi lỗi (có thể đã ghi một phần). */
     private <T> T write(Supplier<T> action) {
         try {

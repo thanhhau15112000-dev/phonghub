@@ -37,6 +37,12 @@ public class TransactionalInvoiceUseCase implements InvoiceUseCase {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public Invoice voidInvoice(UUID invoiceId, String reason) {
+        return delegate.voidInvoice(invoiceId, reason);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public Invoice issueMonthlyInvoice(UUID contractId, YearMonth period) {
         return delegate.issueMonthlyInvoice(contractId, period);
     }

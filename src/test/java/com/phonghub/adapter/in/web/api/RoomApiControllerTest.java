@@ -50,7 +50,7 @@ class RoomApiControllerTest {
         when(roomUseCase.listRoomsForProperty(propertyId)).thenReturn(List.of(room("P101"), room("P102")));
 
         ResponseEntity<List<RoomResponse>> response =
-            controller.listRoomsForProperty(propertyId, null, null, null, null, 0, null);
+            controller.listRoomsForProperty(propertyId, null, null, null, null, 0, null, false);
 
         assertEquals(2, response.getBody().size());
         assertNull(response.getHeaders().getFirst("X-Total-Count"));
@@ -63,7 +63,7 @@ class RoomApiControllerTest {
         when(roomUseCase.searchRooms(any())).thenReturn(new RoomPage(List.of(room("P104")), 7, 1, 1));
 
         ResponseEntity<List<RoomResponse>> response = controller.listRoomsForProperty(propertyId,
-            RoomStatus.AVAILABLE, new BigDecimal("1000"), new BigDecimal("5000000"), 1, 1, 1);
+            RoomStatus.AVAILABLE, new BigDecimal("1000"), new BigDecimal("5000000"), 1, 1, 1, false);
 
         ArgumentCaptor<RoomSearchCriteria> captor = ArgumentCaptor.forClass(RoomSearchCriteria.class);
         verify(roomUseCase).searchRooms(captor.capture());
@@ -86,9 +86,9 @@ class RoomApiControllerTest {
     @DisplayName("tham số sai bị chặn trước khi gọi use case")
     void invalidParamsRejectedBeforeUseCase() {
         assertThrows(IllegalArgumentException.class, () -> controller.listRoomsForProperty(propertyId, null,
-            new BigDecimal("9"), new BigDecimal("1"), null, 0, null));
+            new BigDecimal("9"), new BigDecimal("1"), null, 0, null, false));
         assertThrows(IllegalArgumentException.class, () -> controller.listRoomsForProperty(propertyId, null,
-            null, null, null, 2, null));
+            null, null, null, 2, null, false));
         verify(roomUseCase, never()).searchRooms(any());
         verify(roomUseCase, never()).listRoomsForProperty(any());
     }
@@ -99,6 +99,6 @@ class RoomApiControllerTest {
         when(roomUseCase.searchRooms(any())).thenThrow(new UnauthorizedPropertyAccessException("no"));
 
         assertThrows(UnauthorizedPropertyAccessException.class, () -> controller.listRoomsForProperty(propertyId,
-            RoomStatus.AVAILABLE, null, null, null, 0, null));
+            RoomStatus.AVAILABLE, null, null, null, 0, null, false));
     }
 }

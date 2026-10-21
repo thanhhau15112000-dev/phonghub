@@ -24,7 +24,7 @@
         <div class="flex-between" style="margin-bottom: 16px;">
             <div style="display: flex; align-items: center; gap: 12px;">
                 <h2 style="margin: 0;">Thông tin phòng</h2>
-                <button th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                <button th:if="${currentUser != null and !room.isArchived() and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                         type="button"
                         id="editRoomBtn"
                         class="btn btn-sm btn-secondary"
@@ -40,6 +40,7 @@
             <div style="display: flex; align-items: center; gap: 8px;">
                 <span style="color: var(--text-secondary); font-size: 13px;">Trạng thái:</span>
                 <span th:class="'badge badge-' + ${room.getStatus()}" style="font-size: 13px;" th:text="${uiText.roomStatus(room.getStatus())}">Trống</span>
+                <span th:if="${room.isArchived()}" class="badge badge-DRAFT" style="font-size: 13px;">Ngừng sử dụng</span>
             </div>
         </div>
 
@@ -63,7 +64,7 @@
         </div>
 
         <!-- Biểu mẫu đổi trạng thái (quản trị viên, nhân viên hoặc chủ trọ) -->
-        <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+        <div th:if="${currentUser != null and !room.isArchived() and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
             <h3 style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Thay đổi trạng thái phòng</h3>
             <form th:action="@{'/rooms/' + ${room.getId()} + '/status'}" method="post" style="display: flex; gap: 8px; align-items: center;">
                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -83,11 +84,24 @@
         </div>
     </div>
 
+    <!-- Phòng đã ngừng sử dụng (#89) -->
+    <div th:if="${room.isArchived()}" class="card" style="border: 1px dashed var(--border-color); padding: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <p style="margin: 0; font-size: 13px; color: var(--text-secondary);">
+            Phòng đã ngừng sử dụng từ <strong th:text="${#temporals.format(room.getArchivedAt(), 'dd/MM/yyyy HH:mm')}">01/01/2026</strong>:
+            không hiện trong danh sách phòng, không tạo được hợp đồng mới. Lịch sử hợp đồng và bảo trì vẫn xem được.
+        </p>
+        <form th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+              th:action="@{'/rooms/' + ${room.getId()} + '/restore'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button type="submit" class="btn btn-sm btn-primary">Dùng lại phòng</button>
+        </form>
+    </div>
+
     <!-- Hợp đồng đang hiệu lực -->
     <div class="card">
         <div class="flex-between" style="margin-bottom: 12px;">
             <h2>Hợp đồng thuê</h2>
-            <a th:if="${activeContract == null and (room.getStatus().name() == 'AVAILABLE' or room.getStatus().name() == 'RESERVED') and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            <a th:if="${activeContract == null and !room.isArchived() and (room.getStatus().name() == 'AVAILABLE' or room.getStatus().name() == 'RESERVED') and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                th:href="@{'/contracts/new?propertyId=' + ${property.id()} + '&roomId=' + ${room.getId()}}"
                class="btn btn-primary btn-sm">+ Tạo hợp đồng</a>
         </div>
@@ -353,6 +367,22 @@
                 </tr>
             </tbody>
         </table>
+    </div>
+
+    <!-- Ngừng sử dụng phòng (#89): chủ nhà trọ hoặc quản trị viên -->
+    <div th:if="${currentUser != null and !room.isArchived() and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+         class="card" style="border-color: #fecaca;">
+        <h2>Ngừng sử dụng phòng</h2>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+            Phòng ngừng sử dụng sẽ không hiện trong danh sách và không tạo được hợp đồng mới; lịch sử vẫn được giữ và có thể dùng
+            lại sau. Chỉ thực hiện được khi phòng đang trống hoặc bảo trì, không còn hợp đồng chưa kết thúc, hóa đơn chưa thu hay
+            phiếu bảo trì chưa xong.
+        </p>
+        <form th:action="@{'/rooms/' + ${room.getId()} + '/archive'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button type="submit" class="btn btn-sm btn-danger"
+                    onclick="return confirm('Ngừng sử dụng phòng này? Có thể dùng lại sau.');">Ngừng sử dụng phòng</button>
+        </form>
     </div>
 
     <!-- Dialog chỉnh sửa thông tin phòng (Chủ nhà hoặc Quản trị viên) -->

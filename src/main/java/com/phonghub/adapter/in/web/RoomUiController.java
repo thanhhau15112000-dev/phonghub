@@ -108,6 +108,30 @@ public class RoomUiController {
         return "redirect:/rooms/" + id;
     }
 
+    @PostMapping("/{id}/archive")
+    public String archiveRoom(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        try {
+            Room room = roomUseCase.archiveRoom(id);
+            redirectAttributes.addFlashAttribute("successMessage",
+                "Đã ngừng sử dụng phòng '" + room.getRoomNumber() + "'. Có thể dùng lại ở trang nhà trọ.");
+            return "redirect:/properties/" + room.getPropertyId();
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+            return "redirect:/rooms/" + id;
+        }
+    }
+
+    @PostMapping("/{id}/restore")
+    public String restoreRoom(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        try {
+            Room room = roomUseCase.restoreRoom(id);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã dùng lại phòng '" + room.getRoomNumber() + "'.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/rooms/" + id;
+    }
+
     @PostMapping("/{id}/edit")
     public String updateRoom(
         @PathVariable UUID id,

@@ -13,6 +13,13 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.phonghub.application.port.out.AuditPort;
+import com.phonghub.application.port.out.ContractRepositoryPort;
+import com.phonghub.application.port.out.InvoiceRepositoryPort;
+import com.phonghub.domain.exception.ConflictException;
+import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
+import com.phonghub.domain.model.Contract;
+import com.phonghub.domain.model.Invoice;
+import java.util.Comparator;
 import com.phonghub.domain.exception.InvalidPropertyStatusException;
 import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.UserRole;
@@ -24,6 +31,8 @@ public class PropertyService implements PropertyUseCase {
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
     private final AuditPort auditPort;
+    private final ContractRepositoryPort contractRepository;
+    private final InvoiceRepositoryPort invoiceRepository;
     private final RoomRepositoryPort roomRepository;
 
     public PropertyService(
@@ -40,7 +49,7 @@ public class PropertyService implements PropertyUseCase {
         AuthorizationService authorizationService,
         AuditPort auditPort
     ) {
-        this(propertyRepository, currentUserPort, authorizationService, auditPort, null);
+        this(propertyRepository, currentUserPort, authorizationService, auditPort, null, null, null);
     }
 
     public PropertyService(
@@ -48,12 +57,16 @@ public class PropertyService implements PropertyUseCase {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
         AuditPort auditPort,
+        ContractRepositoryPort contractRepository,
+        InvoiceRepositoryPort invoiceRepository,
         RoomRepositoryPort roomRepository
     ) {
         this.propertyRepository = propertyRepository;
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
         this.auditPort = auditPort != null ? auditPort : event -> {};
+        this.contractRepository = contractRepository;
+        this.invoiceRepository = invoiceRepository;
         this.roomRepository = roomRepository;
     }
 
@@ -90,6 +103,7 @@ public class PropertyService implements PropertyUseCase {
 
         Property property = propertyRepository.findById(command.propertyId())
             .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + command.propertyId()));
+        assertNotArchived(property, "sửa thông tin");
 
         int totalRooms = command.totalRooms() == null ? property.totalRooms() : command.totalRooms();
         // Tổng số phòng là con số khai báo; không cho thấp hơn số phòng đã tạo để danh sách và thông tin khớp nhau.
@@ -145,7 +159,80 @@ public class PropertyService implements PropertyUseCase {
     public List<Property> listAccessibleProperties() {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Set<UUID> accessibleIds = authorizationService.getAccessiblePropertyIds(currentUser);
-        return propertyRepository.findAllById(accessibleIds);
+        return propertyRepository.findAllById(accessibleIds).stream().filter(p -> !p.isArchived()).toList();
+    }
+
+    @Override
+    public List<Property> listArchivedProperties() {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        if (currentUser == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        List<Property> scope = switch (currentUser.role()) {
+            case ADMIN -> propertyRepository.findAll();
+            case OWNER -> propertyRepository.findByOwnerId(currentUser.id());
+            default -> List.of();
+        };
+        return scope.stream().filter(Property::isArchived)
+            .sorted(Comparator.comparing(Property::archivedAt).reversed()).toList();
+    }
+
+    @Override
+    public Property archiveProperty(UUID propertyId) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        authorizationService.assertOwnerOrAdmin(currentUser, propertyId);
+        if (contractRepository == null || invoiceRepository == null) {
+            throw new IllegalStateException("PropertyService chưa được cấu hình kho hợp đồng/hóa đơn để ẩn nhà trọ");
+        }
+        Property property = propertyRepository.findById(propertyId)
+            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + propertyId));
+        if (property.isArchived()) {
+            throw new ConflictException("Nhà trọ '" + property.name() + "' đã được ẩn trước đó.");
+        }
+
+        List<Contract> contracts = contractRepository.findByPropertyId(propertyId);
+        long openContracts = contracts.stream().filter(Contract::isOpen).count();
+        if (openContracts > 0) {
+            throw new ConflictException(String.format(
+                "Không thể ẩn nhà trọ '%s': còn %d hợp đồng chưa kết thúc (nháp, đang hiệu lực hoặc chưa trả phòng). "
+                    + "Hãy kết thúc hoặc hủy các hợp đồng này trước.", property.name(), openContracts));
+        }
+        long unpaidInvoices = contracts.stream()
+            .flatMap(c -> invoiceRepository.findByContractId(c.getId()).stream())
+            .filter(Invoice::isPayable)
+            .count();
+        if (unpaidInvoices > 0) {
+            throw new ConflictException(String.format(
+                "Không thể ẩn nhà trọ '%s': còn %d hóa đơn chưa thu xong. Hãy thu đủ hoặc hủy các hóa đơn này trước.",
+                property.name(), unpaidInvoices));
+        }
+
+        Property saved = propertyRepository.save(property.archive(Instant.now()));
+        auditPort.recordEvent(AuditPort.AuditEvent.of("PROPERTY_ARCHIVED", currentUser.id(), "PROPERTY",
+            saved.id().toString(), saved.id(), Map.of("propertyName", saved.name())));
+        return saved;
+    }
+
+    @Override
+    public Property restoreProperty(UUID propertyId) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        authorizationService.assertOwnerOrAdmin(currentUser, propertyId);
+        Property property = propertyRepository.findById(propertyId)
+            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + propertyId));
+        if (!property.isArchived()) {
+            throw new ConflictException("Nhà trọ '" + property.name() + "' đang hoạt động, không cần khôi phục.");
+        }
+        Property saved = propertyRepository.save(property.restore());
+        auditPort.recordEvent(AuditPort.AuditEvent.of("PROPERTY_RESTORED", currentUser.id(), "PROPERTY",
+            saved.id().toString(), saved.id(), Map.of("propertyName", saved.name())));
+        return saved;
+    }
+
+    private static void assertNotArchived(Property property, String action) {
+        if (property.isArchived()) {
+            throw new ConflictException(String.format(
+                "Nhà trọ '%s' đã bị ẩn, không thể %s. Hãy khôi phục nhà trọ trước.", property.name(), action));
+        }
     }
 
     @Override
@@ -164,6 +251,7 @@ public class PropertyService implements PropertyUseCase {
 
         Property property = propertyRepository.findById(propertyId)
             .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + propertyId));
+        assertNotArchived(property, "duyệt");
 
         if (property.approvalStatus() != PropertyApprovalStatus.PENDING) {
             throw new InvalidPropertyStatusException(String.format(
@@ -212,6 +300,7 @@ public class PropertyService implements PropertyUseCase {
 
         Property property = propertyRepository.findById(propertyId)
             .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + propertyId));
+        assertNotArchived(property, "từ chối");
 
         if (property.approvalStatus() != PropertyApprovalStatus.PENDING) {
             throw new InvalidPropertyStatusException(String.format(

@@ -2,6 +2,7 @@ package com.phonghub.migration;
 
 import com.phonghub.adapter.out.audit.PostgresAuditAdapter;
 import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
+import com.phonghub.adapter.out.security.PersonalDataFields;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.AuditQueryPort;
 import com.phonghub.application.port.out.TenantDataProtectionPort;
@@ -24,6 +25,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** #78: ghi nhật ký có làm sạch + suy ra nhà trọ từ đối tượng, truy vấn có lọc theo phạm vi nhà trọ. */
@@ -66,13 +68,22 @@ class AuditLogPostgresTest {
 
         TenantDataProtectionPort protector = new AesGcmTenantDataProtector("test-v1",
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
-        PostgresAuditAdapter audit = new PostgresAuditAdapter(new NamedParameterJdbcTemplate(ds), new ObjectMapper(), protector);
+        NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
+        PostgresAuditAdapter audit = new PostgresAuditAdapter(jdbc, new ObjectMapper(), protector);
+        // users.full_name lưu dạng mã hóa (V17): trang Nhật ký phải hiện tên đã giải mã, không phải chuỗi enc1.
+        UUID unreadableActor = UUID.fromString(jdbc.getJdbcTemplate().queryForObject(
+            "SELECT id::text FROM users WHERE id <> ? LIMIT 1", String.class, actor));
+        jdbc.update("UPDATE users SET full_name = :name WHERE id = :id", Map.of(
+            "name", protector.encryptField(PersonalDataFields.USERS_FULL_NAME, "Chủ trọ Kiểm Thử"), "id", actor));
+        jdbc.update("UPDATE users SET full_name = 'enc1.hong.khong.doc.duoc' WHERE id = :id", Map.of("id", unreadableActor));
 
         audit.recordEvent(AuditPort.AuditEvent.of("ROOM_UPDATED", actor, "ROOM", roomId.toString(),
             Map.of("note", "đổi giá", "password", "hunter2", "identityCardNumber", "079201004321")));
         audit.recordEvent(AuditPort.AuditEvent.of("PROPERTY_UPDATED", actor, "PROPERTY", otherProperty.toString(),
             Map.of("note", "nhà khác")));
         audit.recordEvent(AuditPort.AuditEvent.of("LOGIN_FAILED", null, "USER", null, Map.of("reason", "INVALID_CREDENTIALS")));
+        audit.recordEvent(AuditPort.AuditEvent.of("LOGIN_SUCCEEDED", unreadableActor, "USER",
+            unreadableActor.toString(), Map.of()));
 
         try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
             assertEquals(roomProperty.toString(),
@@ -88,13 +99,18 @@ class AuditLogPostgresTest {
         assertEquals(1, mine.size());
         AuditQueryPort.Entry entry = mine.getFirst();
         assertEquals("ROOM_UPDATED", entry.action());
+        assertEquals(actor, entry.actorId());
+        assertEquals("Chủ trọ Kiểm Thử", entry.actorName());
         assertTrue(entry.details().contains("đổi giá"));
         assertFalse(entry.details().contains("hunter2"), "mật khẩu không được lưu");
         assertFalse(entry.details().contains("079201004321"), "số CCCD đầy đủ không được lưu");
         assertTrue(entry.details().contains("********4321"));
 
-        assertEquals(3, audit.search(new AuditQueryPort.Filter(null, null, null, null, null, null, 50, 0)).size(),
+        assertEquals(4, audit.search(new AuditQueryPort.Filter(null, null, null, null, null, null, 50, 0)).size(),
             "admin (không giới hạn nhà trọ) thấy cả sự kiện không gắn nhà trọ");
+        AuditQueryPort.Entry unreadable = audit.search(new AuditQueryPort.Filter(
+            null, unreadableActor, null, "LOGIN_SUCCEEDED", null, null, 50, 0)).getFirst();
+        assertNull(unreadable.actorName(), "tên không giải mã được thì để trống, không lộ chuỗi mã hóa");
         assertTrue(audit.search(new AuditQueryPort.Filter(List.of(), null, null, null, null, null, 50, 0)).isEmpty());
         assertEquals(1, audit.search(new AuditQueryPort.Filter(
             null, null, "USER", "LOGIN_FAILED", null, null, 50, 0)).size());

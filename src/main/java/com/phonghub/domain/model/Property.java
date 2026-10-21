@@ -12,8 +12,24 @@ public record Property(
     UUID ownerId,
     PropertyApprovalStatus approvalStatus,
     String rejectionReason,
-    Instant createdAt
+    Instant createdAt,
+    /** Thời điểm nhà trọ bị ẩn (#89); null là đang hoạt động. Hợp đồng, hóa đơn cũ vẫn giữ nguyên để tra cứu. */
+    Instant archivedAt
 ) {
+    public Property(
+        UUID id,
+        String name,
+        String address,
+        String description,
+        int totalRooms,
+        UUID ownerId,
+        PropertyApprovalStatus approvalStatus,
+        String rejectionReason,
+        Instant createdAt
+    ) {
+        this(id, name, address, description, totalRooms, ownerId, approvalStatus, rejectionReason, createdAt, null);
+    }
+
     public Property {
         if (id == null) {
             throw new IllegalArgumentException("Property id cannot be null");
@@ -42,7 +58,21 @@ public record Property(
     ) {
         return new Property(id, newName.trim(), newAddress.trim(),
             newDescription == null || newDescription.isBlank() ? null : newDescription.trim(),
-            newTotalRooms, ownerId, newStatus, newRejectionReason, createdAt);
+            newTotalRooms, ownerId, newStatus, newRejectionReason, createdAt, archivedAt);
+    }
+
+    public boolean isArchived() {
+        return archivedAt != null;
+    }
+
+    public Property archive(Instant at) {
+        return new Property(id, name, address, description, totalRooms, ownerId, approvalStatus, rejectionReason,
+            createdAt, at);
+    }
+
+    public Property restore() {
+        return new Property(id, name, address, description, totalRooms, ownerId, approvalStatus, rejectionReason,
+            createdAt, null);
     }
 
     public Property(

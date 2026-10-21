@@ -14,6 +14,30 @@ public interface UserUseCase {
     Set<UUID> getAssignedPropertyIds(UUID userId);
     User updateProfile(UpdateProfileCommand command);
 
+    /**
+     * Admin sửa thông tin, vai trò, trạng thái tài khoản khác (#89). Email gắn với tài khoản đăng nhập (Supabase) nên
+     * không sửa ở đây. Không áp dụng cho tài khoản quản trị viên và không đổi sang vai trò quản trị viên (409). Đổi vai
+     * trò khi còn dữ liệu gắn với vai trò cũ (nhà trọ đang sở hữu, phân công nhà trọ, hồ sơ người thuê) thì 409.
+     */
+    User adminUpdateUser(AdminUpdateUserCommand command);
+
+    record AdminUpdateUserCommand(
+        UUID userId,
+        String fullName,
+        String phone,
+        com.phonghub.domain.model.UserRole role,
+        User.UserStatus status
+    ) {
+        public AdminUpdateUserCommand {
+            if (userId == null) {
+                throw new IllegalArgumentException("User id cannot be null");
+            }
+            if (role == null || status == null) {
+                throw new IllegalArgumentException("Vai trò và trạng thái không được để trống");
+            }
+        }
+    }
+
     record UpdateProfileCommand(
         UUID userId,
         String fullName,

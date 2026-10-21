@@ -16,8 +16,8 @@ public class MaintenanceTicket {
     private final UUID propertyId;
     private final UUID requestedByTenantId;
     private UUID assignedTechnicianId;
-    private final String title;
-    private final String description;
+    private String title;
+    private String description;
     private MaintenancePriority priority;
     private MaintenanceStatus status;
     private BigDecimal repairCost;
@@ -447,7 +447,51 @@ public class MaintenanceTicket {
     public boolean isWorkFinished() {
         return isResolved()
             || this.status == MaintenanceStatus.AWAITING_PAYMENT
-            || this.status == MaintenanceStatus.REJECTED;
+            || this.status == MaintenanceStatus.REJECTED
+            || this.status == MaintenanceStatus.CANCELLED;
+    }
+
+    /** Phiếu chưa bắt đầu xử lý (vừa báo hoặc mới giao, kỹ thuật viên chưa nhận làm) thì còn sửa/hủy được (#89). */
+    public boolean isEditable() {
+        return this.status == MaintenanceStatus.REPORTED || this.status == MaintenanceStatus.ASSIGNED;
+    }
+
+    /**
+     * Sửa nội dung phiếu chưa xử lý (#89). Đổi mức ưu tiên thì tính lại hạn xử lý từ lúc tạo phiếu theo SLA mới
+     * ({@code sla} null là không đặt hạn) và cho phép cảnh báo quá hạn lại.
+     */
+    public void updateRequest(String newTitle, String newDescription, MaintenancePriority newPriority, Duration sla) {
+        if (!isEditable()) {
+            throw new InvalidMaintenanceStateException(
+                "Chỉ sửa được phiếu chưa xử lý (vừa báo hoặc mới giao), phiếu hiện ở trạng thái " + status);
+        }
+        if (newTitle == null || newTitle.isBlank()) {
+            throw new IllegalArgumentException("Tiêu đề không được để trống");
+        }
+        if (newDescription == null || newDescription.isBlank()) {
+            throw new IllegalArgumentException("Mô tả không được để trống");
+        }
+        MaintenancePriority priorityAfter = newPriority != null ? newPriority : this.priority;
+        if (priorityAfter != this.priority) {
+            this.dueAt = sla == null ? null : createdAt.plus(sla);
+            this.slaNotifiedAt = null;
+        }
+        this.title = newTitle.trim();
+        this.description = newDescription.trim();
+        this.priority = priorityAfter;
+        this.updatedAt = Instant.now();
+    }
+
+    /** Hủy phiếu chưa xử lý (#89): chuyển CANCELLED, ghi mốc vào dòng thời gian, không xóa phiếu. */
+    public void cancel(String reason) {
+        if (!isEditable()) {
+            throw new InvalidMaintenanceStateException(
+                "Chỉ hủy được phiếu chưa xử lý (vừa báo hoặc mới giao), phiếu hiện ở trạng thái " + status);
+        }
+        MaintenanceStatus before = this.status;
+        this.status = MaintenanceStatus.CANCELLED;
+        this.updatedAt = Instant.now();
+        recordEvent(before, reason == null || reason.isBlank() ? "Hủy phiếu" : "Hủy phiếu: " + reason.trim());
     }
 
     public UUID getId() {

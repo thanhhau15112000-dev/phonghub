@@ -4,5 +4,7 @@ public enum ContractStatus {
     DRAFT,
     ACTIVE,
     EXPIRED,
-    TERMINATED
+    TERMINATED,
+    /** Hợp đồng nháp bị hủy trước khi kích hoạt (#89); giữ lại bản ghi thay vì xóa cứng. */
+    CANCELLED
 }

@@ -119,10 +119,12 @@ public class PhongHubConfiguration {
         AuthorizationService authorizationService,
         AuditPort auditPort,
         PhongHubCaches caches,
+        ContractRepositoryPort contractRepo,
+        InvoiceRepositoryPort invoiceRepo,
         RoomRepositoryPort roomRepo
     ) {
         return new CachingPropertyUseCase(
-            new PropertyService(propertyRepo, currentUserPort, authorizationService, auditPort, roomRepo),
+            new PropertyService(propertyRepo, currentUserPort, authorizationService, auditPort, contractRepo, invoiceRepo, roomRepo),
             caches, currentUserPort);
     }
 
@@ -136,11 +138,12 @@ public class PhongHubConfiguration {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
         AuditPort auditPort,
-        PhongHubCaches caches
+        PhongHubCaches caches,
+        InvoiceRepositoryPort invoiceRepo
     ) {
         return new CachingRoomUseCase(new RoomService(
             roomRepo, propertyRepo, ticketRepo, contractRepo, tenantRepo, currentUserPort, authorizationService,
-            auditPort
+            auditPort, invoiceRepo
         ), caches, currentUserPort);
     }
 
@@ -429,10 +432,13 @@ public class PhongHubConfiguration {
         UserRepositoryPort userRepo,
         StaffPropertyAssignmentPort assignmentRepo,
         CurrentUserPort currentUserPort,
-        AuthorizationService authorizationService
+        AuthorizationService authorizationService,
+        PropertyRepositoryPort propertyRepo,
+        TenantRepositoryPort tenantRepo,
+        AuditPort auditPort
     ) {
         return new UserService(
-            userRepo, assignmentRepo, currentUserPort, authorizationService
+            userRepo, assignmentRepo, currentUserPort, authorizationService, propertyRepo, tenantRepo, auditPort
         );
     }
 
@@ -642,11 +648,12 @@ public class PhongHubConfiguration {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
         MeterReadingRepositoryPort meterReadingRepository,
-        ServiceRateRepositoryPort serviceRateRepository
+        ServiceRateRepositoryPort serviceRateRepository,
+        AuditPort auditPort
     ) {
         InvoiceService service = new InvoiceService(
             invoiceRepository, ticketRepository, contractUseCase, currentUserPort, authorizationService,
-            meterReadingRepository, serviceRateRepository
+            meterReadingRepository, serviceRateRepository, auditPort
         );
         return new TransactionalInvoiceUseCase(service);
     }
@@ -692,7 +699,8 @@ public class PhongHubConfiguration {
         com.phonghub.application.port.out.MediaStoragePort mediaStoragePort
     ) {
         return new com.phonghub.application.service.ChatService(
-            chatRoomRepository, chatMessageRepository, userRepository, sseChatEventPublisher, mediaStoragePort
+            chatRoomRepository, chatMessageRepository, userRepository, sseChatEventPublisher, mediaStoragePort,
+            java.time.Clock.systemUTC()
         );
     }
 

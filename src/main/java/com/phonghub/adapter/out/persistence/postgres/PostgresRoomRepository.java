@@ -28,7 +28,7 @@ public class PostgresRoomRepository implements RoomRepositoryPort {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    private static final RowMapper<Room> ROW_MAPPER = (rs, rowNum) -> withVersion(new Room(
+    private static final RowMapper<Room> ROW_MAPPER = (rs, rowNum) -> withState(new Room(
         UUID.fromString(rs.getString("id")),
         UUID.fromString(rs.getString("property_id")),
         rs.getString("room_number"),
@@ -39,10 +39,11 @@ public class PostgresRoomRepository implements RoomRepositoryPort {
         RoomStatus.valueOf(rs.getString("status")),
         toInstant(rs.getTimestamp("created_at")),
         toInstant(rs.getTimestamp("updated_at"))
-    ), rs.getLong("version"));
+    ), rs.getLong("version"), rs.getTimestamp("archived_at"));
 
-    private static Room withVersion(Room room, long version) {
+    private static Room withState(Room room, long version, Timestamp archivedAt) {
         room.restoreVersion(version);
+        room.restoreArchivedAt(archivedAt == null ? null : archivedAt.toInstant());
         return room;
     }
 
@@ -53,8 +54,8 @@ public class PostgresRoomRepository implements RoomRepositoryPort {
     @Override
     public Room save(Room room) {
         String sql = """
-            INSERT INTO rooms (id, property_id, room_number, floor, area_sqm, base_price, max_occupants, status, created_at, updated_at, version)
-            VALUES (:id, :propertyId, :roomNumber, :floor, :areaSqm, :basePrice, :maxOccupants, :status, :createdAt, :updatedAt, :version)
+            INSERT INTO rooms (id, property_id, room_number, floor, area_sqm, base_price, max_occupants, status, created_at, updated_at, version, archived_at)
+            VALUES (:id, :propertyId, :roomNumber, :floor, :areaSqm, :basePrice, :maxOccupants, :status, :createdAt, :updatedAt, :version, :archivedAt)
             ON CONFLICT (id) DO UPDATE SET
                 room_number = EXCLUDED.room_number,
                 floor = EXCLUDED.floor,
@@ -63,6 +64,7 @@ public class PostgresRoomRepository implements RoomRepositoryPort {
                 max_occupants = EXCLUDED.max_occupants,
                 status = EXCLUDED.status,
                 updated_at = EXCLUDED.updated_at,
+                archived_at = EXCLUDED.archived_at,
                 version = rooms.version + 1
             WHERE rooms.version = :version
             RETURNING version
@@ -79,7 +81,8 @@ public class PostgresRoomRepository implements RoomRepositoryPort {
             .addValue("maxOccupants", room.getMaxOccupants())
             .addValue("status", room.getStatus().name())
             .addValue("createdAt", Timestamp.from(room.getCreatedAt()))
-            .addValue("updatedAt", Timestamp.from(room.getUpdatedAt()));
+            .addValue("updatedAt", Timestamp.from(room.getUpdatedAt()))
+            .addValue("archivedAt", room.getArchivedAt() == null ? null : Timestamp.from(room.getArchivedAt()));
 
         List<Long> versions = jdbcTemplate.queryForList(sql, params, Long.class);
         if (versions.isEmpty()) {
@@ -94,7 +97,8 @@ public class PostgresRoomRepository implements RoomRepositoryPort {
         if (c.restrictToRoomIds() != null && c.restrictToRoomIds().isEmpty()) {
             return new RoomPage(List.of(), 0, c.page(), c.size());
         }
-        StringBuilder where = new StringBuilder(" WHERE property_id = :propertyId");
+        StringBuilder where = new StringBuilder(" WHERE property_id = :propertyId")
+            .append(c.archived() ? " AND archived_at IS NOT NULL" : " AND archived_at IS NULL");
         MapSqlParameterSource params = new MapSqlParameterSource("propertyId", c.propertyId());
         if (c.status() != null) {
             where.append(" AND status = :status");
@@ -135,13 +139,13 @@ public class PostgresRoomRepository implements RoomRepositoryPort {
 
     @Override
     public List<Room> findByPropertyId(UUID propertyId) {
-        String sql = "SELECT * FROM rooms WHERE property_id = :propertyId ORDER BY room_number ASC";
+        String sql = "SELECT * FROM rooms WHERE property_id = :propertyId AND archived_at IS NULL ORDER BY room_number ASC";
         return jdbcTemplate.query(sql, Map.of("propertyId", propertyId), ROW_MAPPER);
     }
 
     @Override
     public List<Room> findByPropertyIdAndStatus(UUID propertyId, RoomStatus status) {
-        String sql = "SELECT * FROM rooms WHERE property_id = :propertyId AND status = :status ORDER BY room_number ASC";
+        String sql = "SELECT * FROM rooms WHERE property_id = :propertyId AND status = :status AND archived_at IS NULL ORDER BY room_number ASC";
         return jdbcTemplate.query(sql, Map.of("propertyId", propertyId, "status", status.name()), ROW_MAPPER);
     }
 

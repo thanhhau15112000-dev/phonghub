@@ -14,7 +14,8 @@ public record PropertyResponse(
     UUID ownerId,
     PropertyApprovalStatus approvalStatus,
     String rejectionReason,
-    Instant createdAt
+    Instant createdAt,
+    Instant archivedAt
 ) {
     public static PropertyResponse from(Property property) {
         return new PropertyResponse(
@@ -26,7 +27,8 @@ public record PropertyResponse(
             property.ownerId(),
             property.approvalStatus(),
             property.rejectionReason(),
-            property.createdAt()
+            property.createdAt(),
+            property.archivedAt()
         );
     }
 }

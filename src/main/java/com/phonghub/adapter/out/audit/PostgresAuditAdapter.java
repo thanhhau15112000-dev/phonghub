@@ -156,7 +156,7 @@ public class PostgresAuditAdapter implements AuditPort, AuditQueryPort {
                 UUID.fromString(rs.getString("id")),
                 rs.getString("action"),
                 actorId != null ? UUID.fromString(actorId) : null,
-                rs.getString("actor_name"),
+                readActorName(rs.getString("actor_name")),
                 rs.getString("target_type"),
                 rs.getString("target_id"),
                 propertyId != null ? UUID.fromString(propertyId) : null,
@@ -165,6 +165,18 @@ public class PostgresAuditAdapter implements AuditPort, AuditQueryPort {
             ));
         });
         return entries;
+    }
+
+    /** {@code users.full_name} được mã hóa (V17); đọc không được thì để null, trang hiện mã người dùng thay tên. */
+    private String readActorName(String stored) {
+        if (stored == null) {
+            return null;
+        }
+        try {
+            return protector.decryptField(PersonalDataFields.USERS_FULL_NAME, stored);
+        } catch (RuntimeException ex) {
+            return null;
+        }
     }
 
     private String readDetails(String stored) {
