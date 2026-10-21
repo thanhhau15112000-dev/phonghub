@@ -21,6 +21,20 @@ import java.util.stream.Collectors;
 
 public class AuthorizationService {
 
+    // Câu báo lỗi hiển thị cho người dùng (giao diện và API): tiếng Việt, không kèm tên hay mã nội bộ.
+    public static final String MSG_LOGIN_REQUIRED = "Vui lòng đăng nhập để tiếp tục.";
+    public static final String MSG_ADMIN_ONLY = "Chỉ quản trị viên mới được thực hiện thao tác này.";
+    public static final String MSG_CREATE_PROPERTY = "Chỉ chủ trọ hoặc quản trị viên mới được tạo nhà trọ.";
+    public static final String MSG_PROPERTY_UNAVAILABLE =
+        "Không tìm thấy nhà trọ hoặc bạn không có quyền truy cập nhà trọ này.";
+    public static final String MSG_NOT_OWNER = "Bạn không phải chủ của nhà trọ này nên không thể thực hiện thao tác.";
+    public static final String MSG_NOT_ASSIGNED = "Bạn chưa được phân công làm việc tại nhà trọ này.";
+    public static final String MSG_NOT_RESIDENT = "Bạn không có hợp đồng thuê tại nhà trọ này.";
+    public static final String MSG_ROLE_DENIED = "Vai trò của bạn không được thực hiện thao tác này.";
+    public static final String MSG_OWNER_OR_ADMIN = "Chỉ chủ nhà trọ hoặc quản trị viên mới được thực hiện thao tác này.";
+    public static final String MSG_TENANT_NOT_MANAGED =
+        "Bạn không quản lý nhà trọ nào mà người thuê này đang hoặc đã từng cư trú.";
+
     private final StaffPropertyAssignmentPort assignmentPort;
     private final PropertyRepositoryPort propertyRepositoryPort;
     private final TenantRepositoryPort tenantRepositoryPort;
@@ -40,47 +54,38 @@ public class AuthorizationService {
 
     public void assertAdmin(CurrentUser user) {
         if (user == null || user.role() != UserRole.ADMIN) {
-            throw new UnauthorizedPropertyAccessException("Action requires ADMIN role");
+            throw new UnauthorizedPropertyAccessException(MSG_ADMIN_ONLY);
         }
     }
 
     public void assertCanCreateProperty(CurrentUser user) {
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(MSG_LOGIN_REQUIRED);
         }
         if (user.role() == UserRole.ADMIN || user.role() == UserRole.OWNER) {
             return;
         }
-        throw new UnauthorizedPropertyAccessException(String.format(
-            "User %s with role %s cannot create property. Only Admin or Owner allowed.",
-            user.fullName(), user.role()
-        ));
+        throw new UnauthorizedPropertyAccessException(MSG_CREATE_PROPERTY);
     }
 
     public void assertCanAccessProperty(CurrentUser user, UUID propertyId) {
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(MSG_LOGIN_REQUIRED);
         }
         if (user.role() == UserRole.ADMIN) {
             return;
         }
         if (user.role() == UserRole.OWNER) {
             Property prop = propertyRepositoryPort.findById(propertyId)
-                .orElseThrow(() -> new UnauthorizedPropertyAccessException("Property not found: " + propertyId));
+                .orElseThrow(() -> new UnauthorizedPropertyAccessException(MSG_PROPERTY_UNAVAILABLE));
             if (prop.ownerId() == null || !user.id().equals(prop.ownerId())) {
-                throw new UnauthorizedPropertyAccessException(String.format(
-                    "Owner %s does not own property %s",
-                    user.fullName(), propertyId
-                ));
+                throw new UnauthorizedPropertyAccessException(MSG_NOT_OWNER);
             }
             return;
         }
         if (user.role() == UserRole.STAFF || user.role() == UserRole.TECHNICIAN) {
             if (!assignmentPort.isUserAssignedToProperty(user.id(), propertyId)) {
-                throw new UnauthorizedPropertyAccessException(String.format(
-                    "User %s (%s) is not assigned to property %s",
-                    user.fullName(), user.role(), propertyId
-                ));
+                throw new UnauthorizedPropertyAccessException(MSG_NOT_ASSIGNED);
             }
             return;
         }
@@ -88,76 +93,58 @@ public class AuthorizationService {
             // Tenant can only access the property of their contract
             Set<UUID> tenantPropertyIds = getTenantPropertyIds(user.id());
             if (!tenantPropertyIds.contains(propertyId)) {
-                throw new UnauthorizedPropertyAccessException(String.format(
-                    "Tenant %s does not have an active occupancy in property %s",
-                    user.fullName(), propertyId
-                ));
+                throw new UnauthorizedPropertyAccessException(MSG_NOT_RESIDENT);
             }
             return;
         }
-        throw new UnauthorizedPropertyAccessException("Access denied for role " + user.role());
+        throw new UnauthorizedPropertyAccessException(MSG_ROLE_DENIED);
     }
 
     public void assertCanManageProperty(CurrentUser user, UUID propertyId) {
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(MSG_LOGIN_REQUIRED);
         }
         if (user.role() == UserRole.ADMIN) {
             return;
         }
         if (user.role() == UserRole.OWNER) {
             Property prop = propertyRepositoryPort.findById(propertyId)
-                .orElseThrow(() -> new UnauthorizedPropertyAccessException("Property not found: " + propertyId));
+                .orElseThrow(() -> new UnauthorizedPropertyAccessException(MSG_PROPERTY_UNAVAILABLE));
             if (prop.ownerId() == null || !user.id().equals(prop.ownerId())) {
-                throw new UnauthorizedPropertyAccessException(String.format(
-                    "Owner %s does not own property %s",
-                    user.fullName(), propertyId
-                ));
+                throw new UnauthorizedPropertyAccessException(MSG_NOT_OWNER);
             }
             return;
         }
         if (user.role() == UserRole.STAFF) {
             if (!assignmentPort.isUserAssignedToProperty(user.id(), propertyId)) {
-                throw new UnauthorizedPropertyAccessException(String.format(
-                    "Staff %s is not assigned to manage property %s",
-                    user.fullName(), propertyId
-                ));
+                throw new UnauthorizedPropertyAccessException(MSG_NOT_ASSIGNED);
             }
             return;
         }
-        throw new UnauthorizedPropertyAccessException(String.format(
-            "User %s with role %s cannot manage property %s",
-            user.fullName(), user.role(), propertyId
-        ));
+        throw new UnauthorizedPropertyAccessException(MSG_ROLE_DENIED);
     }
 
     public void assertOwnerOrAdmin(CurrentUser user, UUID propertyId) {
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(MSG_LOGIN_REQUIRED);
         }
         if (user.role() == UserRole.ADMIN) {
             return;
         }
         if (user.role() == UserRole.OWNER) {
             Property prop = propertyRepositoryPort.findById(propertyId)
-                .orElseThrow(() -> new UnauthorizedPropertyAccessException("Property not found: " + propertyId));
+                .orElseThrow(() -> new UnauthorizedPropertyAccessException(MSG_PROPERTY_UNAVAILABLE));
             if (prop.ownerId() == null || !user.id().equals(prop.ownerId())) {
-                throw new UnauthorizedPropertyAccessException(String.format(
-                    "Owner %s does not own property %s",
-                    user.fullName(), propertyId
-                ));
+                throw new UnauthorizedPropertyAccessException(MSG_NOT_OWNER);
             }
             return;
         }
-        throw new UnauthorizedPropertyAccessException(String.format(
-            "User %s with role %s is not permitted to perform this action. Only Owner or Admin allowed.",
-            user.fullName(), user.role()
-        ));
+        throw new UnauthorizedPropertyAccessException(MSG_OWNER_OR_ADMIN);
     }
 
     public void assertCanUpdateTenant(CurrentUser user, UUID tenantId) {
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(MSG_LOGIN_REQUIRED);
         }
         if (user.role() == UserRole.ADMIN) {
             return;
@@ -167,10 +154,7 @@ public class AuthorizationService {
                 .anyMatch(pId -> assignmentPort.isUserAssignedToProperty(user.id(), pId))) {
                 return;
             }
-            throw new UnauthorizedPropertyAccessException(String.format(
-                "Nhân viên '%s' không phụ trách nhà trọ nào mà người thuê '%s' đang hoặc đã từng cư trú.",
-                user.fullName(), tenantId
-            ));
+            throw new UnauthorizedPropertyAccessException(MSG_TENANT_NOT_MANAGED);
         }
         if (user.role() == UserRole.OWNER) {
             Set<UUID> propertyIds = tenantPropertyIds(tenantId);
@@ -185,34 +169,29 @@ public class AuthorizationService {
                 return;
             }
 
-            throw new UnauthorizedPropertyAccessException(String.format(
-                "Chủ nhà trọ '%s' không quản lý nhà trọ nào mà người thuê '%s' đang hoặc đã từng cư trú.",
-                user.fullName(), tenantId
-            ));
+            throw new UnauthorizedPropertyAccessException(MSG_TENANT_NOT_MANAGED);
         }
 
-        throw new UnauthorizedPropertyAccessException(String.format(
-            "Người dùng '%s' với vai trò '%s' không có quyền cập nhật thông tin người thuê. Chỉ Chủ nhà trọ, Nhân viên phụ trách hoặc Quản trị viên mới được phép.",
-            user.fullName(), user.role()
-        ));
+        throw new UnauthorizedPropertyAccessException(
+            "Chỉ chủ nhà trọ, nhân viên phụ trách hoặc quản trị viên mới được cập nhật thông tin người thuê.");
     }
 
     public void assertCanAccessTenant(CurrentUser user, UUID tenantId) {
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(MSG_LOGIN_REQUIRED);
         }
         if (user.role() == UserRole.ADMIN) {
             return;
         }
 
         Tenant tenant = tenantRepositoryPort.findById(tenantId)
-            .orElseThrow(() -> new TenantNotFoundException("Tenant not found with ID: " + tenantId));
+            .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy người thuê."));
 
         if (user.role() == UserRole.TENANT) {
             if (tenant.userId() != null && tenant.userId().equals(user.id())) {
                 return;
             }
-            throw new UnauthorizedPropertyAccessException("Tenant can only view their own tenant profile");
+            throw new UnauthorizedPropertyAccessException("Người thuê chỉ xem được hồ sơ của chính mình.");
         }
 
         Set<UUID> propertyIds = tenantPropertyIds(tenantId);
@@ -226,10 +205,7 @@ public class AuthorizationService {
             if (ownsProperty) {
                 return;
             }
-            throw new UnauthorizedPropertyAccessException(String.format(
-                "Chủ nhà trọ '%s' không quản lý nhà trọ nào mà người thuê '%s' đang hoặc đã từng cư trú.",
-                user.fullName(), tenantId
-            ));
+            throw new UnauthorizedPropertyAccessException(MSG_TENANT_NOT_MANAGED);
         }
 
         if (user.role() == UserRole.STAFF) {
@@ -238,16 +214,10 @@ public class AuthorizationService {
             if (isAssigned) {
                 return;
             }
-            throw new UnauthorizedPropertyAccessException(String.format(
-                "Nhân viên '%s' không phụ trách nhà trọ nào mà người thuê '%s' đang hoặc đã từng cư trú.",
-                user.fullName(), tenantId
-            ));
+            throw new UnauthorizedPropertyAccessException(MSG_TENANT_NOT_MANAGED);
         }
 
-        throw new UnauthorizedPropertyAccessException(String.format(
-            "Người dùng '%s' với vai trò '%s' không có quyền xem thông tin người thuê.",
-            user.fullName(), user.role()
-        ));
+        throw new UnauthorizedPropertyAccessException(MSG_ROLE_DENIED);
     }
 
     /**
@@ -276,7 +246,7 @@ public class AuthorizationService {
      */
     public void assertCanAccessTenantDocuments(CurrentUser user, UUID propertyId, UUID tenantId) {
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(MSG_LOGIN_REQUIRED);
         }
         if (propertyId == null || tenantId == null) {
             throw new IllegalArgumentException("Property and tenant are required");
@@ -287,28 +257,27 @@ public class AuthorizationService {
             case STAFF -> {
                 assertCanManageProperty(user, propertyId);
                 if (!assignmentPort.find(user.id(), propertyId).map(a -> a.canViewDocuments()).orElse(false)) {
-                    throw new UnauthorizedPropertyAccessException(String.format(
-                        "Staff %s chưa được cấp quyền xem giấy tờ người thuê tại nhà trọ %s", user.fullName(), propertyId));
+                    throw new UnauthorizedPropertyAccessException(
+                        "Bạn chưa được cấp quyền xem giấy tờ người thuê tại nhà trọ này.");
                 }
             }
             case TENANT -> {
                 Tenant self = tenantRepositoryPort.findByUserId(user.id()).orElse(null);
                 if (self == null || !self.id().equals(tenantId)) {
-                    throw new UnauthorizedPropertyAccessException("Tenant can only access their own documents");
+                    throw new UnauthorizedPropertyAccessException("Người thuê chỉ xem được giấy tờ của chính mình.");
                 }
             }
-            default -> throw new UnauthorizedPropertyAccessException(
-                "Role " + user.role() + " cannot access tenant documents");
+            default -> throw new UnauthorizedPropertyAccessException(MSG_ROLE_DENIED);
         }
         if (!isTenantLinkedToProperty(tenantId, propertyId)) {
-            throw new UnauthorizedPropertyAccessException("Tenant has no contract at property " + propertyId);
+            throw new UnauthorizedPropertyAccessException(MSG_NOT_RESIDENT);
         }
     }
 
     /** Xóa hồ sơ giấy tờ chỉ dành cho người quản lý nhà trọ; người thuê không tự xóa. */
     public void assertCanDeleteTenantDocuments(CurrentUser user, UUID propertyId, UUID tenantId) {
         if (user != null && user.role() == UserRole.TENANT) {
-            throw new UnauthorizedPropertyAccessException("Tenant cannot delete documents");
+            throw new UnauthorizedPropertyAccessException("Người thuê không được xóa giấy tờ.");
         }
         assertCanAccessTenantDocuments(user, propertyId, tenantId);
     }
@@ -338,14 +307,15 @@ public class AuthorizationService {
     /** Xem hóa đơn: người thuê của hợp đồng (chính hoặc ở cùng), hoặc người có quyền với nhà trọ. */
     public void assertCanViewInvoice(CurrentUser user, com.phonghub.domain.model.Invoice invoice) {
         Contract contract = contractRepositoryPort.findById(invoice.getContractId())
-            .orElseThrow(() -> new UnauthorizedPropertyAccessException("Contract not found: " + invoice.getContractId()));
+            .orElseThrow(() -> new UnauthorizedPropertyAccessException(
+                "Không tìm thấy hợp đồng hoặc bạn không có quyền truy cập."));
         if (user.role() == UserRole.TENANT) {
             Optional<Tenant> tenantOpt = tenantRepositoryPort.findByUserId(user.id());
             boolean allowed = tenantOpt.isPresent() && (
                 contract.getPrimaryTenantId().equals(tenantOpt.get().id())
                     || contract.getOccupants().stream().anyMatch(o -> o.tenantId().equals(tenantOpt.get().id())));
             if (!allowed) {
-                throw new UnauthorizedPropertyAccessException("Tenant can only view their own invoice");
+                throw new UnauthorizedPropertyAccessException("Người thuê chỉ xem được hóa đơn của mình.");
             }
             return;
         }
@@ -357,8 +327,8 @@ public class AuthorizationService {
         assertCanManageProperty(user, propertyId);
         if (user.role() == UserRole.STAFF && !assignmentPort.find(user.id(), propertyId)
             .map(assignment -> assignment.canManageContracts()).orElse(false)) {
-            throw new UnauthorizedPropertyAccessException(String.format(
-                "Staff %s chưa được cấp quyền quản lý hợp đồng tại nhà trọ %s", user.fullName(), propertyId));
+            throw new UnauthorizedPropertyAccessException(
+                "Bạn chưa được cấp quyền quản lý hợp đồng tại nhà trọ này.");
         }
     }
 
@@ -367,31 +337,26 @@ public class AuthorizationService {
         assertCanManageProperty(user, propertyId);
         if (user.role() == UserRole.STAFF && !assignmentPort.find(user.id(), propertyId)
             .map(assignment -> assignment.canCollectPayment()).orElse(false)) {
-            throw new UnauthorizedPropertyAccessException(String.format(
-                "Staff %s chưa được cấp quyền thu tiền tại nhà trọ %s", user.fullName(), propertyId));
+            throw new UnauthorizedPropertyAccessException(
+                "Bạn chưa được cấp quyền thu tiền tại nhà trọ này.");
         }
     }
 
     public void assertTechnicianCanWorkOnProperty(CurrentUser user, UUID propertyId) {
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(MSG_LOGIN_REQUIRED);
         }
         if (user.role() == UserRole.ADMIN) {
             return;
         }
         if (user.role() == UserRole.TECHNICIAN) {
             if (!assignmentPort.isUserAssignedToProperty(user.id(), propertyId)) {
-                throw new UnauthorizedPropertyAccessException(String.format(
-                    "Technician %s is not assigned to property %s",
-                    user.fullName(), propertyId
-                ));
+                throw new UnauthorizedPropertyAccessException(MSG_NOT_ASSIGNED);
             }
             return;
         }
-        throw new UnauthorizedPropertyAccessException(String.format(
-            "User %s with role %s cannot perform technician actions",
-            user.fullName(), user.role()
-        ));
+        throw new UnauthorizedPropertyAccessException(
+            "Chỉ kỹ thuật viên được phân công hoặc quản trị viên mới được thực hiện thao tác này.");
     }
 
     public Set<UUID> getAccessiblePropertyIds(CurrentUser user) {

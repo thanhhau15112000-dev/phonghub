@@ -98,7 +98,7 @@ public class RoomAssetService implements RoomAssetUseCase {
 
         List<TemplateItem> items = TEMPLATES.get(template == null ? "" : template.trim().toUpperCase(Locale.ROOT));
         if (items == null) {
-            throw new IllegalArgumentException("Unknown asset template. Allowed: BASIC, FULL");
+            throw new IllegalArgumentException("Mẫu tài sản không hợp lệ (chỉ có BASIC hoặc FULL).");
         }
         List<RoomAsset> assets = new ArrayList<>();
         for (TemplateItem item : items) {
@@ -217,7 +217,7 @@ public class RoomAssetService implements RoomAssetUseCase {
         if (roomId == null) {
             throw new IllegalArgumentException("Room id is required");
         }
-        return roomRepository.findById(roomId).orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
+        return roomRepository.findById(roomId).orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng."));
     }
 
     private RoomAsset findActiveAsset(UUID assetId) {

@@ -155,7 +155,7 @@ public class TenantService implements TenantUseCase {
         return loadPropertyTenants(propertyId).stream()
             .filter(view -> view.tenant().id().equals(tenantId))
             .findFirst()
-            .orElseThrow(() -> new TenantNotFoundException("Tenant not found in property: " + tenantId));
+            .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy người thuê trong nhà trọ này."));
     }
 
     @Override
@@ -255,7 +255,7 @@ public class TenantService implements TenantUseCase {
     @Override
     public Tenant updateTenant(UpdateTenantCommand command) {
         Tenant tenant = tenantRepository.findById(command.tenantId())
-            .orElseThrow(() -> new TenantNotFoundException("Tenant not found with ID: " + command.tenantId()));
+            .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy người thuê."));
 
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         authorizationService.assertCanUpdateTenant(currentUser, tenant.id());

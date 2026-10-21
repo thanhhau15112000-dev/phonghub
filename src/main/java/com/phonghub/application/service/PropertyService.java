@@ -4,6 +4,7 @@ import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
+import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.model.Property;
 import java.time.Instant;
@@ -32,6 +33,7 @@ public class PropertyService implements PropertyUseCase {
     private final AuditPort auditPort;
     private final ContractRepositoryPort contractRepository;
     private final InvoiceRepositoryPort invoiceRepository;
+    private final RoomRepositoryPort roomRepository;
 
     public PropertyService(
         PropertyRepositoryPort propertyRepository,
@@ -47,7 +49,7 @@ public class PropertyService implements PropertyUseCase {
         AuthorizationService authorizationService,
         AuditPort auditPort
     ) {
-        this(propertyRepository, currentUserPort, authorizationService, auditPort, null, null);
+        this(propertyRepository, currentUserPort, authorizationService, auditPort, null, null, null);
     }
 
     public PropertyService(
@@ -56,7 +58,8 @@ public class PropertyService implements PropertyUseCase {
         AuthorizationService authorizationService,
         AuditPort auditPort,
         ContractRepositoryPort contractRepository,
-        InvoiceRepositoryPort invoiceRepository
+        InvoiceRepositoryPort invoiceRepository,
+        RoomRepositoryPort roomRepository
     ) {
         this.propertyRepository = propertyRepository;
         this.currentUserPort = currentUserPort;
@@ -64,6 +67,7 @@ public class PropertyService implements PropertyUseCase {
         this.auditPort = auditPort != null ? auditPort : event -> {};
         this.contractRepository = contractRepository;
         this.invoiceRepository = invoiceRepository;
+        this.roomRepository = roomRepository;
     }
 
     @Override
@@ -102,6 +106,14 @@ public class PropertyService implements PropertyUseCase {
         assertNotArchived(property, "sửa thông tin");
 
         int totalRooms = command.totalRooms() == null ? property.totalRooms() : command.totalRooms();
+        // Tổng số phòng là con số khai báo; không cho thấp hơn số phòng đã tạo để danh sách và thông tin khớp nhau.
+        if (roomRepository != null && command.totalRooms() != null) {
+            int existingRooms = roomRepository.findByPropertyId(property.id()).size();
+            if (totalRooms < existingRooms) {
+                throw new IllegalArgumentException(String.format(
+                    "Tổng số phòng không được nhỏ hơn số phòng đã tạo (%d phòng).", existingRooms));
+            }
+        }
         String description = command.description() == null || command.description().isBlank()
             ? null : command.description().trim();
         boolean coreChanged = property.changesCoreInfo(command.name(), command.address());

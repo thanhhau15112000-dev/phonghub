@@ -57,7 +57,7 @@ class PropertyArchiveServiceUnitTest {
         assignments = new InMemoryStaffPropertyAssignmentRepository();
         AuthorizationService authorization = new AuthorizationService(assignments, properties,
             new InMemoryTenantRepository(), contracts);
-        service = new PropertyService(properties, () -> current, authorization, events::add, contracts, invoices);
+        service = new PropertyService(properties, () -> current, authorization, events::add, contracts, invoices, null);
         property = properties.save(new Property(UUID.randomUUID(), "Nhà trọ Xanh", "1 Lê Lợi", null, 5, ownerId,
             PropertyApprovalStatus.VERIFIED, null, Instant.now()));
         current = owner;
