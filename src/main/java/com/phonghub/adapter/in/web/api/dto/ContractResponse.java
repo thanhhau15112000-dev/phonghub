@@ -22,7 +22,9 @@ public record ContractResponse(
     ContractStatus status,
     List<ContractOccupantResponse> occupants,
     Instant createdAt,
-    Instant updatedAt
+    Instant updatedAt,
+    /** Gửi lại khi sửa hợp đồng nháp để phát hiện sửa chồng (#76, #89). */
+    long version
 ) {
     public record ContractOccupantResponse(
         UUID id,
@@ -62,7 +64,8 @@ public record ContractResponse(
             contract.getStatus(),
             occupantResponses,
             contract.getCreatedAt(),
-            contract.getUpdatedAt()
+            contract.getUpdatedAt(),
+            contract.getVersion()
         );
     }
 }

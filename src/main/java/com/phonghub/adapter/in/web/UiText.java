@@ -94,6 +94,7 @@ public final class UiText {
             case ACTIVE -> "Đang hiệu lực";
             case EXPIRED -> "Đã hết hạn";
             case TERMINATED -> "Đã chấm dứt";
+            case CANCELLED -> "Đã hủy";
         };
     }
 
