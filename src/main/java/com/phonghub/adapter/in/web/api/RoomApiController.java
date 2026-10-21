@@ -48,10 +48,11 @@ public class RoomApiController {
         @RequestParam(required = false) BigDecimal maxPrice,
         @RequestParam(required = false) Integer floor,
         @RequestParam(defaultValue = "0") int page,
-        @RequestParam(required = false) Integer size
+        @RequestParam(required = false) Integer size,
+        @RequestParam(defaultValue = "false") boolean archived
     ) {
         RoomSearchCriteria criteria = new RoomSearchCriteria(
-            propertyId, status, minPrice, maxPrice, floor, null, page, size);
+            propertyId, status, minPrice, maxPrice, floor, null, page, size, archived);
         if (criteria.isUnfiltered()) {
             return ResponseEntity.ok(roomUseCase.listRoomsForProperty(propertyId).stream()
                 .map(RoomResponse::from)
@@ -79,6 +80,17 @@ public class RoomApiController {
         ));
         RoomResponse response = RoomResponse.from(room);
         return ResponseEntity.created(URI.create("/api/rooms/" + response.id())).body(response);
+    }
+
+    /** Ngừng sử dụng phòng (#89): chủ nhà trọ hoặc admin; còn hợp đồng/hóa đơn/phiếu bảo trì dở dang thì 409. */
+    @PostMapping("/rooms/{id}/archive")
+    public ResponseEntity<RoomResponse> archiveRoom(@PathVariable UUID id) {
+        return ResponseEntity.ok(RoomResponse.from(roomUseCase.archiveRoom(id)));
+    }
+
+    @PostMapping("/rooms/{id}/restore")
+    public ResponseEntity<RoomResponse> restoreRoom(@PathVariable UUID id) {
+        return ResponseEntity.ok(RoomResponse.from(roomUseCase.restoreRoom(id)));
     }
 
     @GetMapping("/rooms/{id}")

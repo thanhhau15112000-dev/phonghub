@@ -18,6 +18,8 @@ public class Room {
     private final Instant createdAt;
     private Instant updatedAt;
     private long version;
+    /** Thời điểm phòng ngừng sử dụng (#89); null là đang dùng. */
+    private Instant archivedAt;
 
     public Room(
         UUID id,
@@ -264,6 +266,41 @@ public class Room {
     }
 
     /** Phiên bản dùng cho khóa lạc quan; do tầng lưu trữ gán sau khi đọc/ghi. */
+    public Instant getArchivedAt() {
+        return archivedAt;
+    }
+
+    public boolean isArchived() {
+        return archivedAt != null;
+    }
+
+    /** Ngừng sử dụng phòng: chỉ khi phòng trống hoặc đang bảo trì (không có người ở, không giữ chỗ). */
+    public void archive(Instant at) {
+        if (archivedAt != null) {
+            throw new InvalidRoomStateException("Phòng '" + roomNumber + "' đã ngừng sử dụng trước đó.");
+        }
+        if (status != RoomStatus.AVAILABLE && status != RoomStatus.MAINTENANCE) {
+            throw new InvalidRoomStateException(String.format(
+                "Chỉ ngừng sử dụng được phòng đang trống hoặc bảo trì; phòng '%s' đang ở trạng thái %s.",
+                roomNumber, status));
+        }
+        this.archivedAt = at;
+        this.updatedAt = at;
+    }
+
+    public void restore() {
+        if (archivedAt == null) {
+            throw new InvalidRoomStateException("Phòng '" + roomNumber + "' đang được sử dụng, không cần khôi phục.");
+        }
+        this.archivedAt = null;
+        this.updatedAt = Instant.now();
+    }
+
+    /** Dùng khi đọc từ kho dữ liệu. */
+    public void restoreArchivedAt(Instant archivedAt) {
+        this.archivedAt = archivedAt;
+    }
+
     public long getVersion() {
         return version;
     }

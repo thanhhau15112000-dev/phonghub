@@ -20,7 +20,7 @@ public class InMemoryRoomRepository implements RoomRepositoryPort {
 
     private Room clone(Room r) {
         if (r == null) return null;
-        return new Room(
+        Room copy = new Room(
             r.getId(),
             r.getPropertyId(),
             r.getRoomNumber(),
@@ -32,6 +32,8 @@ public class InMemoryRoomRepository implements RoomRepositoryPort {
             r.getCreatedAt(),
             r.getUpdatedAt()
         );
+        copy.restoreArchivedAt(r.getArchivedAt());
+        return copy;
     }
 
     @Override
@@ -45,6 +47,7 @@ public class InMemoryRoomRepository implements RoomRepositoryPort {
     public RoomPage search(RoomSearchCriteria c) {
         List<Room> matches = store.values().stream()
             .filter(r -> r.getPropertyId().equals(c.propertyId()))
+            .filter(r -> r.isArchived() == c.archived())
             .filter(r -> c.status() == null || r.getStatus() == c.status())
             .filter(r -> c.minPrice() == null || r.getBasePrice().compareTo(c.minPrice()) >= 0)
             .filter(r -> c.maxPrice() == null || r.getBasePrice().compareTo(c.maxPrice()) <= 0)
@@ -65,7 +68,7 @@ public class InMemoryRoomRepository implements RoomRepositoryPort {
     @Override
     public List<Room> findByPropertyId(UUID propertyId) {
         return store.values().stream()
-            .filter(r -> r.getPropertyId().equals(propertyId))
+            .filter(r -> r.getPropertyId().equals(propertyId) && !r.isArchived())
             .map(this::clone)
             .toList();
     }
@@ -73,7 +76,7 @@ public class InMemoryRoomRepository implements RoomRepositoryPort {
     @Override
     public List<Room> findByPropertyIdAndStatus(UUID propertyId, RoomStatus status) {
         return store.values().stream()
-            .filter(r -> r.getPropertyId().equals(propertyId) && r.getStatus() == status)
+            .filter(r -> r.getPropertyId().equals(propertyId) && r.getStatus() == status && !r.isArchived())
             .map(this::clone)
             .toList();
     }

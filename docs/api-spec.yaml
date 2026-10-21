@@ -458,6 +458,13 @@ paths:
           in: query
           schema:
             $ref: '#/components/schemas/RoomStatus'
+        - name: archived
+          in: query
+          required: false
+          description: true chỉ trả phòng đã ngừng sử dụng (#89); mặc định chỉ phòng đang dùng
+          schema:
+            type: boolean
+            default: false
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/LimitParam'
       responses:
@@ -542,6 +549,65 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/rooms/{roomId}/archive:
+    parameters:
+      - name: roomId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Rooms]
+      summary: Ngừng sử dụng (xóa mềm) phòng (owner của nhà trọ hoặc admin) (#89)
+      description: >
+        Phòng phải đang trống hoặc bảo trì. Từ chối (409) khi còn hợp đồng chưa kết thúc, hóa đơn chưa thu hoặc phiếu
+        bảo trì chưa xong. Phòng đã ngừng không hiện trong danh sách, không tạo hợp đồng mới; số phòng vẫn được giữ.
+      responses:
+        '200':
+          description: Đã ngừng sử dụng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/rooms/{roomId}/restore:
+    parameters:
+      - name: roomId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Rooms]
+      summary: Dùng lại phòng đã ngừng sử dụng (owner của nhà trọ hoặc admin) (#89)
+      responses:
+        '200':
+          description: Đã dùng lại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /api/rooms/{roomId}/assets:
     parameters:
@@ -4153,6 +4219,11 @@ components:
         createdAt:
           type: string
           format: date-time
+        archivedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Thời điểm phòng ngừng sử dụng (#89); null là đang dùng
 
     RoomInput:
       type: object

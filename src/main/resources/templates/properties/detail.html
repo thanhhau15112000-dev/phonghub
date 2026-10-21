@@ -228,6 +228,37 @@
             <a th:if="${roomPage.hasNext()}" class="btn btn-sm" style="text-decoration: none;"
                th:href="@{'/properties/' + ${property.id()}(status=${filterStatus}, minPrice=${filterMinPrice}, maxPrice=${filterMaxPrice}, floor=${filterFloor}, page=${roomPage.page() + 1})}">Trang sau &rarr;</a>
         </div>
+
+        <!-- Phòng đã ngừng sử dụng (#89): không tính vào danh sách trên, chủ trọ / quản trị viên khôi phục tại đây -->
+        <div th:if="${archivedRooms != null and !archivedRooms.isEmpty() and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+             style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+            <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">Phòng đã ngừng sử dụng</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Số phòng</th>
+                        <th class="col-number">Tầng</th>
+                        <th>Ngừng lúc</th>
+                        <th class="col-actions">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="r : ${archivedRooms}">
+                        <td><a th:href="@{'/rooms/' + ${r.getId()}}" th:text="${r.getRoomNumber()}">P101</a></td>
+                        <td class="col-number" th:text="${r.getFloor()}">1</td>
+                        <td th:text="${#temporals.format(r.getArchivedAt(), 'dd/MM/yyyy HH:mm')}">01/01/2026 00:00</td>
+                        <td class="col-actions">
+                            <div class="table-actions">
+                                <form th:action="@{'/rooms/' + ${r.getId()} + '/restore'}" method="post">
+                                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                    <button type="submit" class="btn btn-sm btn-secondary">Dùng lại</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <!-- Ẩn nhà trọ (#89): chủ nhà trọ hoặc quản trị viên; hệ thống từ chối nếu còn hợp đồng chưa kết thúc hoặc hóa đơn chưa thu -->
