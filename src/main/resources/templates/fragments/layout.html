@@ -11,6 +11,9 @@
 <header th:fragment="header" class="header-bar">
     <div class="header-navigation">
         <a th:href="@{/}" class="brand">PhongHub</a>
+        <button type="button" id="navToggle" class="nav-toggle" aria-label="Mở menu" aria-expanded="false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
         <nav>
             <ul class="nav-links">
                 <li><a th:href="@{/dashboard}">Bảng điều khiển</a></li>
@@ -155,10 +158,20 @@
     </div>
 </div>
 
-<footer th:fragment="footer" style="margin-top: 48px; padding: 24px 0; border-top: 1px solid var(--border-color); text-align: center; font-size: 12px; color: var(--text-secondary);">
-    PhongHub B2B — Quản lý nhà trọ (MVP, Spring Boot + Pure Domain)
+<footer th:fragment="footer" class="site-footer" style="margin-top: 48px; border-top: 1px solid var(--border-color); text-align: center; font-size: 12px; color: var(--text-secondary);">
+    PhongHub — Quản lý nhà trọ
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            // Menu thu gọn trên điện thoại
+            const navToggle = document.getElementById('navToggle');
+            if (navToggle) {
+                navToggle.addEventListener('click', function () {
+                    const header = navToggle.closest('.header-bar');
+                    const open = header.classList.toggle('nav-open');
+                    navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                });
+            }
+
             const bellBtn = document.getElementById('notifBellBtn');
             const notifDropdown = document.getElementById('notifDropdown');
 

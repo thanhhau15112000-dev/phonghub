@@ -91,7 +91,7 @@
             <thead>
                 <tr>
                     <th>Tiêu đề và mô tả</th>
-                    <th th:if="${currentUser.role().name() != 'TENANT'}">Cơ sở</th>
+                    <th>Phòng</th>
                     <th>Mức độ</th>
                     <th>Trạng thái</th>
                     <th>Chi phí sửa chữa</th>
@@ -105,12 +105,15 @@
                         <a th:href="@{'/maintenance/' + ${t.getId()}}" th:text="${t.getTitle()}" style="font-weight: 600; color: var(--accent);">Tiêu đề</a>
                         <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;" th:text="${t.getDescription()}">Mô tả</div>
                     </td>
-                    <td th:if="${currentUser.role().name() != 'TENANT'}" th:text="${propertyNames.get(t.getPropertyId())}">Cơ sở</td>
+                    <td>
+                        <strong th:text="${roomNumbers.get(t.getRoomId()) != null ? roomNumbers.get(t.getRoomId()) : '—'}">P101</strong>
+                        <div th:if="${currentUser.role().name() != 'TENANT'}" style="font-size: 12px; color: var(--text-secondary);" th:text="${propertyNames.get(t.getPropertyId())}">Cơ sở</div>
+                    </td>
                     <td><span class="badge" th:text="${uiText.maintenancePriority(t.getPriority())}">Trung bình</span>
                         <span th:if="${t.isOverdue(now)}" class="badge" style="background: #ef4444; color: #fff;">Quá hạn</span></td>
                     <td><span th:class="'badge badge-' + ${t.getStatus()}" th:text="${uiText.maintenanceStatus(t.getStatus())}">Đã báo</span></td>
-                    <td th:text="${t.getRepairCost() != null and t.getRepairCost().compareTo(T(java.math.BigDecimal).ZERO) > 0 ? #numbers.formatDecimal(t.getRepairCost(), 0, 'COMMA', 0, 'POINT') + ' đ' : '—'}">—</td>
-                    <td th:text="${#temporals.format(t.getCreatedAt(), 'yyyy-MM-dd HH:mm')}">2026-09-17</td>
+                    <td th:text="${t.getRepairCost() != null and t.getRepairCost().compareTo(T(java.math.BigDecimal).ZERO) > 0 ? #numbers.formatDecimal(t.getRepairCost(), 0, 'POINT', 0, 'COMMA') + ' đ' : '—'}">—</td>
+                    <td th:text="${#temporals.format(t.getCreatedAt(), 'dd/MM/yyyy HH:mm')}">2026-09-17</td>
                     <td class="col-actions">
                         <div class="table-actions">
                             <a th:if="${currentUser.role().name() == 'TENANT' and feeInvoices.containsKey(t.getId()) and feeInvoices.get(t.getId()).isPayable()}"

@@ -47,13 +47,13 @@ public record Handover(
         }
         if (initialElectricMeter == null || initialElectricMeter.signum() < 0
             || initialWaterMeter == null || initialWaterMeter.signum() < 0) {
-            throw new IllegalArgumentException("Meter readings must be zero or more");
+            throw new IllegalArgumentException("Chỉ số điện nước không được âm.");
         }
         if (roomCondition == null || roomCondition.isBlank()) {
-            throw new IllegalArgumentException("Room condition cannot be blank");
+            throw new IllegalArgumentException("Cần mô tả tình trạng phòng.");
         }
         if (finalDeduction != null && finalDeduction.signum() < 0) {
-            throw new IllegalArgumentException("Final deduction cannot be negative");
+            throw new IllegalArgumentException("Khoản khấu trừ không được âm.");
         }
         roomCondition = roomCondition.trim();
         if (createdAt == null) {
@@ -109,7 +109,7 @@ public record Handover(
     public Handover approve(UUID actorId, BigDecimal deduction) {
         requireStatus(HandoverStatus.PENDING_APPROVAL, "duyệt");
         if (deduction != null && deduction.signum() < 0) {
-            throw new IllegalArgumentException("Final deduction cannot be negative");
+            throw new IllegalArgumentException("Khoản khấu trừ không được âm.");
         }
         Instant now = Instant.now();
         return copy(HandoverStatus.APPROVED, contractTermsHash, houseRulesText, houseRulesHash, null, sentAt,
@@ -119,7 +119,7 @@ public record Handover(
     public Handover reject(String reason, UUID actorId) {
         requireStatus(HandoverStatus.PENDING_APPROVAL, "từ chối");
         if (reason == null || reason.isBlank()) {
-            throw new IllegalArgumentException("Rejection reason is required");
+            throw new IllegalArgumentException("Cần nhập lý do từ chối.");
         }
         return copy(HandoverStatus.REJECTED, contractTermsHash, houseRulesText, houseRulesHash, reason.trim(),
             sentAt, confirmedByTenant, confirmedAt, null, null, null, Instant.now(), actorId);

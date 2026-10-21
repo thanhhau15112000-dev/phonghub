@@ -59,6 +59,19 @@ public class GlobalUiExceptionHandler {
         return determineRedirect(request);
     }
 
+    /** Tham số sai kiểu (giá trị lựa chọn lạ, ngày sai định dạng...): báo câu dễ hiểu thay cho lỗi chuyển kiểu của Java. */
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public String handleTypeMismatch(
+        org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex,
+        HttpServletRequest request,
+        RedirectAttributes redirectAttributes
+    ) {
+        log.warn("UI type mismatch at URI {}: {}", request.getRequestURI(), ex.getMessage());
+        redirectAttributes.addFlashAttribute("errorMessage",
+            "Giá trị nhập vào không hợp lệ" + (ex.getValue() != null ? ": " + ex.getValue() : "") + ".");
+        return determineRedirect(request);
+    }
+
     private String determineRedirect(HttpServletRequest request) {
         String referer = request.getHeader("Referer");
         String currentUri = request.getRequestURI();

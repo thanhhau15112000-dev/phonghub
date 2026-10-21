@@ -17,7 +17,7 @@ class AuditDetailsFormatterTest {
             {"after":{"roomNumber":"P101","floor":1,"areaSqm":"25.00","basePrice":"3600000","maxOccupants":2},
              "before":{"roomNumber":"P101","floor":1,"areaSqm":"25","basePrice":"3500000.00","maxOccupants":2}}""";
 
-        assertEquals(List.of(new Line("Giá thuê", "3,500,000 đ → 3,600,000 đ")),
+        assertEquals(List.of(new Line("Giá thuê", "3.500.000 đ → 3.600.000 đ")),
             AuditDetailsFormatter.format("ROOM", json));
         assertEquals(List.of(new Line("Thay đổi", "Không có trường nào thay đổi")),
             AuditDetailsFormatter.format("ROOM", "{\"before\":{\"basePrice\":\"3500000.00\"},\"after\":{\"basePrice\":\"3500000\"}}"));

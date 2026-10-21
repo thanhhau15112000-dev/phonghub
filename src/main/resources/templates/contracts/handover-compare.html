@@ -68,7 +68,7 @@
 
     <div class="card">
         <h2>Ảnh phòng cạnh nhau</h2>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
             <div>
                 <h3 style="font-size: 14px;">Lúc nhận phòng</h3>
                 <p th:if="${comparison.checkInPhotos().isEmpty()}" style="color: var(--text-secondary); font-size: 13px;">Không có ảnh.</p>

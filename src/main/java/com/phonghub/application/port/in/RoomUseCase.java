@@ -43,16 +43,16 @@ public interface RoomUseCase {
                 throw new IllegalArgumentException("Property id cannot be null");
             }
             if (roomNumber == null || roomNumber.isBlank()) {
-                throw new IllegalArgumentException("Room number cannot be blank");
+                throw new IllegalArgumentException("Số phòng không được để trống.");
             }
             if (basePrice == null || basePrice.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Base price cannot be negative");
+                throw new IllegalArgumentException("Giá thuê không được âm.");
             }
             if (maxOccupants <= 0) {
-                throw new IllegalArgumentException("Max occupants must be positive");
+                throw new IllegalArgumentException("Số người tối đa phải lớn hơn 0.");
             }
             if (areaSqm != null && areaSqm.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Area cannot be negative");
+                throw new IllegalArgumentException("Diện tích không được âm.");
             }
         }
     }
@@ -82,16 +82,16 @@ public interface RoomUseCase {
                 throw new IllegalArgumentException("Room id cannot be null");
             }
             if (roomNumber == null || roomNumber.isBlank()) {
-                throw new IllegalArgumentException("Room number cannot be blank");
+                throw new IllegalArgumentException("Số phòng không được để trống.");
             }
             if (basePrice == null || basePrice.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Base price cannot be negative");
+                throw new IllegalArgumentException("Giá thuê không được âm.");
             }
             if (maxOccupants <= 0) {
-                throw new IllegalArgumentException("Max occupants must be positive");
+                throw new IllegalArgumentException("Số người tối đa phải lớn hơn 0.");
             }
             if (areaSqm != null && areaSqm.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Area cannot be negative");
+                throw new IllegalArgumentException("Diện tích không được âm.");
             }
         }
     }

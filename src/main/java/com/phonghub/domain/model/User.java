@@ -37,10 +37,10 @@ public record User(
             throw new IllegalArgumentException("User id cannot be null");
         }
         if (email == null || email.isBlank()) {
-            throw new IllegalArgumentException("Email cannot be blank");
+            throw new IllegalArgumentException("Email không được để trống.");
         }
         if (fullName == null || fullName.isBlank()) {
-            throw new IllegalArgumentException("Full name cannot be blank");
+            throw new IllegalArgumentException("Họ tên không được để trống.");
         }
         if (role == null) {
             throw new IllegalArgumentException("Role cannot be null");

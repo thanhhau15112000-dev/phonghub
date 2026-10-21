@@ -182,13 +182,13 @@ public class HandoverService implements HandoverUseCase {
             throw new InvalidHandoverStateException("Chỉ thêm ảnh khi biên bản ở trạng thái DRAFT.");
         }
         if (kind == null) {
-            throw new IllegalArgumentException("Photo kind is required");
+            throw new IllegalArgumentException("Cần chọn loại ảnh.");
         }
         if (!FileSanitizer.isImage(contentType)) {
-            throw new IllegalArgumentException("Handover photos must be jpeg, png or webp");
+            throw new IllegalArgumentException("Ảnh biên bản phải là JPEG, PNG hoặc WebP.");
         }
         if (photoRepository.findByHandoverId(handover.id()).size() >= MAX_PHOTOS) {
-            throw new IllegalArgumentException("A handover can have at most " + MAX_PHOTOS + " photos");
+            throw new IllegalArgumentException("Biên bản có tối đa " + MAX_PHOTOS + " ảnh.");
         }
         FileSanitizer.SanitizedFile file = FileSanitizer.sanitize(contentType, content, maxFileSizeBytes);
         String key = PrivateFileStorageService.objectKey(contract.getPropertyId(), "handover", file.extension());
@@ -216,7 +216,7 @@ public class HandoverService implements HandoverUseCase {
         }
         HandoverPhoto photo = photoRepository.findById(photoId)
             .filter(found -> found.handoverId().equals(handover.id()))
-            .orElseThrow(() -> new HandoverNotFoundException("Handover photo not found: " + photoId));
+            .orElseThrow(() -> new HandoverNotFoundException("Không tìm thấy ảnh biên bản: " + photoId));
         photoRepository.delete(photo.id());
         deleteQuietly(photo.imageKey());
         audit(type, "PHOTO_REMOVED", user, handover, Map.of("kind", photo.kind().name()));
@@ -236,9 +236,9 @@ public class HandoverService implements HandoverUseCase {
         }
         HandoverItem item = itemRepository.findById(itemId)
             .filter(found -> found.handoverId().equals(handover.id()))
-            .orElseThrow(() -> new HandoverNotFoundException("Handover item not found: " + itemId));
+            .orElseThrow(() -> new HandoverNotFoundException("Không tìm thấy hạng mục biên bản: " + itemId));
         if (command.status() == null) {
-            throw new IllegalArgumentException("Asset status is required");
+            throw new IllegalArgumentException("Cần chọn tình trạng tài sản.");
         }
         BigDecimal deduction = command.deductionAmount() == null ? BigDecimal.ZERO : command.deductionAmount();
         if (deduction.signum() > 0 && command.status() == AssetStatus.GOOD) {
@@ -258,7 +258,7 @@ public class HandoverService implements HandoverUseCase {
         Contract contract = findContract(contractId);
         authorizationService.assertCanManageContracts(user, contract.getPropertyId());
         Handover handover = handoverRepository.findForUpdate(contractId, type)
-            .orElseThrow(() -> new HandoverNotFoundException("Handover not found for contract " + contractId));
+            .orElseThrow(() -> new HandoverNotFoundException("Chưa có biên bản cho hợp đồng " + contractId));
         if (handover.status() != HandoverStatus.DRAFT) {
             throw new InvalidHandoverStateException("Chỉ gửi biên bản ở trạng thái DRAFT.");
         }
@@ -301,7 +301,7 @@ public class HandoverService implements HandoverUseCase {
         Contract contract = findContract(contractId);
         Tenant tenant = requirePrimaryTenant(user, contract);
         Handover handover = handoverRepository.findForUpdate(contractId, type)
-            .orElseThrow(() -> new HandoverNotFoundException("Handover not found for contract " + contractId));
+            .orElseThrow(() -> new HandoverNotFoundException("Chưa có biên bản cho hợp đồng " + contractId));
         if (handover.status() != HandoverStatus.PENDING_TENANT) {
             throw new InvalidHandoverStateException(String.format(
                 "Không thể xác nhận biên bản ở trạng thái %s (cần PENDING_TENANT).", handover.status()));
@@ -341,7 +341,7 @@ public class HandoverService implements HandoverUseCase {
             authorizationService.assertCanManageContracts(user, contract.getPropertyId());
         }
         Handover handover = handoverRepository.findForUpdate(contractId, type)
-            .orElseThrow(() -> new HandoverNotFoundException("Handover not found for contract " + contractId));
+            .orElseThrow(() -> new HandoverNotFoundException("Chưa có biên bản cho hợp đồng " + contractId));
 
         if (type == HandoverType.CHECK_IN) {
             Handover saved = handoverRepository.save(handover.approve(user.id()));
@@ -370,7 +370,7 @@ public class HandoverService implements HandoverUseCase {
         Contract contract = findContract(contractId);
         authorizationService.assertCanManageContracts(user, contract.getPropertyId());
         Handover handover = handoverRepository.findForUpdate(contractId, type)
-            .orElseThrow(() -> new HandoverNotFoundException("Handover not found for contract " + contractId));
+            .orElseThrow(() -> new HandoverNotFoundException("Chưa có biên bản cho hợp đồng " + contractId));
         Handover saved = handoverRepository.save(handover.reject(reason, user.id()));
         audit(type, "REJECTED", user, saved, Map.of());
         return saved;
@@ -382,7 +382,7 @@ public class HandoverService implements HandoverUseCase {
         Contract contract = findContract(contractId);
         authorizationService.assertCanManageContracts(user, contract.getPropertyId());
         Handover handover = handoverRepository.findForUpdate(contractId, type)
-            .orElseThrow(() -> new HandoverNotFoundException("Handover not found for contract " + contractId));
+            .orElseThrow(() -> new HandoverNotFoundException("Chưa có biên bản cho hợp đồng " + contractId));
         Handover saved = handoverRepository.save(handover.reopen(user.id()));
         audit(type, "REOPENED", user, saved, Map.of());
         return saved;
@@ -406,7 +406,7 @@ public class HandoverService implements HandoverUseCase {
         Handover handover = findHandover(contractId, type);
         HandoverPhoto photo = photoRepository.findById(photoId)
             .filter(found -> found.handoverId().equals(handover.id()))
-            .orElseThrow(() -> new HandoverNotFoundException("Handover photo not found: " + photoId));
+            .orElseThrow(() -> new HandoverNotFoundException("Không tìm thấy ảnh biên bản: " + photoId));
         return storagePort.createSignedUrl(photo.imageKey(), SIGNED_URL_TTL);
     }
 
@@ -435,7 +435,7 @@ public class HandoverService implements HandoverUseCase {
             boolean linked = tenant != null && (contract.getPrimaryTenantId().equals(tenant.id())
                 || contract.getOccupants().stream().map(ContractOccupant::tenantId).anyMatch(tenant.id()::equals));
             if (!linked) {
-                throw new UnauthorizedPropertyAccessException("Tenant is not part of this contract");
+                throw new UnauthorizedPropertyAccessException("Người thuê không thuộc hợp đồng này.");
             }
             return;
         }
@@ -444,11 +444,11 @@ public class HandoverService implements HandoverUseCase {
 
     private Tenant requirePrimaryTenant(CurrentUser user, Contract contract) {
         if (user == null || !user.isTenant()) {
-            throw new UnauthorizedPropertyAccessException("Only the primary tenant can confirm the handover");
+            throw new UnauthorizedPropertyAccessException("Chỉ người thuê chính được xác nhận biên bản.");
         }
         Tenant tenant = tenantRepository.findByUserId(user.id()).orElse(null);
         if (tenant == null || !tenant.id().equals(contract.getPrimaryTenantId())) {
-            throw new UnauthorizedPropertyAccessException("Only the primary tenant can confirm the handover");
+            throw new UnauthorizedPropertyAccessException("Chỉ người thuê chính được xác nhận biên bản.");
         }
         return tenant;
     }
@@ -463,12 +463,12 @@ public class HandoverService implements HandoverUseCase {
             throw new IllegalArgumentException("Contract id is required");
         }
         return contractRepository.findById(contractId)
-            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
+            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
     }
 
     private Handover findHandover(UUID contractId, HandoverType type) {
         return handoverRepository.find(contractId, type)
-            .orElseThrow(() -> new HandoverNotFoundException("Handover not found for contract " + contractId));
+            .orElseThrow(() -> new HandoverNotFoundException("Chưa có biên bản cho hợp đồng " + contractId));
     }
 
     private void deleteQuietly(String key) {

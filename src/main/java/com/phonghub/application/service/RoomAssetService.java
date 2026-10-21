@@ -238,9 +238,9 @@ public class RoomAssetService implements RoomAssetUseCase {
             return;
         }
         var ticket = ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new IllegalArgumentException("Maintenance ticket not found: " + ticketId));
+            .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy phiếu bảo trì: " + ticketId));
         if (!ticket.getRoomId().equals(asset.roomId())) {
-            throw new IllegalArgumentException("Maintenance ticket does not belong to the room of this asset");
+            throw new IllegalArgumentException("Phiếu bảo trì không thuộc phòng của tài sản này.");
         }
     }
 

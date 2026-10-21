@@ -31,11 +31,11 @@ public record TenantDocument(
             throw new IllegalArgumentException("Document id, tenant, property and type are required");
         }
         if (frontImageKey == null || frontImageKey.isBlank() || frontContentType == null) {
-            throw new IllegalArgumentException("Front image is required");
+            throw new IllegalArgumentException("Cần ảnh mặt trước giấy tờ.");
         }
         if (type == DocumentType.GPLX && (numberCiphertext == null || numberNonce == null
             || numberHmac == null || numberKeyId == null || numberLast4 == null)) {
-            throw new IllegalArgumentException("Driving licence number is required");
+            throw new IllegalArgumentException("Cần nhập số giấy phép lái xe.");
         }
         if (createdAt == null) {
             createdAt = Instant.now();

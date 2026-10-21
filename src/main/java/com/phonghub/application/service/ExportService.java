@@ -130,7 +130,7 @@ public class ExportService implements ExportUseCase {
      */
     private List<Property> scope(CurrentUser user, ExportRequest request) {
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
         }
         boolean contracts = request.dataset() == Dataset.CONTRACTS;
         if (!contracts) {

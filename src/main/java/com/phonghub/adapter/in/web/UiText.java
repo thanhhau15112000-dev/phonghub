@@ -89,12 +89,7 @@ public final class UiText {
         if (status == null) {
             return "Chưa xác định";
         }
-        return switch (status) {
-            case AVAILABLE -> "Trống";
-            case RESERVED -> "Đã đặt";
-            case OCCUPIED -> "Đang thuê";
-            case MAINTENANCE -> "Bảo trì";
-        };
+        return status.label();
     }
 
     public String contractStatus(ContractStatus status) {

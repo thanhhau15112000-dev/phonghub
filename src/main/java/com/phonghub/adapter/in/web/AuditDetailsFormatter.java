@@ -321,12 +321,22 @@ public final class AuditDetailsFormatter {
     }
 
     /** Số tiền "3500000.00" → "3,500,000 đ" như các trang khác; giá trị đã che ("***") giữ nguyên. */
+    /** Tiền kiểu Việt Nam: dấu chấm ngăn nghìn (3.500.000 đ), giống giao diện. */
+    private static final DecimalFormatSymbols VN_MONEY = vnMoneySymbols();
+
+    private static DecimalFormatSymbols vnMoneySymbols() {
+        DecimalFormatSymbols symbols = DecimalFormatSymbols.getInstance(Locale.US);
+        symbols.setGroupingSeparator('.');
+        symbols.setDecimalSeparator(',');
+        return symbols;
+    }
+
     private static String money(String text) {
         BigDecimal amount = number(text);
         if (amount == null) {
             return text;
         }
-        return new DecimalFormat("#,##0", DecimalFormatSymbols.getInstance(Locale.US)).format(amount) + " đ";
+        return new DecimalFormat("#,##0", VN_MONEY).format(amount) + " đ";
     }
 
     private static boolean sameValue(Object a, Object b) {

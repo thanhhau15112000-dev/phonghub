@@ -673,6 +673,6 @@ class PhongHubUiIntegrationTest {
         mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Đã rời " + LocalDate.now())));
+            .andExpect(content().string(containsString("Đã rời " + LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")))));
     }
 }

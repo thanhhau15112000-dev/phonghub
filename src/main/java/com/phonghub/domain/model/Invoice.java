@@ -321,7 +321,7 @@ public class Invoice {
             throw new DomainException("Chỉ có thể tạo khoản phí cho hợp đồng đang hiệu lực hoặc chưa trả phòng.");
         }
         if (amount == null || amount.signum() <= 0) {
-            throw new IllegalArgumentException("Fee amount must be greater than zero");
+            throw new IllegalArgumentException("Phí sửa chữa phải lớn hơn 0.");
         }
         if (paymentCode == null || paymentCode.isBlank()) {
             throw new IllegalArgumentException("Payment code is required");
@@ -374,7 +374,7 @@ public class Invoice {
             throw new DomainException("Kỳ thanh toán không ở trạng thái chờ thanh toán: " + status);
         }
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Payment amount must be greater than zero");
+            throw new IllegalArgumentException("Số tiền thanh toán phải lớn hơn 0.");
         }
         if (amount.compareTo(remainingAmount()) > 0) {
             throw new DomainException("Số tiền vượt quá số còn nợ của hóa đơn; phần dư phải được tách ra trước khi ghi nhận.");

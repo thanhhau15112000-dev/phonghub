@@ -103,7 +103,7 @@ public class ContractService implements ContractUseCase {
         authorizationService.assertCanManageContracts(currentUser, command.propertyId());
 
         Property property = propertyRepository.findById(command.propertyId())
-            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + command.propertyId()));
+            .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + command.propertyId()));
 
         if (property.isArchived()) {
             throw new com.phonghub.domain.exception.ConflictException(
@@ -126,14 +126,14 @@ public class ContractService implements ContractUseCase {
         Optional<Contract> existingActive = contractRepository.findActiveByRoomId(room.getId());
         if (existingActive.isPresent()) {
             throw new DuplicateActiveContractException(String.format(
-                "Room '%s' already has an active contract (ID: %s)", room.getRoomNumber(), existingActive.get().getId()
+                "Phòng '%s' đã có hợp đồng đang hiệu lực (mã %s).", room.getRoomNumber(), existingActive.get().getId()
             ));
         }
 
         // Room cannot have a contract created if it is in MAINTENANCE
         if (room.getStatus() == RoomStatus.MAINTENANCE) {
             throw new DomainException(String.format(
-                "Cannot create contract for room '%s' while in MAINTENANCE status", room.getRoomNumber()
+                "Phòng '%s' đang bảo trì nên chưa tạo được hợp đồng.", room.getRoomNumber()
             ));
         }
 
@@ -174,7 +174,7 @@ public class ContractService implements ContractUseCase {
     public Contract activateContract(UUID contractId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Contract contract = contractRepository.findById(contractId)
-            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
+            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
 
         // Kiểm tra quyền trước trạng thái để người ngoài phạm vi nhận 403, không biết được trạng thái hợp đồng.
         Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
@@ -190,7 +190,7 @@ public class ContractService implements ContractUseCase {
         Optional<Contract> activeContract = contractRepository.findActiveByRoomId(room.getId());
         if (activeContract.isPresent() && !activeContract.get().getId().equals(contract.getId())) {
             throw new DuplicateActiveContractException(String.format(
-                "Room '%s' already has an active contract (ID: %s)", room.getRoomNumber(), activeContract.get().getId()
+                "Phòng '%s' đã có hợp đồng đang hiệu lực (mã %s).", room.getRoomNumber(), activeContract.get().getId()
             ));
         }
 
@@ -220,7 +220,7 @@ public class ContractService implements ContractUseCase {
     public Contract terminateContract(UUID contractId, boolean requiresMaintenance) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Contract contract = contractRepository.findById(contractId)
-            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
+            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
 
         Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
         assertResiding(contract);
@@ -231,7 +231,7 @@ public class ContractService implements ContractUseCase {
     public Contract terminateEarly(UUID contractId, boolean requiresMaintenance, String reason) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Contract contract = contractRepository.findById(contractId)
-            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
+            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
         // Bỏ qua biên bản check-out (vốn chỉ chủ trọ/admin duyệt) nên cũng chỉ chủ trọ/admin được làm
         Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
         authorizationService.assertOwnerOrAdmin(currentUser, contract.getPropertyId());
@@ -278,7 +278,7 @@ public class ContractService implements ContractUseCase {
     public Contract renewContract(RenewContractCommand command) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Contract contract = contractRepository.findById(command.contractId())
-            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + command.contractId()));
+            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + command.contractId()));
         // Quyền trước trạng thái: người ngoài phạm vi nhận 403, không biết được trạng thái hợp đồng.
         validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
         if (command.expectedVersion() != null && command.expectedVersion() != contract.getVersion()) {
@@ -308,7 +308,7 @@ public class ContractService implements ContractUseCase {
     public Contract updateDraftContract(UpdateDraftContractCommand command) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Contract contract = contractRepository.findById(command.contractId())
-            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + command.contractId()));
+            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + command.contractId()));
         // Quyền trước trạng thái: người ngoài phạm vi nhận 403, không biết được trạng thái hợp đồng.
         validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
         if (command.expectedVersion() != null && command.expectedVersion() != contract.getVersion()) {
@@ -327,7 +327,7 @@ public class ContractService implements ContractUseCase {
     public Contract cancelDraftContract(UUID contractId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Contract contract = contractRepository.findById(contractId)
-            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
+            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
         validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
 
         contract.cancelDraft();
@@ -358,17 +358,17 @@ public class ContractService implements ContractUseCase {
     public Contract getContract(UUID contractId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Contract contract = contractRepository.findById(contractId)
-            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
+            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
 
         if (currentUser.role() == UserRole.TENANT) {
             Optional<Tenant> tenantOpt = tenantRepository.findByUserId(currentUser.id());
             if (tenantOpt.isEmpty()) {
-                throw new UnauthorizedPropertyAccessException("Tenant profile not found");
+                throw new UnauthorizedPropertyAccessException("Không tìm thấy hồ sơ người thuê của tài khoản này.");
             }
             boolean isAuthorized = contract.getPrimaryTenantId().equals(tenantOpt.get().id()) ||
                 contract.getOccupants().stream().anyMatch(o -> o.tenantId().equals(tenantOpt.get().id()));
             if (!isAuthorized) {
-                throw new UnauthorizedPropertyAccessException("Tenant can only view their own contract");
+                throw new UnauthorizedPropertyAccessException("Người thuê chỉ xem được hợp đồng của mình.");
             }
         } else {
             authorizationService.assertCanAccessProperty(currentUser, contract.getPropertyId());
@@ -434,13 +434,13 @@ public class ContractService implements ContractUseCase {
     @Override
     public AddOccupantResult addOccupant(AddOccupantCommand command) {
         Contract contract = contractRepository.findById(command.contractId())
-            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + command.contractId()));
+            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + command.contractId()));
 
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         authorizationService.assertOwnerOrAdmin(currentUser, contract.getPropertyId());
 
         Property property = propertyRepository.findById(contract.getPropertyId())
-            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + contract.getPropertyId()));
+            .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + contract.getPropertyId()));
 
         if (property.approvalStatus() != PropertyApprovalStatus.VERIFIED) {
             throw new InvalidPropertyStatusException(String.format(
@@ -457,7 +457,7 @@ public class ContractService implements ContractUseCase {
         }
 
         Room room = roomRepository.findById(contract.getRoomId())
-            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + contract.getRoomId()));
+            .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + contract.getRoomId()));
 
         LocalDate today = LocalDate.now();
         long residingCount = (contract.getOccupants() == null || contract.getOccupants().isEmpty())
@@ -624,7 +624,7 @@ public class ContractService implements ContractUseCase {
     public ContractOccupant checkOutOccupant(CheckOutOccupantCommand command) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Contract contract = contractRepository.findById(command.contractId())
-            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + command.contractId()));
+            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + command.contractId()));
 
         authorizationService.assertOwnerOrAdmin(currentUser, contract.getPropertyId());
 
@@ -654,7 +654,7 @@ public class ContractService implements ContractUseCase {
 
     private Room validateOwnershipOfRoom(CurrentUser user, UUID propertyId, UUID roomId) {
         Room room = roomRepository.findById(roomId)
-            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
+            .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + roomId));
         if (!room.getPropertyId().equals(propertyId)) {
             throw new UnauthorizedPropertyAccessException(String.format(
                 "Phòng '%s' (ID: %s) không thuộc về nhà trọ (ID: %s).", room.getRoomNumber(), roomId, propertyId

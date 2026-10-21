@@ -59,7 +59,7 @@
     </div>
 
     <!-- Thông tin hợp đồng -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
         <!-- Bên trái: Điều khoản thuê -->
         <div class="card">
             <h2>Điều khoản thuê</h2>
@@ -71,19 +71,19 @@
                     </tr>
                     <tr>
                         <td style="color: var(--text-secondary);">Ngày bắt đầu:</td>
-                        <td th:text="${contract.getStartDate()}">2026-01-01</td>
+                        <td th:text="${uiText.date(contract.getStartDate())}">2026-01-01</td>
                     </tr>
                     <tr>
                         <td style="color: var(--text-secondary);">Ngày kết thúc:</td>
-                        <td th:text="${contract.getEndDate()}">2027-01-01</td>
+                        <td th:text="${uiText.date(contract.getEndDate())}">2027-01-01</td>
                     </tr>
                     <tr>
                         <td style="color: var(--text-secondary);">Tiền thuê hàng tháng:</td>
-                        <td th:text="${#numbers.formatDecimal(contract.getRentAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                        <td th:text="${#numbers.formatDecimal(contract.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     </tr>
                     <tr>
                         <td style="color: var(--text-secondary);">Tiền đặt cọc:</td>
-                        <td th:text="${#numbers.formatDecimal(contract.getDepositAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                        <td th:text="${#numbers.formatDecimal(contract.getDepositAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     </tr>
                     <tr>
                         <td style="color: var(--text-secondary);">Ngày thanh toán hàng tháng:</td>
@@ -182,10 +182,10 @@
                         </td>
                         <td th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).maskedIdentityCardNumber() : '—'}">CCCD</td>
                         <td th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).phone() : '—'}">SĐT</td>
-                        <td th:text="${occ.checkInDate()}">2026-01-01</td>
+                        <td th:text="${uiText.date(occ.checkInDate())}">2026-01-01</td>
                         <td>
                             <span th:if="${occ.checkOutDate() == null}" class="badge badge-ACTIVE" style="font-size: 11px; padding: 2px 6px;">Đang ở</span>
-                            <span th:if="${occ.checkOutDate() != null}" class="badge badge-TERMINATED" style="font-size: 11px; padding: 2px 6px;" th:text="'Đã rời ' + ${occ.checkOutDate()}">Đã rời</span>
+                            <span th:if="${occ.checkOutDate() != null}" class="badge badge-TERMINATED" style="font-size: 11px; padding: 2px 6px;" th:text="${'Đã rời ' + uiText.date(occ.checkOutDate())}">Đã rời</span>
                         </td>
                         <td th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" style="display: flex; gap: 4px; align-items: center;">
                             <a th:if="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId())}"
@@ -238,12 +238,12 @@
                         </tr>
                         <tr>
                             <td style="color: var(--text-secondary);">Số tiền cần chuyển:</td>
-                            <td style="font-weight: 600;" th:text="${#numbers.formatDecimal(payableInvoice.remainingAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                            <td style="font-weight: 600;" th:text="${#numbers.formatDecimal(payableInvoice.remainingAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                         </tr>
                         <tr>
                             <td style="color: var(--text-secondary);">Hạn thanh toán:</td>
                             <td>
-                                <span th:text="${payableInvoice.getDueDate()}">2026-10-05</span>
+                                <span th:text="${uiText.date(payableInvoice.getDueDate())}">2026-10-05</span>
                                 <span th:class="'badge badge-' + ${uiText.invoiceBadge(payableInvoice, today)}" th:text="${uiText.invoiceState(payableInvoice, today)}">Đến hạn</span>
                             </td>
                         </tr>
@@ -296,14 +296,14 @@
                         <a th:if="${inv.isConsolidated()}" th:href="@{'/invoices/' + ${inv.getConsolidatedIntoInvoiceId()} + '/pay'}" style="color: var(--accent); font-size: 12px;">Xem hóa đơn tháng</a>
                         <ul th:if="${#lists.size(inv.getItems()) > 1}" style="margin: 4px 0 0; padding-left: 16px; font-size: 12px; color: var(--text-secondary);">
                             <li th:each="item : ${inv.getItems()}"
-                                th:text="${item.name() + ': ' + #numbers.formatDecimal(item.totalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">Mục</li>
+                                th:text="${item.name() + ': ' + #numbers.formatDecimal(item.totalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">Mục</li>
                         </ul>
                         <div th:each="warning : ${invoiceWarnings.get(inv.getId())}"
                              style="margin-top: 4px; font-size: 12px; color: var(--warning, #b45309);" th:text="'⚠ ' + ${warning}">Cảnh báo</div>
                     </td>
-                    <td th:text="${#numbers.formatDecimal(inv.getTotalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
-                    <td th:text="${#numbers.formatDecimal(inv.getPaidAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</td>
-                    <td th:text="${inv.getDueDate()}">2026-10-05</td>
+                    <td th:text="${#numbers.formatDecimal(inv.getTotalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
+                    <td th:text="${#numbers.formatDecimal(inv.getPaidAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</td>
+                    <td th:text="${uiText.date(inv.getDueDate())}">2026-10-05</td>
                     <td style="font-family: monospace;" th:text="${inv.getPaymentCode() != null ? inv.getPaymentCode() : '—'}">PHXXXXXXXX</td>
                     <td><span th:class="'badge badge-' + ${uiText.invoiceBadge(inv, today)}" th:text="${uiText.invoiceState(inv, today)}">Đến hạn</span></td>
                     <td>
@@ -357,7 +357,7 @@
                 <input type="text" id="addOccupantFullName" name="fullName" class="form-control" required placeholder="VD: Nguyễn Văn B">
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="addOccupantIdCard">Số CCCD / Định danh <span style="color: var(--danger-color, #dc2626);">*</span></label>
                     <input type="text" id="addOccupantIdCard" name="identityCardNumber" class="form-control" required placeholder="12 chữ số">
@@ -368,14 +368,14 @@
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="addOccupantEmail">Email</label>
                     <input type="email" id="addOccupantEmail" name="email" class="form-control" placeholder="tenant@gmail.com">
                 </div>
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="addOccupantCheckInDate">Ngày nhận phòng</label>
-                    <input type="date" id="addOccupantCheckInDate" name="checkInDate" th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}" class="form-control">
+                    <input type="date" id="addOccupantCheckInDate" name="checkInDate" th:value="${#temporals.format(#temporals.createNow(), 'dd/MM/yyyy')}" class="form-control">
                 </div>
             </div>
 
@@ -430,7 +430,7 @@
                 <input type="text" id="editTenantFullName" name="fullName" class="form-control" required placeholder="VD: Nguyễn Văn A">
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="editTenantIdCard">Số CCCD / Định danh <span style="color: var(--danger-color, #dc2626);">*</span></label>
                     <input type="text" id="editTenantIdCard" name="identityCardNumber" class="form-control" required placeholder="12 chữ số">
@@ -489,7 +489,7 @@
 
             <div class="form-group" style="margin-bottom: 16px;">
                 <label class="form-label" for="checkOutDateInput">Ngày rời phòng <span style="color: var(--danger-color, #dc2626);">*</span></label>
-                <input type="date" id="checkOutDateInput" name="checkOutDate" class="form-control" required th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}">
+                <input type="date" id="checkOutDateInput" name="checkOutDate" class="form-control" required th:value="${#temporals.format(#temporals.createNow(), 'dd/MM/yyyy')}">
             </div>
 
             <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-color);">
@@ -592,7 +592,7 @@
             <div class="form-group">
                 <label class="form-label" for="renewRent">Tiền thuê mới / tháng (VNĐ)</label>
                 <input type="number" id="renewRent" name="rentAmount" class="form-control" min="1" step="1000"
-                       th:placeholder="${'Giữ nguyên ' + #numbers.formatDecimal(contract.getRentAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">
+                       th:placeholder="${'Giữ nguyên ' + #numbers.formatDecimal(contract.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">
                 <small style="color: var(--text-secondary); font-size: 11px;">Bỏ trống để giữ nguyên. Tiền thuê mới áp dụng cho các kỳ hóa đơn phát hành sau khi gia hạn.</small>
             </div>
             <div style="display: flex; justify-content: flex-end; gap: 8px;">

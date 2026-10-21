@@ -143,28 +143,28 @@ public interface ContractUseCase {
                 throw new IllegalArgumentException("Room id cannot be null");
             }
             if (primaryTenantFullName == null || primaryTenantFullName.isBlank()) {
-                throw new IllegalArgumentException("Primary tenant full name cannot be blank");
+                throw new IllegalArgumentException("Họ tên người thuê chính không được để trống.");
             }
             if (primaryTenantIdCard == null || primaryTenantIdCard.isBlank()) {
-                throw new IllegalArgumentException("Primary tenant ID card cannot be blank");
+                throw new IllegalArgumentException("Số CCCD người thuê chính không được để trống.");
             }
             if (primaryTenantPhone == null || primaryTenantPhone.isBlank()) {
-                throw new IllegalArgumentException("Primary tenant phone cannot be blank");
+                throw new IllegalArgumentException("Số điện thoại người thuê chính không được để trống.");
             }
             if (depositAmount == null || depositAmount.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Deposit amount cannot be negative");
+                throw new IllegalArgumentException("Tiền cọc không được âm.");
             }
             if (rentAmount == null || rentAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalArgumentException("Rent amount must be greater than zero");
+                throw new IllegalArgumentException("Tiền thuê phải lớn hơn 0.");
             }
             if (startDate == null || endDate == null) {
-                throw new IllegalArgumentException("Dates cannot be null");
+                throw new IllegalArgumentException("Ngày bắt đầu và ngày kết thúc không được để trống.");
             }
             if (!endDate.isAfter(startDate)) {
-                throw new IllegalArgumentException("End date must be after start date");
+                throw new IllegalArgumentException("Ngày kết thúc phải sau ngày bắt đầu.");
             }
             if (paymentDay < 1 || paymentDay > 31) {
-                throw new IllegalArgumentException("Payment day must be between 1 and 31");
+                throw new IllegalArgumentException("Ngày thanh toán phải từ 1 đến 31.");
             }
         }
     }

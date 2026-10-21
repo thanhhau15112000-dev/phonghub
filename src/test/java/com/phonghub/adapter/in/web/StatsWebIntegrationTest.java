@@ -222,7 +222,7 @@ class StatsWebIntegrationTest extends SeededWebTest {
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertTrue(owner.contains("id=\"operations\""));
         assertTrue(owner.contains("Doanh thu theo tháng"));
-        assertTrue(owner.contains("4,000,000 đ"), "đã thu");
+        assertTrue(owner.contains("4.000.000 đ"), "đã thu");
         assertTrue(owner.contains("1 hóa đơn quá hạn"));
         assertFalse(owner.contains("id=\"adminOverview\""));
 
@@ -232,7 +232,7 @@ class StatsWebIntegrationTest extends SeededWebTest {
         assertTrue(admin.contains("id=\"pendingPropertyTable\""), "bảng nhà chờ duyệt");
         assertFalse(admin.contains("id=\"operations\""), "#163: admin không có khối vận hành (tiền)");
         assertFalse(admin.contains("Doanh thu"), "#163: admin không thấy doanh thu");
-        assertFalse(admin.contains("4,000,000"), "#163: admin không thấy số tiền đã thu");
+        assertFalse(admin.contains("4.000.000"), "#163: admin không thấy số tiền đã thu");
         assertFalse(admin.contains("Công nợ"), "#163: admin không thấy công nợ");
 
         for (String user : new String[] {STAFF_1, TENANT_1, TECH_1}) {
@@ -254,7 +254,7 @@ class StatsWebIntegrationTest extends SeededWebTest {
         String foreign = mockMvc.perform(get("/").header("X-User-Id", OWNER_2).param("statsPropertyId", PROP_1))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertTrue(foreign.contains("id=\"operations\""));
-        assertFalse(foreign.contains("7,000,000"), "không lộ số liệu nhà của owner khác");
+        assertFalse(foreign.contains("7.000.000"), "không lộ số liệu nhà của owner khác");
 
         String filtered = mockMvc.perform(get("/").header("X-User-Id", OWNER_1).param("statsPropertyId", PROP_1))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();

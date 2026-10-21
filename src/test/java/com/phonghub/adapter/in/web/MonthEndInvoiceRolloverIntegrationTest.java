@@ -158,7 +158,7 @@ class MonthEndInvoiceRolloverIntegrationTest {
             .andExpect(content().string(containsString("Chi tiết hóa đơn")))
             .andExpect(content().string(containsString("Phí sửa chữa: Vỡ kính cửa sổ")))
             .andExpect(content().string(containsString("Phí sửa chữa: Hỏng ổ khóa")))
-            .andExpect(content().string(containsString("4,250,000 đ")))
+            .andExpect(content().string(containsString("4.250.000 đ")))
             .andExpect(content().string(not(containsString("Hỏng vòi sen"))));
         // Khoản đã gộp trỏ về hóa đơn tháng
         mockMvc.perform(as(get("/invoices/" + unpaidA.getId() + "/pay"), TENANT))

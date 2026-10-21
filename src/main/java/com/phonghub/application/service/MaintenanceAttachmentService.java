@@ -143,13 +143,13 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
     /** Xem: tenant của phiếu, owner/staff/admin của nhà trọ, technician được giao phiếu này. */
     private void assertCanView(CurrentUser user, MaintenanceTicket ticket) {
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
         }
         if (user.role() == UserRole.TENANT) {
             Tenant tenant = tenantRepository.findByUserId(user.id()).orElse(null);
             if (tenant == null || !authorizationService.canTenantViewTicket(user, ticket.getRoomId(),
                 ticket.getRequestedByTenantId())) {
-                throw new UnauthorizedPropertyAccessException("Tenant can only access attachments of their own tickets");
+                throw new UnauthorizedPropertyAccessException("Người thuê chỉ xem được tệp đính kèm của phiếu thuộc phòng mình.");
             }
             return;
         }
@@ -165,13 +165,13 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
 
     private MaintenanceTicket findTicket(UUID ticketId) {
         return ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + ticketId));
     }
 
     private MaintenanceAttachment find(UUID ticketId, UUID attachmentId) {
         return attachmentRepository.findById(attachmentId)
             .filter(attachment -> attachment.ticketId().equals(ticketId))
-            .orElseThrow(() -> new MaintenanceTicketException("Attachment not found: " + attachmentId));
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy tệp đính kèm: " + attachmentId));
     }
 
     private void deleteQuietly(String key) {

@@ -55,19 +55,19 @@ public class Contract {
             throw new IllegalArgumentException("Primary tenant id cannot be null");
         }
         if (depositAmount == null || depositAmount.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Deposit amount cannot be negative");
+            throw new IllegalArgumentException("Tiền cọc không được âm.");
         }
         if (rentAmount == null || rentAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Rent amount must be greater than zero");
+            throw new IllegalArgumentException("Tiền thuê phải lớn hơn 0.");
         }
         if (startDate == null || endDate == null) {
-            throw new IllegalArgumentException("Start date and end date cannot be null");
+            throw new IllegalArgumentException("Ngày bắt đầu và ngày kết thúc không được để trống.");
         }
         if (!endDate.isAfter(startDate)) {
-            throw new IllegalArgumentException("End date must be after start date");
+            throw new IllegalArgumentException("Ngày kết thúc phải sau ngày bắt đầu.");
         }
         if (paymentDay < 1 || paymentDay > 31) {
-            throw new IllegalArgumentException("Payment day must be between 1 and 31");
+            throw new IllegalArgumentException("Ngày thanh toán phải từ 1 đến 31.");
         }
 
         this.id = id;
@@ -126,10 +126,10 @@ public class Contract {
         }
         boolean exists = occupants.stream().anyMatch(o -> o.tenantId().equals(tenantId));
         if (exists) {
-            throw new DomainException("Tenant is already an occupant in this contract");
+            throw new DomainException("Người này đã có trong danh sách người ở của hợp đồng.");
         }
         if (isPrimary && occupants.stream().anyMatch(ContractOccupant::isPrimary)) {
-            throw new DomainException("Contract already has a primary occupant");
+            throw new DomainException("Hợp đồng đã có người thuê chính.");
         }
         ContractOccupant occupant = new ContractOccupant(
             UUID.randomUUID(),
@@ -258,7 +258,7 @@ public class Contract {
     public void activate() {
         if (this.status != ContractStatus.DRAFT) {
             throw new DomainException(String.format(
-                "Contract %s cannot be activated because it is in status %s (must be DRAFT)",
+                "Hợp đồng %s không kích hoạt được vì đang ở trạng thái %s (chỉ kích hoạt hợp đồng nháp).",
                 id, status
             ));
         }
@@ -270,7 +270,7 @@ public class Contract {
     public void terminate() {
         if (!isResiding()) {
             throw new DomainException(String.format(
-                "Contract %s cannot be terminated because it is in status %s (must be ACTIVE or EXPIRED)",
+                "Hợp đồng %s không kết thúc được vì đang ở trạng thái %s (chỉ kết thúc hợp đồng đang hiệu lực hoặc đã hết hạn).",
                 id, status
             ));
         }
@@ -314,7 +314,7 @@ public class Contract {
     public void expire() {
         if (this.status != ContractStatus.ACTIVE) {
             throw new DomainException(String.format(
-                "Contract %s cannot be expired because it is in status %s (must be ACTIVE)",
+                "Hợp đồng %s không chuyển sang hết hạn được vì đang ở trạng thái %s (chỉ hợp đồng đang hiệu lực).",
                 id, status
             ));
         }

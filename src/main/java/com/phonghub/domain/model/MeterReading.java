@@ -39,13 +39,13 @@ public record MeterReading(
             throw new IllegalArgumentException("Meter reading requires id, room, type and date");
         }
         if (periodMonth < 1 || periodMonth > 12 || periodYear < 2020) {
-            throw new IllegalArgumentException("Invalid billing period");
+            throw new IllegalArgumentException("Kỳ ghi chỉ số không hợp lệ.");
         }
         if (previousValue == null || previousValue.signum() < 0 || currentValue == null || currentValue.signum() < 0) {
-            throw new IllegalArgumentException("Meter values must be zero or more");
+            throw new IllegalArgumentException("Chỉ số đồng hồ không được âm.");
         }
         if (consumption == null || consumption.signum() < 0) {
-            throw new IllegalArgumentException("Consumption cannot be negative");
+            throw new IllegalArgumentException("Lượng tiêu thụ không được âm.");
         }
         if ((ocrValue == null) != (ocrConfidence == null)) {
             throw new IllegalArgumentException("OCR value and confidence must be stored together");
@@ -94,7 +94,7 @@ public record MeterReading(
         UUID actorId
     ) {
         if (previous == null || current == null) {
-            throw new IllegalArgumentException("Previous and current values are required");
+            throw new IllegalArgumentException("Cần chỉ số kỳ trước và chỉ số hiện tại.");
         }
         BigDecimal consumption;
         boolean replaced = replacement != null;

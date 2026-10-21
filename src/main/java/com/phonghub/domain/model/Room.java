@@ -42,16 +42,16 @@ public class Room {
             throw new IllegalArgumentException("Property id cannot be null");
         }
         if (roomNumber == null || roomNumber.isBlank()) {
-            throw new IllegalArgumentException("Room number cannot be blank");
+            throw new IllegalArgumentException("Số phòng không được để trống.");
         }
         if (basePrice == null || basePrice.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Base price cannot be negative");
+            throw new IllegalArgumentException("Giá thuê không được âm.");
         }
         if (maxOccupants <= 0) {
-            throw new IllegalArgumentException("Max occupants must be positive");
+            throw new IllegalArgumentException("Số người tối đa phải lớn hơn 0.");
         }
         if (areaSqm != null && areaSqm.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Area cannot be negative");
+            throw new IllegalArgumentException("Diện tích không được âm.");
         }
 
         this.id = id;
@@ -97,16 +97,16 @@ public class Room {
         int maxOccupants
     ) {
         if (roomNumber == null || roomNumber.isBlank()) {
-            throw new IllegalArgumentException("Room number cannot be blank");
+            throw new IllegalArgumentException("Số phòng không được để trống.");
         }
         if (basePrice == null || basePrice.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Base price cannot be negative");
+            throw new IllegalArgumentException("Giá thuê không được âm.");
         }
         if (maxOccupants <= 0) {
-            throw new IllegalArgumentException("Max occupants must be positive");
+            throw new IllegalArgumentException("Số người tối đa phải lớn hơn 0.");
         }
         if (areaSqm != null && areaSqm.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Area cannot be negative");
+            throw new IllegalArgumentException("Diện tích không được âm.");
         }
 
         this.roomNumber = roomNumber.trim();
@@ -154,8 +154,8 @@ public class Room {
         }
         if (!canTransitionTo(target)) {
             throw new InvalidRoomStateException(String.format(
-                "Invalid room status transition for room '%s' (ID: %s): cannot move from %s to %s",
-                roomNumber, id, status, target
+                "Không thể chuyển phòng '%s' từ %s sang %s.",
+                roomNumber, status.label(), target.label()
             ));
         }
         this.status = target;
@@ -165,8 +165,8 @@ public class Room {
     public void reserve() {
         if (this.status != RoomStatus.AVAILABLE) {
             throw new InvalidRoomStateException(String.format(
-                "Room '%s' cannot be reserved because it is currently %s (must be AVAILABLE)",
-                roomNumber, status
+                "Phòng '%s' đang %s nên không đặt giữ chỗ được (cần phòng Trống).",
+                roomNumber, status.label()
             ));
         }
         transitionTo(RoomStatus.RESERVED);
@@ -175,8 +175,8 @@ public class Room {
     public void cancelReservation() {
         if (this.status != RoomStatus.RESERVED) {
             throw new InvalidRoomStateException(String.format(
-                "Room '%s' reservation cannot be cancelled because it is currently %s (must be RESERVED)",
-                roomNumber, status
+                "Phòng '%s' đang %s nên không có giữ chỗ để hủy.",
+                roomNumber, status.label()
             ));
         }
         transitionTo(RoomStatus.AVAILABLE);
@@ -185,8 +185,8 @@ public class Room {
     public void occupy() {
         if (this.status != RoomStatus.AVAILABLE && this.status != RoomStatus.RESERVED) {
             throw new InvalidRoomStateException(String.format(
-                "Room '%s' cannot be occupied because it is currently %s (must be AVAILABLE or RESERVED)",
-                roomNumber, status
+                "Phòng '%s' đang %s nên chưa cho thuê được (cần phòng Trống hoặc Đã đặt).",
+                roomNumber, status.label()
             ));
         }
         transitionTo(RoomStatus.OCCUPIED);
@@ -201,8 +201,8 @@ public class Room {
         }
         if (this.status != RoomStatus.OCCUPIED) {
             throw new InvalidRoomStateException(String.format(
-                "Room '%s' cannot be vacated because it is currently %s (must be OCCUPIED)",
-                roomNumber, status
+                "Phòng '%s' đang %s nên không trả phòng được (cần phòng Đang thuê).",
+                roomNumber, status.label()
             ));
         }
         if (requiresMaintenance) {
@@ -216,8 +216,8 @@ public class Room {
     public void putUnderMaintenance() {
         if (this.status != RoomStatus.AVAILABLE && this.status != RoomStatus.OCCUPIED) {
             throw new InvalidRoomStateException(String.format(
-                "Room '%s' cannot be put under maintenance from %s (must be AVAILABLE or OCCUPIED)",
-                roomNumber, status
+                "Phòng '%s' đang %s nên không chuyển sang bảo trì được.",
+                roomNumber, status.label()
             ));
         }
         transitionTo(RoomStatus.MAINTENANCE);
@@ -226,8 +226,8 @@ public class Room {
     public void releaseFromMaintenance() {
         if (this.status != RoomStatus.MAINTENANCE) {
             throw new InvalidRoomStateException(String.format(
-                "Room '%s' cannot be released from maintenance because it is %s (must be MAINTENANCE)",
-                roomNumber, status
+                "Phòng '%s' đang %s, không ở trạng thái Bảo trì.",
+                roomNumber, status.label()
             ));
         }
         transitionTo(RoomStatus.AVAILABLE);
@@ -303,7 +303,7 @@ public class Room {
         if (status != RoomStatus.AVAILABLE && status != RoomStatus.MAINTENANCE) {
             throw new InvalidRoomStateException(String.format(
                 "Chỉ ngừng sử dụng được phòng đang trống hoặc bảo trì; phòng '%s' đang ở trạng thái %s.",
-                roomNumber, status));
+                roomNumber, status.label()));
         }
         this.archivedAt = at;
         this.updatedAt = at;

@@ -106,7 +106,7 @@ public class RoomService implements RoomUseCase {
         authorizationService.assertCanManageProperty(currentUser, command.propertyId());
 
         Property property = propertyRepository.findById(command.propertyId())
-            .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + command.propertyId()));
+            .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + command.propertyId()));
 
         if (property.isArchived()) {
             throw new com.phonghub.domain.exception.ConflictException(
@@ -166,7 +166,7 @@ public class RoomService implements RoomUseCase {
     public Room updateRoom(UpdateRoomCommand command) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Room room = roomRepository.findById(command.roomId())
-            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + command.roomId()));
+            .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + command.roomId()));
 
         authorizationService.assertOwnerOrAdmin(currentUser, room.getPropertyId());
         assertInUse(room, "sửa thông tin");
@@ -266,14 +266,14 @@ public class RoomService implements RoomUseCase {
     public Room getRoom(UUID roomId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Room room = roomRepository.findById(roomId)
-            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
+            .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + roomId));
 
         authorizationService.assertCanAccessProperty(currentUser, room.getPropertyId());
 
         if (currentUser.role() == UserRole.TENANT) {
             Optional<Tenant> tenantOpt = tenantRepository.findByUserId(currentUser.id());
             if (tenantOpt.isEmpty()) {
-                throw new UnauthorizedPropertyAccessException("Tenant profile not found");
+                throw new UnauthorizedPropertyAccessException("Không tìm thấy hồ sơ người thuê của tài khoản này.");
             }
             UUID tenantId = tenantOpt.get().id();
             boolean isOccupant = contractRepository.findByRoomId(roomId).stream()
@@ -281,7 +281,7 @@ public class RoomService implements RoomUseCase {
                 .anyMatch(c -> c.getPrimaryTenantId().equals(tenantId)
                     || c.getOccupants().stream().anyMatch(o -> o.tenantId().equals(tenantId)));
             if (!isOccupant) {
-                throw new UnauthorizedPropertyAccessException("Tenant cannot access rooms other than their assigned room");
+                throw new UnauthorizedPropertyAccessException("Người thuê chỉ xem được phòng mình đang ở.");
             }
         }
 
@@ -292,7 +292,7 @@ public class RoomService implements RoomUseCase {
     public Room changeRoomStatus(UUID roomId, RoomStatus targetStatus) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Room room = roomRepository.findById(roomId)
-            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
+            .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + roomId));
 
         authorizationService.assertCanManageProperty(currentUser, room.getPropertyId());
         assertInUse(room, "đổi trạng thái");
@@ -335,7 +335,7 @@ public class RoomService implements RoomUseCase {
     public Room archiveRoom(UUID roomId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Room room = roomRepository.findById(roomId)
-            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
+            .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + roomId));
         authorizationService.assertOwnerOrAdmin(currentUser, room.getPropertyId());
         if (room.isArchived()) {
             throw new ConflictException("Phòng '" + room.getRoomNumber() + "' đã ngừng sử dụng trước đó.");
@@ -377,7 +377,7 @@ public class RoomService implements RoomUseCase {
     public Room restoreRoom(UUID roomId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Room room = roomRepository.findById(roomId)
-            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
+            .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + roomId));
         authorizationService.assertOwnerOrAdmin(currentUser, room.getPropertyId());
         if (!room.isArchived()) {
             throw new ConflictException("Phòng '" + room.getRoomNumber() + "' đang được sử dụng, không cần khôi phục.");
@@ -398,16 +398,7 @@ public class RoomService implements RoomUseCase {
             return String.format("Phòng '%s' chỉ chuyển sang Đang thuê khi kích hoạt hợp đồng.", room.getRoomNumber());
         }
         return String.format("Không thể chuyển phòng '%s' từ %s sang %s.", room.getRoomNumber(),
-            statusLabel(room.getStatus()), statusLabel(target));
-    }
-
-    private static String statusLabel(RoomStatus status) {
-        return switch (status) {
-            case AVAILABLE -> "Trống";
-            case RESERVED -> "Đã đặt";
-            case OCCUPIED -> "Đang thuê";
-            case MAINTENANCE -> "Bảo trì";
-        };
+            room.getStatus().label(), target.label());
     }
 
     private static void assertInUse(Room room, String action) {

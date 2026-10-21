@@ -27,15 +27,15 @@ public final class FileSanitizer {
 
     public static SanitizedFile sanitize(String declaredContentType, byte[] content, long maxFileSizeBytes) {
         if (content == null || content.length == 0) {
-            throw new IllegalArgumentException("File cannot be empty");
+            throw new IllegalArgumentException("Tệp không được rỗng.");
         }
         if (content.length > maxFileSizeBytes) {
-            throw new IllegalArgumentException("File exceeds the configured size limit");
+            throw new IllegalArgumentException("Tệp vượt quá dung lượng cho phép.");
         }
         String declaredType = normalizeContentType(declaredContentType);
         FileType fileType = ALLOWED_TYPES.get(declaredType);
         if (fileType == null || !matchesMagicBytes(fileType.kind(), content)) {
-            throw new IllegalArgumentException("File content does not match an allowed jpeg/png/webp/pdf type");
+            throw new IllegalArgumentException("Nội dung tệp không phải ảnh JPEG/PNG/WebP hoặc PDF hợp lệ.");
         }
         return new SanitizedFile(declaredType, fileType.extension(), clean(fileType.kind(), content));
     }
@@ -43,10 +43,10 @@ public final class FileSanitizer {
     /** Video ngắn: mp4/quicktime (hộp ftyp) hoặc webm (EBML). Chỉ kiểm tra chữ ký; không xử lý lại nội dung. */
     public static SanitizedFile sanitizeVideo(String declaredContentType, byte[] content, long maxFileSizeBytes) {
         if (content == null || content.length == 0) {
-            throw new IllegalArgumentException("File cannot be empty");
+            throw new IllegalArgumentException("Tệp không được rỗng.");
         }
         if (content.length > maxFileSizeBytes) {
-            throw new IllegalArgumentException("Video exceeds the configured size limit");
+            throw new IllegalArgumentException("Video vượt quá dung lượng cho phép.");
         }
         String type = normalizeContentType(declaredContentType);
         boolean ok = switch (type) {
@@ -56,7 +56,7 @@ public final class FileSanitizer {
             default -> false;
         };
         if (!ok) {
-            throw new IllegalArgumentException("Video content does not match an allowed mp4/webm/quicktime type");
+            throw new IllegalArgumentException("Nội dung video không phải MP4/WebM/QuickTime hợp lệ.");
         }
         String extension = type.equals("video/webm") ? "webm" : type.equals("video/quicktime") ? "mov" : "mp4";
         return new SanitizedFile(type, extension, content);
@@ -114,7 +114,7 @@ public final class FileSanitizer {
             }
             ByteArrayOutputStream output = new ByteArrayOutputStream();
             if (!ImageIO.write(image, format, output)) {
-                throw new IllegalArgumentException("Image format cannot be sanitized");
+                throw new IllegalArgumentException("Không xử lý được định dạng ảnh này.");
             }
             return output.toByteArray();
         } catch (IOException ex) {
@@ -150,7 +150,7 @@ public final class FileSanitizer {
             result.write(body);
             return result.toByteArray();
         } catch (IOException ex) {
-            throw new IllegalStateException("Unable to sanitize WebP image", ex);
+            throw new IllegalStateException("Không xử lý được ảnh WebP.", ex);
         }
     }
 

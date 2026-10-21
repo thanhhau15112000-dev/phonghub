@@ -112,6 +112,9 @@ public class DashboardUiController {
         model.addAttribute("properties", properties);
         model.addAttribute("propertiesCount", properties.size());
         model.addAttribute("roomsCount", allRooms.size());
+        java.util.Map<java.util.UUID, String> roomNumbers = new java.util.HashMap<>();
+        allRooms.forEach(room -> roomNumbers.put(room.getId(), room.getRoomNumber()));
+        model.addAttribute("roomNumbers", roomNumbers);
         model.addAttribute("activeContractsCount", allContracts.stream().filter(Contract::isActive).count());
         model.addAttribute("openTicketsCount", allTickets.stream().filter(t -> !t.isResolved()).count());
         // Phiếu chưa hoàn thành lên trước, mới nhất trước; chờ thanh toán hiển thị cùng trạng thái

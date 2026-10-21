@@ -9,13 +9,14 @@
 
     <div class="page-title-row">
         <div>
-            <h1>Bảng điều khiển quản lý nhà trọ</h1>
-            <p style="color: var(--text-secondary); font-size: 13px;">Tổng quan về nhà trọ, phòng, hợp đồng và yêu cầu bảo trì trong phạm vi tài khoản.</p>
+            <h1 th:text="${currentUser.role().name() == 'TENANT' ? 'Phòng thuê của tôi' : 'Bảng điều khiển quản lý nhà trọ'}">Bảng điều khiển quản lý nhà trọ</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;"
+               th:text="${currentUser.role().name() == 'TENANT' ? 'Khoản cần thanh toán, thông tin phòng và yêu cầu bảo trì của bạn.' : 'Tổng quan về nhà trọ, phòng, hợp đồng và yêu cầu bảo trì trong phạm vi tài khoản.'}">Tổng quan</p>
         </div>
     </div>
 
-    <!-- Chỉ số tổng quan -->
-    <div class="grid-cols-4">
+    <!-- Chỉ số tổng quan (người thuê chỉ có một phòng nên không cần) -->
+    <div class="grid-cols-4" th:if="${currentUser.role().name() != 'TENANT'}">
         <div class="metric-card">
             <div class="metric-label">Nhà trọ được truy cập</div>
             <div class="metric-value" th:text="${propertiesCount}">0</div>
@@ -73,21 +74,21 @@
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Đã thu / phát sinh</div>
-                    <div class="metric-value" th:text="${#numbers.formatDecimal(opsSummary.revenue().collected(), 0, 'COMMA', 0, 'POINT')} + ' đ'">0 đ</div>
+                    <div class="metric-value" th:text="${#numbers.formatDecimal(opsSummary.revenue().collected(), 0, 'POINT', 0, 'COMMA')} + ' đ'">0 đ</div>
                     <div style="font-size: 12px; color: var(--text-secondary);"
-                         th:text="'/ ' + ${#numbers.formatDecimal(opsSummary.revenue().billed(), 0, 'COMMA', 0, 'POINT')} + ' đ · thu ' + ${opsSummary.revenue().collectionRate() != null ? opsSummary.revenue().collectionRate() + '%' : '—'}">/ 0 đ</div>
+                         th:text="'/ ' + ${#numbers.formatDecimal(opsSummary.revenue().billed(), 0, 'POINT', 0, 'COMMA')} + ' đ · thu ' + ${opsSummary.revenue().collectionRate() != null ? opsSummary.revenue().collectionRate() + '%' : '—'}">/ 0 đ</div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Công nợ</div>
-                    <div class="metric-value" th:text="${#numbers.formatDecimal(opsSummary.revenue().outstanding(), 0, 'COMMA', 0, 'POINT')} + ' đ'">0 đ</div>
+                    <div class="metric-value" th:text="${#numbers.formatDecimal(opsSummary.revenue().outstanding(), 0, 'POINT', 0, 'COMMA')} + ' đ'">0 đ</div>
                     <div style="font-size: 12px;" th:style="${opsSummary.revenue().overdueInvoices() > 0 ? 'color: #b91c1c;' : 'color: var(--text-secondary);'}"
-                         th:text="${opsSummary.revenue().overdueInvoices()} + ' hóa đơn quá hạn · ' + ${#numbers.formatDecimal(opsSummary.revenue().overdueAmount(), 0, 'COMMA', 0, 'POINT')} + ' đ'">0 hóa đơn quá hạn</div>
+                         th:text="${opsSummary.revenue().overdueInvoices()} + ' hóa đơn quá hạn · ' + ${#numbers.formatDecimal(opsSummary.revenue().overdueAmount(), 0, 'POINT', 0, 'COMMA')} + ' đ'">0 hóa đơn quá hạn</div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Lợi nhuận ước tính</div>
-                    <div class="metric-value" th:text="${#numbers.formatDecimal(opsSummary.estimatedProfit(), 0, 'COMMA', 0, 'POINT')} + ' đ'">0 đ</div>
+                    <div class="metric-value" th:text="${#numbers.formatDecimal(opsSummary.estimatedProfit(), 0, 'POINT', 0, 'COMMA')} + ' đ'">0 đ</div>
                     <div style="font-size: 12px; color: var(--text-secondary);"
-                         th:text="'Chi phí sửa chữa ' + ${#numbers.formatDecimal(opsSummary.repairCost(), 0, 'COMMA', 0, 'POINT')} + ' đ'">Chi phí sửa chữa 0 đ</div>
+                         th:text="'Chi phí sửa chữa ' + ${#numbers.formatDecimal(opsSummary.repairCost(), 0, 'POINT', 0, 'COMMA')} + ' đ'">Chi phí sửa chữa 0 đ</div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Phòng đang bảo trì</div>
@@ -126,13 +127,13 @@
                                     <div style="background: var(--accent); border-radius: 4px; height: 8px;"
                                          th:style="'width: ' + ${opsRevenueBars[r.period()]} + '%'"></div>
                                 </div>
-                                <span style="white-space: nowrap;" th:text="${#numbers.formatDecimal(r.billed(), 0, 'COMMA', 0, 'POINT')}">0</span>
+                                <span style="white-space: nowrap;" th:text="${#numbers.formatDecimal(r.billed(), 0, 'POINT', 0, 'COMMA')}">0</span>
                             </div>
                         </td>
-                        <td class="col-number" th:text="${#numbers.formatDecimal(r.collected(), 0, 'COMMA', 0, 'POINT')}">0</td>
-                        <td class="col-number" th:text="${#numbers.formatDecimal(r.outstanding(), 0, 'COMMA', 0, 'POINT')}">0</td>
-                        <td class="col-number" th:text="${#numbers.formatDecimal(r.repairCost(), 0, 'COMMA', 0, 'POINT')}">0</td>
-                        <td class="col-number" th:text="${#numbers.formatDecimal(r.estimatedProfit(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(r.collected(), 0, 'POINT', 0, 'COMMA')}">0</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(r.outstanding(), 0, 'POINT', 0, 'COMMA')}">0</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(r.repairCost(), 0, 'POINT', 0, 'COMMA')}">0</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(r.estimatedProfit(), 0, 'POINT', 0, 'COMMA')}">0</td>
                     </tr>
                 </tbody>
             </table>
@@ -159,11 +160,11 @@
                     <tr th:each="p : ${opsProperties}">
                         <td><a th:href="@{'/properties/' + ${p.propertyId()}}" th:text="${p.name()}" style="font-weight: 600; color: var(--accent);">Nhà trọ</a></td>
                         <td class="col-number" th:text="${p.occupancy().occupancyRate() != null ? p.occupancy().occupancyRate() + '%' : '—'}">0%</td>
-                        <td class="col-number" th:text="${#numbers.formatDecimal(p.revenue().billed(), 0, 'COMMA', 0, 'POINT')}">0</td>
-                        <td class="col-number" th:text="${#numbers.formatDecimal(p.revenue().collected(), 0, 'COMMA', 0, 'POINT')}">0</td>
-                        <td class="col-number" th:text="${#numbers.formatDecimal(p.revenue().outstanding(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(p.revenue().billed(), 0, 'POINT', 0, 'COMMA')}">0</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(p.revenue().collected(), 0, 'POINT', 0, 'COMMA')}">0</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(p.revenue().outstanding(), 0, 'POINT', 0, 'COMMA')}">0</td>
                         <td class="col-number" th:text="${p.revenue().overdueInvoices()}">0</td>
-                        <td class="col-number" th:text="${#numbers.formatDecimal(p.estimatedProfit(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(p.estimatedProfit(), 0, 'POINT', 0, 'COMMA')}">0</td>
                     </tr>
                 </tbody>
             </table>
@@ -256,12 +257,12 @@
                         </tr>
                         <tr>
                             <td style="color: var(--text-secondary);">Số tiền cần chuyển:</td>
-                            <td style="font-weight: 600;" th:text="${#numbers.formatDecimal(nextInvoice.remainingAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                            <td style="font-weight: 600;" th:text="${#numbers.formatDecimal(nextInvoice.remainingAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                         </tr>
                         <tr>
                             <td style="color: var(--text-secondary);">Hạn thanh toán:</td>
                             <td>
-                                <span th:text="${nextInvoice.getDueDate()}">2026-10-05</span>
+                                <span th:text="${uiText.date(nextInvoice.getDueDate())}">2026-10-05</span>
                                 <span th:class="'badge badge-' + ${uiText.invoiceBadge(nextInvoice, today)}" th:text="${uiText.invoiceState(nextInvoice, today)}">Đến hạn</span>
                             </td>
                         </tr>
@@ -378,6 +379,7 @@
             <thead>
                 <tr>
                     <th>Tiêu đề yêu cầu</th>
+                    <th>Phòng</th>
                     <th>Mức độ</th>
                     <th>Trạng thái</th>
                     <th class="col-actions">Thao tác</th>
@@ -389,6 +391,7 @@
                         <a th:href="@{'/maintenance/' + ${t.getId()}}" th:text="${t.getTitle()}" style="font-weight: 600; color: var(--accent);">Tiêu đề yêu cầu</a>
                         <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;" th:text="${t.getDescription()}">Mô tả</div>
                     </td>
+                    <td th:text="${roomNumbers.get(t.getRoomId()) != null ? roomNumbers.get(t.getRoomId()) : '—'}">P101</td>
                     <td>
                         <span class="badge" th:text="${uiText.maintenancePriority(t.getPriority())}">Trung bình</span>
                     </td>

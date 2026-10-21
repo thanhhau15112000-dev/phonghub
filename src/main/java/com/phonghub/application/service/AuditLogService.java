@@ -77,7 +77,7 @@ public class AuditLogService implements AuditLogUseCase {
     private CurrentUser requireAuditViewer() {
         CurrentUser user = currentUserPort.getCurrentUser();
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
         }
         if (user.role() != UserRole.ADMIN && user.role() != UserRole.OWNER) {
             throw new UnauthorizedPropertyAccessException("Chỉ chủ nhà trọ hoặc quản trị viên được xem nhật ký.");

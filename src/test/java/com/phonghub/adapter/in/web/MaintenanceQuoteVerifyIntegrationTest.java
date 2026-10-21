@@ -129,7 +129,7 @@ class MaintenanceQuoteVerifyIntegrationTest extends SeededWebTest {
         String tenantPaysPage = mockMvc.perform(get("/maintenance/" + tenantPays.getId()).header("X-User-Id", TENANT_1))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertTrue(tenantPaysPage.contains("id=\"quote-detail\""));
-        assertTrue(tenantPaysPage.contains("300,000 đ"));
+        assertTrue(tenantPaysPage.contains("300.000 đ"));
         assertFalse(tenantPaysPage.contains("id=\"quote-form\""), "người thuê không nhập báo giá");
         String ownerPage = mockMvc.perform(get("/maintenance/" + ownerPays.getId()).header("X-User-Id", OWNER_1))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
