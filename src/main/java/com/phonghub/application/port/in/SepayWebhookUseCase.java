@@ -2,8 +2,6 @@ package com.phonghub.application.port.in;
 
 import com.phonghub.domain.model.PaymentTransaction;
 import java.math.BigDecimal;
-import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 public interface SepayWebhookUseCase {
@@ -36,8 +34,4 @@ public interface SepayWebhookUseCase {
      * đường xử lý với webhook thật. Chỉ chạy khi cấu hình bật mô phỏng; người gọi phải được phép xem hóa đơn.
      */
     WebhookProcessResult simulateTransfer(UUID invoiceId);
-
-    List<PaymentTransaction> getAllTransactions();
-
-    Optional<PaymentTransaction> getTransactionById(UUID id);
 }

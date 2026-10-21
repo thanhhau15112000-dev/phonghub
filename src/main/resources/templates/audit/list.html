@@ -11,6 +11,10 @@
             <p style="color: var(--text-secondary); font-size: 13px;">
                 Lịch sử đăng nhập, thay đổi dữ liệu và xem giấy tờ. Mật khẩu, token và số giấy tờ đầy đủ không bao giờ được lưu.
             </p>
+            <p th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" id="auditMoneyHiddenNote"
+               style="color: var(--text-secondary); font-size: 13px;">
+                Số tiền trong cột chi tiết được che (***) vì quản trị viên không xem số liệu tài chính của nhà trọ.
+            </p>
         </div>
     </div>
 

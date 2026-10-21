@@ -75,4 +75,29 @@ class AuditSanitizerTest {
     void nullSafe() {
         assertNull(AuditSanitizer.sanitize(null));
     }
+
+    @Test
+    @DisplayName("#163: che số tiền trong chi tiết JSON, kể cả trong before/after; giữ nguyên trường khác")
+    void masksMoneyInJson() {
+        String json = "{\"before\":{\"rentAmount\":\"3000000\",\"depositAmount\":\"6000000\",\"endDate\":\"2027-01-01\"},"
+            + "\"after\":{\"rentAmount\":\"3500000\"},\"amount\":150000,\"basePrice\":\"2500000.50\","
+            + "\"pricePerUnit\":\"3500\",\"feeType\":\"PERCENT\",\"feeValue\":\"5\",\"capAmount\":null,"
+            + "\"totalAmount\":\"1000\",\"cost\":\"200000\",\"daysOverdue\":3,\"roomNumber\":\"P101\"}";
+
+        String masked = AuditSanitizer.maskMoney(json);
+
+        assertEquals("{\"before\":{\"rentAmount\":\"***\",\"depositAmount\":\"***\",\"endDate\":\"2027-01-01\"},"
+            + "\"after\":{\"rentAmount\":\"***\"},\"amount\":\"***\",\"basePrice\":\"***\","
+            + "\"pricePerUnit\":\"***\",\"feeType\":\"PERCENT\",\"feeValue\":\"***\",\"capAmount\":null,"
+            + "\"totalAmount\":\"***\",\"cost\":\"***\",\"daysOverdue\":3,\"roomNumber\":\"P101\"}", masked);
+    }
+
+    @Test
+    @DisplayName("#163: che số tiền trong chi tiết dạng Map.toString của bộ nhớ trong")
+    void masksMoneyInMapText() {
+        assertEquals("{amount=***, propertyId=abc, before={basePrice=***, status=AVAILABLE}}",
+            AuditSanitizer.maskMoney("{amount=150000, propertyId=abc, before={basePrice=2500000, status=AVAILABLE}}"));
+        assertNull(AuditSanitizer.maskMoney(null));
+        assertEquals("{}", AuditSanitizer.maskMoney("{}"));
+    }
 }

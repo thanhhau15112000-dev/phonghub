@@ -205,6 +205,20 @@ class ExportServiceUnitTest {
     }
 
     @Test
+    @DisplayName("#163: admin không xuất hóa đơn, công nợ (toàn bộ hay một nhà) vì không xem số liệu tiền")
+    void adminCannotExportFinance() {
+        login(UUID.randomUUID(), UserRole.ADMIN);
+        for (Dataset dataset : List.of(Dataset.INVOICES, Dataset.DEBTS)) {
+            UnauthorizedPropertyAccessException ex = assertThrows(UnauthorizedPropertyAccessException.class,
+                () -> service.export(new ExportRequest(dataset, Format.XLSX, null, null, null)));
+            assertEquals(AuthorizationService.ADMIN_FINANCE_DENIED, ex.getMessage());
+            assertThrows(UnauthorizedPropertyAccessException.class,
+                () -> service.export(new ExportRequest(dataset, Format.PDF, p1, null, null)));
+        }
+        assertTrue(audit.getRecordedEvents().isEmpty(), "bị từ chối thì không ghi nhận xuất dữ liệu");
+    }
+
+    @Test
     @DisplayName("staff: hóa đơn cần quyền thu tiền, hợp đồng cần quyền quản lý hợp đồng")
     void staffPermissions() {
         login(staffId, UserRole.STAFF);
@@ -235,7 +249,7 @@ class ExportServiceUnitTest {
             () -> service.export(new ExportRequest(Dataset.CONTRACTS, Format.XLSX, p2, null, null)));
         login(UUID.randomUUID(), UserRole.ADMIN);
         assertThrows(PropertyNotFoundException.class,
-            () -> service.export(new ExportRequest(Dataset.INVOICES, Format.XLSX, UUID.randomUUID(), null, null)));
+            () -> service.export(new ExportRequest(Dataset.CONTRACTS, Format.XLSX, UUID.randomUUID(), null, null)));
         when(currentUserPort.getCurrentUser()).thenReturn(null);
         assertThrows(UnauthorizedPropertyAccessException.class,
             () -> service.export(new ExportRequest(Dataset.INVOICES, Format.XLSX, null, null, null)));

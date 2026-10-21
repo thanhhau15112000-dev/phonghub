@@ -7,6 +7,7 @@ import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.InvoiceUseCase;
+import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
@@ -16,6 +17,7 @@ import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
+import com.phonghub.domain.model.UserRole;
 import java.time.YearMonth;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -78,6 +80,7 @@ public class InvoiceService implements InvoiceUseCase {
 
     @Override
     public List<Invoice> listInvoicesForContract(UUID contractId) {
+        assertCanViewFinance();
         // getContract áp dụng quy tắc xem hợp đồng (người thuê chỉ xem hợp đồng của mình).
         contractUseCase.getContract(contractId);
         return invoiceRepository.findByContractId(contractId).stream()
@@ -89,6 +92,7 @@ public class InvoiceService implements InvoiceUseCase {
     public Invoice getInvoice(UUID invoiceId) {
         Invoice invoice = invoiceRepository.findById(invoiceId)
             .orElseThrow(() -> new DomainException("Không tìm thấy hóa đơn."));
+        assertCanViewFinance();
         // getContract áp dụng quy tắc xem hợp đồng (người thuê chỉ xem hợp đồng của mình).
         contractUseCase.getContract(invoice.getContractId());
         return invoice;
@@ -96,6 +100,7 @@ public class InvoiceService implements InvoiceUseCase {
 
     @Override
     public Map<UUID, List<String>> utilityWarnings(UUID contractId) {
+        assertCanViewFinance();
         Contract contract = contractUseCase.getContract(contractId);
         Map<UUID, List<String>> warnings = new HashMap<>();
         for (Invoice invoice : invoiceRepository.findByContractId(contractId)) {
@@ -109,6 +114,7 @@ public class InvoiceService implements InvoiceUseCase {
 
     @Override
     public Invoice issueMonthlyInvoice(UUID contractId, YearMonth period) {
+        assertCanViewFinance();
         Contract contract = contractUseCase.getContract(contractId);
         authorizationService.assertCanManageContracts(currentUserPort.getCurrentUser(), contract.getPropertyId());
 
@@ -122,6 +128,7 @@ public class InvoiceService implements InvoiceUseCase {
 
     @Override
     public Invoice voidInvoice(UUID invoiceId, String reason) {
+        assertCanViewFinance();
         Invoice invoice = invoiceRepository.findByIdForUpdate(invoiceId)
             .orElseThrow(() -> new InvoiceNotFoundException("Không tìm thấy hóa đơn: " + invoiceId));
         // Quyền trước trạng thái: người ngoài phạm vi nhận 403, không biết được tình trạng hóa đơn.
@@ -166,6 +173,10 @@ public class InvoiceService implements InvoiceUseCase {
 
     @Override
     public java.util.Optional<Invoice> findFeeInvoiceForTicket(UUID ticketId) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        if (user != null && user.role() == UserRole.ADMIN) {
+            return java.util.Optional.empty();
+        }
         return invoiceRepository.findActiveByTicketId(ticketId).filter(invoice -> {
             try {
                 contractUseCase.getContract(invoice.getContractId());
@@ -174,5 +185,13 @@ public class InvoiceService implements InvoiceUseCase {
                 return false;
             }
         });
+    }
+
+    /** Hóa đơn là số liệu tiền của nhà trọ nên quản trị viên không xem (#163); phạm vi xem do getContract kiểm tra. */
+    private void assertCanViewFinance() {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        if (user != null) {
+            authorizationService.assertCanViewFinance(user);
+        }
     }
 }

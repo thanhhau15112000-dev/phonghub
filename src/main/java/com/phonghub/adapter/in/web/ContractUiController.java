@@ -207,7 +207,10 @@ public class ContractUiController {
             model.addAttribute("room", room);
             model.addAttribute("primaryTenant", primaryTenant);
             model.addAttribute("occupantTenants", occupantTenants);
-            addPaymentAttributes(model, currentUser, contract, property);
+            // Hóa đơn và thanh toán là số liệu tiền của nhà trọ: quản trị viên không xem (#163).
+            if (currentUser.role() != UserRole.ADMIN) {
+                addPaymentAttributes(model, currentUser, contract, property);
+            }
 
             return "contracts/detail";
         } catch (DomainException ex) {
@@ -264,8 +267,7 @@ public class ContractUiController {
             .orElse(null);
 
         boolean canIssueInvoice = contract.isResiding() && currentUser != null && (
-            currentUser.role() == UserRole.ADMIN
-                || currentUser.role() == UserRole.STAFF
+            currentUser.role() == UserRole.STAFF
                 || (currentUser.role() == UserRole.OWNER && currentUser.id().equals(property.ownerId()))
         );
 
@@ -276,8 +278,7 @@ public class ContractUiController {
         model.addAttribute("canIssueInvoice", canIssueInvoice);
         // Hủy hóa đơn (#89) không phụ thuộc hợp đồng còn hiệu lực: hợp đồng đã kết thúc vẫn có thể còn kỳ lập sai.
         model.addAttribute("canVoidInvoice", currentUser != null && (
-            currentUser.role() == UserRole.ADMIN
-                || currentUser.role() == UserRole.STAFF
+            currentUser.role() == UserRole.STAFF
                 || (currentUser.role() == UserRole.OWNER && currentUser.id().equals(property.ownerId()))));
         model.addAttribute("defaultInvoicePeriod", YearMonth.now().toString());
         model.addAttribute("bankConfigured", sepayProperties.hasBankAccount());

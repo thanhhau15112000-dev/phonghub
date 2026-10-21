@@ -39,7 +39,6 @@ import com.phonghub.application.port.out.StatisticsQueryPort.SignupCount;
 import com.phonghub.application.port.out.StatisticsQueryPort.UserCount;
 import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.application.service.StatisticsService;
-import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyApprovalStatus;
@@ -250,13 +249,23 @@ class StatisticsServiceUnitTest {
     }
 
     @Test
-    @DisplayName("admin xem toàn bộ hoặc một nhà bất kỳ; nhà không tồn tại trả lỗi không tìm thấy")
-    void adminScope() {
+    @DisplayName("#163: admin không xem thống kê tài chính (toàn bộ hay một nhà) và không truy vấn số liệu tiền")
+    void adminForbiddenOnFinance() {
         login(UUID.randomUUID(), UserRole.ADMIN);
 
-        assertEquals(3, service.ownerSummary(query(null, null)).propertyCount());
-        assertEquals(1, service.ownerSummary(query(foreign, null)).propertyCount());
-        assertThrows(PropertyNotFoundException.class, () -> service.ownerSummary(query(UUID.randomUUID(), null)));
+        UnauthorizedPropertyAccessException ex = assertThrows(UnauthorizedPropertyAccessException.class,
+            () -> service.ownerSummary(query(null, null)));
+        assertEquals(AuthorizationService.ADMIN_FINANCE_DENIED, ex.getMessage());
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> service.ownerSummary(query(foreign, null)));
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> service.ownerRevenue(query(p1, null)));
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> service.ownerProperties(query(null, null)));
+        verifyNoInteractions(port);
+    }
+
+    @Test
+    @DisplayName("owner lọc nhà không tồn tại bị từ chối")
+    void ownerUnknownProperty() {
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> service.ownerSummary(query(UUID.randomUUID(), null)));
     }
 
     @ParameterizedTest
@@ -288,7 +297,7 @@ class StatisticsServiceUnitTest {
     }
 
     @Test
-    @DisplayName("admin: tổng quan toàn hệ thống dùng phạm vi null (không giới hạn nhà trọ)")
+    @DisplayName("admin: tổng quan toàn hệ thống dùng phạm vi null, không có số liệu tiền (#163)")
     void adminOverview() {
         login(UUID.randomUUID(), UserRole.ADMIN);
         when(port.propertyApprovalCounts()).thenReturn(List.of(
@@ -296,8 +305,6 @@ class StatisticsServiceUnitTest {
         when(port.userCounts()).thenReturn(List.of(
             new UserCount(UserRole.OWNER, User.UserStatus.ACTIVE, 3), new UserCount(UserRole.TENANT, User.UserStatus.ACTIVE, 7),
             new UserCount(UserRole.TENANT, User.UserStatus.INACTIVE, 1)));
-        when(port.invoiceAggregates(isNull(), any(), any(), any())).thenReturn(List.of(
-            invoices(p1, YearMonth.of(2026, 2), "1000", "400", "600", 0, "0")));
         when(port.roomStatusCounts(isNull())).thenReturn(List.of(new RoomStatusCount(p1, RoomStatus.OCCUPIED, 1)));
 
         AdminOverview overview = service.adminOverview(query(null, null));
@@ -308,10 +315,8 @@ class StatisticsServiceUnitTest {
         assertEquals(3, overview.accounts("OWNER"));
         assertEquals(8, overview.accounts("TENANT"));
         assertEquals(0, overview.accounts("STAFF"));
-        assertEquals(new BigDecimal("400"), overview.revenue().collected());
-        assertEquals(new BigDecimal("40.0"), overview.revenue().collectionRate());
         assertEquals(new BigDecimal("100.0"), overview.occupancy().occupancyRate());
-        verify(port, never()).invoiceAggregates(anyCollection(), any(), any(), any());
+        verify(port, never()).invoiceAggregates(any(), any(), any(), any());
     }
 
     @Test

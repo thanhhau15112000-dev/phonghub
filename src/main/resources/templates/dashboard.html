@@ -34,7 +34,7 @@
         </div>
     </div>
 
-    <!-- Dashboard vận hành (#75): chỉ chủ nhà trọ / quản trị viên, số liệu theo phạm vi quyền -->
+    <!-- Dashboard vận hành (#75): chỉ chủ nhà trọ; quản trị viên không xem số liệu tiền (#163) -->
     <div th:if="${opsSummary != null}" id="operations">
         <div class="card">
             <div class="flex-between" style="margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
@@ -170,7 +170,7 @@
         </div>
     </div>
 
-    <!-- Quản trị viên: tổng quan hệ thống và nhà trọ chờ duyệt -->
+    <!-- Quản trị viên: tổng quan hệ thống và nhà trọ chờ duyệt (không có số liệu tiền, #163) -->
     <div th:if="${adminOverview != null}" class="card" id="adminOverview">
         <h2 style="margin-bottom: 12px;">Toàn hệ thống</h2>
         <div class="grid-cols-4">
@@ -194,10 +194,10 @@
                      th:text="${adminOverview.accounts('STAFF')} + ' nhân viên · ' + ${adminOverview.accounts('TECHNICIAN')} + ' kỹ thuật viên'">0 nhân viên</div>
             </div>
             <div class="metric-card">
-                <div class="metric-label">Doanh thu hệ thống (đã thu)</div>
-                <div class="metric-value" th:text="${#numbers.formatDecimal(adminOverview.revenue().collected(), 0, 'COMMA', 0, 'POINT')} + ' đ'">0 đ</div>
+                <div class="metric-label">Phòng trống</div>
+                <div class="metric-value" th:text="${adminOverview.occupancy().available()}">0</div>
                 <div style="font-size: 12px; color: var(--text-secondary);"
-                     th:text="'Phát sinh ' + ${#numbers.formatDecimal(adminOverview.revenue().billed(), 0, 'COMMA', 0, 'POINT')} + ' đ'">Phát sinh 0 đ</div>
+                     th:text="${adminOverview.occupancy().reserved()} + ' giữ chỗ · ' + ${adminOverview.occupancy().maintenance()} + ' đang bảo trì'">0 giữ chỗ</div>
             </div>
         </div>
 

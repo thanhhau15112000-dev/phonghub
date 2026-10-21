@@ -46,6 +46,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class MonthEndInvoiceRolloverIntegrationTest {
 
     private static final String ADMIN = LocalDemoAuthenticationAdapter.ADMIN_ID.toString();
+    private static final String OWNER = LocalDemoAuthenticationAdapter.OWNER_1_ID.toString();
     private static final String TENANT = LocalDemoAuthenticationAdapter.TENANT_1_ID.toString();
     private static final String CONTRACT_URL = "/contracts/" + DataSeeder.CONTRACT_1_ID;
 
@@ -111,7 +112,8 @@ class MonthEndInvoiceRolloverIntegrationTest {
     }
 
     private Invoice issueMonthly() throws Exception {
-        mockMvc.perform(as(post(CONTRACT_URL + "/invoices"), ADMIN).param("period", YearMonth.now().toString()))
+        // Chủ trọ lập hóa đơn; quản trị viên không làm việc với tiền (#163).
+        mockMvc.perform(as(post(CONTRACT_URL + "/invoices"), OWNER).param("period", YearMonth.now().toString()))
             .andExpect(flash().attributeExists("successMessage"));
         return invoiceRepository.findByContractId(DataSeeder.CONTRACT_1_ID).stream()
             .filter(i -> i.getType() == InvoiceType.RENT).findFirst().orElseThrow();

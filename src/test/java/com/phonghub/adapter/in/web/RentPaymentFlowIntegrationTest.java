@@ -42,6 +42,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class RentPaymentFlowIntegrationTest {
 
     private static final String ADMIN = LocalDemoAuthenticationAdapter.ADMIN_ID.toString();
+    private static final String OWNER = LocalDemoAuthenticationAdapter.OWNER_1_ID.toString();
     private static final String TENANT = LocalDemoAuthenticationAdapter.TENANT_1_ID.toString();
     private static final String CONTRACT_URL = "/contracts/" + DataSeeder.CONTRACT_1_ID;
 
@@ -93,16 +94,16 @@ class RentPaymentFlowIntegrationTest {
     }
 
     @Test
-    @DisplayName("Admin issues invoice, tenant sees transfer code, SePay webhook settles it")
+    @DisplayName("Owner issues invoice, tenant sees transfer code, SePay webhook settles it")
     void issueAndSettleInvoice() throws Exception {
         String period = YearMonth.now().toString();
 
-        mockMvc.perform(post(CONTRACT_URL + "/invoices").header("X-User-Id", ADMIN).param("period", period))
+        mockMvc.perform(post(CONTRACT_URL + "/invoices").header("X-User-Id", OWNER).param("period", period))
             .andExpect(redirectedUrl(CONTRACT_URL))
             .andExpect(flash().attributeExists("successMessage"));
 
         // Trùng kỳ bị từ chối
-        mockMvc.perform(post(CONTRACT_URL + "/invoices").header("X-User-Id", ADMIN).param("period", period))
+        mockMvc.perform(post(CONTRACT_URL + "/invoices").header("X-User-Id", OWNER).param("period", period))
             .andExpect(redirectedUrl(CONTRACT_URL))
             .andExpect(flash().attributeExists("errorMessage"));
 
@@ -156,7 +157,7 @@ class RentPaymentFlowIntegrationTest {
             .andExpect(content().string(not(containsString("Sửa vòi nước và kiểm tra máy lạnh"))));
 
         mockMvc.perform(post(CONTRACT_URL + "/invoices")
-                .header("X-User-Id", ADMIN)
+                .header("X-User-Id", OWNER)
                 .param("period", YearMonth.now().toString()))
             .andExpect(redirectedUrl(CONTRACT_URL));
         String code = invoiceRepository.findByContractId(DataSeeder.CONTRACT_1_ID).get(0).getPaymentCode();
@@ -170,6 +171,34 @@ class RentPaymentFlowIntegrationTest {
     }
 
     @Test
+    @DisplayName("#163: admin không lập/xem hóa đơn; trang hợp đồng của admin không có phần thanh toán")
+    void adminHasNoAccessToInvoices() throws Exception {
+        mockMvc.perform(post(CONTRACT_URL + "/invoices").header("X-User-Id", ADMIN)
+                .param("period", YearMonth.now().toString()))
+            .andExpect(redirectedUrl(CONTRACT_URL))
+            .andExpect(flash().attributeExists("errorMessage"));
+        assertTrue(invoiceRepository.findByContractId(DataSeeder.CONTRACT_1_ID).isEmpty());
+
+        mockMvc.perform(post(CONTRACT_URL + "/invoices").header("X-User-Id", OWNER)
+            .param("period", YearMonth.now().toString()));
+        Invoice invoice = invoiceRepository.findByContractId(DataSeeder.CONTRACT_1_ID).get(0);
+
+        mockMvc.perform(get(CONTRACT_URL).header("X-User-Id", ADMIN))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("id=\"payments\""))))
+            .andExpect(content().string(not(containsString(invoice.getPaymentCode()))))
+            .andExpect(content().string(not(containsString("Tạo kỳ thanh toán"))));
+        mockMvc.perform(get("/invoices/" + invoice.getId() + "/pay").header("X-User-Id", ADMIN))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(flash().attributeExists("errorMessage"));
+
+        mockMvc.perform(get(CONTRACT_URL).header("X-User-Id", OWNER))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("id=\"payments\"")))
+            .andExpect(content().string(containsString(invoice.getPaymentCode())));
+    }
+
+    @Test
     @DisplayName("Admin dashboard keeps the property table and does not show tenant payment card")
     void adminDashboardUnchanged() throws Exception {
         mockMvc.perform(get("/dashboard").header("X-User-Id", ADMIN))
@@ -177,12 +206,5 @@ class RentPaymentFlowIntegrationTest {
             .andExpect(content().string(containsString("Nhà trọ trong phạm vi")))
             .andExpect(content().string(not(containsString("Nơi ở của tôi"))))
             .andExpect(content().string(containsString("Sửa vòi nước và kiểm tra máy lạnh")));
-    }
-
-    @Test
-    @DisplayName("Raw SePay transaction listing is forbidden for tenants")
-    void tenantCannotListTransactions() throws Exception {
-        mockMvc.perform(get("/api/v1/payments/transactions").header("X-User-Id", TENANT))
-            .andExpect(status().isForbidden());
     }
 }

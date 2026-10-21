@@ -21,7 +21,6 @@ import com.phonghub.application.port.in.SepayWebhookUseCase;
 import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.application.service.SepayPaymentService;
 import com.phonghub.config.SepayProperties;
-import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.exception.UnauthorizedWebhookException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
@@ -328,17 +327,6 @@ class SepayPaymentServiceUnitTest {
         Invoice stored = invoiceRepo.findById(invoice.getId()).orElseThrow();
         assertEquals(InvoiceStatus.ISSUED, stored.getStatus());
         assertEquals(0, stored.getPaidAmount().signum());
-    }
-
-    @Test
-    @DisplayName("Transaction listing is restricted to ADMIN")
-    void testTransactionListingRequiresAdmin() {
-        service.processWebhook(null, createSampleCommand(9001L, "Tien phong", "in"));
-        assertEquals(1, service.getAllTransactions().size());
-
-        currentUserPort.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_TENANT_1);
-        assertThrows(UnauthorizedPropertyAccessException.class, () -> service.getAllTransactions());
-        assertThrows(UnauthorizedPropertyAccessException.class, () -> service.getTransactionById(UUID.randomUUID()));
     }
 
     private static BigDecimal vnd(String amount) {

@@ -75,7 +75,11 @@ class InvoiceVoidIntegrationTest extends SeededWebTest {
         mockMvc.perform(post(voidUrl(invoice)).header("X-User-Id", TENANT_1)
                 .contentType(MediaType.APPLICATION_JSON).content(REASON))
             .andExpect(status().isForbidden());
-        mockMvc.perform(post("/api/invoices/" + UUID.randomUUID() + "/void").header("X-User-Id", ADMIN)
+        // Admin không đụng tới số liệu tiền của nhà trọ (#163), kể cả hủy hóa đơn.
+        mockMvc.perform(post(voidUrl(invoice)).header("X-User-Id", ADMIN)
+                .contentType(MediaType.APPLICATION_JSON).content(REASON))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/invoices/" + UUID.randomUUID() + "/void").header("X-User-Id", OWNER_1)
                 .contentType(MediaType.APPLICATION_JSON).content(REASON))
             .andExpect(status().isNotFound());
         mockMvc.perform(post(voidUrl(invoice)).header("X-User-Id", OWNER_1)

@@ -54,7 +54,7 @@ public class AuditLogService implements AuditLogUseCase {
         }
         Set<UUID> scope = command.propertyId() != null ? Set.of(command.propertyId()) : allowed;
         int page = Math.max(0, command.page());
-        return auditQueryPort.search(new AuditQueryPort.Filter(
+        List<AuditQueryPort.Entry> entries = auditQueryPort.search(new AuditQueryPort.Filter(
             scope,
             command.actorId(),
             command.targetType(),
@@ -64,6 +64,14 @@ public class AuditLogService implements AuditLogUseCase {
             PAGE_SIZE,
             page * PAGE_SIZE
         ));
+        if (user.role() != UserRole.ADMIN) {
+            return entries;
+        }
+        // Admin vẫn theo dõi được ai làm gì, nhưng không xem số liệu tiền của nhà trọ (#163).
+        return entries.stream()
+            .map(e -> new AuditQueryPort.Entry(e.id(), e.action(), e.actorId(), e.actorName(), e.targetType(),
+                e.targetId(), e.propertyId(), AuditSanitizer.maskMoney(e.details()), e.createdAt()))
+            .toList();
     }
 
     private CurrentUser requireAuditViewer() {
