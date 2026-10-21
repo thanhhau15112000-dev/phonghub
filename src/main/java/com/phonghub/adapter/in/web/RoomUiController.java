@@ -178,6 +178,10 @@ public class RoomUiController {
         model.addAttribute("assets", assets);
         model.addAttribute("assetHistory", history);
         model.addAttribute("canManageAssets", canManage);
+        // Các phòng khác cùng nhà trọ để áp dụng thêm khi thêm nhiều tài sản một lần.
+        model.addAttribute("batchOtherRooms", canManage
+            ? roomUseCase.listRoomsForProperty(property.id()).stream().filter(r -> !r.getId().equals(roomId)).toList()
+            : List.of());
         model.addAttribute("assetEventTypes", AssetEventType.values());
     }
 
@@ -213,6 +217,69 @@ public class RoomUiController {
     ) {
         return handle(id, redirectAttributes, "Đã thêm tài sản từ mẫu " + template + ".", () ->
             roomAssetUseCase.createFromTemplate(id, template));
+    }
+
+    /**
+     * Thêm nhiều tài sản một lần (#60, Jira "Add Facilities to Room in Batch"). Các dòng bỏ trống tên bị bỏ qua; số
+     * lượng trống tính là 1.
+     */
+    @PostMapping("/{id}/assets/batch")
+    public String createAssetBatch(
+        @PathVariable UUID id,
+        @RequestParam(name = "itemName", required = false) List<String> names,
+        @RequestParam(name = "itemQuantity", required = false) List<String> quantities,
+        @RequestParam(name = "itemValue", required = false) List<String> values,
+        @RequestParam(name = "alsoRoomIds", required = false) List<UUID> alsoRoomIds,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            List<RoomAssetUseCase.BatchItem> items = new java.util.ArrayList<>();
+            int rows = names == null ? 0 : names.size();
+            for (int i = 0; i < rows; i++) {
+                String name = names.get(i);
+                if (name == null || name.isBlank()) {
+                    continue;
+                }
+                int quantity = parseQuantity(valueAt(quantities, i), i + 1);
+                BigDecimal value = parseValue(valueAt(values, i), i + 1);
+                items.add(new RoomAssetUseCase.BatchItem(name.trim(), quantity, value));
+            }
+            List<RoomAsset> saved = roomAssetUseCase.createBatch(
+                new RoomAssetUseCase.CreateBatchCommand(id, alsoRoomIds, items));
+            long rooms = saved.stream().map(RoomAsset::roomId).distinct().count();
+            redirectAttributes.addFlashAttribute("successMessage", rooms > 1
+                ? String.format("Đã thêm %d tài sản cho mỗi phòng (%d phòng).", items.size(), rooms)
+                : String.format("Đã thêm %d tài sản.", items.size()));
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/rooms/" + id + "#room-assets";
+    }
+
+    private static String valueAt(List<String> values, int index) {
+        return values == null || index >= values.size() ? null : values.get(index);
+    }
+
+    private static int parseQuantity(String raw, int row) {
+        if (raw == null || raw.isBlank()) {
+            return 1;
+        }
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Số lượng ở dòng " + row + " không hợp lệ.");
+        }
+    }
+
+    private static BigDecimal parseValue(String raw, int row) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(raw.trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Giá trị ước tính ở dòng " + row + " không hợp lệ.");
+        }
     }
 
     @PostMapping("/{id}/assets/{assetId}/edit")

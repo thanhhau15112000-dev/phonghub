@@ -151,6 +151,7 @@
                     </select>
                     <button type="submit" class="btn btn-sm btn-secondary">Thêm từ mẫu</button>
                 </form>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('batchAssetModal').showModal()">Thêm nhiều tài sản</button>
                 <button type="button" class="btn btn-sm btn-primary" onclick="document.getElementById('addAssetModal').showModal()">+ Thêm tài sản</button>
             </div>
         </div>
@@ -226,6 +227,59 @@
     </div>
 
     <!-- Hộp thoại thêm tài sản -->
+    <!-- Thêm nhiều tài sản một lần (Jira "Add Facilities to Room in Batch"): tự nhập danh sách, áp thêm cho phòng khác -->
+    <dialog th:if="${canManageAssets}" id="batchAssetModal" class="modal-dialog" style="max-width: 640px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Thêm nhiều tài sản</h3>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('batchAssetModal').close()">✕</button>
+        </div>
+        <form th:action="@{'/rooms/' + ${room.getId()} + '/assets/batch'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">
+                Dòng để trống tên sẽ được bỏ qua; số lượng trống tính là 1. Một dòng sai thì không tài sản nào được thêm.
+            </p>
+            <table class="data-table" id="batchAssetRows" style="margin-bottom: 8px;">
+                <thead>
+                    <tr><th>Tên tài sản</th><th style="width: 90px;">Số lượng</th><th style="width: 160px;">Giá trị ước tính (đ)</th></tr>
+                </thead>
+                <tbody>
+                    <tr th:each="i : ${#numbers.sequence(1, 5)}">
+                        <td><input type="text" name="itemName" class="form-control" maxlength="150" placeholder="VD: Giường, Quạt trần"></td>
+                        <td><input type="number" name="itemQuantity" class="form-control" min="1" value="1"></td>
+                        <td><input type="number" name="itemValue" class="form-control" min="0" step="1000"></td>
+                    </tr>
+                </tbody>
+            </table>
+            <button type="button" class="btn btn-sm btn-secondary" style="margin-bottom: 12px;" onclick="addBatchAssetRow()">+ Thêm dòng</button>
+            <div th:if="${!#lists.isEmpty(batchOtherRooms)}" class="form-group">
+                <label class="form-label">Áp dụng thêm cho các phòng (cùng nhà trọ)</label>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px;">
+                    <label th:each="r : ${batchOtherRooms}" style="display: inline-flex; align-items: center; gap: 4px;">
+                        <input type="checkbox" name="alsoRoomIds" th:value="${r.getId()}">
+                        <span th:text="${r.getRoomNumber()}">P102</span>
+                    </label>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('batchAssetModal').close()">Hủy</button>
+                <button type="submit" class="btn btn-sm btn-primary">Thêm tài sản</button>
+            </div>
+        </form>
+    </dialog>
+    <script th:if="${canManageAssets}">
+        function addBatchAssetRow() {
+            const body = document.querySelector('#batchAssetRows tbody');
+            if (body.rows.length >= 30) {
+                return;
+            }
+            const row = body.rows[0].cloneNode(true);
+            row.querySelectorAll('input').forEach(input => {
+                input.value = input.name === 'itemQuantity' ? '1' : '';
+            });
+            body.appendChild(row);
+        }
+    </script>
+
     <dialog th:if="${canManageAssets}" id="addAssetModal" class="modal-dialog" style="max-width: 480px;">
         <h3 style="margin-top: 0;">Thêm tài sản</h3>
         <form th:action="@{'/rooms/' + ${room.getId()} + '/assets'}" method="post" enctype="multipart/form-data">
