@@ -274,6 +274,59 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationError'
 
+  /api/admin/users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Auth]
+      summary: Admin sửa thông tin, vai trò, trạng thái tài khoản (#89)
+      description: >
+        Chỉ ADMIN. Email gắn với tài khoản đăng nhập nên không sửa ở đây. Từ chối (409) khi sửa tài khoản quản trị viên,
+        tự sửa chính mình, đổi sang vai trò ADMIN, trùng số điện thoại, hoặc đổi vai trò khi còn dữ liệu gắn với vai trò cũ
+        (nhà trọ đang sở hữu, phân công nhà trọ, hồ sơ người thuê). Tài khoản không ACTIVE không đăng nhập được.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fullName, role, status]
+              properties:
+                fullName: { type: string }
+                phone: { type: string, pattern: '^0\d{9}$', nullable: true }
+                role: { type: string, enum: [OWNER, STAFF, TECHNICIAN, TENANT] }
+                status: { type: string, enum: [ACTIVE, INACTIVE, SUSPENDED] }
+      responses:
+        '200':
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  username: { type: string }
+                  email: { type: string }
+                  fullName: { type: string }
+                  phone: { type: string, nullable: true }
+                  role: { type: string }
+                  status: { type: string }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
   # ==========================================
   # 2. PROPERTIES, ROOMS & ASSETS
   # ==========================================

@@ -271,6 +271,14 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void adminUserEditRequiresBearerTokenInProd() throws Exception {
+        mockMvc.perform(patch("/api/admin/users/55555555-0000-0000-0000-000000000002")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fullName\":\"x\",\"role\":\"OWNER\",\"status\":\"ACTIVE\"}"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void adminCanOpenAccountManagementPage() throws Exception {
         UUID tenantId = UUID.randomUUID();
         when(userUseCase.listUsers()).thenReturn(List.of(

@@ -232,6 +232,59 @@ public class AdminUserUiController {
         return "redirect:/admin/users";
     }
 
+    /** Trang sửa thông tin, vai trò, trạng thái của một tài khoản (#89). */
+    @GetMapping("/{userId}/edit")
+    public String editUserForm(@PathVariable UUID userId, Model model, RedirectAttributes redirectAttributes) {
+        CurrentUser admin = currentUserPort.getCurrentUser();
+        if (!isAdmin(admin)) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên mới có thể quản lý tài khoản.");
+            return "redirect:/";
+        }
+        try {
+            User target = userUseCase.getUser(userId);
+            if (target.role() == UserRole.ADMIN) {
+                redirectAttributes.addFlashAttribute("tableErrorMessage", "Không sửa tài khoản quản trị viên tại đây.");
+                return "redirect:/admin/users";
+            }
+            model.addAttribute("currentUser", admin);
+            model.addAttribute("target", target);
+            model.addAttribute("roles", java.util.Arrays.stream(UserRole.values())
+                .filter(role -> role != UserRole.ADMIN).toList());
+            model.addAttribute("statuses", User.UserStatus.values());
+            return "admin/user-edit";
+        } catch (DomainException ex) {
+            redirectAttributes.addFlashAttribute("tableErrorMessage", userFacingMessage(ex));
+            return "redirect:/admin/users";
+        }
+    }
+
+    @PostMapping("/{userId}/edit")
+    public String editUser(
+        @PathVariable UUID userId,
+        @RequestParam(defaultValue = "") String fullName,
+        @RequestParam(required = false) String phone,
+        @RequestParam UserRole role,
+        @RequestParam User.UserStatus status,
+        RedirectAttributes redirectAttributes
+    ) {
+        CurrentUser admin = currentUserPort.getCurrentUser();
+        if (!isAdmin(admin)) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên mới có thể quản lý tài khoản.");
+            return "redirect:/";
+        }
+        try {
+            User saved = userUseCase.adminUpdateUser(new UserUseCase.AdminUpdateUserCommand(
+                userId, fullName, phone, role, status));
+            String msg = "Đã cập nhật tài khoản " + saved.fullName() + ".";
+            redirectAttributes.addFlashAttribute("successMessage", msg);
+            redirectAttributes.addFlashAttribute("tableSuccessMessage", msg);
+            return "redirect:/admin/users";
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", userFacingMessage(ex));
+            return "redirect:/admin/users/" + userId + "/edit";
+        }
+    }
+
     @PostMapping("/{userId}/delete")
     public String deleteUser(@PathVariable("userId") UUID userId, RedirectAttributes redirectAttributes) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
