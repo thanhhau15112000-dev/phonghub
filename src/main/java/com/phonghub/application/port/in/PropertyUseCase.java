@@ -6,7 +6,22 @@ import java.util.UUID;
 
 public interface PropertyUseCase {
     Property createProperty(CreatePropertyCommand command);
+
+    /** Nhà trọ đang hoạt động trong phạm vi người dùng; nhà trọ đã ẩn xem ở {@link #listArchivedProperties()}. */
     List<Property> listAccessibleProperties();
+
+    /** Nhà trọ đã ẩn mà người dùng có quyền quản lý (chủ trọ: nhà của mình, admin: tất cả). */
+    List<Property> listArchivedProperties();
+
+    /**
+     * Ẩn (xóa mềm) nhà trọ (#89), chỉ chủ nhà trọ hoặc admin. Còn hợp đồng chưa kết thúc (nháp, hiệu lực, hết hạn chưa
+     * trả phòng) hoặc hóa đơn chưa thu xong thì từ chối (409). Hợp đồng, hóa đơn cũ được giữ nguyên.
+     */
+    Property archiveProperty(UUID propertyId);
+
+    /** Khôi phục nhà trọ đã ẩn (chủ nhà trọ hoặc admin). */
+    Property restoreProperty(UUID propertyId);
+
     Property getProperty(UUID propertyId);
     Property verifyProperty(UUID propertyId);
     Property rejectProperty(UUID propertyId, String reason);

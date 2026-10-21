@@ -105,6 +105,10 @@ public class ContractService implements ContractUseCase {
         Property property = propertyRepository.findById(command.propertyId())
             .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + command.propertyId()));
 
+        if (property.isArchived()) {
+            throw new com.phonghub.domain.exception.ConflictException(
+                "Nhà trọ '" + property.name() + "' đã bị ẩn, không thể tạo hợp đồng mới.");
+        }
         if (property.approvalStatus() != PropertyApprovalStatus.VERIFIED) {
             throw new DomainException(String.format(
                 "Không thể tạo hợp đồng cho nhà trọ '%s' vì chưa được duyệt (trạng thái: %s).",

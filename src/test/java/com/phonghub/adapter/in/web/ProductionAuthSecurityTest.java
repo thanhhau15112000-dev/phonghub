@@ -620,6 +620,14 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void propertyArchiveEndpointsRequireBearerTokenInProd() throws Exception {
+        String property = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+        mockMvc.perform(post(property + "/archive")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post(property + "/restore")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/properties").param("archived", "true")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void notificationCenterRequiresAuthenticationInProd() throws Exception {
         String id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
         mockMvc.perform(get("/api/notifications")).andExpect(status().isUnauthorized());

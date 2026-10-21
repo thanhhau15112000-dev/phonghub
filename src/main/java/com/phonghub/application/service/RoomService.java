@@ -89,6 +89,10 @@ public class RoomService implements RoomUseCase {
         Property property = propertyRepository.findById(command.propertyId())
             .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + command.propertyId()));
 
+        if (property.isArchived()) {
+            throw new com.phonghub.domain.exception.ConflictException(
+                "Nhà trọ '" + property.name() + "' đã bị ẩn, không thể tạo thêm phòng. Hãy khôi phục nhà trọ trước.");
+        }
         if (property.approvalStatus() != PropertyApprovalStatus.VERIFIED) {
             throw new InvalidPropertyStatusException(String.format(
                 "Chỉ có thể tạo phòng cho nhà trọ đã được duyệt (VERIFIED). Trạng thái hiện tại: '%s'.",

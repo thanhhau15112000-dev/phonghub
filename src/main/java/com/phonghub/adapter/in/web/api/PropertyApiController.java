@@ -28,12 +28,25 @@ public class PropertyApiController {
         this.propertyUseCase = propertyUseCase;
     }
 
+    /** {@code archived=true}: nhà trọ đã ẩn mà chủ trọ/admin quản lý (#89); mặc định chỉ nhà trọ đang hoạt động. */
     @GetMapping
-    public ResponseEntity<List<PropertyResponse>> listProperties() {
-        List<PropertyResponse> list = propertyUseCase.listAccessibleProperties().stream()
-            .map(PropertyResponse::from)
-            .toList();
-        return ResponseEntity.ok(list);
+    public ResponseEntity<List<PropertyResponse>> listProperties(
+        @org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean archived
+    ) {
+        List<Property> properties = archived
+            ? propertyUseCase.listArchivedProperties()
+            : propertyUseCase.listAccessibleProperties();
+        return ResponseEntity.ok(properties.stream().map(PropertyResponse::from).toList());
+    }
+
+    @PostMapping("/{id}/archive")
+    public ResponseEntity<PropertyResponse> archiveProperty(@PathVariable UUID id) {
+        return ResponseEntity.ok(PropertyResponse.from(propertyUseCase.archiveProperty(id)));
+    }
+
+    @PostMapping("/{id}/restore")
+    public ResponseEntity<PropertyResponse> restoreProperty(@PathVariable UUID id) {
+        return ResponseEntity.ok(PropertyResponse.from(propertyUseCase.restoreProperty(id)));
     }
 
     @GetMapping("/{id}")

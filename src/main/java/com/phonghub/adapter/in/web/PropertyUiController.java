@@ -70,7 +70,32 @@ public class PropertyUiController {
         model.addAttribute("statusCounts", statusCounts);
         model.addAttribute("selectedStatus", finalFilter != null ? finalFilter.name() : "ALL");
         model.addAttribute("totalCount", allProperties.size());
+        model.addAttribute("archivedProperties", propertyUseCase.listArchivedProperties());
         return "properties/list";
+    }
+
+    @PostMapping("/{id}/archive")
+    public String archiveProperty(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        try {
+            Property property = propertyUseCase.archiveProperty(id);
+            redirectAttributes.addFlashAttribute("successMessage",
+                "Đã ẩn nhà trọ '" + property.name() + "'. Có thể khôi phục trong mục \"Nhà trọ đã ẩn\".");
+            return "redirect:/properties";
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+            return "redirect:/properties/" + id;
+        }
+    }
+
+    @PostMapping("/{id}/restore")
+    public String restoreProperty(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        try {
+            Property property = propertyUseCase.restoreProperty(id);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã khôi phục nhà trọ '" + property.name() + "'.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/properties/" + id;
     }
 
     @PostMapping("/{id}/verify")
