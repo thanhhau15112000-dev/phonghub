@@ -99,8 +99,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
             response.getWriter().write("{\"type\":\"https://phonghub.local/errors/too-many-requests\","
                 + "\"title\":\"Too Many Requests\",\"status\":429,\"detail\":\"" + message + "\"}");
         } else {
-            response.setContentType("text/plain");
-            response.getWriter().write(message);
+            // Form đăng nhập/quên mật khẩu: trang HTML có nút quay lại thay vì một dòng chữ trơn (#164).
+            String back = request.getContextPath()
+                + (request.getRequestURI().endsWith("/forgot-password") ? "/forgot-password" : "/login");
+            response.setContentType("text/html");
+            response.getWriter().write("<!DOCTYPE html><html lang=\"vi\"><head><meta charset=\"UTF-8\">"
+                + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+                + "<title>Thao tác quá nhanh - PhongHub</title>"
+                + "<link rel=\"stylesheet\" href=\"" + request.getContextPath() + "/css/style.css\"></head><body>"
+                + "<main class=\"container\" style=\"max-width: 480px; margin-top: 48px;\"><div class=\"card\">"
+                + "<h1>Thao tác quá nhanh</h1><p id=\"rateLimitMessage\">" + message + "</p>"
+                + "<a class=\"btn btn-primary\" href=\"" + back + "\">Quay lại</a>"
+                + "</div></main></body></html>");
         }
     }
 }
