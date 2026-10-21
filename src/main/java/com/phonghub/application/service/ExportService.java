@@ -315,6 +315,7 @@ public class ExportService implements ExportUseCase {
             case ACTIVE -> "Đang hiệu lực";
             case EXPIRED -> "Hết hạn";
             case TERMINATED -> "Đã kết thúc";
+            case CANCELLED -> "Đã hủy";
         };
     }
 }

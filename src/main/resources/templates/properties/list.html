@@ -149,6 +149,38 @@
         </table>
     </div>
 
+    <!-- Nhà trọ đã ẩn (#89): chỉ chủ trọ / quản trị viên thấy, khôi phục ngay tại đây -->
+    <div th:if="${!#lists.isEmpty(archivedProperties)}" class="card">
+        <h2>Nhà trọ đã ẩn</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="min-width: 170px;">Tên nhà trọ</th>
+                    <th style="min-width: 200px;">Địa chỉ</th>
+                    <th>Ẩn lúc</th>
+                    <th class="col-actions">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="p : ${archivedProperties}">
+                    <td class="col-wrap">
+                        <a th:href="@{'/properties/' + ${p.id()}}" th:text="${p.name()}" style="font-weight: 600;">Tên nhà trọ</a>
+                    </td>
+                    <td class="col-wrap" th:text="${p.address()}">Địa chỉ</td>
+                    <td th:text="${#temporals.format(p.archivedAt(), 'dd/MM/yyyy HH:mm')}">01/01/2026 00:00</td>
+                    <td class="col-actions">
+                        <div class="table-actions">
+                            <form th:action="@{'/properties/' + ${p.id()} + '/restore'}" method="post">
+                                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                <button type="submit" class="btn btn-sm btn-secondary">Khôi phục</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
     <!-- Dialog xem chi tiết lý do từ chối -->
     <dialog id="viewReasonModal" class="modal-dialog">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">

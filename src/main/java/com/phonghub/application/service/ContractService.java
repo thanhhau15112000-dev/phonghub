@@ -105,6 +105,10 @@ public class ContractService implements ContractUseCase {
         Property property = propertyRepository.findById(command.propertyId())
             .orElseThrow(() -> new PropertyNotFoundException("Property not found with ID: " + command.propertyId()));
 
+        if (property.isArchived()) {
+            throw new com.phonghub.domain.exception.ConflictException(
+                "Nhà trọ '" + property.name() + "' đã bị ẩn, không thể tạo hợp đồng mới.");
+        }
         if (property.approvalStatus() != PropertyApprovalStatus.VERIFIED) {
             throw new DomainException(String.format(
                 "Không thể tạo hợp đồng cho nhà trọ '%s' vì chưa được duyệt (trạng thái: %s).",
@@ -113,6 +117,10 @@ public class ContractService implements ContractUseCase {
         }
 
         Room room = validateOwnershipOfRoom(currentUser, command.propertyId(), command.roomId());
+        if (room.isArchived()) {
+            throw new com.phonghub.domain.exception.ConflictException(
+                "Phòng '" + room.getRoomNumber() + "' đã ngừng sử dụng, không thể tạo hợp đồng.");
+        }
 
         // Room must not already have an active contract
         Optional<Contract> existingActive = contractRepository.findActiveByRoomId(room.getId());
@@ -233,6 +241,49 @@ public class ContractService implements ContractUseCase {
             "oldStatus", ContractStatus.ACTIVE.name(), "newStatus", saved.getStatus().name(),
             "requiresMaintenance", requiresMaintenance));
         return saved;
+    }
+
+    @Override
+    public Contract updateDraftContract(UpdateDraftContractCommand command) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        Contract contract = contractRepository.findById(command.contractId())
+            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + command.contractId()));
+        // Quyền trước trạng thái: người ngoài phạm vi nhận 403, không biết được trạng thái hợp đồng.
+        validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
+        if (command.expectedVersion() != null && command.expectedVersion() != contract.getVersion()) {
+            throw new com.phonghub.domain.exception.OptimisticLockConflictException("Hợp đồng");
+        }
+
+        Map<String, Object> before = terms(contract);
+        contract.updateDraftTerms(command.depositAmount(), command.rentAmount(), command.startDate(),
+            command.endDate(), command.paymentDay());
+        Contract saved = contractRepository.save(contract);
+        audit("CONTRACT_UPDATED", currentUser, saved, Map.of("before", before, "after", terms(saved)));
+        return saved;
+    }
+
+    @Override
+    public Contract cancelDraftContract(UUID contractId) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        Contract contract = contractRepository.findById(contractId)
+            .orElseThrow(() -> new ContractNotFoundException("Contract not found with ID: " + contractId));
+        validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
+
+        contract.cancelDraft();
+        Contract saved = contractRepository.save(contract);
+        audit("CONTRACT_CANCELLED", currentUser, saved, Map.of(
+            "oldStatus", ContractStatus.DRAFT.name(), "newStatus", saved.getStatus().name()));
+        return saved;
+    }
+
+    private static Map<String, Object> terms(Contract contract) {
+        Map<String, Object> terms = new java.util.LinkedHashMap<>();
+        terms.put("depositAmount", contract.getDepositAmount().toPlainString());
+        terms.put("rentAmount", contract.getRentAmount().toPlainString());
+        terms.put("startDate", contract.getStartDate().toString());
+        terms.put("endDate", contract.getEndDate().toString());
+        terms.put("paymentDay", contract.getPaymentDay());
+        return terms;
     }
 
     private void audit(String action, CurrentUser actor, Contract contract, Map<String, Object> details) {

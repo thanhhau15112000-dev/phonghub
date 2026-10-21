@@ -171,4 +171,20 @@ class RateLimitFilterTest {
         clock.advanceSeconds(10);
         assertTrue(limiter.tryAcquire("r", "k", 1, 10).allowed());
     }
+
+    @Test
+    @DisplayName("bộ đếm: dọn khóa hết hạn theo cửa sổ của chính khóa đó, không xóa sớm bộ đếm của rule cửa sổ dài")
+    void cleanupKeepsLongerWindows() {
+        FixedWindowRateLimiter limiter = new FixedWindowRateLimiter(clock);
+        assertTrue(limiter.tryAcquire("long", "victim", 1, 900).allowed());
+        assertFalse(limiter.tryAcquire("long", "victim", 1, 900).allowed());
+        for (int i = 0; i <= 10_000; i++) {
+            limiter.tryAcquire("short", "k" + i, 1, 60);
+        }
+        clock.advanceSeconds(61);
+        limiter.tryAcquire("short", "trigger-cleanup", 1, 60);
+
+        assertFalse(limiter.tryAcquire("long", "victim", 1, 900).allowed(),
+            "khóa cửa sổ 900 giây mới qua 61 giây vẫn phải bị chặn");
+    }
 }

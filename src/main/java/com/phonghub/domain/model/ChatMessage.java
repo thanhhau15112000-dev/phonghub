@@ -42,7 +42,7 @@ public record ChatMessage(
         }
     }
 
-    public static ChatMessage create(UUID chatRoomId, UUID senderId, String senderName, String content) {
+    public static ChatMessage create(UUID chatRoomId, UUID senderId, String senderName, String content, Instant createdAt) {
         return new ChatMessage(
             UUID.randomUUID(),
             chatRoomId,
@@ -51,12 +51,13 @@ public record ChatMessage(
             content.trim(),
             null,
             null,
-            Instant.now(),
+            createdAt,
             null
         );
     }
 
-    public static ChatMessage createMedia(UUID chatRoomId, UUID senderId, String senderName, String caption, String mediaUrl, String mediaType) {
+    public static ChatMessage createMedia(UUID chatRoomId, UUID senderId, String senderName, String caption, String mediaUrl, String mediaType,
+        Instant createdAt) {
         return new ChatMessage(
             UUID.randomUUID(),
             chatRoomId,
@@ -65,7 +66,7 @@ public record ChatMessage(
             caption != null ? caption.trim() : "",
             mediaUrl,
             mediaType,
-            Instant.now(),
+            createdAt,
             null
         );
     }

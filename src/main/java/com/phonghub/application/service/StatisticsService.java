@@ -184,7 +184,7 @@ public class StatisticsService implements StatisticsUseCase {
     private List<Property> ownerScope(UUID propertyId) {
         CurrentUser user = currentUserPort.getCurrentUser();
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
         }
         if (user.role() == UserRole.ADMIN) {
             throw new UnauthorizedPropertyAccessException(AuthorizationService.ADMIN_FINANCE_DENIED);
@@ -197,7 +197,8 @@ public class StatisticsService implements StatisticsUseCase {
             return List.of(propertyRepository.findById(propertyId)
                 .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + propertyId)));
         }
-        return propertyRepository.findByOwnerId(user.id());
+        // Nhà trọ đã ẩn (#89) không tính vào thống kê chung; vẫn xem được khi chọn đích danh nhà trọ đó.
+        return propertyRepository.findByOwnerId(user.id()).stream().filter(p -> !p.isArchived()).toList();
     }
 
     private List<MaintenanceAggregate> completedMaintenance(Collection<UUID> ids, StatsQuery query) {

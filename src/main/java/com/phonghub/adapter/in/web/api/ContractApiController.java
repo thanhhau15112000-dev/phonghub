@@ -71,6 +71,46 @@ public class ContractApiController {
         return ResponseEntity.ok(ContractResponse.from(contract));
     }
 
+    /** Sửa điều khoản hợp đồng nháp (#89); gửi kèm {@code version} để phát hiện sửa chồng (409). */
+    @org.springframework.web.bind.annotation.PatchMapping("/contracts/{id}")
+    public ResponseEntity<ContractResponse> updateDraftContract(
+        @PathVariable UUID id,
+        @Valid @RequestBody UpdateDraftContractRequest request
+    ) {
+        Contract contract = contractUseCase.updateDraftContract(new ContractUseCase.UpdateDraftContractCommand(
+            id, request.depositAmount(), request.rentAmount(), request.startDate(), request.endDate(),
+            request.paymentDay(), request.version()));
+        return ResponseEntity.ok(ContractResponse.from(contract));
+    }
+
+    /** Hủy hợp đồng nháp (#89): chuyển CANCELLED, không xóa cứng. */
+    @PostMapping("/contracts/{id}/cancel")
+    public ResponseEntity<ContractResponse> cancelDraftContract(@PathVariable UUID id) {
+        return ResponseEntity.ok(ContractResponse.from(contractUseCase.cancelDraftContract(id)));
+    }
+
+    public record UpdateDraftContractRequest(
+        @NotNull(message = "Deposit amount is required")
+        @DecimalMin(value = "0.0", message = "Deposit amount cannot be negative")
+        BigDecimal depositAmount,
+
+        @NotNull(message = "Rent amount is required")
+        @DecimalMin(value = "0.0", inclusive = false, message = "Rent amount must be greater than zero")
+        BigDecimal rentAmount,
+
+        @NotNull(message = "Start date is required")
+        LocalDate startDate,
+
+        @NotNull(message = "End date is required")
+        LocalDate endDate,
+
+        @Min(value = 1, message = "Payment day must be between 1 and 31")
+        @Max(value = 31, message = "Payment day must be between 1 and 31")
+        int paymentDay,
+
+        Long version
+    ) {}
+
     @PostMapping("/contracts/{id}/terminate")
     public ResponseEntity<ContractResponse> terminateContract(
         @PathVariable UUID id,

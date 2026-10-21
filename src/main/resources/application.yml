@@ -46,6 +46,15 @@ phonghub:
   contracts:
     expiry-job-enabled: ${CONTRACT_EXPIRY_JOB_ENABLED:true}
     expiry-reminder-days: ${CONTRACT_EXPIRY_REMINDER_DAYS:30}
+  # OCR chỉ số đồng hồ (#67). "tesseract" cần lệnh tesseract (image Docker đã cài sẵn); máy không có lệnh thì tự về
+  # nhập tay. Kết quả dưới min-confidence không được điền sẵn, người dùng phải tự nhập.
+  ocr:
+    engine: ${METER_OCR_ENGINE:disabled}
+    min-confidence: ${METER_OCR_MIN_CONFIDENCE:0.85}
+    tesseract:
+      command: ${TESSERACT_COMMAND:tesseract}
+      timeout-seconds: ${TESSERACT_TIMEOUT_SECONDS:15}
+      max-concurrent: ${TESSERACT_MAX_CONCURRENT:1}
   # Cache danh sách nhà trọ/phòng và dashboard owner (#88); xóa khi dữ liệu đổi, TTL là lưới an toàn
   cache:
     enabled: ${CACHE_ENABLED:true}

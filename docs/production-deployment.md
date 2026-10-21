@@ -26,6 +26,8 @@ Create the service from the repository Blueprint (`render.yaml`) or configure th
 
 The secret values must be entered in Render's secret/environment-variable UI. They are intentionally not stored in `render.yaml`.
 
+Meter-reading OCR (#67) is on by default in the Docker image (`METER_OCR_ENGINE=tesseract`; the image installs `tesseract-ocr`). Set `METER_OCR_ENGINE=disabled` to turn it off without rebuilding, and tune `METER_OCR_MIN_CONFIDENCE` (default `0.85`), `TESSERACT_TIMEOUT_SECONDS` (15) and `TESSERACT_MAX_CONCURRENT` (1) if needed. See `docs/ocr-meter-benchmark.md`.
+
 The application binds to Render's `PORT` environment variable and `0.0.0.0`. Flyway runs the versioned migrations in `classpath:db/migration` during startup.
 
 ## First Admin account

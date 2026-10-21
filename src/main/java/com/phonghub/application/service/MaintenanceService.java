@@ -20,6 +20,7 @@ import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.LiableParty;
+import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.MaintenanceTicketEvent;
@@ -224,6 +225,66 @@ public class MaintenanceService implements MaintenanceUseCase {
         audit("MAINTENANCE_TICKET_REJECTED", currentUser, saved, Map.of("reason", saved.getRejectionReason()));
         notifyRequester(saved);
         return saved;
+    }
+
+    @Override
+    public MaintenanceTicket updateTicket(UpdateMaintenanceTicketCommand command) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = maintenanceTicketRepository.findById(command.ticketId())
+            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + command.ticketId()));
+        assertCanChangeRequest(currentUser, ticket);
+
+        Map<String, Object> before = Map.of("title", ticket.getTitle(), "priority", ticket.getPriority().name());
+        MaintenancePriority priority = command.priority() != null ? command.priority() : ticket.getPriority();
+        ticket.updateRequest(command.title(), command.description(), priority, slaPolicy.forPriority(priority));
+        MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
+        audit("MAINTENANCE_TICKET_UPDATED", currentUser, saved, Map.of("before", before,
+            "after", Map.of("title", saved.getTitle(), "priority", saved.getPriority().name())));
+        return saved;
+    }
+
+    @Override
+    public MaintenanceTicket cancelTicket(UUID ticketId, String reason) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
+            .orElseThrow(() -> new MaintenanceTicketException("Maintenance ticket not found with ID: " + ticketId));
+        assertCanChangeRequest(currentUser, ticket);
+
+        MaintenanceStatus before = ticket.getStatus();
+        ticket.cancel(reason);
+        ticket.attributeEventsTo(currentUser.id());
+        MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
+        Map<String, Object> details = new java.util.LinkedHashMap<>();
+        details.put("oldStatus", before.name());
+        details.put("newStatus", saved.getStatus().name());
+        if (reason != null && !reason.isBlank()) {
+            details.put("reason", reason.trim());
+        }
+        audit("MAINTENANCE_TICKET_CANCELLED", currentUser, saved, details);
+        return saved;
+    }
+
+    /**
+     * Người thuê chỉ sửa/hủy phiếu do chính mình báo (và còn ở nhà trọ đó); kỹ thuật viên không được; người quản lý
+     * theo quyền quản lý nhà trọ. Quyền kiểm tra trước trạng thái để người ngoài phạm vi nhận 403.
+     */
+    private void assertCanChangeRequest(CurrentUser user, MaintenanceTicket ticket) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException("Authentication required");
+        }
+        if (user.role() == UserRole.TENANT) {
+            Tenant tenant = tenantRepository.findByUserId(user.id())
+                .orElseThrow(() -> new UnauthorizedPropertyAccessException("Tenant profile not found"));
+            if (!tenant.id().equals(ticket.getRequestedByTenantId())) {
+                throw new UnauthorizedPropertyAccessException("Chỉ người báo phiếu được sửa hoặc hủy phiếu này");
+            }
+            authorizationService.assertCanAccessProperty(user, ticket.getPropertyId());
+            return;
+        }
+        if (user.role() == UserRole.TECHNICIAN) {
+            throw new UnauthorizedPropertyAccessException("Kỹ thuật viên không sửa hoặc hủy phiếu bảo trì");
+        }
+        authorizationService.assertCanManageProperty(user, ticket.getPropertyId());
     }
 
     private static UUID actorIdOf(CurrentUser user) {

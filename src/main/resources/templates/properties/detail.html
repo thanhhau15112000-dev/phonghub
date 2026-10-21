@@ -14,12 +14,13 @@
                 <span class="badge"
                       th:classappend="${property.approvalStatus() != null ? 'badge-' + property.approvalStatus().name() : 'badge-VERIFIED'}"
                       th:text="${property.approvalStatus() != null ? uiText.approvalStatus(property.approvalStatus()) : 'Đã duyệt'}">Đã duyệt</span>
+                <span th:if="${property.isArchived()}" class="badge badge-DRAFT">Đã ẩn</span>
             </div>
             <p style="color: var(--text-secondary); font-size: 13px;" th:text="${property.address()}">Địa chỉ</p>
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
             <!-- Nút Duyệt cho Quản trị viên khi nhà trọ PENDING -->
-            <form th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and property.approvalStatus() != null and property.approvalStatus().name() == 'PENDING'}"
+            <form th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() == 'PENDING'}"
                   th:action="@{'/properties/' + ${property.id()} + '/verify'}" method="post" style="display: inline;">
                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                 <button type="submit" class="btn btn-sm btn-primary"
@@ -27,13 +28,13 @@
                         onclick="return confirm('Bạn có chắc chắn muốn duyệt nhà trọ này không?');">Duyệt nhà trọ</button>
             </form>
             <!-- Nút Từ chối cho Quản trị viên khi nhà trọ PENDING -->
-            <button th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and property.approvalStatus() != null and property.approvalStatus().name() == 'PENDING'}"
+            <button th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() == 'PENDING'}"
                     type="button" class="btn btn-sm btn-danger"
                     th:attr="data-id=${property.id()},data-name=${property.name()}"
                     onclick="openRejectModal(this.getAttribute('data-id'), this.getAttribute('data-name'))">
                 Từ chối
             </button>
-            <button th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            <button th:if="${currentUser != null and !property.isArchived() and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                     type="button" id="editPropertyBtn" class="btn btn-sm btn-secondary"
                     onclick="document.getElementById('editPropertyModal').showModal()">Sửa thông tin</button>
             <a th:if="${currentUser != null and currentUser.role().name() != 'TENANT' and currentUser.role().name() != 'TECHNICIAN'}"
@@ -79,8 +80,21 @@
         </div>
     </div>
 
+    <!-- Nhà trọ đã ẩn (#89): chỉ xem lại lịch sử, muốn thao tác tiếp thì khôi phục -->
+    <div th:if="${property.isArchived()}" class="card" style="border: 1px dashed var(--border-color); padding: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <p style="margin: 0; font-size: 13px; color: var(--text-secondary);">
+            Nhà trọ này đã được ẩn lúc <strong th:text="${#temporals.format(property.archivedAt(), 'dd/MM/yyyy HH:mm')}">01/01/2026</strong>.
+            Không hiện trong danh sách, không thể thêm phòng hay tạo hợp đồng mới; hợp đồng và hóa đơn cũ vẫn xem được.
+        </p>
+        <form th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+              th:action="@{'/properties/' + ${property.id()} + '/restore'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button type="submit" class="btn btn-sm btn-primary">Khôi phục nhà trọ</button>
+        </form>
+    </div>
+
     <!-- Thông báo khi nhà trọ chưa duyệt -->
-    <div th:if="${currentUser != null and property.approvalStatus() != null and property.approvalStatus().name() != 'VERIFIED' and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() != null and property.ownerId().equals(currentUser.id())))}" class="card" style="background-color: var(--bg-surface); border: 1px dashed var(--border-color); color: var(--text-secondary); padding: 16px;">
+    <div th:if="${currentUser != null and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() != 'VERIFIED' and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() != null and property.ownerId().equals(currentUser.id())))}" class="card" style="background-color: var(--bg-surface); border: 1px dashed var(--border-color); color: var(--text-secondary); padding: 16px;">
         <p style="margin: 0; font-size: 13px;">
             Nhà trọ này đang ở trạng thái <strong th:text="${uiText.approvalStatus(property.approvalStatus())}">Chờ duyệt</strong>.
             Chức năng thêm phòng chỉ khả dụng khi nhà trọ đã được Quản trị viên duyệt (<strong>Đã duyệt</strong>).
@@ -88,7 +102,7 @@
     </div>
 
     <!-- Biểu mẫu thêm phòng (quản trị viên, nhân viên hoặc chủ trọ sở hữu khi nhà trọ đã duyệt) -->
-    <div th:if="${currentUser != null and property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED' and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() != null and property.ownerId().equals(currentUser.id())))}" class="card">
+    <div th:if="${currentUser != null and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED' and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() != null and property.ownerId().equals(currentUser.id())))}" class="card">
         <h2>Thêm phòng vào nhà trọ</h2>
         <form th:action="@{'/properties/' + ${property.id()} + '/rooms'}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -214,6 +228,52 @@
             <a th:if="${roomPage.hasNext()}" class="btn btn-sm" style="text-decoration: none;"
                th:href="@{'/properties/' + ${property.id()}(status=${filterStatus}, minPrice=${filterMinPrice}, maxPrice=${filterMaxPrice}, floor=${filterFloor}, page=${roomPage.page() + 1})}">Trang sau &rarr;</a>
         </div>
+
+        <!-- Phòng đã ngừng sử dụng (#89): không tính vào danh sách trên, chủ trọ / quản trị viên khôi phục tại đây -->
+        <div th:if="${archivedRooms != null and !archivedRooms.isEmpty() and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+             style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+            <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">Phòng đã ngừng sử dụng</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Số phòng</th>
+                        <th class="col-number">Tầng</th>
+                        <th>Ngừng lúc</th>
+                        <th class="col-actions">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="r : ${archivedRooms}">
+                        <td><a th:href="@{'/rooms/' + ${r.getId()}}" th:text="${r.getRoomNumber()}">P101</a></td>
+                        <td class="col-number" th:text="${r.getFloor()}">1</td>
+                        <td th:text="${#temporals.format(r.getArchivedAt(), 'dd/MM/yyyy HH:mm')}">01/01/2026 00:00</td>
+                        <td class="col-actions">
+                            <div class="table-actions">
+                                <form th:action="@{'/rooms/' + ${r.getId()} + '/restore'}" method="post">
+                                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                    <button type="submit" class="btn btn-sm btn-secondary">Dùng lại</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Ẩn nhà trọ (#89): chủ nhà trọ hoặc quản trị viên; hệ thống từ chối nếu còn hợp đồng chưa kết thúc hoặc hóa đơn chưa thu -->
+    <div th:if="${currentUser != null and !property.isArchived() and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+         class="card" style="border-color: #fecaca;">
+        <h2>Ẩn nhà trọ</h2>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+            Nhà trọ đã ẩn không hiện trong danh sách và không tạo thêm phòng, hợp đồng. Dữ liệu cũ (hợp đồng, hóa đơn, nhật ký)
+            vẫn được giữ và có thể khôi phục bất cứ lúc nào. Chỉ ẩn được khi không còn hợp đồng chưa kết thúc và hóa đơn chưa thu.
+        </p>
+        <form th:action="@{'/properties/' + ${property.id()} + '/archive'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button type="submit" class="btn btn-sm btn-danger"
+                    onclick="return confirm('Ẩn nhà trọ này? Có thể khôi phục lại sau.');">Ẩn nhà trọ</button>
+        </form>
     </div>
 
     <!-- Dialog từ chối duyệt nhà trọ (Quản trị viên) -->

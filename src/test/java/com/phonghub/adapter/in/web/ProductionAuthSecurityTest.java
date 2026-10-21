@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
@@ -49,6 +50,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -106,6 +108,13 @@ class ProductionAuthSecurityTest {
 
     @MockitoBean
     private com.phonghub.application.port.in.ChatMessageUseCase chatMessageUseCase;
+
+    @Test
+    void roomAssetBatchRequiresBearerTokenInProd() throws Exception {
+        mockMvc.perform(post("/api/rooms/10401040-1040-1040-1040-104010401040/assets/batch")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"items\":[{\"name\":\"Giường\"}]}"))
+            .andExpect(status().isUnauthorized());
+    }
 
     @Test
     void healthEndpointIsPermittedWithoutAuthenticationInProd() throws Exception {
@@ -266,6 +275,14 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(get("/properties").session(session))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/account/password"));
+    }
+
+    @Test
+    void adminUserEditRequiresBearerTokenInProd() throws Exception {
+        mockMvc.perform(patch("/api/admin/users/55555555-0000-0000-0000-000000000002")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fullName\":\"x\",\"role\":\"OWNER\",\"status\":\"ACTIVE\"}"))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -620,6 +637,14 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void propertyArchiveEndpointsRequireBearerTokenInProd() throws Exception {
+        String property = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+        mockMvc.perform(post(property + "/archive")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post(property + "/restore")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/properties").param("archived", "true")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void notificationCenterRequiresAuthenticationInProd() throws Exception {
         String id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
         mockMvc.perform(get("/api/notifications")).andExpect(status().isUnauthorized());
@@ -631,11 +656,29 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void maintenanceEditAndCancelRequireBearerTokenInProd() throws Exception {
+        String ticket = "/api/maintenance/dddddddd-dddd-dddd-dddd-dddddddddddd";
+        mockMvc.perform(MockMvcRequestBuilders.patch(ticket).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"x\",\"description\":\"y\"}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(post(ticket + "/cancel")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void roomAssetEndpointsRequireBearerTokenInProd() throws Exception {
         String roomId = "10101010-1010-1010-1010-101010101010";
         mockMvc.perform(get("/api/rooms/" + roomId + "/assets")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/assets/" + roomId)).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/assets/" + roomId + "/qr")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void roomArchiveEndpointsRequireBearerTokenInProd() throws Exception {
+        String room = "/api/rooms/10401040-1040-1040-1040-104010401040";
+        mockMvc.perform(post(room + "/archive")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post(room + "/restore")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/rooms").param("archived", "true"))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -647,6 +690,14 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(post(ticket + "/verify")).andExpect(status().isUnauthorized());
         mockMvc.perform(post(ticket + "/reopen").contentType(MediaType.APPLICATION_JSON).content("{\"feedback\": \"x\"}"))
             .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void contractDraftEditEndpointsRequireBearerTokenInProd() throws Exception {
+        String contract = "/api/contracts/cccccccc-cccc-cccc-cccc-cccccccccccc";
+        mockMvc.perform(patch(contract).contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(post(contract + "/cancel")).andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -674,6 +725,13 @@ class ProductionAuthSecurityTest {
                 .param("period", "2026-10"))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void invoiceVoidRequiresBearerTokenInProd() throws Exception {
+        mockMvc.perform(post("/api/invoices/eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee/void")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"x\"}"))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -47,6 +47,18 @@ public class TransactionalMaintenanceUseCase implements MaintenanceUseCase {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket updateTicket(UpdateMaintenanceTicketCommand command) {
+        return delegate.updateTicket(command);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket cancelTicket(UUID ticketId, String reason) {
+        return delegate.cancelTicket(ticketId, reason);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public MaintenanceTicket resolveTicket(ResolveMaintenanceTicketCommand command) {
         return delegate.resolveTicket(command);
     }

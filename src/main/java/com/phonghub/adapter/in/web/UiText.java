@@ -94,6 +94,7 @@ public final class UiText {
             case ACTIVE -> "Đang hiệu lực";
             case EXPIRED -> "Đã hết hạn";
             case TERMINATED -> "Đã chấm dứt";
+            case CANCELLED -> "Đã hủy";
         };
     }
 
@@ -191,6 +192,7 @@ public final class UiText {
             case RESOLVED -> "Đã xử lý";
             case VERIFIED -> "Đã xác nhận";
             case REJECTED -> "Đã từ chối";
+            case CANCELLED -> "Đã hủy";
         };
     }
 

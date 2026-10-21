@@ -6,6 +6,7 @@ import com.phonghub.domain.model.ServiceRate;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 public class TransactionalUtilityUseCase implements UtilityUseCase {
@@ -28,8 +29,12 @@ public class TransactionalUtilityUseCase implements UtilityUseCase {
         return delegate.listReadings(roomId);
     }
 
+    /**
+     * Không chạy trong transaction: bước này ghi audit METER_OCR_REQUESTED (transaction chỉ đọc làm Postgres từ chối
+     * INSERT, endpoint trả 500) và OCR có thể mất vài giây, không nên giữ kết nối DB trong lúc chờ.
+     */
     @Override
-    @Transactional(readOnly = true)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OcrSuggestion readMeterPhoto(UUID roomId, com.phonghub.domain.model.MeterType meterType,
                                         String contentType, byte[] content) {
         return delegate.readMeterPhoto(roomId, meterType, contentType, content);
