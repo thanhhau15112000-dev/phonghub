@@ -16,6 +16,24 @@ public interface MaintenanceUseCase {
     MaintenanceTicket assignTechnician(UUID ticketId, UUID technicianId);
     /** Owner/staff từ chối phiếu chưa xử lý; bắt buộc có lý do, người thuê được thông báo. */
     MaintenanceTicket rejectTicket(UUID ticketId, String reason);
+
+    /**
+     * Sửa tiêu đề, mô tả, mức ưu tiên của phiếu chưa xử lý (#89): người thuê đã báo phiếu, hoặc người quản lý nhà trọ.
+     * Phiếu đã bắt đầu xử lý thì 409.
+     */
+    MaintenanceTicket updateTicket(UpdateMaintenanceTicketCommand command);
+
+    /** Hủy phiếu chưa xử lý (#89), cùng quyền như sửa; chuyển CANCELLED, không xóa. */
+    MaintenanceTicket cancelTicket(UUID ticketId, String reason);
+
+    record UpdateMaintenanceTicketCommand(UUID ticketId, String title, String description,
+                                          com.phonghub.domain.model.MaintenancePriority priority) {
+        public UpdateMaintenanceTicketCommand {
+            if (ticketId == null) {
+                throw new IllegalArgumentException("Ticket id is required");
+            }
+        }
+    }
     MaintenanceTicket resolveTicket(ResolveMaintenanceTicketCommand command);
     /** Quản lý miễn khoản phí đang chờ thanh toán: hủy hóa đơn, chủ trọ chịu phí, phiếu hoàn tất. */
     MaintenanceTicket waiveRepairFee(UUID ticketId, String reason);

@@ -3665,6 +3665,68 @@ paths:
         '409':
           description: Phiếu chưa sửa xong
 
+  /api/maintenance/{id}:
+    patch:
+      tags: [Maintenance]
+      summary: Sửa tiêu đề, mô tả, mức độ của phiếu chưa xử lý (#89)
+      description: >
+        Người thuê đã báo phiếu (còn ở nhà trọ) hoặc người quản lý nhà trọ; kỹ thuật viên không được. Chỉ phiếu REPORTED
+        hoặc ASSIGNED; đổi mức độ thì hạn xử lý tính lại từ lúc tạo theo SLA mới.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, description]
+              properties:
+                title: { type: string }
+                description: { type: string }
+                priority: { type: string, enum: [LOW, MEDIUM, HIGH, URGENT] }
+      responses:
+        '200':
+          description: Đã cập nhật
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Phiếu đã bắt đầu xử lý hoặc đã đóng
+
+  /api/maintenance/{id}/cancel:
+    post:
+      tags: [Maintenance]
+      summary: Hủy phiếu chưa xử lý (#89), cùng quyền như sửa; chuyển CANCELLED và ghi mốc vào dòng thời gian
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 500 }
+      responses:
+        '200':
+          description: Phiếu ở trạng thái CANCELLED
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Phiếu đã bắt đầu xử lý hoặc đã đóng
+
   # ==========================================
   # STATISTICS (#93)
   # Doanh thu tính theo kỳ hóa đơn (bỏ hóa đơn VOIDED và phí đã gộp vào hóa đơn tháng); chi phí là phí sửa chữa
@@ -4004,7 +4066,7 @@ components:
 
     TicketStatus:
       type: string
-      enum: [REPORTED, ASSIGNED, IN_PROGRESS, RESOLVED, VERIFIED, REJECTED]
+      enum: [REPORTED, ASSIGNED, IN_PROGRESS, AWAITING_PAYMENT, RESOLVED, VERIFIED, REJECTED, CANCELLED]
 
     TicketPriority:
       type: string
