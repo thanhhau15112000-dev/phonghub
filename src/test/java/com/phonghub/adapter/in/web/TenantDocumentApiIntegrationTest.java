@@ -116,6 +116,9 @@ class TenantDocumentApiIntegrationTest {
 
         ((InMemoryAuditAdapter) auditPort).getRecordedEvents().forEach(event ->
             assertEquals(false, event.details().toString().contains("555566667777")));
+        // #78: gắn đúng nhà đang thao tác, không để nhật ký đoán theo nhà gần nhất của người thuê
+        ((InMemoryAuditAdapter) auditPort).getRecordedEvents().forEach(event ->
+            assertEquals(DataSeeder.PROP_1_ID, event.propertyId(), event.action()));
     }
 
     @Test

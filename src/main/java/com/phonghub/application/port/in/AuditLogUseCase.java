@@ -13,6 +13,10 @@ public interface AuditLogUseCase {
     /** Các nhà trọ mà người dùng hiện tại được chọn để lọc (admin: tất cả). */
     List<PropertyOption> selectableProperties();
 
+    /**
+     * Một trang nhật ký, mới nhất trước. Trả tối đa {@code PAGE_SIZE + 1} sự kiện: có sự kiện thứ {@code PAGE_SIZE + 1}
+     * nghĩa là còn trang sau (sự kiện đó thuộc trang sau, không hiển thị ở trang này).
+     */
     List<AuditQueryPort.Entry> search(SearchCommand command);
 
     record PropertyOption(UUID id, String name) {}

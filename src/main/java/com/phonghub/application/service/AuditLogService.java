@@ -61,7 +61,7 @@ public class AuditLogService implements AuditLogUseCase {
             command.action(),
             command.from() == null ? null : command.from().atStartOfDay(DISPLAY_ZONE).toInstant(),
             command.to() == null ? null : command.to().plusDays(1).atStartOfDay(DISPLAY_ZONE).toInstant(),
-            PAGE_SIZE,
+            PAGE_SIZE + 1,
             page * PAGE_SIZE
         ));
         if (user.role() != UserRole.ADMIN) {

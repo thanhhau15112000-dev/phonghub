@@ -100,7 +100,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
             .sorted(Comparator.comparing(TenantDocument::type))
             .map(document -> summarize(document, tenant))
             .toList();
-        audit("TENANT_DOCUMENTS_VIEWED", user, tenantId, Map.of("count", summaries.size()));
+        audit("TENANT_DOCUMENTS_VIEWED", user, propertyId, tenantId, Map.of("count", summaries.size()));
         return summaries;
     }
 
@@ -110,7 +110,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
         authorizationService.assertCanAccessTenantDocuments(user, propertyId, tenantId);
         Tenant tenant = findTenant(tenantId);
         TenantDocument document = findDocument(tenantId, type);
-        audit("TENANT_DOCUMENT_VIEWED", user, tenantId, Map.of("type", type.name()));
+        audit("TENANT_DOCUMENT_VIEWED", user, propertyId, tenantId, Map.of("type", type.name()));
         return summarize(document, tenant);
     }
 
@@ -163,7 +163,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
             deleteQuietly(previous.frontImageKey());
             deleteQuietly(previous.backImageKey());
         }
-        audit("TENANT_DOCUMENT_UPLOADED", user, command.tenantId(),
+        audit("TENANT_DOCUMENT_UPLOADED", user, command.propertyId(), command.tenantId(),
             Map.of("type", command.type().name(), "replaced", previous != null));
         return summarize(saved, tenant);
     }
@@ -176,7 +176,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
 
         if (!passwordMatches(user, password)) {
             recordFailure(user.id());
-            audit("TENANT_DOCUMENT_REVEAL_FAILED", user, tenantId, Map.of("type", type.name()));
+            audit("TENANT_DOCUMENT_REVEAL_FAILED", user, propertyId, tenantId, Map.of("type", type.name()));
             throw new DocumentRevealDeniedException();
         }
         failedReveals.remove(user.id());
@@ -191,7 +191,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
             decryptImage(document.frontImageKey(), document.frontContentType()),
             document.hasBackImage() ? decryptImage(document.backImageKey(), document.backContentType()) : null
         );
-        audit("TENANT_DOCUMENT_REVEALED", user, tenantId, Map.of("type", type.name()));
+        audit("TENANT_DOCUMENT_REVEALED", user, propertyId, tenantId, Map.of("type", type.name()));
         return revealed;
     }
 
@@ -204,7 +204,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
         documentRepository.delete(tenantId, type);
         deleteQuietly(document.frontImageKey());
         deleteQuietly(document.backImageKey());
-        audit("TENANT_DOCUMENT_DELETED", user, tenantId, Map.of("type", type.name()));
+        audit("TENANT_DOCUMENT_DELETED", user, propertyId, tenantId, Map.of("type", type.name()));
     }
 
     private void assertNotLocked(UUID tenantId) {
@@ -322,10 +322,12 @@ public class TenantDocumentService implements TenantDocumentUseCase {
             .orElseThrow(() -> new TenantDocumentNotFoundException("Document " + type + " not found for tenant"));
     }
 
-    private void audit(String action, CurrentUser user, UUID tenantId, Map<String, Object> details) {
+    /** Gắn nhà trọ đang thao tác: người thuê có thể thuộc nhiều nhà, không để adapter đoán theo nhà gần nhất. */
+    private void audit(String action, CurrentUser user, UUID propertyId, UUID tenantId, Map<String, Object> details) {
         Map<String, Object> payload = new HashMap<>(details);
         payload.put("tenantId", tenantId.toString());
-        auditPort.recordEvent(AuditPort.AuditEvent.of(action, user.id(), "TENANT_DOCUMENT", tenantId.toString(), payload));
+        auditPort.recordEvent(AuditPort.AuditEvent.of(action, user.id(), "TENANT_DOCUMENT", tenantId.toString(), propertyId,
+            payload));
     }
 
     private record Prepared(String contentType, byte[] content) {}

@@ -109,7 +109,7 @@ public class TenantPrivacyService implements TenantPrivacyUseCase {
         }
         TenantPrivacy current = privacyRepository.find(tenantId).orElseGet(() -> TenantPrivacy.none(tenantId));
         privacyRepository.save(current.withLegalHold(reason, actor.id(), clock.instant()));
-        audit("TENANT_LEGAL_HOLD_SET", actor.id(), tenantId, Map.of("propertyId", propertyId.toString()));
+        audit("TENANT_LEGAL_HOLD_SET", actor.id(), propertyId, tenantId, Map.of("propertyId", propertyId.toString()));
         return statusOf(tenantId);
     }
 
@@ -120,7 +120,7 @@ public class TenantPrivacyService implements TenantPrivacyUseCase {
         assertTenantInProperty(propertyId, tenantId);
         TenantPrivacy current = privacyRepository.find(tenantId).orElseGet(() -> TenantPrivacy.none(tenantId));
         privacyRepository.save(current.withoutLegalHold());
-        audit("TENANT_LEGAL_HOLD_CLEARED", actor.id(), tenantId, Map.of("propertyId", propertyId.toString()));
+        audit("TENANT_LEGAL_HOLD_CLEARED", actor.id(), propertyId, tenantId, Map.of("propertyId", propertyId.toString()));
         return statusOf(tenantId);
     }
 
@@ -141,7 +141,7 @@ public class TenantPrivacyService implements TenantPrivacyUseCase {
                 "Bạn còn hợp đồng đang hiệu lực; chỉ yêu cầu xóa được sau khi đã check-out.");
         }
         privacy = privacyRepository.save(privacy.withErasureRequested(clock.instant()));
-        audit("TENANT_ERASURE_REQUESTED", user.id(), tenant.id(), Map.of("legalHold", privacy.legalHold()));
+        audit("TENANT_ERASURE_REQUESTED", user.id(), null, tenant.id(), Map.of("legalHold", privacy.legalHold()));
         if (privacy.legalHold()) {
             return ErasureOutcome.PENDING_LEGAL_HOLD;
         }
@@ -224,7 +224,7 @@ public class TenantPrivacyService implements TenantPrivacyUseCase {
         authorizationService.assertOwnerOrAdmin(actor, propertyId);
         assertTenantInProperty(propertyId, tenantId);
         if (password == null || password.isBlank() || !passwordMatches(actor, password)) {
-            audit("TENANT_PURGE_CONFIRM_FAILED", actor.id(), tenantId, Map.of("propertyId", propertyId.toString()));
+            audit("TENANT_PURGE_CONFIRM_FAILED", actor.id(), propertyId, tenantId, Map.of("propertyId", propertyId.toString()));
             throw new DocumentRevealDeniedException();
         }
         TenantPrivacy privacy = privacyRepository.find(tenantId).orElseGet(() -> TenantPrivacy.none(tenantId));
@@ -310,7 +310,7 @@ public class TenantPrivacyService implements TenantPrivacyUseCase {
                 tenant.createdAt()));
         }
         privacyRepository.save(privacy.withPurged(clock.instant()));
-        audit("TENANT_DATA_PURGED", actorId, tenant.id(), Map.of("reason", reason, "documents", documents.size()));
+        audit("TENANT_DATA_PURGED", actorId, null, tenant.id(), Map.of("reason", reason, "documents", documents.size()));
     }
 
     private PrivacyStatus statusOf(UUID tenantId) {
@@ -326,9 +326,10 @@ public class TenantPrivacyService implements TenantPrivacyUseCase {
         }
     }
 
-    private void audit(String action, UUID actorId, UUID tenantId, Map<String, Object> details) {
+    /** propertyId: nhà trọ đang thao tác; null khi không gắn nhà nào (người thuê tự yêu cầu, xóa tự động). */
+    private void audit(String action, UUID actorId, UUID propertyId, UUID tenantId, Map<String, Object> details) {
         Map<String, Object> payload = new HashMap<>(details);
         payload.put("tenantId", tenantId.toString());
-        auditPort.recordEvent(AuditPort.AuditEvent.of(action, actorId, "TENANT", tenantId.toString(), payload));
+        auditPort.recordEvent(AuditPort.AuditEvent.of(action, actorId, "TENANT", tenantId.toString(), propertyId, payload));
     }
 }

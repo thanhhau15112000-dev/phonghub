@@ -45,6 +45,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -274,5 +275,26 @@ class ExportServiceUnitTest {
             () -> service.export(new ExportRequest(Dataset.INVOICES, Format.XLSX, null, YearMonth.of(2030, 1), null)));
         assertThrows(IllegalArgumentException.class, () -> Dataset.parse("nope"));
         assertEquals(Format.PDF, Format.parse(" PDF "));
+    }
+
+    @Test
+    @DisplayName("#78: sự kiện xuất gắn nhà trọ để chủ nhà thấy; file nhiều nhà ghi mỗi nhà một sự kiện, không lộ số dòng")
+    void auditScopedToProperties() {
+        login(ownerId, UserRole.OWNER);
+        service.export(new ExportRequest(Dataset.CONTRACTS, Format.XLSX, null, null, null));
+
+        assertEquals(1, audit.getRecordedEvents().size());
+        assertEquals(p1, audit.getRecordedEvents().get(0).propertyId());
+        assertEquals(1, audit.getRecordedEvents().get(0).details().get("rows"));
+
+        audit.clear();
+        login(UUID.randomUUID(), UserRole.ADMIN);
+        service.export(new ExportRequest(Dataset.CONTRACTS, Format.PDF, null, null, null));
+
+        var events = audit.getRecordedEvents();
+        assertEquals(2, events.size());
+        assertEquals(Set.of(p1, p2), Set.of(events.get(0).propertyId(), events.get(1).propertyId()));
+        assertEquals(events.get(0).details().get("exportId"), events.get(1).details().get("exportId"));
+        assertFalse(events.get(0).details().containsKey("rows"), "chủ nhà không thấy tổng số dòng của nhà khác");
     }
 }

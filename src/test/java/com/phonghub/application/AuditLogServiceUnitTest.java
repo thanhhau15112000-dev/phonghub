@@ -146,7 +146,7 @@ class AuditLogServiceUnitTest {
         AuditQueryPort.Filter filter = capturedFilter();
         assertEquals(Instant.parse("2026-09-30T17:00:00Z"), filter.from());
         assertEquals(Instant.parse("2026-10-01T17:00:00Z"), filter.to());
-        assertEquals(AuditLogUseCase.PAGE_SIZE, filter.limit());
+        assertEquals(AuditLogUseCase.PAGE_SIZE + 1, filter.limit(), "lấy thừa 1 dòng để biết còn trang sau");
         assertEquals(2 * AuditLogUseCase.PAGE_SIZE, filter.offset());
         assertEquals("ROOM", filter.targetType());
         assertEquals("ROOM_UPDATED", filter.action());

@@ -5,7 +5,10 @@ import com.phonghub.application.port.out.AuditQueryPort;
 import com.phonghub.domain.exception.DomainException;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -43,25 +46,40 @@ public class AuditLogUiController {
             UUID actor = parseUuid(actorId);
             LocalDate fromDate = parseDate(from);
             LocalDate toDate = parseDate(to);
+            // Mã hành động lưu dạng chữ in hoa; gõ tay "room_updated" trên URL vẫn lọc được.
+            String actionCode = action == null || action.isBlank() ? null : action.trim().toUpperCase(Locale.ROOT);
+            List<AuditQueryPort.Entry> entries;
             if ((actorId != null && !actorId.isBlank() && actor == null)
                 || (from != null && !from.isBlank() && fromDate == null)
                 || (to != null && !to.isBlank() && toDate == null)) {
                 model.addAttribute("errorMessage", "Bộ lọc không hợp lệ: kiểm tra mã người thực hiện và ngày (yyyy-MM-dd).");
-                model.addAttribute("entries", List.<AuditQueryPort.Entry>of());
+                entries = List.of();
             } else {
-                model.addAttribute("entries", auditLogUseCase.search(new AuditLogUseCase.SearchCommand(
-                    propertyId, actor, targetType, action, fromDate, toDate, page)));
+                entries = auditLogUseCase.search(new AuditLogUseCase.SearchCommand(
+                    propertyId, actor, targetType, actionCode, fromDate, toDate, page));
             }
-            model.addAttribute("properties", auditLogUseCase.selectableProperties());
+            boolean hasNextPage = entries.size() > AuditLogUseCase.PAGE_SIZE;
+            if (hasNextPage) {
+                entries = entries.subList(0, AuditLogUseCase.PAGE_SIZE);
+            }
+            Map<UUID, List<AuditDetailsFormatter.Line>> detailLines = new HashMap<>();
+            entries.forEach(e -> detailLines.put(e.id(), AuditDetailsFormatter.format(e.targetType(), e.details())));
+            List<AuditLogUseCase.PropertyOption> properties = auditLogUseCase.selectableProperties();
+            Map<UUID, String> propertyNames = new HashMap<>();
+            properties.forEach(p -> propertyNames.put(p.id(), p.name()));
+            model.addAttribute("entries", entries);
+            model.addAttribute("detailLines", detailLines);
+            model.addAttribute("propertyNames", propertyNames);
+            model.addAttribute("properties", properties);
             model.addAttribute("targetTypes", TARGET_TYPES);
             model.addAttribute("propertyId", propertyId);
             model.addAttribute("actorId", actorId);
             model.addAttribute("targetType", targetType);
-            model.addAttribute("action", action);
+            model.addAttribute("action", actionCode);
             model.addAttribute("from", from);
             model.addAttribute("to", to);
             model.addAttribute("page", Math.max(0, page));
-            model.addAttribute("pageSize", AuditLogUseCase.PAGE_SIZE);
+            model.addAttribute("hasNextPage", hasNextPage);
             return "audit/list";
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
