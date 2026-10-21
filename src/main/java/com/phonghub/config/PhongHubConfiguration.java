@@ -676,6 +676,20 @@ public class PhongHubConfiguration {
         return new TransactionalInvoiceUseCase(service);
     }
 
+    /** Quyết toán tiền cọc khi trả phòng: chỉ đọc, quyền do ContractUseCase/InvoiceUseCase kiểm tra. */
+    @Bean
+    public com.phonghub.application.port.in.CheckOutSettlementUseCase checkOutSettlementUseCase(
+        ContractUseCase contractUseCase,
+        InvoiceUseCase invoiceUseCase,
+        HandoverRepositoryPort handoverRepo,
+        HandoverItemRepositoryPort itemRepo,
+        MeterReadingRepositoryPort meterReadingRepository,
+        ServiceRateRepositoryPort serviceRateRepository
+    ) {
+        return new com.phonghub.application.service.CheckOutSettlementService(contractUseCase, invoiceUseCase,
+            handoverRepo, itemRepo, meterReadingRepository, serviceRateRepository);
+    }
+
     @Bean
     public FileStorageUseCase fileStorageUseCase(
         FileStoragePort storagePort,

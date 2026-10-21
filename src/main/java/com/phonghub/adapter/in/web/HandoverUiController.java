@@ -1,5 +1,6 @@
 package com.phonghub.adapter.in.web;
 
+import com.phonghub.application.port.in.CheckOutSettlementUseCase;
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.HandoverUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
@@ -41,19 +42,22 @@ public class HandoverUiController {
     private final PropertyUseCase propertyUseCase;
     private final TenantRepositoryPort tenantRepository;
     private final CurrentUserPort currentUserPort;
+    private final CheckOutSettlementUseCase settlementUseCase;
 
     public HandoverUiController(
         HandoverUseCase handoverUseCase,
         ContractUseCase contractUseCase,
         PropertyUseCase propertyUseCase,
         TenantRepositoryPort tenantRepository,
-        CurrentUserPort currentUserPort
+        CurrentUserPort currentUserPort,
+        CheckOutSettlementUseCase settlementUseCase
     ) {
         this.handoverUseCase = handoverUseCase;
         this.contractUseCase = contractUseCase;
         this.propertyUseCase = propertyUseCase;
         this.tenantRepository = tenantRepository;
         this.currentUserPort = currentUserPort;
+        this.settlementUseCase = settlementUseCase;
     }
 
     private static HandoverType typeOf(String kind) {
@@ -102,6 +106,9 @@ public class HandoverUiController {
             model.addAttribute("assetStatuses", AssetStatus.values());
             model.addAttribute("kind", kind);
             model.addAttribute("checkOut", type == HandoverType.CHECK_OUT);
+            // Quyết toán cọc: chỉ trang check-out, chỉ người xem được số liệu tiền của hợp đồng
+            model.addAttribute("settlement", type == HandoverType.CHECK_OUT && details != null
+                ? settlementUseCase.settlement(contractId).orElse(null) : null);
             model.addAttribute("base", "/contracts/" + contractId + "/" + kind);
             return "contracts/handover";
         } catch (DomainException ex) {
