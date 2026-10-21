@@ -186,7 +186,8 @@ class OwnerFlowAndAdminPasswordResetIntegrationTest {
         // 4. Terminate contract as Owner 1
         mockMvc.perform(post("/contracts/" + createdContract.getId() + "/terminate")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
-                .param("requiresMaintenance", "false"))
+                .param("requiresMaintenance", "false")
+                .param("reason", "Người thuê chuyển đi trước hạn"))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/contracts/" + createdContract.getId()))
             .andExpect(flash().attributeExists("successMessage"));

@@ -309,7 +309,7 @@ public class ContractUiController {
         RedirectAttributes redirectAttributes
     ) {
         try {
-            contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
+            ContractUseCase.AddOccupantResult result = contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
                 id,
                 fullName,
                 identityCardNumber,
@@ -319,7 +319,15 @@ public class ContractUiController {
                 checkInDate != null ? checkInDate : LocalDate.now(),
                 createAccount
             ));
-            redirectAttributes.addFlashAttribute("successMessage", "Thêm người thuê vào phòng thành công.");
+            String message = "Thêm người thuê vào phòng thành công.";
+            if (result.temporaryPassword() != null) {
+                // Mật khẩu tạm chỉ hiện một lần; người thuê phải đổi ở lần đăng nhập đầu
+                message += " Đã tạo tài khoản đăng nhập: " + result.accountUsername() + " / mật khẩu tạm "
+                    + result.temporaryPassword() + " (chỉ hiện một lần, hãy gửi cho người thuê).";
+            } else if (result.accountUsername() != null) {
+                message += " Đã liên kết với tài khoản có sẵn: " + result.accountUsername() + ".";
+            }
+            redirectAttributes.addFlashAttribute("successMessage", message);
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }
@@ -369,14 +377,34 @@ public class ContractUiController {
         return "redirect:/contracts/" + id;
     }
 
+    @PostMapping("/{id}/renew")
+    public String renewContract(
+        @PathVariable UUID id,
+        @RequestParam LocalDate endDate,
+        @RequestParam(required = false) java.math.BigDecimal rentAmount,
+        @RequestParam(required = false) Long version,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            Contract renewed = contractUseCase.renewContract(
+                new ContractUseCase.RenewContractCommand(id, endDate, rentAmount, version));
+            redirectAttributes.addFlashAttribute("successMessage", "Đã gia hạn hợp đồng đến ngày "
+                + UiText.INSTANCE.date(renewed.getEndDate()) + ".");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
+    }
+
     @PostMapping("/{id}/terminate")
     public String terminateContract(
         @PathVariable UUID id,
         @RequestParam(name = "requiresMaintenance", defaultValue = "false") boolean requiresMaintenance,
+        @RequestParam(required = false) String reason,
         RedirectAttributes redirectAttributes
     ) {
         try {
-            Contract terminated = contractUseCase.terminateContract(id, requiresMaintenance);
+            Contract terminated = contractUseCase.terminateEarly(id, requiresMaintenance, reason);
             // Lấy trạng thái thật: phòng đang sửa dở vẫn giữ Bảo trì dù không chọn "cần kiểm tra bảo trì"
             RoomStatus roomStatus = roomRepository.findById(terminated.getRoomId()).map(Room::getStatus)
                 .orElse(requiresMaintenance ? RoomStatus.MAINTENANCE : RoomStatus.AVAILABLE);
@@ -384,7 +412,7 @@ public class ContractUiController {
                 "successMessage",
                 "Đã chấm dứt hợp đồng. Phòng hiện ở trạng thái " + UiText.INSTANCE.roomStatus(roomStatus) + "."
             );
-        } catch (DomainException ex) {
+        } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }
         return "redirect:/contracts/" + id;

@@ -148,9 +148,11 @@ public class Contract {
         if (tenantId == null) {
             throw new IllegalArgumentException("Tenant id cannot be null");
         }
-        if (this.status != ContractStatus.ACTIVE) {
+        // Hợp đồng đã hết hạn nhưng chưa trả phòng (#87) vẫn có người ở nên vẫn ghi nhận được người ở cùng rời đi
+        if (!isResiding()) {
             throw new DomainException(String.format(
-                "Chỉ có thể ghi nhận rời phòng cho hợp đồng đang có hiệu lực (ACTIVE). Trạng thái hiện tại: '%s'.",
+                "Chỉ có thể ghi nhận rời phòng cho hợp đồng còn người ở (đang hiệu lực hoặc đã hết hạn nhưng chưa trả "
+                    + "phòng). Trạng thái hiện tại: '%s'.",
                 this.status
             ));
         }
@@ -273,6 +275,39 @@ public class Contract {
             ));
         }
         this.status = ContractStatus.TERMINATED;
+        this.updatedAt = Instant.now();
+    }
+
+    /**
+     * Gia hạn hợp đồng người thuê còn ở: dời ngày kết thúc, có thể đổi tiền thuê (áp dụng cho các kỳ hóa đơn phát
+     * hành sau). Hợp đồng đã hết hạn mà chưa trả phòng (#87) trở lại hiệu lực.
+     */
+    public void renew(LocalDate newEndDate, BigDecimal newRent, LocalDate today) {
+        if (!isResiding()) {
+            throw new InvalidContractStateException(String.format(
+                "Chỉ gia hạn được hợp đồng đang hiệu lực hoặc đã hết hạn nhưng chưa trả phòng. Trạng thái hiện tại: '%s'.",
+                status));
+        }
+        if (newEndDate == null) {
+            throw new IllegalArgumentException("Cần nhập ngày kết thúc mới.");
+        }
+        if (!newEndDate.isAfter(endDate)) {
+            throw new IllegalArgumentException(String.format(
+                "Ngày kết thúc mới phải sau ngày kết thúc hiện tại (%s).", endDate));
+        }
+        if (today != null && newEndDate.isBefore(today)) {
+            throw new IllegalArgumentException("Ngày kết thúc mới không được trước hôm nay.");
+        }
+        if (newRent != null && newRent.signum() <= 0) {
+            throw new IllegalArgumentException("Tiền thuê phải lớn hơn 0.");
+        }
+        this.endDate = newEndDate;
+        if (newRent != null) {
+            this.rentAmount = newRent;
+        }
+        if (this.status == ContractStatus.EXPIRED) {
+            this.status = ContractStatus.ACTIVE;
+        }
         this.updatedAt = Instant.now();
     }
 

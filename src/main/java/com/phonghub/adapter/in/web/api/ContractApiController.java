@@ -111,14 +111,34 @@ public class ContractApiController {
         Long version
     ) {}
 
+    /** Chấm dứt ngay không qua check-out: chỉ chủ trọ/admin, bắt buộc {@code reason}. */
     @PostMapping("/contracts/{id}/terminate")
     public ResponseEntity<ContractResponse> terminateContract(
         @PathVariable UUID id,
-        @RequestParam(name = "requiresMaintenance", defaultValue = "false") boolean requiresMaintenance
+        @RequestParam(name = "requiresMaintenance", defaultValue = "false") boolean requiresMaintenance,
+        @RequestParam(name = "reason", required = false) String reason
     ) {
-        Contract contract = contractUseCase.terminateContract(id, requiresMaintenance);
+        Contract contract = contractUseCase.terminateEarly(id, requiresMaintenance, reason);
         return ResponseEntity.ok(ContractResponse.from(contract));
     }
+
+    @PostMapping("/contracts/{id}/renew")
+    public ResponseEntity<ContractResponse> renewContract(
+        @PathVariable UUID id,
+        @Valid @RequestBody RenewContractRequest request
+    ) {
+        Contract contract = contractUseCase.renewContract(new ContractUseCase.RenewContractCommand(
+            id, request.endDate(), request.rentAmount(), request.version()));
+        return ResponseEntity.ok(ContractResponse.from(contract));
+    }
+
+    public record RenewContractRequest(
+        @NotNull(message = "Cần nhập ngày kết thúc mới")
+        LocalDate endDate,
+        /** Tiền thuê mới cho các kỳ phát hành sau; bỏ trống là giữ nguyên. */
+        BigDecimal rentAmount,
+        Long version
+    ) {}
 
     @GetMapping("/contracts/{id}")
     public ResponseEntity<ContractResponse> getContract(@PathVariable UUID id) {
@@ -136,11 +156,11 @@ public class ContractApiController {
     }
 
     @PostMapping("/contracts/{id}/occupants")
-    public ResponseEntity<ContractResponse.ContractOccupantResponse> addOccupant(
+    public ResponseEntity<ContractResponse.OccupantAddedResponse> addOccupant(
         @PathVariable UUID id,
         @Valid @RequestBody AddOccupantRequest request
     ) {
-        com.phonghub.domain.model.ContractOccupant occupant = contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
+        ContractUseCase.AddOccupantResult result = contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
             id,
             request.fullName(),
             request.identityCardNumber(),
@@ -150,7 +170,8 @@ public class ContractApiController {
             request.checkInDate() != null ? request.checkInDate() : LocalDate.now(),
             request.createAccount()
         ));
-        ContractResponse.ContractOccupantResponse response = ContractResponse.ContractOccupantResponse.from(occupant);
+        ContractResponse.OccupantAddedResponse response = ContractResponse.OccupantAddedResponse.from(
+            result.occupant(), result.accountUsername(), result.temporaryPassword());
         return ResponseEntity.created(URI.create("/api/contracts/" + id + "/occupants/" + response.id())).body(response);
     }
 

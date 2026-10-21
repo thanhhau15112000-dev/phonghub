@@ -9,7 +9,7 @@
 
     <div class="page-title-row">
         <div>
-            <h1>Hợp đồng <span th:text="${#strings.substring(contract.getId().toString(), 0, 8)}">Mã</span></h1>
+            <h1>Hợp đồng phòng <span th:text="${room.getRoomNumber()}">P101</span></h1>
             <p style="color: var(--text-secondary); font-size: 13px;">
                 Nhà trọ: <strong th:text="${property.name()}">Nhà trọ</strong> | Phòng: <strong th:text="${room.getRoomNumber()}">P101</strong>
             </p>
@@ -48,15 +48,12 @@
                             onclick="return confirm('Hủy hợp đồng nháp này? Hợp đồng sẽ chuyển sang trạng thái Đã hủy và không kích hoạt được nữa.');">Hủy hợp đồng nháp</button>
                 </form>
 
-                <!-- Nút chấm dứt khi đang có hiệu lực hoặc đã hết hạn mà chưa trả phòng (#87) -->
-                <form th:if="${contract.isResiding()}" th:action="@{'/contracts/' + ${contract.getId()} + '/terminate'}" method="post" style="display: flex; align-items: center; gap: 8px;">
-                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <label style="font-size: 12px; display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" name="requiresMaintenance" value="true">
-                        Cần kiểm tra bảo trì
-                    </label>
-                    <button type="submit" class="btn btn-danger">Chấm dứt hợp đồng</button>
-                </form>
+                <!-- Hợp đồng còn người ở (đang hiệu lực hoặc hết hạn chưa trả phòng, #87): gia hạn hoặc chấm dứt ngay -->
+                <button th:if="${contract.isResiding()}" type="button" class="btn btn-secondary"
+                        onclick="document.getElementById('renewModal').showModal()">Gia hạn hợp đồng</button>
+                <button th:if="${contract.isResiding() and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                        type="button" class="btn btn-danger"
+                        onclick="document.getElementById('terminateModal').showModal()">Chấm dứt ngay…</button>
             </div>
         </div>
     </div>
@@ -569,6 +566,70 @@
             <div style="display: flex; justify-content: flex-end; gap: 8px;">
                 <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('editDraftModal').close()">Đóng</button>
                 <button type="submit" class="btn btn-sm btn-primary">Lưu thay đổi</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Dialog gia hạn hợp đồng người thuê còn ở (đang hiệu lực hoặc đã hết hạn chưa trả phòng) -->
+    <dialog th:if="${contract.isResiding() and currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            id="renewModal" class="modal-dialog" style="max-width: 480px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Gia hạn hợp đồng</h3>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('renewModal').close()">✕</button>
+        </div>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-top: 0;">
+            Ngày kết thúc hiện tại: <strong th:text="${uiText.date(contract.getEndDate())}">01/01/2027</strong>.
+            <span th:if="${contract.getStatus().name() == 'EXPIRED'}">Hợp đồng đã hết hạn sẽ trở lại hiệu lực.</span>
+        </p>
+        <form th:action="@{'/contracts/' + ${contract.getId()} + '/renew'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <input type="hidden" name="version" th:value="${contract.getVersion()}">
+            <div class="form-group">
+                <label class="form-label" for="renewEnd">Ngày kết thúc mới *</label>
+                <input type="date" id="renewEnd" name="endDate" class="form-control" required
+                       th:min="${contract.getEndDate().plusDays(1)}" th:value="${contract.getEndDate().plusYears(1)}">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="renewRent">Tiền thuê mới / tháng (VNĐ)</label>
+                <input type="number" id="renewRent" name="rentAmount" class="form-control" min="1" step="1000"
+                       th:placeholder="${'Giữ nguyên ' + #numbers.formatDecimal(contract.getRentAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">
+                <small style="color: var(--text-secondary); font-size: 11px;">Bỏ trống để giữ nguyên. Tiền thuê mới áp dụng cho các kỳ hóa đơn phát hành sau khi gia hạn.</small>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('renewModal').close()">Đóng</button>
+                <button type="submit" class="btn btn-sm btn-primary">Gia hạn</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Dialog chấm dứt hợp đồng ngay (không qua biên bản check-out): chỉ chủ trọ/quản trị viên, bắt buộc lý do -->
+    <dialog th:if="${contract.isResiding() and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            id="terminateModal" class="modal-dialog" style="max-width: 520px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Chấm dứt hợp đồng ngay</h3>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('terminateModal').close()">✕</button>
+        </div>
+        <div style="font-size: 13px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 12px;">
+            Chấm dứt ngay <strong>không lập biên bản check-out</strong>: không đối chiếu tài sản, không có xác nhận của người thuê
+            và không tính khấu trừ cọc. Trả phòng thông thường hãy dùng nút <strong>Check-out</strong>.
+            <div th:if="${invoices != null and !#lists.isEmpty(invoices.?[payable])}" style="margin-top: 8px; color: var(--danger, #b91c1c);">
+                Hợp đồng còn <strong th:text="${#lists.size(invoices.?[payable])}">1</strong> hóa đơn chưa thu xong; các hóa đơn này vẫn giữ để thu tiếp sau khi chấm dứt.
+            </div>
+        </div>
+        <form th:action="@{'/contracts/' + ${contract.getId()} + '/terminate'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group">
+                <label class="form-label" for="terminateReason">Lý do chấm dứt *</label>
+                <textarea id="terminateReason" name="reason" class="form-control" rows="3" maxlength="500" required
+                          placeholder="Ví dụ: Người thuê bỏ đi không báo, vi phạm nội quy..."></textarea>
+            </div>
+            <label style="font-size: 13px; display: flex; align-items: center; gap: 6px; margin-bottom: 12px;">
+                <input type="checkbox" name="requiresMaintenance" value="true">
+                Phòng cần kiểm tra bảo trì sau khi trả
+            </label>
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('terminateModal').close()">Đóng</button>
+                <button type="submit" class="btn btn-sm btn-danger">Chấm dứt hợp đồng</button>
             </div>
         </form>
     </dialog>

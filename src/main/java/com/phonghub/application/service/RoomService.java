@@ -238,20 +238,23 @@ public class RoomService implements RoomUseCase {
         return roomRepository.search(criteria);
     }
 
-    /** Người thuê chỉ thấy phòng của mình (chủ hợp đồng hoặc người ở cùng) trong nhà trọ này. */
+    /**
+     * Người thuê chỉ thấy phòng của mình (chủ hợp đồng hoặc người ở cùng) trong nhà trọ này, kể cả khi hợp đồng đã hết
+     * hạn nhưng chưa trả phòng (#87).
+     */
     private Optional<Room> tenantRoom(CurrentUser tenantUser, UUID propertyId) {
         Optional<Tenant> tenantOpt = tenantRepository.findByUserId(tenantUser.id());
         if (tenantOpt.isEmpty()) {
             return Optional.empty();
         }
         Optional<Contract> activeContract = contractRepository.findByPrimaryTenantId(tenantOpt.get().id()).stream()
-            .filter(Contract::isActive)
+            .filter(Contract::isResiding)
             .filter(c -> c.getPropertyId().equals(propertyId))
             .findFirst();
 
         if (activeContract.isEmpty()) {
             activeContract = contractRepository.findByOccupantTenantId(tenantOpt.get().id()).stream()
-                .filter(Contract::isActive)
+                .filter(Contract::isResiding)
                 .filter(c -> c.getPropertyId().equals(propertyId))
                 .findFirst();
         }
@@ -272,10 +275,11 @@ public class RoomService implements RoomUseCase {
             if (tenantOpt.isEmpty()) {
                 throw new UnauthorizedPropertyAccessException("Tenant profile not found");
             }
-            Optional<Contract> activeContract = contractRepository.findActiveByRoomId(roomId);
-            boolean isOccupant = activeContract.isPresent() &&
-                (activeContract.get().getPrimaryTenantId().equals(tenantOpt.get().id()) ||
-                 activeContract.get().getOccupants().stream().anyMatch(o -> o.tenantId().equals(tenantOpt.get().id())));
+            UUID tenantId = tenantOpt.get().id();
+            boolean isOccupant = contractRepository.findByRoomId(roomId).stream()
+                .filter(Contract::isResiding)
+                .anyMatch(c -> c.getPrimaryTenantId().equals(tenantId)
+                    || c.getOccupants().stream().anyMatch(o -> o.tenantId().equals(tenantId)));
             if (!isOccupant) {
                 throw new UnauthorizedPropertyAccessException("Tenant cannot access rooms other than their assigned room");
             }
