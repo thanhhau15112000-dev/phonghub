@@ -157,13 +157,17 @@ public class UtilityService implements UtilityUseCase {
     }
 
     private BigDecimal resolvePrevious(RecordReadingCommand command, MeterReading latest, Contract contract) {
-        BigDecimal derived = null;
-        if (latest != null) {
-            derived = latest.currentValue();
-        } else if (contract != null) {
-            derived = handoverRepository.find(contract.getId(), HandoverType.CHECK_IN)
+        BigDecimal checkInValue = contract == null ? null
+            : handoverRepository.find(contract.getId(), HandoverType.CHECK_IN)
                 .filter(handover -> handover.status() == HandoverStatus.APPROVED)
                 .map(handover -> initialOf(handover, command.meterType())).orElse(null);
+        BigDecimal derived = null;
+        if (latest != null && (checkInValue == null || contract.getId().equals(latest.contractId()))) {
+            derived = latest.currentValue();
+        } else if (checkInValue != null) {
+            // Kỳ đầu của hợp đồng mới: tính từ chỉ số lúc nhận phòng, không từ lần ghi của khách trước hay lúc phòng
+            // trống (lần ghi đó luôn trước khi hợp đồng này hiệu lực), để khách mới không trả phần của người trước.
+            derived = checkInValue;
         }
         BigDecimal baseline = command.baselineValue();
         if (derived != null) {

@@ -217,6 +217,46 @@
             </div>
         </div>
 
+        <!-- Quyết toán tiền cọc khi trả phòng (chỉ người xem được số liệu tiền của hợp đồng) -->
+        <div class="card" th:if="${settlement != null}" id="settlement">
+            <h2>Quyết toán tiền cọc</h2>
+            <table class="data-table" style="max-width: 560px;">
+                <tbody>
+                    <tr>
+                        <td>Tiền cọc</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(settlement.deposit(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                    </tr>
+                    <tr>
+                        <td th:text="${settlement.deductionFinal() ? 'Khấu trừ tài sản (chủ trọ đã chốt)' : 'Khấu trừ tài sản (đề xuất)'}">Khấu trừ tài sản</td>
+                        <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(settlement.deduction(), 0, 'COMMA', 0, 'POINT') + ' đ'}">− 0 đ</td>
+                    </tr>
+                    <tr>
+                        <td th:text="${'Hóa đơn chưa thu (' + settlement.unpaidInvoices() + ' hóa đơn)'}">Hóa đơn chưa thu</td>
+                        <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(settlement.outstanding(), 0, 'COMMA', 0, 'POINT') + ' đ'}">− 0 đ</td>
+                    </tr>
+                    <tr th:each="u : ${settlement.utilities()}">
+                        <td>
+                            <span th:text="${u.meterType().name() == 'ELECTRIC' ? 'Điện' : 'Nước'}">Điện</span>
+                            chưa tính tiền:
+                            <span th:text="${u.fromValue().stripTrailingZeros().toPlainString() + ' → ' + u.toValue().stripTrailingZeros().toPlainString()}">100 → 150</span>
+                            (<span th:text="${u.consumption().stripTrailingZeros().toPlainString()}">50</span>
+                            <span th:text="${u.meterType().name() == 'ELECTRIC' ? 'kWh' : 'm³'}">kWh</span>)
+                            <span th:if="${u.unitPrice().signum() == 0}" style="color: var(--text-secondary); font-size: 11px;">— nhà trọ chưa có đơn giá</span>
+                        </td>
+                        <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(u.amount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">− 0 đ</td>
+                    </tr>
+                    <tr style="font-weight: 700;">
+                        <td th:text="${settlement.balance().signum() >= 0 ? 'Hoàn lại người thuê' : 'Người thuê cần trả thêm'}">Hoàn lại người thuê</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(settlement.balance().abs(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 0;">
+                Tiền điện/nước tính từ lần ghi chỉ số gần nhất tới chỉ số trong biên bản này theo đơn giá hiện tại (ước tính,
+                chưa lập hóa đơn). Hóa đơn chưa thu vẫn giữ để đối chiếu sau khi trả phòng.
+            </p>
+        </div>
+
         <div class="card" th:if="${details.handover().contractTermsHash() != null}">
             <h2>Điều khoản đã gửi cho khách</h2>
             <p style="font-size: 12px; word-break: break-all;">Mã băm điều khoản hợp đồng: <code th:text="${details.handover().contractTermsHash()}">hash</code></p>
