@@ -75,7 +75,9 @@ public class RoomUiController {
         try {
             Room room = roomUseCase.getRoom(id);
             Property property = propertyUseCase.getProperty(room.getPropertyId());
-            Optional<Contract> activeContract = contractRepository.findActiveByRoomId(id);
+            // Hợp đồng người thuê còn ở: đang hiệu lực, hoặc đã hết hạn nhưng chưa trả phòng (#87)
+            Optional<Contract> activeContract = contractRepository.findByRoomId(id).stream()
+                .filter(Contract::isResiding).findFirst();
             List<MaintenanceTicket> tickets = maintenanceUseCase.listTicketsForRoom(id);
 
             model.addAttribute("currentUser", currentUser);
@@ -83,7 +85,7 @@ public class RoomUiController {
             model.addAttribute("property", property);
             model.addAttribute("activeContract", activeContract.orElse(null));
             model.addAttribute("tickets", tickets);
-            model.addAttribute("allStatuses", RoomStatus.values());
+            model.addAttribute("manualStatuses", room.manualTargets(activeContract.isPresent()));
             addAssetAttributes(model, currentUser, property, id);
 
             return "rooms/detail";

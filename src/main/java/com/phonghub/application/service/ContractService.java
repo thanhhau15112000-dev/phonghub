@@ -232,13 +232,14 @@ public class ContractService implements ContractUseCase {
         }
 
         // Invariant: Ending a contract changes room to AVAILABLE unless maintenance is explicitly required
+        ContractStatus oldStatus = contract.getStatus();
         contract.terminate();
         room.vacate(requiresMaintenance);
 
         roomRepository.save(room);
         Contract saved = contractRepository.save(contract);
         audit("CONTRACT_TERMINATED", currentUser, saved, Map.of(
-            "oldStatus", ContractStatus.ACTIVE.name(), "newStatus", saved.getStatus().name(),
+            "oldStatus", oldStatus.name(), "newStatus", saved.getStatus().name(),
             "requiresMaintenance", requiresMaintenance));
         return saved;
     }

@@ -3,6 +3,8 @@ package com.phonghub.domain.model;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -130,6 +132,19 @@ public class Room {
         };
     }
 
+    /**
+     * Trạng thái người quản lý được chọn tay. Phòng còn người ở theo hợp đồng (đang hiệu lực hoặc hết hạn chưa trả
+     * phòng) chỉ đổi trạng thái theo vòng đời hợp đồng; "Đang thuê" chỉ có được khi kích hoạt hợp đồng.
+     */
+    public List<RoomStatus> manualTargets(boolean hasResidingContract) {
+        if (hasResidingContract) {
+            return List.of();
+        }
+        return Arrays.stream(RoomStatus.values())
+            .filter(target -> target != status && target != RoomStatus.OCCUPIED && canTransitionTo(target))
+            .toList();
+    }
+
     public void transitionTo(RoomStatus target) {
         if (target == null) {
             throw new IllegalArgumentException("Target status cannot be null");
@@ -178,6 +193,12 @@ public class Room {
     }
 
     public void vacate(boolean requiresMaintenance) {
+        if (this.status == RoomStatus.MAINTENANCE) {
+            // Dữ liệu cũ: phòng có người ở từng bị chuyển sang bảo trì. Vẫn trả phòng được; phòng giữ trạng thái bảo trì
+            // cho tới khi các phiếu sửa xong.
+            this.updatedAt = Instant.now();
+            return;
+        }
         if (this.status != RoomStatus.OCCUPIED) {
             throw new InvalidRoomStateException(String.format(
                 "Room '%s' cannot be vacated because it is currently %s (must be OCCUPIED)",

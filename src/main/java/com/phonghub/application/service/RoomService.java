@@ -293,22 +293,19 @@ public class RoomService implements RoomUseCase {
         authorizationService.assertCanManageProperty(currentUser, room.getPropertyId());
         assertInUse(room, "đổi trạng thái");
 
-        // Invariant F2: Cannot manually set an OCCUPIED room to AVAILABLE
-        if (room.getStatus() == RoomStatus.OCCUPIED && targetStatus == RoomStatus.AVAILABLE) {
-            Optional<Contract> activeContract = contractRepository.findActiveByRoomId(roomId);
-            if (activeContract.isPresent()) {
-                throw new InvalidRoomStateException(String.format(
-                    "Cannot manually change status of room '%s' to AVAILABLE: an ACTIVE contract exists (ID: %s). Contract must be terminated via contract lifecycle.",
-                    room.getRoomNumber(), activeContract.get().getId()
-                ));
+        if (targetStatus == null) {
+            throw new IllegalArgumentException("Cần chọn trạng thái phòng.");
+        }
+        // Phòng còn người ở theo hợp đồng chỉ đổi trạng thái qua kích hoạt/kết thúc hợp đồng; "Đang thuê" chỉ có được
+        // khi kích hoạt hợp đồng. Nếu không, phòng có người ở có thể bị đánh dấu Trống hoặc Bảo trì.
+        if (targetStatus != room.getStatus()) {
+            boolean residing = contractRepository.findByRoomId(roomId).stream().anyMatch(Contract::isResiding);
+            if (!room.manualTargets(residing).contains(targetStatus)) {
+                throw new InvalidRoomStateException(manualChangeRefusal(room, targetStatus, residing));
             }
-            throw new InvalidRoomStateException(String.format(
-                "Cannot manually change status of room '%s' to AVAILABLE: room is OCCUPIED. Room must be vacated via contract lifecycle or transitioned to MAINTENANCE.",
-                room.getRoomNumber()
-            ));
         }
 
-        // Invariant: Leaving MAINTENANCE requires that all maintenance tickets are resolved
+        // Rời BẢO TRÌ chỉ khi các phiếu bảo trì của phòng đã xong
         if (room.getStatus() == RoomStatus.MAINTENANCE && targetStatus == RoomStatus.AVAILABLE) {
             List<MaintenanceTicket> openTickets = maintenanceTicketRepository.findByRoomIdAndStatusNot(
                 roomId, MaintenanceStatus.RESOLVED
@@ -316,7 +313,7 @@ public class RoomService implements RoomUseCase {
 
             if (!openTickets.isEmpty()) {
                 throw new InvalidRoomStateException(String.format(
-                    "Cannot release room '%s' from MAINTENANCE: %d unresolved maintenance ticket(s) exist",
+                    "Chưa thể chuyển phòng '%s' sang Trống: còn %d phiếu bảo trì chưa xử lý xong.",
                     room.getRoomNumber(), openTickets.size()
                 ));
             }
@@ -385,6 +382,28 @@ public class RoomService implements RoomUseCase {
         Room saved = roomRepository.save(room);
         audit("ROOM_RESTORED", currentUser, saved, Map.of("roomNumber", saved.getRoomNumber()));
         return saved;
+    }
+
+    private static String manualChangeRefusal(Room room, RoomStatus target, boolean residing) {
+        if (residing) {
+            return String.format("Phòng '%s' đang có người ở theo hợp đồng; trạng thái phòng chỉ thay đổi khi kích hoạt "
+                + "hoặc kết thúc hợp đồng (trả phòng). Sự cố cần sửa thì tạo phiếu bảo trì, không cần đổi trạng thái phòng.",
+                room.getRoomNumber());
+        }
+        if (target == RoomStatus.OCCUPIED) {
+            return String.format("Phòng '%s' chỉ chuyển sang Đang thuê khi kích hoạt hợp đồng.", room.getRoomNumber());
+        }
+        return String.format("Không thể chuyển phòng '%s' từ %s sang %s.", room.getRoomNumber(),
+            statusLabel(room.getStatus()), statusLabel(target));
+    }
+
+    private static String statusLabel(RoomStatus status) {
+        return switch (status) {
+            case AVAILABLE -> "Trống";
+            case RESERVED -> "Đã đặt";
+            case OCCUPIED -> "Đang thuê";
+            case MAINTENANCE -> "Bảo trì";
+        };
     }
 
     private static void assertInUse(Room room, String action) {

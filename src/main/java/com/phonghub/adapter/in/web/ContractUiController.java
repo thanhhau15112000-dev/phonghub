@@ -370,12 +370,13 @@ public class ContractUiController {
         RedirectAttributes redirectAttributes
     ) {
         try {
-            contractUseCase.terminateContract(id, requiresMaintenance);
+            Contract terminated = contractUseCase.terminateContract(id, requiresMaintenance);
+            // Lấy trạng thái thật: phòng đang sửa dở vẫn giữ Bảo trì dù không chọn "cần kiểm tra bảo trì"
+            RoomStatus roomStatus = roomRepository.findById(terminated.getRoomId()).map(Room::getStatus)
+                .orElse(requiresMaintenance ? RoomStatus.MAINTENANCE : RoomStatus.AVAILABLE);
             redirectAttributes.addFlashAttribute(
                 "successMessage",
-                "Đã chấm dứt hợp đồng. Phòng hiện ở trạng thái "
-                    + UiText.INSTANCE.roomStatus(requiresMaintenance ? RoomStatus.MAINTENANCE : RoomStatus.AVAILABLE)
-                    + "."
+                "Đã chấm dứt hợp đồng. Phòng hiện ở trạng thái " + UiText.INSTANCE.roomStatus(roomStatus) + "."
             );
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());

@@ -327,7 +327,8 @@
                 </div>
             </div>
 
-            <div class="form-row">
+            <!-- Chỉ phòng đang bảo trì mới có thể đưa về Trống -->
+            <div class="form-row" th:if="${room.getStatus().name() == 'MAINTENANCE'}">
                 <div class="form-group" style="flex: 1; display: flex; align-items: center;">
                     <label style="font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
                         <input type="checkbox" name="releaseRoomToAvailable" value="true" checked>

@@ -138,12 +138,19 @@ public class MaintenanceUiController {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         List<Property> properties = propertyUseCase.listAccessibleProperties();
         List<Room> rooms = new ArrayList<>();
+        java.util.Map<UUID, String> propertyNames = new java.util.LinkedHashMap<>();
         for (Property p : properties) {
-            rooms.addAll(roomUseCase.listRoomsForProperty(p.id()));
+            List<Room> propertyRooms = roomUseCase.listRoomsForProperty(p.id());
+            rooms.addAll(propertyRooms);
+            if (!propertyRooms.isEmpty()) {
+                propertyNames.put(p.id(), p.name());
+            }
         }
 
         model.addAttribute("currentUser", currentUser);
         model.addAttribute("rooms", rooms);
+        // Có phòng ở nhiều nhà trọ thì ghi kèm tên nhà để không nhầm các phòng trùng số
+        model.addAttribute("propertyNames", propertyNames);
         model.addAttribute("selectedRoomId", roomId);
         model.addAttribute("priorities", MaintenancePriority.values());
         model.addAttribute("causes", MaintenanceCause.values());
@@ -421,10 +428,15 @@ public class MaintenanceUiController {
             String message = resolved.getStatus() == com.phonghub.domain.model.MaintenanceStatus.AWAITING_PAYMENT
                 ? "Đã ghi nhận chi phí sửa chữa. Phiếu chuyển sang chờ người thuê thanh toán."
                 : "Đã hoàn tất xử lý yêu cầu.";
-            redirectAttributes.addFlashAttribute(
-                "successMessage",
-                message + (releaseRoomToAvailable ? " Phòng đã được chuyển về trạng thái trống." : "")
-            );
+            String roomNote = "";
+            if (releaseRoomToAvailable) {
+                // Phòng còn người ở theo hợp đồng không bị đánh dấu trống: báo đúng trạng thái thật
+                boolean released = roomUseCase.getRoom(resolved.getRoomId()).getStatus()
+                    == com.phonghub.domain.model.RoomStatus.AVAILABLE;
+                roomNote = released ? " Phòng đã được chuyển về trạng thái trống."
+                    : " Phòng vẫn có người ở theo hợp đồng nên giữ nguyên trạng thái.";
+            }
+            redirectAttributes.addFlashAttribute("successMessage", message + roomNote);
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
                 ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
