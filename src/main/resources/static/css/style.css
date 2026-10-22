@@ -29,6 +29,16 @@ body {
   line-height: 1.5;
   color: var(--text-primary);
   background-color: var(--bg-main);
+  /* Footer luôn ở đáy màn hình khi nội dung ngắn: main giãn ra chiếm phần còn trống */
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+body > main {
+  flex: 1 0 auto;
+  width: 100%;
 }
 
 a {

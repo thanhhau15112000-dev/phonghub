@@ -131,7 +131,9 @@ class AuthLoginIdentityAndNotificationTest {
             // Should not show Admin system notification bell, only the personal one (#86)
             .andExpect(content().string(not(containsString("title=\"Thông báo hệ thống\""))))
             .andExpect(content().string(not(containsString("href=\"/admin/notifications\""))))
-            .andExpect(content().string(containsString("title=\"Thông báo của bạn\"")));
+            .andExpect(content().string(containsString("title=\"Thông báo của bạn\"")))
+            // Thông báo chỉ nằm trong chuông, thanh điều hướng không còn tab riêng
+            .andExpect(content().string(not(containsString("href=\"/notifications\">Thông báo"))));
     }
 
     @Test
@@ -169,7 +171,8 @@ class AuthLoginIdentityAndNotificationTest {
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("id=\"notifBellBtn\"")))
             .andExpect(content().string(containsString("class=\"notif-badge\"")))
-            .andExpect(content().string(containsString("href=\"/admin/notifications\"")));
+            .andExpect(content().string(containsString("href=\"/admin/notifications\"")))
+            .andExpect(content().string(not(containsString("href=\"/admin/notifications\">Thông báo"))));
 
         // Admin visits notifications page
         mockMvc.perform(get("/admin/notifications")
