@@ -4,6 +4,9 @@ spring:
     username: ${PHONGHUB_DB_USER:phonghub}
     password: ${PHONGHUB_DB_PASSWORD:phonghub_local_only}
     driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      url: redis://${PHONGHUB_REDIS_HOST:localhost}:${PHONGHUB_REDIS_PORT:16379}
   flyway:
     locations: classpath:db/migration,classpath:db/seed/docker
     baseline-on-migrate: true

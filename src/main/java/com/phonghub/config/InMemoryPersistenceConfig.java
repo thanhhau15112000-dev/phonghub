@@ -29,11 +29,20 @@ import com.phonghub.application.port.out.StatisticsQueryPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.session.MapSessionRepository;
+import org.springframework.session.SessionRepository;
 import org.springframework.transaction.PlatformTransactionManager;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Configuration
 @Profile("test")
 public class InMemoryPersistenceConfig {
+
+    // Có SessionRepository riêng thì auto-config Spring Session Redis lùi lại: profile test không cần Redis
+    @Bean
+    public SessionRepository<?> sessionRepository() {
+        return new MapSessionRepository(new ConcurrentHashMap<>());
+    }
 
     @Bean
     public PlatformTransactionManager transactionManager(

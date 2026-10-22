@@ -32,7 +32,8 @@ COPY --from=builder /workspace/target/*.jar app.jar
 EXPOSE 8080
 
 # Configure JVM flags suitable for container memory constraints
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+# Heap 60% để metaspace, thread stack và code cache của Spring Boot vẫn nằm trong giới hạn 512MB của Render free
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=60.0"
 ENV SPRING_PROFILES_ACTIVE=prod
 # Image đã có tesseract nên bật OCR; đặt METER_OCR_ENGINE=disabled để tắt mà không cần build lại
 ENV METER_OCR_ENGINE=tesseract

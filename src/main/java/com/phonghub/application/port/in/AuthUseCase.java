@@ -2,6 +2,7 @@ package com.phonghub.application.port.in;
 
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -22,13 +23,14 @@ public interface AuthUseCase {
         UserRole role
     ) {}
 
+    // Serializable: được truyền qua flash attribute, lưu tạm trong session store
     record PasswordResetResult(
         UUID userId,
         String username,
         String temporaryPassword,
         boolean mustChangePassword,
         String message
-    ) {}
+    ) implements Serializable {}
 
     record AdminCreateUserResult(
         UUID id,
@@ -41,5 +43,5 @@ public interface AuthUseCase {
         boolean mustChangePassword,
         String temporaryPassword,
         Instant createdAt
-    ) {}
+    ) implements Serializable {}
 }
