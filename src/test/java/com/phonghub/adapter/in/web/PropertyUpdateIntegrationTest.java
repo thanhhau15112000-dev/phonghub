@@ -66,12 +66,20 @@ class PropertyUpdateIntegrationTest extends SeededWebTest {
     }
 
     @Test
-    @DisplayName("Owner renames a verified property: it needs approval again and new rooms are blocked until the admin approves")
-    void coreChangeNeedsReapproval() throws Exception {
+    @DisplayName("Owner renames a verified property: stays VERIFIED; changing the address needs approval again and blocks new rooms until the admin approves")
+    void addressChangeNeedsReapproval() throws Exception {
         mockMvc.perform(patch(URL).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
                 .content(body("Nhà trọ đổi tên", currentAddress(), "x")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.name").value("Nhà trọ đổi tên"))
+            .andExpect(jsonPath("$.approvalStatus").value("VERIFIED"));
+        mockMvc.perform(post(ROOMS).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"roomNumber\":\"P899\",\"floor\":1,\"basePrice\":1000000,\"maxOccupants\":2}"))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(patch(URL).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
+                .content(body("Nhà trọ đổi tên", "99 Đường mới", "x")))
+            .andExpect(status().isOk())
             .andExpect(jsonPath("$.approvalStatus").value("PENDING"));
 
         mockMvc.perform(post(ROOMS).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
@@ -100,7 +108,7 @@ class PropertyUpdateIntegrationTest extends SeededWebTest {
     @DisplayName("A rejected property is resubmitted when its owner edits it and the rejection reason is cleared")
     void rejectedPropertyIsResubmitted() throws Exception {
         mockMvc.perform(patch(URL).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
-            .content(body("Cần duyệt", currentAddress(), "")));
+            .content(body("Cần duyệt", "Địa chỉ cần xác minh", "")));
         mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_1_ID + "/reject").header("X-User-Id", ADMIN)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Sai địa chỉ\"}"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.approvalStatus").value("REJECTED"));
@@ -132,14 +140,15 @@ class PropertyUpdateIntegrationTest extends SeededWebTest {
     @DisplayName("The audit lists changed field names and status transition without personal or free-text values")
     void auditHasNoValues() throws Exception {
         mockMvc.perform(patch(URL).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
-            .content(body("Tên riêng tư XYZ", currentAddress(), "")));
+            .content(body("Tên riêng tư XYZ", "Địa chỉ riêng ABC", "")));
 
         var event = ((InMemoryAuditAdapter) auditPort).getRecordedEvents().stream()
             .filter(e -> e.action().equals("PROPERTY_UPDATED")).findFirst().orElseThrow();
-        assertEquals(java.util.List.of("name", "description"), event.details().get("changedFields"));
+        assertEquals(java.util.List.of("name", "address", "description"), event.details().get("changedFields"));
         assertEquals("VERIFIED", event.details().get("oldStatus"));
         assertEquals("PENDING", event.details().get("newStatus"));
         assertEquals(false, event.details().toString().contains("XYZ"));
+        assertEquals(false, event.details().toString().contains("ABC"));
     }
 
     @Test
@@ -169,8 +178,11 @@ class PropertyUpdateIntegrationTest extends SeededWebTest {
 
         mockMvc.perform(post(page + "/edit").header("X-User-Id", OWNER_1).param("name", "Tên mới từ form")
                 .param("address", currentAddress()).param("description", "d"))
+            .andExpect(flash().attribute("successMessage", "Đã cập nhật thông tin nhà trọ."));
+        mockMvc.perform(post(page + "/edit").header("X-User-Id", OWNER_1).param("name", "Tên mới từ form")
+                .param("address", "Địa chỉ mới từ form").param("description", "d"))
             .andExpect(flash().attribute("successMessage",
-                "Đã cập nhật. Thay đổi tên hoặc địa chỉ cần được quản trị viên duyệt lại."));
+                "Đã cập nhật. Đổi địa chỉ cần được quản trị viên duyệt lại."));
         mockMvc.perform(post(page + "/edit").header("X-User-Id", STAFF_1).param("name", "x").param("address", "y"))
             .andExpect(flash().attributeExists("errorMessage"));
         mockMvc.perform(post(page + "/edit").header("X-User-Id", OWNER_1).param("name", " ").param("address", "y"))

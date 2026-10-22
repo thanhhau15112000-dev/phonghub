@@ -27,8 +27,8 @@ public interface PropertyUseCase {
     Property rejectProperty(UUID propertyId, String reason);
 
     /**
-     * Sửa thông tin nhà trọ (owner của nhà trọ hoặc admin). Owner đổi tên hoặc địa chỉ của nhà trọ đã duyệt thì nhà trọ
-     * quay về PENDING chờ duyệt lại; nhà trọ bị từ chối được gửi duyệt lại khi owner sửa. Admin sửa không đổi trạng thái.
+     * Sửa thông tin nhà trọ (owner của nhà trọ hoặc admin). Owner đổi địa chỉ của nhà trọ đã duyệt thì nhà trọ quay về
+     * PENDING chờ duyệt lại (sửa tên, mô tả, số phòng thì không); nhà trọ bị từ chối được gửi duyệt lại khi owner sửa. Admin sửa không đổi trạng thái.
      */
     Property updateProperty(UpdatePropertyCommand command);
 
