@@ -25,8 +25,44 @@ public record PaymentTransaction(
     Instant createdAt,
     BigDecimal appliedAmount,
     BigDecimal excessAmount,
-    PaymentReviewReason reviewReason
+    PaymentReviewReason reviewReason,
+    String gatewayTransactionId
 ) {
+    public PaymentTransaction(
+        UUID id,
+        Long sepayId,
+        String gateway,
+        String transactionDate,
+        String accountNumber,
+        String subAccount,
+        String transferType,
+        BigDecimal transferAmount,
+        BigDecimal accumulated,
+        String code,
+        String content,
+        String referenceCode,
+        String description,
+        PaymentStatus status,
+        UUID contractId,
+        UUID invoiceId,
+        Instant createdAt
+    ) {
+        this(id, sepayId, gateway, transactionDate, accountNumber, subAccount, transferType, transferAmount,
+            accumulated, code, content, referenceCode, description, status, contractId, invoiceId, createdAt,
+            null, null, null, null);
+    }
+
+    public PaymentTransaction(
+        UUID id, Long sepayId, String gateway, String transactionDate, String accountNumber, String subAccount,
+        String transferType, BigDecimal transferAmount, BigDecimal accumulated, String code, String content,
+        String referenceCode, String description, PaymentStatus status, UUID contractId, UUID invoiceId,
+        Instant createdAt, BigDecimal appliedAmount, BigDecimal excessAmount, PaymentReviewReason reviewReason
+    ) {
+        this(id, sepayId, gateway, transactionDate, accountNumber, subAccount, transferType, transferAmount,
+            accumulated, code, content, referenceCode, description, status, contractId, invoiceId, createdAt,
+            appliedAmount, excessAmount, reviewReason, null);
+    }
+
     public PaymentTransaction {
         Objects.requireNonNull(id, "id cannot be null");
         if (transferType == null) {
@@ -47,17 +83,6 @@ public record PaymentTransaction(
         if (excessAmount == null) {
             excessAmount = BigDecimal.ZERO;
         }
-    }
-
-    public PaymentTransaction(
-        UUID id, Long sepayId, String gateway, String transactionDate, String accountNumber, String subAccount,
-        String transferType, BigDecimal transferAmount, BigDecimal accumulated, String code, String content,
-        String referenceCode, String description, PaymentStatus status, UUID contractId, UUID invoiceId,
-        Instant createdAt
-    ) {
-        this(id, sepayId, gateway, transactionDate, accountNumber, subAccount, transferType, transferAmount,
-            accumulated, code, content, referenceCode, description, status, contractId, invoiceId, createdAt,
-            null, null, null);
     }
 
     /** Cần người quản lý xem xét (trả dư, hóa đơn không còn nhận tiền hoặc không khớp hóa đơn nào). */

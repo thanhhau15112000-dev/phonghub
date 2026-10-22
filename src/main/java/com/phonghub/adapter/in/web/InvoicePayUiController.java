@@ -73,6 +73,7 @@ public class InvoicePayUiController {
             model.addAttribute("today", LocalDate.now());
             model.addAttribute("returnUrl", returnUrl(invoice));
             model.addAttribute("simulationEnabled", sepayProperties.isSimulationEnabled());
+            model.addAttribute("sandboxCheckoutEnabled", sepayProperties.hasSandboxCheckoutConfiguration());
             model.addAttribute("bankConfigured", sepayProperties.hasBankAccount());
             model.addAttribute("bankCode", sepayProperties.getBankCode());
             model.addAttribute("bankAccountNumber", sepayProperties.getBankAccountNumber());
@@ -120,6 +121,19 @@ public class InvoicePayUiController {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }
         return "redirect:/invoices/" + id + "/pay";
+    }
+
+    @PostMapping("/{id}/sepay-checkout")
+    public String sepaySandboxCheckout(@PathVariable UUID id, Model model, RedirectAttributes redirectAttributes) {
+        try {
+            SepayWebhookUseCase.SandboxCheckout checkout = sepayWebhookUseCase.createSandboxCheckout(id);
+            model.addAttribute("checkoutAction", checkout.action());
+            model.addAttribute("checkoutFields", checkout.fields());
+            return "invoices/sepay-checkout";
+        } catch (DomainException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+            return "redirect:/invoices/" + id + "/pay";
+        }
     }
 
     private static String returnUrl(Invoice invoice) {

@@ -109,6 +109,12 @@
                     </div>
                     <button type="submit" class="btn btn-sm btn-secondary">Mô phỏng chuyển khoản</button>
                 </form>
+                <form th:if="${sandboxCheckoutEnabled}" th:action="@{'/invoices/' + ${invoice.getId()} + '/sepay-checkout'}" method="post"
+                      style="margin-top: 14px;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <button type="submit" class="btn btn-primary">Thanh toán bằng SePay Sandbox</button>
+                    <span style="font-size: 12px; color: var(--text-secondary);">Môi trường mô phỏng, không trừ tiền thật.</span>
+                </form>
                 <p style="font-size: 12px; color: var(--text-secondary); margin: 10px 0 0;">
                     Quét mã QR hoặc chuyển khoản đúng số tiền và <strong>đúng nội dung</strong> ở trên để hệ thống tự ghi nhận thanh toán.
                     Trang này tự cập nhật khi nhận được tiền.

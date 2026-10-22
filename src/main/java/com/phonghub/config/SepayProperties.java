@@ -31,6 +31,12 @@ public class SepayProperties {
     /** Tên chủ tài khoản hiển thị cho người thuê. */
     private String bankAccountName;
 
+    /** SePay Gateway Sandbox checkout (không bật mặc định). */
+    private boolean sandboxCheckoutEnabled;
+    private String merchantId;
+    private String secretKey;
+    private String publicBaseUrl;
+
     public String getWebhookApiKey() {
         return webhookApiKey;
     }
@@ -82,5 +88,44 @@ public class SepayProperties {
     public boolean hasBankAccount() {
         return bankCode != null && !bankCode.isBlank()
             && bankAccountNumber != null && !bankAccountNumber.isBlank();
+    }
+
+    public boolean isSandboxCheckoutEnabled() {
+        return sandboxCheckoutEnabled;
+    }
+
+    public void setSandboxCheckoutEnabled(boolean sandboxCheckoutEnabled) {
+        this.sandboxCheckoutEnabled = sandboxCheckoutEnabled;
+    }
+
+    public String getMerchantId() {
+        return merchantId;
+    }
+
+    public void setMerchantId(String merchantId) {
+        this.merchantId = merchantId;
+    }
+
+    public String getSecretKey() {
+        return secretKey;
+    }
+
+    public void setSecretKey(String secretKey) {
+        this.secretKey = secretKey;
+    }
+
+    public String getPublicBaseUrl() {
+        return publicBaseUrl;
+    }
+
+    public void setPublicBaseUrl(String publicBaseUrl) {
+        this.publicBaseUrl = publicBaseUrl;
+    }
+
+    public boolean hasSandboxCheckoutConfiguration() {
+        return sandboxCheckoutEnabled
+            && merchantId != null && !merchantId.isBlank()
+            && secretKey != null && !secretKey.isBlank()
+            && publicBaseUrl != null && !publicBaseUrl.isBlank();
     }
 }
