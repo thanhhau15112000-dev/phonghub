@@ -47,6 +47,7 @@ class ProductionConfigValidatorTest {
         env.setProperty("spring.datasource.url", "jdbc:postgresql://localhost:5432/phonghub");
         env.setProperty("spring.datasource.username", "postgres");
         env.setProperty("spring.datasource.password", "secret-db-pass");
+        env.setProperty("spring.data.redis.url", "redis://localhost:6379");
         env.setProperty("supabase.url", "https://example.supabase.co");
         env.setProperty("supabase.anon-key", "secret-anon-key");
         env.setProperty("supabase.service-role-key", "secret-service-role-key");
@@ -60,5 +61,22 @@ class ProductionConfigValidatorTest {
         ProductionConfigValidator validator = new ProductionConfigValidator(env);
 
         assertDoesNotThrow(validator::validateProductionConfig);
+    }
+
+    @Test
+    void failsFastWhenRedisUrlIsUnresolved() {
+        MockEnvironment env = new MockEnvironment();
+        env.setProperty("spring.datasource.url", "jdbc:postgresql://localhost:5432/phonghub");
+        env.setProperty("spring.datasource.username", "postgres");
+        env.setProperty("spring.datasource.password", "secret-db-pass");
+        env.setProperty("spring.data.redis.url", "${REDIS_URL}");
+
+        ProductionConfigValidator validator = new ProductionConfigValidator(env);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            validator::validateProductionConfig
+        );
+        assertTrue(ex.getMessage().contains("spring.data.redis.url"));
     }
 }

@@ -86,6 +86,8 @@ Local dùng PostgreSQL trong Docker, không cần tạo `.env`. Các giá trị 
 | `PHONGHUB_DB_NAME` | `phonghub` | `phonghub` |
 | `PHONGHUB_DB_USER` | `phonghub` | `phonghub` |
 | `PHONGHUB_DB_PASSWORD` | `phonghub_local_only` | `phonghub_local_only` |
+| `PHONGHUB_REDIS_HOST` | `localhost` | `redis` |
+| `PHONGHUB_REDIS_PORT` | `16379` | `6379` |
 
 Không copy `.env.example` thành `.env` để chạy local. File đó là template cho
 staging/production và chứa cấu hình kết nối Supabase; secret thật không được
@@ -116,7 +118,7 @@ local. Database được lưu trong Docker volume `phonghub_pgdata`.
 Nếu cần debug backend trực tiếp trên máy:
 
 ```bash
-docker compose up -d db
+docker compose up -d db redis
 ```
 
 PowerShell:
@@ -180,7 +182,7 @@ staging hoặc production.
 
 ### `docker`
 
-- PostgreSQL chạy trong Docker.
+- PostgreSQL và Redis (session store) chạy trong Docker.
 - Flyway chạy `db/migration` và fixture tại `db/seed/docker`.
 - Dữ liệu fixture được lưu trong volume Docker.
 - Local demo actor switching vẫn được bật để kiểm thử các role nhanh; đây là
@@ -198,6 +200,8 @@ staging hoặc production.
 - Chỉ chạy migration trong `db/migration`; không chạy fixture Docker.
 - Xác thực dùng JWT từ Supabase.
 - UI Thymeleaf dùng session cookie bảo mật; REST API dùng Bearer JWT.
+- Session UI lưu trong Redis qua `REDIS_URL` (Render Key Value `phonghub-sessions`),
+  nên phiên đăng nhập không mất khi service restart hoặc redeploy.
 - `SUPABASE_SERVICE_ROLE_KEY` chỉ được dùng ở backend và không được đưa vào
   frontend hoặc commit vào Git.
 - Chỉ kích hoạt `prod`; không bật đồng thời với profile `docker`.
