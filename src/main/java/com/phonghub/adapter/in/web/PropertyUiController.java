@@ -258,7 +258,7 @@ public class PropertyUiController {
             boolean resubmitted = before.approvalStatus() != saved.approvalStatus()
                 && saved.approvalStatus() == com.phonghub.domain.model.PropertyApprovalStatus.PENDING;
             redirectAttributes.addFlashAttribute("successMessage", resubmitted
-                ? "Đã cập nhật. Thay đổi tên hoặc địa chỉ cần được quản trị viên duyệt lại."
+                ? "Đã cập nhật. Đổi địa chỉ cần được quản trị viên duyệt lại."
                 : "Đã cập nhật thông tin nhà trọ.");
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());

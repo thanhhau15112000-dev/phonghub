@@ -2,18 +2,30 @@ package com.phonghub.adapter.in.web;
 
 import com.phonghub.config.RateLimitProperties;
 import jakarta.servlet.FilterChain;
+import jakarta.servlet.ReadListener;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import org.springframework.web.filter.OncePerRequestFilter;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /** Giới hạn tần suất đăng nhập, quên mật khẩu và webhook SePay; vượt ngưỡng trả 429 kèm Retry-After. */
 public class RateLimitFilter extends OncePerRequestFilter {
 
     static final String WEBHOOK_PATH = "/api/v1/payments/sepay/webhook";
+    /** Body đăng nhập chỉ có tên đăng nhập và mật khẩu; lớn hơn mức này không phải yêu cầu hợp lệ. */
+    static final int MAX_LOGIN_BODY_BYTES = 16 * 1024;
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final RateLimitProperties props;
     private final FixedWindowRateLimiter limiter;
@@ -39,11 +51,26 @@ public class RateLimitFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         String ip = clientIp(request);
         FixedWindowRateLimiter.Decision decision;
+        HttpServletRequest forwarded = request;
         switch (path) {
             case "/login", "/api/auth/login" -> {
                 decision = check("login", ip, props.getLogin());
-                if (decision.allowed() && path.equals("/login")) {
-                    decision = check("login-account", normalized(request.getParameter("username")), props.getLoginAccount());
+                if (decision.allowed()) {
+                    String account;
+                    if (path.equals("/login")) {
+                        account = request.getParameter("username");
+                    } else {
+                        // API nhận JSON: đọc body một lần, giữ lại cho controller đọc tiếp
+                        byte[] body = request.getInputStream().readNBytes(MAX_LOGIN_BODY_BYTES + 1);
+                        if (body.length > MAX_LOGIN_BODY_BYTES) {
+                            rejectTooLarge(response);
+                            return;
+                        }
+                        forwarded = new CachedBodyRequest(request, body);
+                        account = usernameFromJson(body);
+                    }
+                    // Web và API dùng chung bộ đếm theo tài khoản: đổi cổng đăng nhập không được thêm lượt thử
+                    decision = check("login-account", normalized(account), props.getLoginAccount());
                 }
             }
             case "/forgot-password" -> {
@@ -56,10 +83,89 @@ public class RateLimitFilter extends OncePerRequestFilter {
             default -> decision = check("webhook", ip, props.getWebhook());
         }
         if (decision.allowed()) {
-            chain.doFilter(request, response);
+            chain.doFilter(forwarded, response);
             return;
         }
         reject(request, response, decision.retryAfterSeconds());
+    }
+
+    /** Tên đăng nhập trong body JSON; body sai định dạng hoặc thiếu trường thì dùng khóa rỗng (vẫn bị đếm). */
+    private static String usernameFromJson(byte[] body) {
+        if (body.length == 0) {
+            return "";
+        }
+        try {
+            JsonNode username = JSON.readTree(body).get("username");
+            return username != null && username.isString() ? username.asString() : "";
+        } catch (RuntimeException ex) {
+            return "";
+        }
+    }
+
+    private static void rejectTooLarge(HttpServletResponse response) throws IOException {
+        response.setStatus(413);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType("application/problem+json");
+        response.getWriter().write("{\"type\":\"https://phonghub.local/errors/payload-too-large\","
+            + "\"title\":\"Payload Too Large\",\"status\":413,\"detail\":\"Dữ liệu đăng nhập quá lớn.\"}");
+    }
+
+    /** Request với body đã đọc sẵn, cho phép controller đọc lại. */
+    static final class CachedBodyRequest extends HttpServletRequestWrapper {
+        private final byte[] body;
+
+        CachedBodyRequest(HttpServletRequest request, byte[] body) {
+            super(request);
+            this.body = body;
+        }
+
+        @Override
+        public ServletInputStream getInputStream() {
+            ByteArrayInputStream in = new ByteArrayInputStream(body);
+            return new ServletInputStream() {
+                @Override
+                public boolean isFinished() {
+                    return in.available() == 0;
+                }
+
+                @Override
+                public boolean isReady() {
+                    return true;
+                }
+
+                @Override
+                public void setReadListener(ReadListener listener) {
+                    throw new UnsupportedOperationException("Đọc bất đồng bộ không được hỗ trợ");
+                }
+
+                @Override
+                public int read() {
+                    return in.read();
+                }
+
+                @Override
+                public int read(byte[] buffer, int offset, int length) {
+                    return in.read(buffer, offset, length);
+                }
+            };
+        }
+
+        @Override
+        public BufferedReader getReader() {
+            Charset charset = getCharacterEncoding() == null
+                ? StandardCharsets.UTF_8 : Charset.forName(getCharacterEncoding());
+            return new BufferedReader(new InputStreamReader(getInputStream(), charset));
+        }
+
+        @Override
+        public int getContentLength() {
+            return body.length;
+        }
+
+        @Override
+        public long getContentLengthLong() {
+            return body.length;
+        }
     }
 
     private FixedWindowRateLimiter.Decision check(String rule, String key, RateLimitProperties.Rule limit) {
