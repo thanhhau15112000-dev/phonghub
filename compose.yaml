@@ -16,6 +16,17 @@ services:
       timeout: 5s
       retries: 12
 
+  redis:
+    image: redis:7-alpine
+    container_name: phonghub-redis
+    ports:
+      - "${PHONGHUB_REDIS_PORT:-16379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   app:
     build:
       context: .
@@ -28,6 +39,8 @@ services:
       PHONGHUB_DB_NAME: ${PHONGHUB_DB_NAME:-phonghub}
       PHONGHUB_DB_USER: ${PHONGHUB_DB_USER:-phonghub}
       PHONGHUB_DB_PASSWORD: ${PHONGHUB_DB_PASSWORD:-phonghub_local_only}
+      PHONGHUB_REDIS_HOST: redis
+      PHONGHUB_REDIS_PORT: 6379
       TENANT_DATA_KEY_ID: ${TENANT_DATA_KEY_ID:?TENANT_DATA_KEY_ID is required}
       TENANT_DATA_ENCRYPTION_KEY: ${TENANT_DATA_ENCRYPTION_KEY:?TENANT_DATA_ENCRYPTION_KEY is required}
       TENANT_DATA_HMAC_KEY: ${TENANT_DATA_HMAC_KEY:?TENANT_DATA_HMAC_KEY is required}
@@ -39,6 +52,8 @@ services:
       - "8080:8080"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
 volumes:

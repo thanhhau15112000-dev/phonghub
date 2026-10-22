@@ -1,15 +1,17 @@
 package com.phonghub.application.port.out;
 
 import com.phonghub.domain.model.UserRole;
+import java.io.Serializable;
 import java.util.UUID;
 
+// Serializable: nằm trong SecurityContext được lưu ở session store (Redis)
 public record CurrentUser(
     UUID id,
     String email,
     String fullName,
     UserRole role,
     boolean mustChangePassword
-) {
+) implements Serializable {
     public CurrentUser(UUID id, String email, String fullName, UserRole role) {
         this(id, email, fullName, role, false);
     }
