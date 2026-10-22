@@ -15,5 +15,4 @@ phonghub:
     enabled: false
   sepay:
     allow-unsigned-webhook: true
-    simulation-enabled: true
     sandbox-checkout-enabled: false

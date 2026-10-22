@@ -72,7 +72,7 @@ public class InvoicePayUiController {
             model.addAttribute("ticketTitle", ticketTitle);
             model.addAttribute("today", LocalDate.now());
             model.addAttribute("returnUrl", returnUrl(invoice));
-            model.addAttribute("simulationEnabled", sepayProperties.isSimulationEnabled());
+            model.addAttribute("sandboxCheckoutEnabled", sepayProperties.hasSandboxCheckoutConfiguration());
             model.addAttribute("bankConfigured", sepayProperties.hasBankAccount());
             model.addAttribute("bankCode", sepayProperties.getBankCode());
             model.addAttribute("bankAccountNumber", sepayProperties.getBankAccountNumber());
@@ -107,19 +107,6 @@ public class InvoicePayUiController {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
         problem.setTitle("Unauthorized Property Access");
         return problem;
-    }
-
-    /** Chế độ thử nghiệm: giả lập một lần chuyển khoản đủ số tiền (chỉ khi bật cấu hình mô phỏng). */
-    @PostMapping("/{id}/simulate-payment")
-    public String simulatePayment(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
-        try {
-            invoiceUseCase.getInvoice(id); // kiểm tra quyền xem hóa đơn
-            sepayWebhookUseCase.simulateTransfer(id);
-            redirectAttributes.addFlashAttribute("successMessage", "Thanh toán thành công.");
-        } catch (DomainException ex) {
-            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
-        }
-        return "redirect:/invoices/" + id + "/pay";
     }
 
     @PostMapping("/{id}/sepay-checkout")
