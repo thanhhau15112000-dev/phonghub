@@ -66,6 +66,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
     "spring.datasource.url=jdbc:postgresql://localhost:5432/mock",
     "spring.datasource.username=mock",
     "spring.datasource.password=mock",
+    "spring.data.redis.url=redis://localhost:6379",
     "phonghub.security.tenant-data.key-id=v1",
     "phonghub.security.tenant-data.encryption-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
     "phonghub.security.tenant-data.hmac-key=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="
@@ -83,6 +84,15 @@ class ProductionAuthSecurityTest {
 
     @MockitoBean
     private org.flywaydb.core.Flyway flyway;
+
+    // Thay session store Redis bằng bản in-memory: vẫn đi qua SessionRepositoryFilter của Spring Session, không cần Redis thật
+    @org.springframework.boot.test.context.TestConfiguration
+    static class InMemorySessionStoreConfig {
+        @org.springframework.context.annotation.Bean
+        org.springframework.session.MapSessionRepository sessionRepository() {
+            return new org.springframework.session.MapSessionRepository(new java.util.concurrent.ConcurrentHashMap<>());
+        }
+    }
 
     @MockitoBean
     private AuthUseCase authUseCase;

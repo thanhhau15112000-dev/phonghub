@@ -22,6 +22,7 @@ public class ProductionConfigValidator {
             "spring.datasource.url",
             "spring.datasource.username",
             "spring.datasource.password",
+            "spring.data.redis.url",
             "supabase.url",
             "supabase.anon-key",
             "supabase.service-role-key",
