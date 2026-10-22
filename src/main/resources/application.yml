@@ -13,6 +13,17 @@ spring:
       # JPA được cấu hình tường minh trong JpaPersistenceConfiguration (chỉ profile prod/docker).
       - org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration
       - org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration
+  datasource:
+    # Pool Hikari cho profile dùng Postgres (prod/docker). Supabase giới hạn số kết nối đồng thời của cả project,
+    # nên pool nhỏ; thời gian sống của kết nối ngắn hơn ngưỡng cắt kết nối nhàn rỗi của mạng/proxy.
+    hikari:
+      pool-name: phonghub-db
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:5}
+      minimum-idle: ${DB_POOL_MIN_IDLE:1}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:10000}
+      idle-timeout: 300000
+      keepalive-time: 120000
+      max-lifetime: 1500000
   servlet:
     multipart:
       max-file-size: ${STORAGE_MAX_FILE_SIZE_BYTES:10485760}

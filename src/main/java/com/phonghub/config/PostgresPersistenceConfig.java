@@ -50,6 +50,8 @@ import java.util.Arrays;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.jpa.autoconfigure.EntityManagerFactoryDependsOnPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -78,9 +80,12 @@ public class PostgresPersistenceConfig {
     public DataSource dataSource(
         @Value("${spring.datasource.url}") String url,
         @Value("${spring.datasource.username}") String username,
-        @Value("${spring.datasource.password}") String password
+        @Value("${spring.datasource.password}") String password,
+        Environment environment
     ) {
         HikariConfig config = new HikariConfig();
+        // Kích thước pool, timeout... theo spring.datasource.hikari.* (cùng tên thuộc tính của Spring Boot).
+        Binder.get(environment).bind("spring.datasource.hikari", Bindable.ofInstance(config));
         config.setJdbcUrl(url);
         config.setUsername(username);
         config.setPassword(password);

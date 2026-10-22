@@ -5,7 +5,9 @@ import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Property;
+import com.zaxxer.hikari.HikariDataSource;
 import java.util.List;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +20,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -47,6 +50,17 @@ class DockerProfileJpaBootPostgresTest {
     @Autowired private PropertyRepositoryPort properties;
     @Autowired private RoomRepositoryPort rooms;
     @Autowired private ContractRepositoryPort contracts;
+    @Autowired private DataSource dataSource;
+
+    @Test
+    @DisplayName("Pool Hikari nhận cấu hình spring.datasource.hikari.*")
+    void hikariPoolUsesConfiguredSettings() {
+        HikariDataSource hikari = assertInstanceOf(HikariDataSource.class, dataSource);
+        assertEquals("phonghub-db", hikari.getPoolName());
+        assertEquals(5, hikari.getMaximumPoolSize());
+        assertEquals(1, hikari.getMinimumIdle());
+        assertEquals(10000, hikari.getConnectionTimeout());
+    }
 
     @Test
     @DisplayName("Boot trên CSDL trống: migrate rồi validate, đọc dữ liệu mẫu qua JPA")
