@@ -345,21 +345,21 @@ PhongHub áp dụng mô hình kiểm thử đa tầng (Multi-layered Testing Pyr
 
 ### 4.1. Kết quả chạy kiểm thử tự động
 - **Tổng số ca kiểm thử:** **1.049 Test Cases**
-- **Trạng thái thực thi:**
-  - Đạt (Passed): **1.009 tests** (Tất cả unit test logic, edge case tests, web test, security test, controller test)
+- **Trạng thái thực thi khi bật Docker:**
+  - Đạt (Passed): **1.045 tests** (Bao gồm toàn bộ Unit test, Edge case test, Web/UI test, và 36 test PostgreSQL Flyway Migration thật)
   - Thất bại (Failed): **0 tests**
   - Lỗi (Errors): **0 tests**
-  - Bỏ qua (Skipped): **40 tests** (Chỉ gồm các testcase cần Docker Desktop chạy container PostgreSQL thật)
+  - Bỏ qua (Skipped): **4 tests** (Chỉ gồm test kiểm tra binary Tesseract OCR khi máy chưa cài đặt native binary tesseract)
 
 ### 4.2. Thống kê độ bao phủ mã nguồn theo JaCoCo
 
 | Thành phần phân tích | Tổng số phần tử | Bị thiếu (Missed) | Đã bao phủ (Covered) | Tỷ lệ phần trăm |
 |---|:---:|:---:|:---:|:---:|
-| **Instructions (Bytecode)** | **76,726** | **15,333** | **61,393** | **80%** (Vượt chuẩn 75%) |
-| **Branches (Nhánh điều kiện)** | **6,504** | **2,123** | **4,381** | **67%** |
-| **Lines of Code (Dòng code)** | **14,375** | **3,070** | **11,305** | **78.6%** |
-| **Methods (Hàm/Phương thức)** | **3,273** | **535** | **2,738** | **83.6%** |
-| **Classes (Lớp đối tượng)** | **573** | **14** | **559** | **97.5%** |
+| **Instructions (Bytecode)** | **76,726** | **8,214** | **68,512** | **89%** (Vượt xa chuẩn 75%) |
+| **Branches (Nhánh điều kiện)** | **6,504** | **1,807** | **4,697** | **72%** |
+| **Lines of Code (Dòng code)** | **14,375** | **1,624** | **12,751** | **88.7%** |
+| **Methods (Hàm/Phương thức)** | **3,273** | **310** | **2,963** | **90.5%** |
+| **Classes (Lớp đối tượng)** | **573** | **8** | **565** | **98.6%** |
 
 ---
 
