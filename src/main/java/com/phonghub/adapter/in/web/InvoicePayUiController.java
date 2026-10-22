@@ -73,7 +73,6 @@ public class InvoicePayUiController {
             model.addAttribute("today", LocalDate.now());
             model.addAttribute("returnUrl", returnUrl(invoice));
             model.addAttribute("simulationEnabled", sepayProperties.isSimulationEnabled());
-            model.addAttribute("sandboxCheckoutEnabled", sepayProperties.hasSandboxCheckoutConfiguration());
             model.addAttribute("bankConfigured", sepayProperties.hasBankAccount());
             model.addAttribute("bankCode", sepayProperties.getBankCode());
             model.addAttribute("bankAccountNumber", sepayProperties.getBankAccountNumber());
@@ -116,7 +115,7 @@ public class InvoicePayUiController {
         try {
             invoiceUseCase.getInvoice(id); // kiểm tra quyền xem hóa đơn
             sepayWebhookUseCase.simulateTransfer(id);
-            redirectAttributes.addFlashAttribute("successMessage", "Đã mô phỏng chuyển khoản (chế độ thử nghiệm).");
+            redirectAttributes.addFlashAttribute("successMessage", "Thanh toán thành công.");
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }

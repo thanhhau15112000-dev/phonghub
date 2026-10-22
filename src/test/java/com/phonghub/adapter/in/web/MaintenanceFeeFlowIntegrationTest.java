@@ -21,6 +21,7 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
+import com.phonghub.config.SepayProperties;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.InvoiceStatus;
 import com.phonghub.domain.model.InvoiceType;
@@ -48,6 +49,7 @@ class MaintenanceFeeFlowIntegrationTest {
     private static final String TENANT = LocalDemoAuthenticationAdapter.TENANT_1_ID.toString();
 
     @Autowired private MockMvc mockMvc;
+    @Autowired private SepayProperties sepayProperties;
     @Autowired private InMemoryUserRepository userRepository;
     @Autowired private InMemoryPropertyRepository propertyRepository;
     @Autowired private InMemoryStaffPropertyAssignmentRepository assignmentRepository;
@@ -62,6 +64,7 @@ class MaintenanceFeeFlowIntegrationTest {
 
     @BeforeEach
     void resetData() {
+        sepayProperties.setSimulationEnabled(true);
         userRepository.clear();
         propertyRepository.clear();
         assignmentRepository.clear();
@@ -290,6 +293,7 @@ class MaintenanceFeeFlowIntegrationTest {
         mockMvc.perform(asUser(get("/dashboard"), TENANT))
             .andExpect(content().string(containsString(payUrl)));
 
+        sepayProperties.setSimulationEnabled(false);
         mockMvc.perform(asUser(get(payUrl), TENANT))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Phí sửa chữa")))
