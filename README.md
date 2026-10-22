@@ -238,23 +238,16 @@ Fixture local (chỉ nằm trong Flyway location của profile `docker`,
 - Fixture hiện mô phỏng cùng kịch bản MVP đang dùng trong test; đây không phải
   bản export đã xác minh từ database Supabase remote.
 
-## SePay Sandbox checkout
+## Thanh toán giả lập
 
-PhongHub hỗ trợ checkout thử nghiệm qua SePay Gateway Sandbox. Cấu hình riêng
-các biến sau trong môi trường cần thử nghiệm:
+Đặt `SEPAY_SIMULATION_ENABLED=true` trong môi trường cần demo để hiện nút
+`Thanh toán` trên trang hóa đơn. Bấm nút sẽ ghi một giao dịch `SIMULATION` đủ số
+tiền còn nợ, rồi quay về trang hóa đơn đã thanh toán. Luồng này chạy nội bộ,
+không mở SePay Sandbox và không cần merchant ID, secret key hay IPN callback.
 
-| Biến | Mục đích |
-| --- | --- |
-| `SEPAY_SANDBOX_CHECKOUT_ENABLED=true` | Hiện nút checkout Sandbox trên trang hóa đơn |
-| `SEPAY_MERCHANT_ID` | Merchant ID do SePay Sandbox cấp |
-| `SEPAY_SECRET_KEY` | Ký checkout và xác thực IPN Sandbox; khác với webhook API key |
-| `SEPAY_PUBLIC_BASE_URL` | URL gốc HTTPS công khai dùng làm URL trả về sau checkout |
-
-Đăng ký IPN Sandbox tới `https://<domain>/api/v1/payments/sepay/ipn` và đặt
-cùng secret key với `SEPAY_SECRET_KEY`. Callback chỉ ghi nhận đơn đã tạo tại
-PhongHub, đúng số tiền còn nợ hóa đơn; callback lặp được xử lý idempotent.
-Checkout Sandbox không thu tiền thật. Không bật hoặc dùng cấu hình này để nhận
-thanh toán production.
+Tắt `SEPAY_SIMULATION_ENABLED` khi dùng thanh toán thật. Luồng chuyển khoản QR
+thật vẫn dùng webhook `/api/v1/payments/sepay/webhook` và
+`SEPAY_WEBHOOK_API_KEY` để đối soát tiền về.
 
 ## REST API chính
 
