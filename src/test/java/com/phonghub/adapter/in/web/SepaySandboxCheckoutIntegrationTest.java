@@ -25,9 +25,17 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
 import com.phonghub.config.SepayProperties;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.InvoiceStatus;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.time.YearMonth;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +48,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.web.util.HtmlUtils;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -130,6 +139,34 @@ class SepaySandboxCheckoutIntegrationTest {
         assertTrue(html.contains("name=\"success_url\" value=\"https://phonghub.example/invoices/"
             + invoice.getId() + "/pay?sepay=result\""), "successful return goes back to the invoice page");
         assertTrue(html.contains("name=\"signature\" value=\""), "checkout form includes its signature");
+        Matcher formMatcher = Pattern.compile("(?s)<form id=\"sepay-checkout\".*?</form>").matcher(html);
+        assertTrue(formMatcher.find(), "checkout form is rendered");
+        Matcher inputMatcher = Pattern.compile("<input[^>]*name=\"([^\"]+)\"[^>]*value=\"([^\"]*)\"[^>]*>")
+            .matcher(formMatcher.group());
+        List<String> fieldNames = new ArrayList<>();
+        Map<String, String> formFields = new LinkedHashMap<>();
+        while (inputMatcher.find()) {
+            String fieldName = HtmlUtils.htmlUnescape(inputMatcher.group(1));
+            String fieldValue = HtmlUtils.htmlUnescape(inputMatcher.group(2));
+            fieldNames.add(fieldName);
+            formFields.put(fieldName, fieldValue);
+        }
+        List<String> expectedFieldNames = List.of(
+            "order_amount", "merchant", "currency", "operation", "order_description",
+            "order_invoice_number", "payment_method", "success_url", "error_url", "cancel_url", "signature"
+        );
+        assertEquals(expectedFieldNames, fieldNames, "SePay input fields retain the signed form order");
+
+        String signedFields = expectedFieldNames.stream()
+            .filter(field -> !"signature".equals(field))
+            .map(field -> field + "=" + formFields.get(field))
+            .reduce((left, right) -> left + "," + right)
+            .orElseThrow();
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(SANDBOX_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        String expectedSignature = Base64.getEncoder().encodeToString(mac.doFinal(signedFields.getBytes(StandardCharsets.UTF_8)));
+        assertEquals(expectedSignature, formFields.get("signature"), "signature matches the rendered checkout fields");
+
         Matcher matcher = Pattern.compile("name=\"order_invoice_number\" value=\"(PH[A-F0-9]{24})\"")
             .matcher(html);
         assertTrue(matcher.find(), "checkout form contains the pending SePay order number");
