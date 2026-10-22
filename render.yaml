@@ -16,12 +16,9 @@ services:
         sync: false
       - key: SPRING_DATASOURCE_PASSWORD
         sync: false
-      # Session store của UI: phiên đăng nhập giữ được qua restart/redeploy
+      # Session store của UI: Internal URL của Render Key Value phonghub-sessions
       - key: REDIS_URL
-        fromService:
-          type: keyvalue
-          name: phonghub-sessions
-          property: connectionString
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
@@ -56,11 +53,3 @@ services:
         sync: false
       - key: SEPAY_PUBLIC_BASE_URL
         sync: false
-
-  - type: keyvalue
-    name: phonghub-sessions
-    plan: free
-    region: singapore
-    maxmemoryPolicy: allkeys-lru
-    # Chỉ nhận kết nối nội bộ từ service cùng tài khoản Render
-    ipAllowList: []
