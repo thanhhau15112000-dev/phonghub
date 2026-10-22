@@ -335,7 +335,7 @@
                 <input type="number" id="editPropertyRooms" name="totalRooms" class="form-control" min="0" th:value="${property.totalRooms()}">
             </div>
             <p th:if="${currentUser.role().name() == 'OWNER'}" style="font-size: 12px; color: var(--text-secondary);">
-                Đổi tên hoặc địa chỉ sẽ đưa nhà trọ về trạng thái chờ duyệt; trong thời gian đó không tạo được phòng hoặc hợp đồng mới.
+                Đổi địa chỉ sẽ đưa nhà trọ về trạng thái chờ duyệt; trong thời gian đó không tạo được phòng hoặc hợp đồng mới. Sửa tên, mô tả, số phòng không cần duyệt lại.
             </p>
             <div style="display: flex; justify-content: flex-end; gap: 8px;">
                 <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('editPropertyModal').close()">Hủy</button>

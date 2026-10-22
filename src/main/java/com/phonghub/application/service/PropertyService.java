@@ -116,9 +116,9 @@ public class PropertyService implements PropertyUseCase {
         }
         String description = command.description() == null || command.description().isBlank()
             ? null : command.description().trim();
-        boolean coreChanged = property.changesCoreInfo(command.name(), command.address());
-        boolean unchanged = !coreChanged && java.util.Objects.equals(property.description(), description)
-            && property.totalRooms() == totalRooms;
+        boolean addressChanged = property.changesAddress(command.address());
+        boolean unchanged = !addressChanged && property.name().equals(command.name().trim())
+            && java.util.Objects.equals(property.description(), description) && property.totalRooms() == totalRooms;
         if (unchanged) {
             return property;
         }
@@ -126,8 +126,9 @@ public class PropertyService implements PropertyUseCase {
         PropertyApprovalStatus status = property.approvalStatus();
         String rejectionReason = property.rejectionReason();
         if (currentUser.role() == UserRole.OWNER) {
+            // Chỉ đổi địa chỉ mới phải duyệt lại; sửa tên/mô tả/số phòng không làm nhà trọ ngừng hoạt động.
             boolean resubmit = status == PropertyApprovalStatus.REJECTED
-                || (status == PropertyApprovalStatus.VERIFIED && coreChanged);
+                || (status == PropertyApprovalStatus.VERIFIED && addressChanged);
             if (resubmit) {
                 status = PropertyApprovalStatus.PENDING;
                 rejectionReason = null;

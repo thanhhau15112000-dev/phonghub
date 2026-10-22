@@ -43,9 +43,12 @@ public record Property(
         }
     }
 
-    /** Tên và địa chỉ là thông tin định danh nhà trọ; thay đổi hai trường này cần được duyệt lại. */
-    public boolean changesCoreInfo(String newName, String newAddress) {
-        return !name.equals(newName.trim()) || !address.equals(newAddress.trim());
+    /**
+     * Địa chỉ là thông tin quản trị viên đã xác minh khi duyệt nhà trọ nên đổi địa chỉ cần duyệt lại. Tên, mô tả, số
+     * phòng chỉ là thông tin hiển thị: sửa không cần duyệt lại.
+     */
+    public boolean changesAddress(String newAddress) {
+        return !address.equals(newAddress.trim());
     }
 
     public Property updateInfo(
