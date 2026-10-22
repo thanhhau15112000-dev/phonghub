@@ -92,6 +92,66 @@ class RateLimitFilterTest {
         assertEquals(200, post("/login", "1.1.1.3", "username", "other").getStatus());
     }
 
+    private MockHttpServletResponse apiLogin(String ip, String json, jakarta.servlet.FilterChain chain)
+        throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/login");
+        request.setRemoteAddr(ip);
+        request.setContentType("application/json");
+        request.setContent(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(request, response, chain);
+        return response;
+    }
+
+    private MockHttpServletResponse apiLogin(String ip, String username) throws Exception {
+        return apiLogin(ip, "{\"username\":\"" + username + "\",\"password\":\"x\"}", new MockFilterChain());
+    }
+
+    @Test
+    @DisplayName("đăng nhập API: giới hạn theo tài khoản (tên trong body JSON) dù đổi IP")
+    void apiLoginByAccount() throws Exception {
+        props.setLoginAccount(new RateLimitProperties.Rule(2, 300));
+        assertEquals(200, apiLogin("1.1.1.1", "Owner1").getStatus());
+        assertEquals(200, apiLogin("1.1.1.2", "owner1 ").getStatus());
+        MockHttpServletResponse blocked = apiLogin("1.1.1.3", "OWNER1");
+        assertEquals(429, blocked.getStatus());
+        assertTrue(blocked.getContentType().contains("problem+json"));
+        assertEquals(200, apiLogin("1.1.1.3", "other").getStatus());
+    }
+
+    @Test
+    @DisplayName("đăng nhập: form web và API dùng chung bộ đếm theo tài khoản")
+    void webAndApiShareAccountBudget() throws Exception {
+        props.setLoginAccount(new RateLimitProperties.Rule(2, 300));
+        assertEquals(200, post("/login", "1.1.1.1", "username", "owner1").getStatus());
+        assertEquals(200, apiLogin("1.1.1.2", "owner1").getStatus());
+        assertEquals(429, apiLogin("1.1.1.3", "owner1").getStatus());
+        assertEquals(429, post("/login", "1.1.1.4", "username", "owner1").getStatus());
+    }
+
+    @Test
+    @DisplayName("đăng nhập API: controller vẫn đọc được nguyên body sau khi bộ lọc đọc tên đăng nhập")
+    void apiLoginBodyStillReadable() throws Exception {
+        String json = "{\"username\":\"Người dùng\",\"password\":\"mật khẩu\"}";
+        String[] seen = new String[1];
+        jakarta.servlet.FilterChain chain = (req, res) -> seen[0] =
+            new String(req.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        assertEquals(200, apiLogin("1.1.1.1", json, chain).getStatus());
+        assertEquals(json, seen[0]);
+    }
+
+    @Test
+    @DisplayName("đăng nhập API: body sai định dạng vẫn bị đếm; body quá lớn trả 413")
+    void apiLoginMalformedAndOversized() throws Exception {
+        props.setLoginAccount(new RateLimitProperties.Rule(1, 300));
+        assertEquals(200, apiLogin("1.1.1.1", "không phải json", new MockFilterChain()).getStatus());
+        assertEquals(429, apiLogin("1.1.1.2", "{}", new MockFilterChain()).getStatus());
+
+        String huge = "{\"username\":\"" + "a".repeat(RateLimitFilter.MAX_LOGIN_BODY_BYTES) + "\"}";
+        MockHttpServletResponse tooLarge = apiLogin("1.1.1.3", huge, new MockFilterChain());
+        assertEquals(413, tooLarge.getStatus());
+    }
+
     @Test
     @DisplayName("#164: form đăng nhập/quên mật khẩu bị chặn thì trả trang HTML có nút quay lại, vẫn 429 + Retry-After")
     void uiBlockedPageIsHtml() throws Exception {
