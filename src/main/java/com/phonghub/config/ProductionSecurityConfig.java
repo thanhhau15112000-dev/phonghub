@@ -62,7 +62,8 @@ public class ProductionSecurityConfig {
                 .requestMatchers(
                     "/api/auth/login",
                     "/api/auth/refresh",
-                    "/api/v1/payments/sepay/webhook"
+                    "/api/v1/payments/sepay/webhook",
+                    "/api/v1/payments/sepay/ipn"
                 ).permitAll()
                 .anyRequest().authenticated()
             )

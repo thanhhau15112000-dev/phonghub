@@ -67,5 +67,9 @@ phonghub:
     bank-code: ${SEPAY_BANK_CODE:}
     bank-account-number: ${SEPAY_BANK_ACCOUNT_NUMBER:}
     bank-account-name: ${SEPAY_BANK_ACCOUNT_NAME:}
+    sandbox-checkout-enabled: ${SEPAY_SANDBOX_CHECKOUT_ENABLED:false}
+    merchant-id: ${SEPAY_MERCHANT_ID:}
+    secret-key: ${SEPAY_SECRET_KEY:}
+    public-base-url: ${SEPAY_PUBLIC_BASE_URL:}
   chat:
     supabase-bucket: ${SUPABASE_CHAT_BUCKET:chat-media}

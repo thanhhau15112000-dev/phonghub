@@ -59,7 +59,8 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
             toInstant(rs.getTimestamp("created_at")),
             rs.getBigDecimal("applied_amount"),
             rs.getBigDecimal("excess_amount"),
-            rs.getString("review_reason") != null ? PaymentReviewReason.valueOf(rs.getString("review_reason")) : null
+            rs.getString("review_reason") != null ? PaymentReviewReason.valueOf(rs.getString("review_reason")) : null,
+            rs.getString("gateway_transaction_id")
         );
     }
 
@@ -70,14 +71,14 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
                 id, sepay_id, gateway, transaction_date, account_number, sub_account,
                 transfer_type, transfer_amount, accumulated, code, content,
                 reference_code, description, status, contract_id, invoice_id, created_at,
-                applied_amount, excess_amount, review_reason
+                applied_amount, excess_amount, review_reason, gateway_transaction_id
             ) VALUES (
                 :id, :sepayId, :gateway, :transactionDate, :accountNumber, :subAccount,
                 :transferType, :transferAmount, :accumulated, :code, :content,
                 :referenceCode, :description, :status, :contractId, :invoiceId, :createdAt,
-                :appliedAmount, :excessAmount, :reviewReason
+                :appliedAmount, :excessAmount, :reviewReason, :gatewayTransactionId
             )
-            ON CONFLICT (sepay_id) DO NOTHING
+            ON CONFLICT DO NOTHING
             """;
 
         MapSqlParameterSource params = new MapSqlParameterSource()
@@ -100,7 +101,8 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
             .addValue("createdAt", Timestamp.from(tx.createdAt()))
             .addValue("appliedAmount", tx.appliedAmount())
             .addValue("excessAmount", tx.excessAmount())
-            .addValue("reviewReason", tx.reviewReason() != null ? tx.reviewReason().name() : null);
+            .addValue("reviewReason", tx.reviewReason() != null ? tx.reviewReason().name() : null)
+            .addValue("gatewayTransactionId", tx.gatewayTransactionId());
 
         return jdbcTemplate.update(sql, params) == 1;
     }
@@ -123,6 +125,21 @@ public class PostgresPaymentRepository implements PaymentRepositoryPort {
         String sql = "SELECT * FROM sepay_transactions WHERE sepay_id = :sepayId";
         try {
             return Optional.ofNullable(jdbcTemplate.queryForObject(sql, Map.of("sepayId", sepayId), this::mapRow));
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public Optional<PaymentTransaction> findByGatewayTransactionId(String transactionId) {
+        if (transactionId == null || transactionId.isBlank()) {
+            return Optional.empty();
+        }
+        String sql = "SELECT * FROM sepay_transactions WHERE gateway_transaction_id = :transactionId";
+        try {
+            return Optional.ofNullable(jdbcTemplate.queryForObject(
+                sql, Map.of("transactionId", transactionId), this::mapRow
+            ));
         } catch (EmptyResultDataAccessException e) {
             return Optional.empty();
         }

@@ -23,4 +23,16 @@ public class TransactionalSepayWebhookUseCase implements SepayWebhookUseCase {
     public WebhookProcessResult simulateTransfer(UUID invoiceId) {
         return delegate.simulateTransfer(invoiceId);
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SandboxCheckout createSandboxCheckout(UUID invoiceId) {
+        return delegate.createSandboxCheckout(invoiceId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SandboxIpnResult processSandboxIpn(String suppliedSecret, SandboxIpnCommand command) {
+        return delegate.processSandboxIpn(suppliedSecret, command);
+    }
 }

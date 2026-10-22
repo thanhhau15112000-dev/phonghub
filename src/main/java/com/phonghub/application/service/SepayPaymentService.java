@@ -9,6 +9,7 @@ import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.NotificationRepositoryPort;
 import com.phonghub.application.port.out.PaymentRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
+import com.phonghub.application.port.out.SepayGatewayOrderRepositoryPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.config.SepayProperties;
 import com.phonghub.domain.exception.DomainException;
@@ -25,15 +26,27 @@ import com.phonghub.domain.model.PaymentReviewReason;
 import com.phonghub.domain.model.PaymentStatus;
 import com.phonghub.domain.model.PaymentTransaction;
 import com.phonghub.domain.model.Property;
+import com.phonghub.domain.model.SepayGatewayOrder;
+import com.phonghub.domain.model.SepayGatewayOrder.Status;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
+import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -45,6 +58,12 @@ public class SepayPaymentService implements SepayWebhookUseCase {
 
     private static final Pattern UUID_PATTERN = Pattern.compile(
         "([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})"
+    );
+    private static final Pattern SANDBOX_ORDER_NUMBER = Pattern.compile("PH[A-F0-9]{24}");
+    private static final String SANDBOX_CHECKOUT_ENDPOINT = "https://pay-sandbox.sepay.vn/v1/checkout/init";
+    private static final List<String> SIGNED_CHECKOUT_FIELDS = List.of(
+        "order_amount", "merchant", "currency", "operation", "order_description",
+        "order_invoice_number", "customer_id", "payment_method", "success_url", "error_url", "cancel_url"
     );
 
     private final PaymentRepositoryPort paymentRepository;
@@ -58,6 +77,7 @@ public class SepayPaymentService implements SepayWebhookUseCase {
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
     private final SepayProperties sepayProperties;
+    private final SepayGatewayOrderRepositoryPort gatewayOrderRepository;
 
     public SepayPaymentService(
         PaymentRepositoryPort paymentRepository,
@@ -71,6 +91,23 @@ public class SepayPaymentService implements SepayWebhookUseCase {
         AuthorizationService authorizationService,
         SepayProperties sepayProperties
     ) {
+        this(paymentRepository, invoiceRepository, ticketRepository, contractRepository, propertyRepository,
+            notificationRepository, userRepository, currentUserPort, authorizationService, sepayProperties, null);
+    }
+
+    public SepayPaymentService(
+        PaymentRepositoryPort paymentRepository,
+        InvoiceRepositoryPort invoiceRepository,
+        MaintenanceTicketRepositoryPort ticketRepository,
+        ContractRepositoryPort contractRepository,
+        PropertyRepositoryPort propertyRepository,
+        NotificationRepositoryPort notificationRepository,
+        UserRepositoryPort userRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        SepayProperties sepayProperties,
+        SepayGatewayOrderRepositoryPort gatewayOrderRepository
+    ) {
         this.paymentRepository = paymentRepository;
         this.invoiceRepository = invoiceRepository;
         this.ticketRepository = ticketRepository;
@@ -81,12 +118,142 @@ public class SepayPaymentService implements SepayWebhookUseCase {
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
         this.sepayProperties = sepayProperties;
+        this.gatewayOrderRepository = gatewayOrderRepository;
     }
 
     @Override
     public WebhookProcessResult processWebhook(String authorizationHeader, SepayWebhookCommand command) {
         validateAuthorization(authorizationHeader);
         return processTransfer(command);
+    }
+
+    @Override
+    public SandboxCheckout createSandboxCheckout(UUID invoiceId) {
+        if (gatewayOrderRepository == null || sepayProperties == null || !sepayProperties.hasSandboxCheckoutConfiguration()) {
+            throw new DomainException("SePay Sandbox checkout chưa được cấu hình.");
+        }
+        CurrentUser user = currentUserPort.getCurrentUser();
+        if (user == null || (user.role() != UserRole.TENANT && user.role() != UserRole.ADMIN)) {
+            throw new UnauthorizedPropertyAccessException("Chỉ người thuê hoặc quản trị viên được thanh toán.");
+        }
+
+        Invoice invoice = invoiceRepository.findByIdForUpdate(invoiceId)
+            .orElseThrow(() -> new DomainException("Không tìm thấy hóa đơn."));
+        authorizationService.assertCanViewInvoice(user, invoice);
+        if (!invoice.isPayable()) {
+            throw new DomainException("Hóa đơn này không còn cần thanh toán.");
+        }
+        BigDecimal amount = invoice.remainingAmount();
+        if (!isWholeVndAmount(amount)) {
+            throw new DomainException("SePay Sandbox chỉ hỗ trợ số tiền VND nguyên dương.");
+        }
+
+        SepayGatewayOrder order = gatewayOrderRepository.findPendingByInvoiceIdForUpdate(invoiceId).orElse(null);
+        if (order != null && order.amount().compareTo(amount) != 0) {
+            gatewayOrderRepository.expire(order.orderInvoiceNumber());
+            order = null;
+        }
+        if (order == null) {
+            order = new SepayGatewayOrder(
+                newSandboxOrderNumber(), invoiceId, amount, Status.PENDING, null, Instant.now(), null
+            );
+            gatewayOrderRepository.savePending(order);
+        }
+
+        String baseUrl = requirePublicBaseUrl();
+        String invoiceUrl = baseUrl + "/invoices/" + invoiceId + "/pay";
+        Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("order_amount", amount.toBigIntegerExact().toString());
+        fields.put("merchant", sepayProperties.getMerchantId().trim());
+        fields.put("currency", "VND");
+        fields.put("operation", "PURCHASE");
+        fields.put("order_description", "PhongHub " + invoice.getPaymentCode());
+        fields.put("order_invoice_number", order.orderInvoiceNumber());
+        fields.put("payment_method", "BANK_TRANSFER");
+        fields.put("success_url", invoiceUrl + "?sepay=result");
+        fields.put("error_url", invoiceUrl + "?sepay=error");
+        fields.put("cancel_url", invoiceUrl + "?sepay=cancelled");
+        fields.put("signature", signCheckoutFields(fields));
+        return new SandboxCheckout(SANDBOX_CHECKOUT_ENDPOINT, Map.copyOf(fields));
+    }
+
+    @Override
+    public SandboxIpnResult processSandboxIpn(String suppliedSecret, SandboxIpnCommand command) {
+        validateSandboxSecret(suppliedSecret);
+        if (command == null || !"ORDER_PAID".equals(command.notificationType())) {
+            return new SandboxIpnResult("ignored", false);
+        }
+        if (command.order() == null || command.transaction() == null) {
+            throw new DomainException("IPN thiếu thông tin đơn hàng hoặc giao dịch.");
+        }
+
+        SandboxOrder orderPayload = command.order();
+        SandboxTransaction transactionPayload = command.transaction();
+        if (!"CAPTURED".equals(orderPayload.orderStatus())
+            || !"VND".equals(orderPayload.orderCurrency())
+            || !"PAYMENT".equals(transactionPayload.transactionType())
+            || !"APPROVED".equals(transactionPayload.transactionStatus())
+            || !"VND".equals(transactionPayload.transactionCurrency())
+            || transactionPayload.transactionId() == null
+            || transactionPayload.transactionId().isBlank()
+            || transactionPayload.transactionId().length() > 160
+            || orderPayload.orderInvoiceNumber() == null
+            || !SANDBOX_ORDER_NUMBER.matcher(orderPayload.orderInvoiceNumber()).matches()) {
+            throw new DomainException("IPN thanh toán không hợp lệ.");
+        }
+
+        BigDecimal orderAmount = parseWholeVndAmount(orderPayload.orderAmount());
+        BigDecimal transactionAmount = parseWholeVndAmount(transactionPayload.transactionAmount());
+        if (orderAmount == null || transactionAmount == null || orderAmount.compareTo(transactionAmount) != 0) {
+            throw new DomainException("Số tiền IPN không hợp lệ hoặc không khớp.");
+        }
+
+        String transactionId = transactionPayload.transactionId();
+        SepayGatewayOrder order = gatewayOrderRepository.findByInvoiceNumberForUpdate(orderPayload.orderInvoiceNumber())
+            .orElseThrow(() -> new DomainException("Không tìm thấy đơn hàng SePay Sandbox."));
+        if (order.amount().compareTo(orderAmount) != 0) {
+            throw new DomainException("Số tiền IPN không khớp với đơn hàng.");
+        }
+        if (order.status() != Status.PENDING) {
+            if (order.status() == Status.PAID && transactionId.equals(order.transactionId())) {
+                return new SandboxIpnResult("paid", true);
+            }
+            throw new DomainException("Trạng thái đơn hàng không hợp lệ.");
+        }
+
+        SepayGatewayOrder priorTransaction = gatewayOrderRepository.findByTransactionId(transactionId).orElse(null);
+        if (priorTransaction != null) {
+            if (!priorTransaction.orderInvoiceNumber().equals(order.orderInvoiceNumber())) {
+                throw new DomainException("Giao dịch đã được gắn với đơn khác.");
+            }
+            throw new DomainException("Giao dịch đã được ghi nhận nhưng đơn hàng chưa hoàn tất.");
+        }
+
+        Invoice invoice = invoiceRepository.findByIdForUpdate(order.invoiceId())
+            .orElseThrow(() -> new DomainException("Không tìm thấy hóa đơn."));
+        if (!invoice.isPayable() || invoice.remainingAmount().compareTo(order.amount()) != 0) {
+            throw new DomainException("Hóa đơn đã thay đổi sau khi tạo đơn thanh toán; IPN bị từ chối.");
+        }
+
+        long internalId = internalGatewayTransactionId(transactionId);
+        WebhookProcessResult result = processTransfer(new SepayWebhookCommand(
+            internalId,
+            "SEPAY_SANDBOX",
+            Instant.now().toString(),
+            "SEPAY_SANDBOX",
+            null,
+            invoice.getPaymentCode(),
+            "SEPAY SANDBOX " + invoice.getPaymentCode(),
+            "in",
+            transactionAmount,
+            null,
+            transactionId,
+            "SePay Sandbox IPN"
+        ), transactionId);
+        if (!result.success() || !gatewayOrderRepository.markPaid(order.orderInvoiceNumber(), transactionId, Instant.now())) {
+            throw new DomainException("Không thể ghi nhận giao dịch SePay Sandbox.");
+        }
+        return new SandboxIpnResult("paid", false);
     }
 
     @Override
@@ -128,13 +295,25 @@ public class SepayPaymentService implements SepayWebhookUseCase {
     }
 
     private WebhookProcessResult processTransfer(SepayWebhookCommand command) {
+        return processTransfer(command, null);
+    }
+
+    private WebhookProcessResult processTransfer(SepayWebhookCommand command, String gatewayTransactionId) {
         if (command.id() == null) {
             throw new IllegalArgumentException("Thiếu id giao dịch SePay");
+        }
+
+        Optional<PaymentTransaction> gatewayExisting = paymentRepository.findByGatewayTransactionId(gatewayTransactionId);
+        if (gatewayExisting.isPresent()) {
+            return new WebhookProcessResult(true, "Giao dịch đã được ghi nhận trước đó", gatewayExisting.get());
         }
 
         // 1. Idempotency (đường nhanh): SePay gửi lại webhook khi chưa nhận 200
         Optional<PaymentTransaction> existing = paymentRepository.findBySepayId(command.id());
         if (existing.isPresent()) {
+            if (gatewayTransactionId != null && !gatewayTransactionId.equals(existing.get().gatewayTransactionId())) {
+                throw new DomainException("Mã giao dịch nội bộ đã được sử dụng bởi một giao dịch khác.");
+            }
             log.info("Sepay webhook: Giao dịch ID {} đã tồn tại trước đó (idempotent ignore)", command.id());
             return new WebhookProcessResult(true, "Giao dịch đã được ghi nhận trước đó", existing.get());
         }
@@ -198,10 +377,16 @@ public class SepayPaymentService implements SepayWebhookUseCase {
             Instant.now(),
             applied,
             excess,
-            reviewReason
+            reviewReason,
+            gatewayTransactionId
         );
         if (!paymentRepository.saveIfNew(tx)) {
-            PaymentTransaction duplicate = paymentRepository.findBySepayId(command.id()).orElse(null);
+            PaymentTransaction duplicate = paymentRepository.findByGatewayTransactionId(gatewayTransactionId)
+                .or(() -> paymentRepository.findBySepayId(command.id()))
+                .orElse(null);
+            if (duplicate == null) {
+                throw new DomainException("Mã giao dịch đã tồn tại nhưng không khớp IPN hiện tại.");
+            }
             return new WebhookProcessResult(true, "Giao dịch đã được ghi nhận trước đó", duplicate);
         }
         log.info("Sepay webhook: Đã lưu giao dịch ID={}, SePayId={}, Số tiền={}, Đã cộng={}, Dư={}, Status={}, Invoice={}",
@@ -223,6 +408,77 @@ public class SepayPaymentService implements SepayWebhookUseCase {
         }
 
         return new WebhookProcessResult(true, "Xử lý giao dịch SePay thành công", tx);
+    }
+
+    private void validateSandboxSecret(String suppliedSecret) {
+        String configuredSecret = sepayProperties != null ? sepayProperties.getSecretKey() : null;
+        if (configuredSecret == null || configuredSecret.isBlank() || suppliedSecret == null
+            || !constantTimeEquals(suppliedSecret.trim(), configuredSecret.trim())) {
+            throw new UnauthorizedWebhookException("IPN SePay Sandbox không được xác thực.");
+        }
+    }
+
+    private String requirePublicBaseUrl() {
+        String configuredUrl = sepayProperties.getPublicBaseUrl();
+        try {
+            URI uri = new URI(configuredUrl == null ? "" : configuredUrl.trim());
+            String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+            boolean localHost = host.equals("localhost") || host.endsWith(".localhost")
+                || host.equals("127.0.0.1") || host.equals("::1") || host.equals("[::1]");
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || host.isBlank() || localHost
+                || uri.getUserInfo() != null || uri.getQuery() != null || uri.getFragment() != null
+                || (uri.getPath() != null && !uri.getPath().isEmpty() && !uri.getPath().equals("/"))) {
+                throw new URISyntaxException(configuredUrl, "Expected a public HTTPS origin");
+            }
+            return uri.getScheme() + "://" + uri.getRawAuthority();
+        } catch (URISyntaxException ex) {
+            throw new DomainException("SEPAY_PUBLIC_BASE_URL cần là domain HTTPS công khai, không kèm path hoặc query.");
+        }
+    }
+
+    private String signCheckoutFields(Map<String, String> fields) {
+        String signedString = SIGNED_CHECKOUT_FIELDS.stream()
+            .filter(fields::containsKey)
+            .map(field -> field + "=" + fields.get(field))
+            .reduce((left, right) -> left + "," + right)
+            .orElse("");
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(sepayProperties.getSecretKey().trim().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            return Base64.getEncoder().encodeToString(mac.doFinal(signedString.getBytes(StandardCharsets.UTF_8)));
+        } catch (GeneralSecurityException ex) {
+            throw new IllegalStateException("Không thể ký yêu cầu SePay Sandbox.", ex);
+        }
+    }
+
+    private static String newSandboxOrderNumber() {
+        return "PH" + UUID.randomUUID().toString().replace("-", "").substring(0, 24).toUpperCase(Locale.ROOT);
+    }
+
+    private static boolean isWholeVndAmount(BigDecimal amount) {
+        return amount != null && amount.signum() > 0 && amount.stripTrailingZeros().scale() <= 0;
+    }
+
+    private static BigDecimal parseWholeVndAmount(String rawAmount) {
+        if (rawAmount == null || !rawAmount.matches("\\d+(?:\\.0{1,2})?")) {
+            return null;
+        }
+        try {
+            BigDecimal amount = new BigDecimal(rawAmount);
+            return isWholeVndAmount(amount) ? amount : null;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private static long internalGatewayTransactionId(String transactionId) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(transactionId.getBytes(StandardCharsets.UTF_8));
+            long hash = ByteBuffer.wrap(digest).getLong();
+            return Long.MIN_VALUE | (hash & Long.MAX_VALUE);
+        } catch (GeneralSecurityException ex) {
+            throw new IllegalStateException("Không thể tạo mã giao dịch SePay Sandbox.", ex);
+        }
     }
 
     private void validateAuthorization(String authorizationHeader) {

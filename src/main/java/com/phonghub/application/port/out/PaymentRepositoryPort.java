@@ -14,6 +14,7 @@ public interface PaymentRepositoryPort {
     boolean saveIfNew(PaymentTransaction transaction);
     Optional<PaymentTransaction> findById(UUID id);
     Optional<PaymentTransaction> findBySepayId(Long sepayId);
+    Optional<PaymentTransaction> findByGatewayTransactionId(String transactionId);
     boolean existsBySepayId(Long sepayId);
     List<PaymentTransaction> findAll();
     /** Giao dịch đã khớp với các hợp đồng này, mới nhất trước (đối soát theo phạm vi nhà trọ, #82). */

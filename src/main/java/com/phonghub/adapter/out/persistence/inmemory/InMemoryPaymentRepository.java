@@ -17,7 +17,8 @@ public class InMemoryPaymentRepository implements PaymentRepositoryPort {
 
     @Override
     public synchronized boolean saveIfNew(PaymentTransaction transaction) {
-        if (existsBySepayId(transaction.sepayId())) {
+        if (existsBySepayId(transaction.sepayId())
+            || findByGatewayTransactionId(transaction.gatewayTransactionId()).isPresent()) {
             return false;
         }
         store.put(transaction.id(), transaction);
@@ -36,6 +37,16 @@ public class InMemoryPaymentRepository implements PaymentRepositoryPort {
         }
         return store.values().stream()
             .filter(t -> sepayId.equals(t.sepayId()))
+            .findFirst();
+    }
+
+    @Override
+    public Optional<PaymentTransaction> findByGatewayTransactionId(String transactionId) {
+        if (transactionId == null || transactionId.isBlank()) {
+            return Optional.empty();
+        }
+        return store.values().stream()
+            .filter(t -> transactionId.equals(t.gatewayTransactionId()))
             .findFirst();
     }
 

@@ -6,6 +6,7 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPaymentRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresSepayGatewayOrderRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetEventRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverItemRepository;
@@ -27,6 +28,7 @@ import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.application.port.out.PaymentRepositoryPort;
+import com.phonghub.application.port.out.SepayGatewayOrderRepositoryPort;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
@@ -251,6 +253,11 @@ public class PostgresPersistenceConfig {
         NamedParameterJdbcTemplate jdbcTemplate
     ) {
         return new com.phonghub.adapter.out.persistence.postgres.PostgresContractReminderRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public SepayGatewayOrderRepositoryPort sepayGatewayOrderRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresSepayGatewayOrderRepository(jdbcTemplate);
     }
 
     @Bean

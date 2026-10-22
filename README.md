@@ -225,8 +225,8 @@ Migration dùng chung:
   SePay.
 - `V12__maintenance_repair_fee_invoices.sql`: hóa đơn phí sửa chữa bảo trì.
 
-Số V4, V5, V8 thuộc fixture local nên migration dùng chung có khoảng trống;
-migration dùng chung mới tiếp tục từ V13.
+Số V4, V5, V8 thuộc fixture local nên migration dùng chung có khoảng trống.
+Các migration dùng chung tiếp tục từ V13; SePay Sandbox được bổ sung tại V48.
 
 Fixture local (chỉ nằm trong Flyway location của profile `docker`,
 `db/seed/docker`):
@@ -237,6 +237,24 @@ Fixture local (chỉ nằm trong Flyway location của profile `docker`,
 - Profile `prod` không quét thư mục fixture này.
 - Fixture hiện mô phỏng cùng kịch bản MVP đang dùng trong test; đây không phải
   bản export đã xác minh từ database Supabase remote.
+
+## SePay Sandbox checkout
+
+PhongHub hỗ trợ checkout thử nghiệm qua SePay Gateway Sandbox. Cấu hình riêng
+các biến sau trong môi trường cần thử nghiệm:
+
+| Biến | Mục đích |
+| --- | --- |
+| `SEPAY_SANDBOX_CHECKOUT_ENABLED=true` | Hiện nút checkout Sandbox trên trang hóa đơn |
+| `SEPAY_MERCHANT_ID` | Merchant ID do SePay Sandbox cấp |
+| `SEPAY_SECRET_KEY` | Ký checkout và xác thực IPN Sandbox; khác với webhook API key |
+| `SEPAY_PUBLIC_BASE_URL` | URL gốc HTTPS công khai dùng làm URL trả về sau checkout |
+
+Đăng ký IPN Sandbox tới `https://<domain>/api/v1/payments/sepay/ipn` và đặt
+cùng secret key với `SEPAY_SECRET_KEY`. Callback chỉ ghi nhận đơn đã tạo tại
+PhongHub, đúng số tiền còn nợ hóa đơn; callback lặp được xử lý idempotent.
+Checkout Sandbox không thu tiền thật. Không bật hoặc dùng cấu hình này để nhận
+thanh toán production.
 
 ## REST API chính
 
