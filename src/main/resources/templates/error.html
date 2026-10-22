@@ -28,7 +28,7 @@
         </div>
 
         <div style="margin-top: 24px; display: flex; justify-content: center; gap: 12px;">
-            <a th:href="@{/dashboard}" class="btn btn-primary">Về bảng điều khiển</a>
+            <a th:href="@{/dashboard}" class="btn btn-primary" th:text="${currentUser != null and currentUser.role().name() == 'TENANT' ? 'Về phòng thuê của tôi' : 'Về bảng điều khiển'}">Về bảng điều khiển</a>
             <a href="javascript:history.back()" class="btn">Quay lại</a>
         </div>
     </div>

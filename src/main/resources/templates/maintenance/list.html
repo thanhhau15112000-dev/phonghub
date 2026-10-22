@@ -13,7 +13,7 @@
             <p style="color: var(--text-secondary); font-size: 13px;">Quản lý sự cố kỹ thuật, phân công, tiến độ xử lý và kết quả.</p>
         </div>
         <div>
-            <a th:href="@{/maintenance/new}" class="btn btn-primary">+ Báo hỏng</a>
+            <a th:if="${currentUser.role().canReportMaintenance()}" th:href="@{/maintenance/new}" class="btn btn-primary">+ Báo hỏng</a>
         </div>
     </div>
 

@@ -38,6 +38,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.time.Instant;
 import java.util.List;
@@ -173,7 +174,10 @@ public class SepayPaymentService implements SepayWebhookUseCase {
         fields.put("error_url", invoiceUrl + "?sepay=error");
         fields.put("cancel_url", invoiceUrl + "?sepay=cancelled");
         fields.put("signature", signCheckoutFields(fields));
-        return new SandboxCheckout(SANDBOX_CHECKOUT_ENDPOINT, Map.copyOf(fields));
+        return new SandboxCheckout(
+            SANDBOX_CHECKOUT_ENDPOINT,
+            Collections.unmodifiableMap(new LinkedHashMap<>(fields))
+        );
     }
 
     @Override

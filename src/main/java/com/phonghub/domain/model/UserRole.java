@@ -5,5 +5,10 @@ public enum UserRole {
     OWNER,
     STAFF,
     TECHNICIAN,
-    TENANT
+    TENANT;
+
+    /** Kỹ thuật viên chỉ nhận và xử lý phiếu, không tạo phiếu (MaintenanceService.createTicket). */
+    public boolean canReportMaintenance() {
+        return this != TECHNICIAN;
+    }
 }
