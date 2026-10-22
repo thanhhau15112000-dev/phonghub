@@ -63,7 +63,7 @@
         </div>
 
         <div th:if="${invoice.isPayable()}" style="display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start;">
-            <img th:if="${paymentQrUrl != null and !simulationEnabled}" th:src="${paymentQrUrl}" alt="Mã QR chuyển khoản" width="220" height="220" style="border: 1px solid var(--border-color);">
+            <img th:if="${paymentQrUrl != null and !sandboxCheckoutEnabled}" th:src="${paymentQrUrl}" alt="Mã QR chuyển khoản" width="220" height="220" style="border: 1px solid var(--border-color);">
             <div style="flex: 1; min-width: 280px;">
                 <table class="data-table">
                     <tbody>
@@ -82,30 +82,30 @@
                                 <span th:class="'badge badge-' + ${uiText.invoiceBadge(invoice, today)}" th:text="${uiText.invoiceState(invoice, today)}">Chưa đến hạn</span>
                             </td>
                         </tr>
-                        <tr th:unless="${simulationEnabled}">
+                        <tr th:unless="${sandboxCheckoutEnabled}">
                             <td style="color: var(--text-secondary);">Nội dung chuyển khoản:</td>
                             <td style="font-family: monospace; font-weight: 700; font-size: 16px;" th:text="${invoice.getPaymentCode()}">PHXXXXXXXX</td>
                         </tr>
-                        <tr th:if="${bankConfigured and !simulationEnabled}">
+                        <tr th:if="${bankConfigured and !sandboxCheckoutEnabled}">
                             <td style="color: var(--text-secondary);">Ngân hàng:</td>
                             <td th:text="${bankCode}">MBBank</td>
                         </tr>
-                        <tr th:if="${bankConfigured and !simulationEnabled}">
+                        <tr th:if="${bankConfigured and !sandboxCheckoutEnabled}">
                             <td style="color: var(--text-secondary);">Số tài khoản:</td>
                             <td style="font-family: monospace;" th:text="${bankAccountNumber}">0123456789</td>
                         </tr>
-                        <tr th:if="${bankConfigured and !simulationEnabled and bankAccountName != null and !#strings.isEmpty(bankAccountName)}">
+                        <tr th:if="${bankConfigured and !sandboxCheckoutEnabled and bankAccountName != null and !#strings.isEmpty(bankAccountName)}">
                             <td style="color: var(--text-secondary);">Chủ tài khoản:</td>
                             <td th:text="${bankAccountName}">NGUYEN VAN B</td>
                         </tr>
                     </tbody>
                 </table>
-                <form th:if="${simulationEnabled}" th:action="@{'/invoices/' + ${invoice.getId()} + '/simulate-payment'}" method="post"
+                <form th:if="${sandboxCheckoutEnabled}" th:action="@{'/invoices/' + ${invoice.getId()} + '/sepay-checkout'}" method="post"
                       style="margin-top: 14px;">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <button type="submit" class="btn btn-primary">Thanh toán</button>
                 </form>
-                <p th:unless="${simulationEnabled}" style="font-size: 12px; color: var(--text-secondary); margin: 10px 0 0;">
+                <p th:unless="${sandboxCheckoutEnabled}" style="font-size: 12px; color: var(--text-secondary); margin: 10px 0 0;">
                     Quét mã QR hoặc chuyển khoản đúng số tiền và <strong>đúng nội dung</strong> ở trên để hệ thống tự ghi nhận thanh toán.
                     Trang này tự cập nhật khi nhận được tiền.
                     <span th:unless="${bankConfigured}">Hệ thống chưa cấu hình tài khoản nhận tiền, vui lòng liên hệ chủ trọ để nhận số tài khoản.</span>
