@@ -34,6 +34,9 @@ management:
 phonghub:
   demo:
     enabled: false
+  handover:
+    # Nút "Bỏ qua" đưa biên bản check-in/check-out thẳng tới APPROVED, chỉ dùng khi demo.
+    skip-enabled: ${HANDOVER_SKIP_ENABLED:false}
   storage:
     bucket: ${SUPABASE_STORAGE_BUCKET:private-files}
     max-file-size-bytes: ${STORAGE_MAX_FILE_SIZE_BYTES:10485760}

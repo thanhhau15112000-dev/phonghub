@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -43,6 +44,7 @@ public class HandoverUiController {
     private final TenantRepositoryPort tenantRepository;
     private final CurrentUserPort currentUserPort;
     private final CheckOutSettlementUseCase settlementUseCase;
+    private final boolean skipEnabled;
 
     public HandoverUiController(
         HandoverUseCase handoverUseCase,
@@ -50,7 +52,8 @@ public class HandoverUiController {
         PropertyUseCase propertyUseCase,
         TenantRepositoryPort tenantRepository,
         CurrentUserPort currentUserPort,
-        CheckOutSettlementUseCase settlementUseCase
+        CheckOutSettlementUseCase settlementUseCase,
+        @Value("${phonghub.handover.skip-enabled:false}") boolean skipEnabled
     ) {
         this.handoverUseCase = handoverUseCase;
         this.contractUseCase = contractUseCase;
@@ -58,6 +61,7 @@ public class HandoverUiController {
         this.tenantRepository = tenantRepository;
         this.currentUserPort = currentUserPort;
         this.settlementUseCase = settlementUseCase;
+        this.skipEnabled = skipEnabled;
     }
 
     private static HandoverType typeOf(String kind) {
@@ -105,6 +109,8 @@ public class HandoverUiController {
             model.addAttribute("photoKinds", HandoverPhotoKind.values());
             model.addAttribute("assetStatuses", AssetStatus.values());
             model.addAttribute("kind", kind);
+            model.addAttribute("canSkip", skipEnabled && (type == HandoverType.CHECK_OUT ? ownerOrAdmin : canManage)
+                && (details == null || !"APPROVED".equals(details.handover().status().name())));
             model.addAttribute("checkOut", type == HandoverType.CHECK_OUT);
             // Quyết toán cọc: chỉ trang check-out, chỉ người xem được số liệu tiền của hợp đồng
             model.addAttribute("settlement", type == HandoverType.CHECK_OUT && details != null
@@ -224,6 +230,17 @@ public class HandoverUiController {
             ? "Đã duyệt check-out: hợp đồng đã kết thúc và phòng đã được trả." : "Đã duyệt biên bản check-in.";
         return handle(contractId, kind, ra, message, () ->
             handoverUseCase.approve(typeOf(kind), contractId, finalDeduction));
+    }
+
+    @PostMapping("/skip")
+    public String skip(@PathVariable UUID contractId, @PathVariable String kind, RedirectAttributes ra) {
+        if (!skipEnabled) {
+            ra.addFlashAttribute("errorMessage", "Chức năng bỏ qua bàn giao đang tắt.");
+            return "redirect:/contracts/" + contractId + "/" + kind;
+        }
+        String message = typeOf(kind) == HandoverType.CHECK_OUT
+            ? "Đã bỏ qua check-out: hợp đồng đã kết thúc và phòng đã được trả." : "Đã bỏ qua check-in: biên bản đã duyệt.";
+        return handle(contractId, kind, ra, message, () -> handoverUseCase.skip(typeOf(kind), contractId));
     }
 
     @PostMapping("/reject")

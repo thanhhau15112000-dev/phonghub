@@ -70,6 +70,17 @@ class HandoverUiIntegrationTest extends SeededWebTest {
     }
 
     @Test
+    @DisplayName("Skipping is off by default: no button and the endpoint changes nothing")
+    void skipDisabledByDefault() throws Exception {
+        mockMvc.perform(get(PAGE).header("X-User-Id", OWNER_1))
+            .andExpect(content().string(not(containsString("Bỏ qua bước này"))));
+        mockMvc.perform(post(PAGE + "/skip").header("X-User-Id", OWNER_1))
+            .andExpect(flash().attributeExists("errorMessage"));
+        mockMvc.perform(get(PAGE).header("X-User-Id", OWNER_1))
+            .andExpect(content().string(containsString("Chưa có biên bản check-in")));
+    }
+
+    @Test
     @DisplayName("The whole check-in can be run from the forms and the buttons follow the role and the status")
     void fullFlowThroughForms() throws Exception {
         mockMvc.perform(post(PAGE).header("X-User-Id", OWNER_1).param("initialElectricMeter", "100.5")

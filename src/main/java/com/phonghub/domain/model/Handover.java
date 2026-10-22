@@ -101,6 +101,14 @@ public record Handover(
             sentAt, true, now, null, null, null, now, actorId);
     }
 
+    /** Bỏ qua bước người thuê xác nhận (chỉ dùng cho nút bỏ qua khi demo); confirmedByTenant giữ false. */
+    public Handover skipTenantConfirmation(UUID actorId) {
+        requireStatus(HandoverStatus.PENDING_TENANT, "bỏ qua xác nhận");
+        Instant now = Instant.now();
+        return copy(HandoverStatus.PENDING_APPROVAL, contractTermsHash, houseRulesText, houseRulesHash, null,
+            sentAt, false, null, null, null, null, now, actorId);
+    }
+
     public Handover approve(UUID actorId) {
         return approve(actorId, null);
     }
