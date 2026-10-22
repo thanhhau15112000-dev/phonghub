@@ -69,7 +69,6 @@ public class SepayPaymentService implements SepayWebhookUseCase {
     private final PaymentRepositoryPort paymentRepository;
     private final InvoiceRepositoryPort invoiceRepository;
     private final MaintenanceTicketRepositoryPort ticketRepository;
-    private static final java.util.concurrent.atomic.AtomicLong SIMULATION_SEQ = new java.util.concurrent.atomic.AtomicLong();
     private final ContractRepositoryPort contractRepository;
     private final PropertyRepositoryPort propertyRepository;
     private final NotificationRepositoryPort notificationRepository;
@@ -254,44 +253,6 @@ public class SepayPaymentService implements SepayWebhookUseCase {
             throw new DomainException("Không thể ghi nhận giao dịch SePay Sandbox.");
         }
         return new SandboxIpnResult("paid", false);
-    }
-
-    @Override
-    public WebhookProcessResult simulateTransfer(UUID invoiceId) {
-        if (!sepayProperties.isSimulationEnabled()) {
-            throw new DomainException("Chế độ mô phỏng chuyển khoản chưa được bật.");
-        }
-        CurrentUser user = currentUserPort.getCurrentUser();
-        // Quản trị viên không xem hóa đơn (#163) nên chỉ người thuê mô phỏng chuyển khoản.
-        if (user == null || user.role() != UserRole.TENANT) {
-            throw new UnauthorizedPropertyAccessException("Chỉ người thuê được mô phỏng chuyển khoản.");
-        }
-        Invoice invoice = invoiceRepository.findById(invoiceId)
-            .orElseThrow(() -> new DomainException("Không tìm thấy hóa đơn."));
-        authorizationService.assertCanViewInvoice(user, invoice);
-        if (!invoice.isPayable()) {
-            throw new DomainException("Hóa đơn này không còn cần thanh toán.");
-        }
-
-        String account = sepayProperties.getBankAccountNumber() != null && !sepayProperties.getBankAccountNumber().isBlank()
-            ? sepayProperties.getBankAccountNumber() : "SIMULATED";
-        log.warn("Sepay: MÔ PHỎNG chuyển khoản {} cho hóa đơn {} (chế độ thử nghiệm)", invoice.remainingAmount(), invoiceId);
-        // sepayId âm, tăng dần theo thời gian: không bao giờ trùng id giao dịch thật của SePay
-        long simulatedId = -(System.currentTimeMillis() * 1000 + SIMULATION_SEQ.incrementAndGet() % 1000);
-        return processTransfer(new SepayWebhookCommand(
-            simulatedId,
-            "SIMULATION",
-            Instant.now().toString(),
-            account,
-            null,
-            null,
-            "MO PHONG " + invoice.getPaymentCode(),
-            "in",
-            invoice.remainingAmount(),
-            null,
-            "SIM-" + Math.abs(simulatedId),
-            "Mô phỏng chuyển khoản (chế độ thử nghiệm)"
-        ));
     }
 
     private WebhookProcessResult processTransfer(SepayWebhookCommand command) {

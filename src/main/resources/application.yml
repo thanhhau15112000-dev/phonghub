@@ -63,7 +63,6 @@ phonghub:
   sepay:
     webhook-api-key: ${SEPAY_WEBHOOK_API_KEY:}
     allow-unsigned-webhook: false
-    simulation-enabled: ${SEPAY_SIMULATION_ENABLED:false}
     bank-code: ${SEPAY_BANK_CODE:}
     bank-account-number: ${SEPAY_BANK_ACCOUNT_NUMBER:}
     bank-account-name: ${SEPAY_BANK_ACCOUNT_NAME:}
