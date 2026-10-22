@@ -98,7 +98,7 @@ public class RoomAssetService implements RoomAssetUseCase {
 
         List<TemplateItem> items = TEMPLATES.get(template == null ? "" : template.trim().toUpperCase(Locale.ROOT));
         if (items == null) {
-            throw new IllegalArgumentException("Unknown asset template. Allowed: BASIC, FULL");
+            throw new IllegalArgumentException("Mẫu tài sản không hợp lệ (chỉ có BASIC hoặc FULL).");
         }
         List<RoomAsset> assets = new ArrayList<>();
         for (TemplateItem item : items) {
@@ -108,6 +108,47 @@ public class RoomAssetService implements RoomAssetUseCase {
         List<RoomAsset> saved = assets.stream().map(assetRepository::save).toList();
         audit("ROOM_ASSET_TEMPLATE_APPLIED", user, saved.getFirst(),
             Map.of("template", template.trim().toUpperCase(Locale.ROOT), "count", saved.size()));
+        return saved;
+    }
+
+    @Override
+    public List<RoomAsset> createBatch(CreateBatchCommand command) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        Room primary = findRoom(command.roomId());
+        authorizationService.assertCanManageProperty(user, primary.getPropertyId());
+
+        java.util.LinkedHashSet<UUID> roomIds = new java.util.LinkedHashSet<>();
+        roomIds.add(primary.getId());
+        roomIds.addAll(command.alsoRoomIds());
+        List<Room> rooms = new ArrayList<>();
+        for (UUID roomId : roomIds) {
+            Room room = findRoom(roomId);
+            if (!room.getPropertyId().equals(primary.getPropertyId())) {
+                throw new IllegalArgumentException("Chỉ áp dụng được cho các phòng cùng một nhà trọ.");
+            }
+            rooms.add(room);
+        }
+
+        // Dựng (và kiểm tra) toàn bộ tài sản trước khi lưu để một dòng sai không để lại phòng được thêm dở.
+        java.util.Set<String> codes = new java.util.HashSet<>();
+        List<RoomAsset> assets = new ArrayList<>();
+        for (Room room : rooms) {
+            for (BatchItem item : command.items()) {
+                String code;
+                do {
+                    code = generateAssetCode();
+                } while (!codes.add(code));
+                assets.add(newAsset(room.getId(), code, item.name(), null, item.quantity(), null, null,
+                    item.estimatedValue(), user));
+            }
+        }
+        List<RoomAsset> saved = assets.stream().map(assetRepository::save).toList();
+        for (Room room : rooms) {
+            List<RoomAsset> inRoom = saved.stream().filter(a -> a.roomId().equals(room.getId())).toList();
+            audit("ROOM_ASSET_BATCH_CREATED", user, inRoom.getFirst(), Map.of(
+                "roomId", room.getId().toString(), "count", inRoom.size(),
+                "names", inRoom.stream().map(RoomAsset::name).toList()));
+        }
         return saved;
     }
 
@@ -197,9 +238,9 @@ public class RoomAssetService implements RoomAssetUseCase {
             return;
         }
         var ticket = ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new IllegalArgumentException("Maintenance ticket not found: " + ticketId));
+            .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy phiếu bảo trì: " + ticketId));
         if (!ticket.getRoomId().equals(asset.roomId())) {
-            throw new IllegalArgumentException("Maintenance ticket does not belong to the room of this asset");
+            throw new IllegalArgumentException("Phiếu bảo trì không thuộc phòng của tài sản này.");
         }
     }
 
@@ -217,7 +258,7 @@ public class RoomAssetService implements RoomAssetUseCase {
         if (roomId == null) {
             throw new IllegalArgumentException("Room id is required");
         }
-        return roomRepository.findById(roomId).orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
+        return roomRepository.findById(roomId).orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng."));
     }
 
     private RoomAsset findActiveAsset(UUID assetId) {

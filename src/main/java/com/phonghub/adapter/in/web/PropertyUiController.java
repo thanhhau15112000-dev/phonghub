@@ -70,7 +70,32 @@ public class PropertyUiController {
         model.addAttribute("statusCounts", statusCounts);
         model.addAttribute("selectedStatus", finalFilter != null ? finalFilter.name() : "ALL");
         model.addAttribute("totalCount", allProperties.size());
+        model.addAttribute("archivedProperties", propertyUseCase.listArchivedProperties());
         return "properties/list";
+    }
+
+    @PostMapping("/{id}/archive")
+    public String archiveProperty(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        try {
+            Property property = propertyUseCase.archiveProperty(id);
+            redirectAttributes.addFlashAttribute("successMessage",
+                "Đã ẩn nhà trọ '" + property.name() + "'. Có thể khôi phục trong mục \"Nhà trọ đã ẩn\".");
+            return "redirect:/properties";
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+            return "redirect:/properties/" + id;
+        }
+    }
+
+    @PostMapping("/{id}/restore")
+    public String restoreProperty(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        try {
+            Property property = propertyUseCase.restoreProperty(id);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã khôi phục nhà trọ '" + property.name() + "'.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/properties/" + id;
     }
 
     @PostMapping("/{id}/verify")
@@ -167,6 +192,10 @@ public class PropertyUiController {
             model.addAttribute("filterFloor", floor);
             model.addAttribute("roomFilterActive", isPresent(status) || isPresent(minPrice) || isPresent(maxPrice)
                 || isPresent(floor));
+            // Số phòng đã tạo thật (đang dùng) để so với số phòng chủ trọ khai báo lúc tạo nhà trọ
+            model.addAttribute("createdRoomCount", roomUseCase.listRoomsForProperty(id).size());
+            model.addAttribute("archivedRooms", roomUseCase.searchRooms(new RoomSearchCriteria(
+                id, null, null, null, null, null, 0, null, true)).items());
             return "properties/detail";
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());

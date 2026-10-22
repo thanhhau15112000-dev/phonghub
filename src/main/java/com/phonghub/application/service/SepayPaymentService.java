@@ -95,8 +95,9 @@ public class SepayPaymentService implements SepayWebhookUseCase {
             throw new DomainException("Chế độ mô phỏng chuyển khoản chưa được bật.");
         }
         CurrentUser user = currentUserPort.getCurrentUser();
-        if (user == null || (user.role() != UserRole.TENANT && user.role() != UserRole.ADMIN)) {
-            throw new UnauthorizedPropertyAccessException("Chỉ người thuê hoặc quản trị viên được mô phỏng chuyển khoản.");
+        // Quản trị viên không xem hóa đơn (#163) nên chỉ người thuê mô phỏng chuyển khoản.
+        if (user == null || user.role() != UserRole.TENANT) {
+            throw new UnauthorizedPropertyAccessException("Chỉ người thuê được mô phỏng chuyển khoản.");
         }
         Invoice invoice = invoiceRepository.findById(invoiceId)
             .orElseThrow(() -> new DomainException("Không tìm thấy hóa đơn."));
@@ -222,18 +223,6 @@ public class SepayPaymentService implements SepayWebhookUseCase {
         }
 
         return new WebhookProcessResult(true, "Xử lý giao dịch SePay thành công", tx);
-    }
-
-    @Override
-    public List<PaymentTransaction> getAllTransactions() {
-        authorizationService.assertAdmin(currentUserPort.getCurrentUser());
-        return paymentRepository.findAll();
-    }
-
-    @Override
-    public Optional<PaymentTransaction> getTransactionById(UUID id) {
-        authorizationService.assertAdmin(currentUserPort.getCurrentUser());
-        return paymentRepository.findById(id);
     }
 
     private void validateAuthorization(String authorizationHeader) {

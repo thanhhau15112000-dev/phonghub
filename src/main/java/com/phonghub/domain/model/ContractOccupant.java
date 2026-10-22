@@ -25,7 +25,7 @@ public record ContractOccupant(
             throw new IllegalArgumentException("Check in date cannot be null");
         }
         if (checkOutDate != null && checkOutDate.isBefore(checkInDate)) {
-            throw new IllegalArgumentException("Check out date cannot be before check in date");
+            throw new IllegalArgumentException("Ngày rời phòng không được trước ngày vào ở.");
         }
     }
 

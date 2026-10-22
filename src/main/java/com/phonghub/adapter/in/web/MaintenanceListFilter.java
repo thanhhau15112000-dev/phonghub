@@ -56,7 +56,8 @@ public record MaintenanceListFilter(
     public static boolean isDone(MaintenanceTicket ticket) {
         return ticket.getStatus() == MaintenanceStatus.RESOLVED
             || ticket.getStatus() == MaintenanceStatus.VERIFIED
-            || ticket.getStatus() == MaintenanceStatus.REJECTED;
+            || ticket.getStatus() == MaintenanceStatus.REJECTED
+            || ticket.getStatus() == MaintenanceStatus.CANCELLED;
     }
 
     /** Điều kiện chung của cả hai tab: cơ sở, mức độ, ngày báo cáo (theo giờ Việt Nam, gồm cả hai đầu mút). */

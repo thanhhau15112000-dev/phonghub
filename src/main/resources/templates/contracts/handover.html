@@ -35,7 +35,7 @@
         </p>
         <form th:if="${canManage and (contract.getStatus().name() == 'ACTIVE' or (checkOut and contract.getStatus().name() == 'EXPIRED'))}" th:action="@{${base}}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 520px;">
+            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 520px;">
                 <div class="form-group">
                     <label class="form-label">Chỉ số điện đầu kỳ *</label>
                     <input type="number" step="0.01" min="0" name="initialElectricMeter" class="form-control" required>
@@ -110,7 +110,7 @@
             <h2>Chỉ số và tình trạng phòng</h2>
             <form th:if="${canManage and details.handover().status().name() == 'DRAFT'}" th:action="@{${base} + '/update'}" method="post">
                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 520px;">
+                <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 520px;">
                     <div class="form-group">
                         <label class="form-label">Chỉ số điện đầu kỳ *</label>
                         <input type="number" step="0.01" min="0" name="initialElectricMeter" class="form-control" th:value="${details.handover().initialElectricMeter()}" required>
@@ -204,17 +204,57 @@
                             <td th:text="${i.quantity()}">1</td>
                             <td th:text="${uiText.assetStatus(i.status())}">Tốt</td>
                             <td th:text="${i.conditionNote() != null ? i.conditionNote() : '—'}">—</td>
-                            <td th:if="${checkOut}" th:text="${#numbers.formatDecimal(i.deductionAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</td>
+                            <td th:if="${checkOut}" th:text="${#numbers.formatDecimal(i.deductionAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</td>
                         </th:block>
                     </tr>
                 </tbody>
             </table>
             <div th:if="${checkOut}" style="margin-top: 8px; font-size: 13px;">
-                Tổng khấu trừ đề xuất: <strong th:text="${#numbers.formatDecimal(details.proposedDeduction(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</strong>
+                Tổng khấu trừ đề xuất: <strong th:text="${#numbers.formatDecimal(details.proposedDeduction(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</strong>
                 <span th:if="${details.handover().finalDeduction() != null}">
-                    | Khoản chủ trọ đã chốt: <strong th:text="${#numbers.formatDecimal(details.handover().finalDeduction(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</strong>
+                    | Khoản chủ trọ đã chốt: <strong th:text="${#numbers.formatDecimal(details.handover().finalDeduction(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</strong>
                 </span>
             </div>
+        </div>
+
+        <!-- Quyết toán tiền cọc khi trả phòng (chỉ người xem được số liệu tiền của hợp đồng) -->
+        <div class="card" th:if="${settlement != null}" id="settlement">
+            <h2>Quyết toán tiền cọc</h2>
+            <table class="data-table" style="max-width: 560px;">
+                <tbody>
+                    <tr>
+                        <td>Tiền cọc</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(settlement.deposit(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
+                    </tr>
+                    <tr>
+                        <td th:text="${settlement.deductionFinal() ? 'Khấu trừ tài sản (chủ trọ đã chốt)' : 'Khấu trừ tài sản (đề xuất)'}">Khấu trừ tài sản</td>
+                        <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(settlement.deduction(), 0, 'POINT', 0, 'COMMA') + ' đ'}">− 0 đ</td>
+                    </tr>
+                    <tr>
+                        <td th:text="${'Hóa đơn chưa thu (' + settlement.unpaidInvoices() + ' hóa đơn)'}">Hóa đơn chưa thu</td>
+                        <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(settlement.outstanding(), 0, 'POINT', 0, 'COMMA') + ' đ'}">− 0 đ</td>
+                    </tr>
+                    <tr th:each="u : ${settlement.utilities()}">
+                        <td>
+                            <span th:text="${u.meterType().name() == 'ELECTRIC' ? 'Điện' : 'Nước'}">Điện</span>
+                            chưa tính tiền:
+                            <span th:text="${u.fromValue().stripTrailingZeros().toPlainString() + ' → ' + u.toValue().stripTrailingZeros().toPlainString()}">100 → 150</span>
+                            (<span th:text="${u.consumption().stripTrailingZeros().toPlainString()}">50</span>
+                            <span th:text="${u.meterType().name() == 'ELECTRIC' ? 'kWh' : 'm³'}">kWh</span>)
+                            <span th:if="${u.unitPrice().signum() == 0}" style="color: var(--text-secondary); font-size: 11px;">— nhà trọ chưa có đơn giá</span>
+                        </td>
+                        <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(u.amount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">− 0 đ</td>
+                    </tr>
+                    <tr style="font-weight: 700;">
+                        <td th:text="${settlement.balance().signum() >= 0 ? 'Hoàn lại người thuê' : 'Người thuê cần trả thêm'}">Hoàn lại người thuê</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(settlement.balance().abs(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 0;">
+                Tiền điện/nước tính từ lần ghi chỉ số gần nhất tới chỉ số trong biên bản này theo đơn giá hiện tại (ước tính,
+                chưa lập hóa đơn). Hóa đơn chưa thu vẫn giữ để đối chiếu sau khi trả phòng.
+            </p>
         </div>
 
         <div class="card" th:if="${details.handover().contractTermsHash() != null}">

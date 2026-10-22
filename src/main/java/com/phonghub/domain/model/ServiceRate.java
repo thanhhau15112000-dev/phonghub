@@ -21,10 +21,10 @@ public record ServiceRate(
             throw new IllegalArgumentException("Service rate requires id, property and charge type");
         }
         if (serviceName == null || serviceName.isBlank()) {
-            throw new IllegalArgumentException("Service name cannot be blank");
+            throw new IllegalArgumentException("Tên dịch vụ không được để trống.");
         }
         if (pricePerUnit == null || pricePerUnit.signum() < 0) {
-            throw new IllegalArgumentException("Price per unit must be zero or more");
+            throw new IllegalArgumentException("Đơn giá không được âm.");
         }
         serviceName = serviceName.trim();
         if (createdAt == null) {

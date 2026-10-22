@@ -76,6 +76,8 @@ public class PaymentReconciliationService implements PaymentReconciliationUseCas
     public ReconciliationReport listTransactions(ReconciliationFilter filter) {
         CurrentUser user = currentUserPort.getCurrentUser();
         List<UUID> scope = collectableProperties(user, filter.propertyId());
+        // Admin không xem số liệu tiền của nhà trọ (#163): giữ mã giao dịch, trạng thái, nhà/phòng nhưng bỏ số tiền.
+        boolean hideMoney = user.role() == UserRole.ADMIN;
 
         // Một truy vấn hợp đồng cho mỗi nhà trọ trong phạm vi, sau đó một truy vấn giao dịch cho cả phạm vi.
         Map<UUID, Contract> contracts;
@@ -120,9 +122,13 @@ public class PaymentReconciliationService implements PaymentReconciliationUseCas
             Property property = contract == null ? null : properties.get(contract.getPropertyId());
             Room room = contract == null ? null : rooms.get(contract.getRoomId());
             rows.add(new ReconciliationRow(tx.id(), tx.sepayId(), tx.createdAt(), tx.gateway(), tx.referenceCode(),
-                tx.transferAmount(), tx.appliedAmount(), tx.excessAmount(), ReconciliationStatus.of(tx),
+                hideMoney ? null : tx.transferAmount(), hideMoney ? null : tx.appliedAmount(),
+                hideMoney ? null : tx.excessAmount(), ReconciliationStatus.of(tx),
                 tx.reviewReason(), tx.contractId(), tx.invoiceId(), property == null ? null : property.id(),
                 property == null ? null : property.name(), room == null ? null : room.getRoomNumber()));
+        }
+        if (hideMoney) {
+            return new ReconciliationReport(rows, counts, null, null, null);
         }
         return new ReconciliationReport(rows, counts,
             sum(rows, ReconciliationRow::amount), sum(rows, ReconciliationRow::appliedAmount),
@@ -133,7 +139,7 @@ public class PaymentReconciliationService implements PaymentReconciliationUseCas
     public Receipt getReceipt(UUID invoiceId) {
         CurrentUser user = currentUserPort.getCurrentUser();
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
         }
         if (user.role() == UserRole.TECHNICIAN) {
             throw new UnauthorizedPropertyAccessException("Kỹ thuật viên không xem biên lai thanh toán.");
@@ -169,19 +175,23 @@ public class PaymentReconciliationService implements PaymentReconciliationUseCas
     }
 
     /**
-     * Nhà trọ được xem giao dịch: null là toàn hệ thống (admin không lọc). Lọc một nhà thì cần quyền thu tiền ở nhà
-     * đó; không lọc thì owner lấy nhà của mình, staff lấy nhà được phân công có quyền thu tiền.
+     * Nhà trọ được xem giao dịch: null là toàn hệ thống (admin). Lọc một nhà thì cần quyền thu tiền ở nhà đó; không
+     * lọc thì owner lấy nhà của mình, staff lấy nhà được phân công có quyền thu tiền.
      */
     private List<UUID> collectableProperties(CurrentUser user, UUID propertyId) {
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
+        }
+        if (user.role() == UserRole.ADMIN) {
+            // Admin vẫn cần thấy giao dịch để hỗ trợ đối soát (kể cả giao dịch chưa khớp hợp đồng nào), nhưng số tiền
+            // được che ở listTransactions (#163).
+            return propertyId == null ? null : List.of(propertyId);
         }
         if (propertyId != null) {
             authorizationService.assertCanCollectPayment(user, propertyId);
             return List.of(propertyId);
         }
         return switch (user.role()) {
-            case ADMIN -> null;
             case OWNER -> propertyRepository.findByOwnerId(user.id()).stream().map(Property::id).toList();
             case STAFF -> assignmentPort.findByUserId(user.id()).stream()
                 .filter(StaffPropertyAssignment::canCollectPayment)

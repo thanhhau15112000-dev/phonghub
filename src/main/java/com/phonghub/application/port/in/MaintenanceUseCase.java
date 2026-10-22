@@ -16,6 +16,24 @@ public interface MaintenanceUseCase {
     MaintenanceTicket assignTechnician(UUID ticketId, UUID technicianId);
     /** Owner/staff từ chối phiếu chưa xử lý; bắt buộc có lý do, người thuê được thông báo. */
     MaintenanceTicket rejectTicket(UUID ticketId, String reason);
+
+    /**
+     * Sửa tiêu đề, mô tả, mức ưu tiên của phiếu chưa xử lý (#89): người thuê đã báo phiếu, hoặc người quản lý nhà trọ.
+     * Phiếu đã bắt đầu xử lý thì 409.
+     */
+    MaintenanceTicket updateTicket(UpdateMaintenanceTicketCommand command);
+
+    /** Hủy phiếu chưa xử lý (#89), cùng quyền như sửa; chuyển CANCELLED, không xóa. */
+    MaintenanceTicket cancelTicket(UUID ticketId, String reason);
+
+    record UpdateMaintenanceTicketCommand(UUID ticketId, String title, String description,
+                                          com.phonghub.domain.model.MaintenancePriority priority) {
+        public UpdateMaintenanceTicketCommand {
+            if (ticketId == null) {
+                throw new IllegalArgumentException("Ticket id is required");
+            }
+        }
+    }
     MaintenanceTicket resolveTicket(ResolveMaintenanceTicketCommand command);
     /** Quản lý miễn khoản phí đang chờ thanh toán: hủy hóa đơn, chủ trọ chịu phí, phiếu hoàn tất. */
     MaintenanceTicket waiveRepairFee(UUID ticketId, String reason);
@@ -59,10 +77,10 @@ public interface MaintenanceUseCase {
                 throw new IllegalArgumentException("Room id cannot be null");
             }
             if (title == null || title.isBlank()) {
-                throw new IllegalArgumentException("Title cannot be blank");
+                throw new IllegalArgumentException("Tiêu đề không được để trống.");
             }
             if (description == null || description.isBlank()) {
-                throw new IllegalArgumentException("Description cannot be blank");
+                throw new IllegalArgumentException("Mô tả không được để trống.");
             }
             if (priority == null) {
                 priority = MaintenancePriority.MEDIUM;
@@ -88,10 +106,10 @@ public interface MaintenanceUseCase {
                 throw new IllegalArgumentException("Ticket id cannot be null");
             }
             if (resolutionNotes == null || resolutionNotes.isBlank()) {
-                throw new IllegalArgumentException("Resolution notes cannot be blank");
+                throw new IllegalArgumentException("Cần ghi kết quả xử lý.");
             }
             if (repairCost != null && repairCost.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Repair cost cannot be negative");
+                throw new IllegalArgumentException("Chi phí sửa chữa không được âm.");
             }
         }
     }

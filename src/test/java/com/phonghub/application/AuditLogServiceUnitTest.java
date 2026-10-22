@@ -81,6 +81,24 @@ class AuditLogServiceUnitTest {
     }
 
     @Test
+    @DisplayName("#163: admin xem được sự kiện nhưng số tiền trong chi tiết bị che; owner thấy đầy đủ")
+    void adminSeesEventsWithoutMoney() {
+        AuditQueryPort.Entry entry = new AuditQueryPort.Entry(UUID.randomUUID(), "LATE_FEE_APPLIED", null, null,
+            "INVOICE", UUID.randomUUID().toString(), ownProperty,
+            "{\"amount\":\"50000\",\"daysOverdue\":3}", Instant.now());
+        when(queryPort.search(any())).thenReturn(List.of(entry));
+
+        loginAs(UserRole.ADMIN, UUID.randomUUID());
+        AuditQueryPort.Entry seenByAdmin = service.search(all()).getFirst();
+        assertEquals("{\"amount\":\"***\",\"daysOverdue\":3}", seenByAdmin.details());
+        assertEquals("LATE_FEE_APPLIED", seenByAdmin.action());
+        assertEquals(entry.targetId(), seenByAdmin.targetId());
+
+        loginAs(UserRole.OWNER, ownerId);
+        assertEquals(entry.details(), service.search(all()).getFirst().details());
+    }
+
+    @Test
     @DisplayName("owner chỉ được xem các nhà trọ của mình")
     void ownerScopedToOwnProperties() {
         loginAs(UserRole.OWNER, ownerId);
@@ -128,7 +146,7 @@ class AuditLogServiceUnitTest {
         AuditQueryPort.Filter filter = capturedFilter();
         assertEquals(Instant.parse("2026-09-30T17:00:00Z"), filter.from());
         assertEquals(Instant.parse("2026-10-01T17:00:00Z"), filter.to());
-        assertEquals(AuditLogUseCase.PAGE_SIZE, filter.limit());
+        assertEquals(AuditLogUseCase.PAGE_SIZE + 1, filter.limit(), "lấy thừa 1 dòng để biết còn trang sau");
         assertEquals(2 * AuditLogUseCase.PAGE_SIZE, filter.offset());
         assertEquals("ROOM", filter.targetType());
         assertEquals("ROOM_UPDATED", filter.action());

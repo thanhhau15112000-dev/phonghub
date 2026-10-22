@@ -171,7 +171,8 @@ class StatsWebIntegrationTest extends SeededWebTest {
             .andExpect(jsonPath("$.propertiesByApproval.REJECTED").value(1))
             .andExpect(jsonPath("$.accountsByRole.OWNER").value(2))
             .andExpect(jsonPath("$.accountsByRole.TENANT").value(1))
-            .andExpect(jsonPath("$.revenue.collected").value(4000000));
+            .andExpect(jsonPath("$.occupancy.totalRooms").value(5))
+            .andExpect(jsonPath("$.revenue").doesNotExist());
 
         mockMvc.perform(get("/api/stats/admin/pending-properties").header("X-User-Id", ADMIN))
             .andExpect(status().isOk())
@@ -184,14 +185,21 @@ class StatsWebIntegrationTest extends SeededWebTest {
             .andExpect(jsonPath("$.totalAccounts").value(7))
             .andExpect(jsonPath("$.byRole.STAFF").value(2))
             .andExpect(jsonPath("$.activity", hasSize(12)));
-
-        mockMvc.perform(get("/api/stats/owner/summary").header("X-User-Id", ADMIN).param("propertyId", PROP_1))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.revenue.billed").value(7000000));
     }
 
     @Test
-    @DisplayName("tham số sai trả 400, nhà trọ không tồn tại trả 404 cho admin")
+    @DisplayName("#163: admin không xem thống kê tài chính, kể cả khi lọc một nhà trọ")
+    void adminForbiddenOnFinanceStats() throws Exception {
+        for (String path : new String[] {"summary", "revenue", "properties"}) {
+            mockMvc.perform(get("/api/stats/owner/" + path).header("X-User-Id", ADMIN))
+                .andExpect(status().isForbidden());
+            mockMvc.perform(get("/api/stats/owner/" + path).header("X-User-Id", ADMIN).param("propertyId", PROP_1))
+                .andExpect(status().isForbidden());
+        }
+    }
+
+    @Test
+    @DisplayName("tham số sai trả 400")
     void invalidParameters() throws Exception {
         mockMvc.perform(get("/api/stats/owner/summary").header("X-User-Id", OWNER_1)
                 .param("from", "2026-06").param("to", "2026-01"))
@@ -205,19 +213,16 @@ class StatsWebIntegrationTest extends SeededWebTest {
             .andExpect(status().isBadRequest());
         mockMvc.perform(get("/api/stats/owner/summary").header("X-User-Id", OWNER_1).param("propertyId", "abc"))
             .andExpect(status().isBadRequest());
-        mockMvc.perform(get("/api/stats/owner/summary").header("X-User-Id", ADMIN)
-                .param("propertyId", UUID.randomUUID().toString()))
-            .andExpect(status().isNotFound());
     }
 
     @Test
-    @DisplayName("dashboard: owner thấy phần vận hành, admin thấy thêm toàn hệ thống; staff/người thuê không thấy")
+    @DisplayName("dashboard: owner thấy phần vận hành; admin chỉ thấy toàn hệ thống, không có tiền; staff/người thuê không thấy")
     void dashboardSections() throws Exception {
         String owner = mockMvc.perform(get("/").header("X-User-Id", OWNER_1))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertTrue(owner.contains("id=\"operations\""));
         assertTrue(owner.contains("Doanh thu theo tháng"));
-        assertTrue(owner.contains("4,000,000 đ"), "đã thu");
+        assertTrue(owner.contains("4.000.000 đ"), "đã thu");
         assertTrue(owner.contains("1 hóa đơn quá hạn"));
         assertFalse(owner.contains("id=\"adminOverview\""));
 
@@ -225,6 +230,10 @@ class StatsWebIntegrationTest extends SeededWebTest {
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertTrue(admin.contains("id=\"adminOverview\""));
         assertTrue(admin.contains("id=\"pendingPropertyTable\""), "bảng nhà chờ duyệt");
+        assertFalse(admin.contains("id=\"operations\""), "#163: admin không có khối vận hành (tiền)");
+        assertFalse(admin.contains("Doanh thu"), "#163: admin không thấy doanh thu");
+        assertFalse(admin.contains("4.000.000"), "#163: admin không thấy số tiền đã thu");
+        assertFalse(admin.contains("Công nợ"), "#163: admin không thấy công nợ");
 
         for (String user : new String[] {STAFF_1, TENANT_1, TECH_1}) {
             String html = mockMvc.perform(get("/").header("X-User-Id", user))
@@ -245,7 +254,7 @@ class StatsWebIntegrationTest extends SeededWebTest {
         String foreign = mockMvc.perform(get("/").header("X-User-Id", OWNER_2).param("statsPropertyId", PROP_1))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertTrue(foreign.contains("id=\"operations\""));
-        assertFalse(foreign.contains("7,000,000"), "không lộ số liệu nhà của owner khác");
+        assertFalse(foreign.contains("7.000.000"), "không lộ số liệu nhà của owner khác");
 
         String filtered = mockMvc.perform(get("/").header("X-User-Id", OWNER_1).param("statsPropertyId", PROP_1))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();

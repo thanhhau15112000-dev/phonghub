@@ -45,6 +45,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class PaymentSimulationIntegrationTest {
 
     private static final String ADMIN = LocalDemoAuthenticationAdapter.ADMIN_ID.toString();
+    private static final String OWNER = LocalDemoAuthenticationAdapter.OWNER_1_ID.toString();
     private static final String TENANT = LocalDemoAuthenticationAdapter.TENANT_1_ID.toString();
     private static final String STAFF = LocalDemoAuthenticationAdapter.STAFF_1_ID.toString();
     private static final String CONTRACT_URL = "/contracts/" + DataSeeder.CONTRACT_1_ID;
@@ -89,7 +90,7 @@ class PaymentSimulationIntegrationTest {
     }
 
     private Invoice issueRent() throws Exception {
-        mockMvc.perform(as(post(CONTRACT_URL + "/invoices"), ADMIN).param("period", YearMonth.now().toString()));
+        mockMvc.perform(as(post(CONTRACT_URL + "/invoices"), OWNER).param("period", YearMonth.now().toString()));
         return invoiceRepository.findByContractId(DataSeeder.CONTRACT_1_ID).get(0);
     }
 
@@ -161,7 +162,7 @@ class PaymentSimulationIntegrationTest {
     }
 
     @Test
-    @DisplayName("Simulation is refused when disabled, for non tenant/admin roles, and for already paid invoices")
+    @DisplayName("Simulation is refused when disabled, for non-tenant roles (admin included, #163), and for already paid invoices")
     void simulationGuards() throws Exception {
         Invoice invoice = issueRent();
 
@@ -173,11 +174,13 @@ class PaymentSimulationIntegrationTest {
             .andExpect(flash().attributeExists("errorMessage"));
         assertEquals(InvoiceStatus.ISSUED, invoiceRepository.findById(invoice.getId()).orElseThrow().getStatus());
 
-        // Bật lại: nhân viên không được mô phỏng
+        // Bật lại: nhân viên và quản trị viên không được mô phỏng
         sepayProperties.setSimulationEnabled(true);
-        mockMvc.perform(as(post("/invoices/" + invoice.getId() + "/simulate-payment"), STAFF))
-            .andExpect(flash().attributeExists("errorMessage"));
-        assertEquals(InvoiceStatus.ISSUED, invoiceRepository.findById(invoice.getId()).orElseThrow().getStatus());
+        for (String user : new String[] {STAFF, ADMIN}) {
+            mockMvc.perform(as(post("/invoices/" + invoice.getId() + "/simulate-payment"), user))
+                .andExpect(flash().attributeExists("errorMessage"));
+            assertEquals(InvoiceStatus.ISSUED, invoiceRepository.findById(invoice.getId()).orElseThrow().getStatus(), user);
+        }
 
         // Hóa đơn đã trả đủ thì không mô phỏng thêm
         mockMvc.perform(as(post("/invoices/" + invoice.getId() + "/simulate-payment"), TENANT));

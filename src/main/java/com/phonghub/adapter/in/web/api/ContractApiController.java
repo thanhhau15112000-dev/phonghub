@@ -71,14 +71,74 @@ public class ContractApiController {
         return ResponseEntity.ok(ContractResponse.from(contract));
     }
 
+    /** Sửa điều khoản hợp đồng nháp (#89); gửi kèm {@code version} để phát hiện sửa chồng (409). */
+    @org.springframework.web.bind.annotation.PatchMapping("/contracts/{id}")
+    public ResponseEntity<ContractResponse> updateDraftContract(
+        @PathVariable UUID id,
+        @Valid @RequestBody UpdateDraftContractRequest request
+    ) {
+        Contract contract = contractUseCase.updateDraftContract(new ContractUseCase.UpdateDraftContractCommand(
+            id, request.depositAmount(), request.rentAmount(), request.startDate(), request.endDate(),
+            request.paymentDay(), request.version()));
+        return ResponseEntity.ok(ContractResponse.from(contract));
+    }
+
+    /** Hủy hợp đồng nháp (#89): chuyển CANCELLED, không xóa cứng. */
+    @PostMapping("/contracts/{id}/cancel")
+    public ResponseEntity<ContractResponse> cancelDraftContract(@PathVariable UUID id) {
+        return ResponseEntity.ok(ContractResponse.from(contractUseCase.cancelDraftContract(id)));
+    }
+
+    public record UpdateDraftContractRequest(
+        @NotNull(message = "Deposit amount is required")
+        @DecimalMin(value = "0.0", message = "Deposit amount cannot be negative")
+        BigDecimal depositAmount,
+
+        @NotNull(message = "Rent amount is required")
+        @DecimalMin(value = "0.0", inclusive = false, message = "Rent amount must be greater than zero")
+        BigDecimal rentAmount,
+
+        @NotNull(message = "Start date is required")
+        LocalDate startDate,
+
+        @NotNull(message = "End date is required")
+        LocalDate endDate,
+
+        @Min(value = 1, message = "Payment day must be between 1 and 31")
+        @Max(value = 31, message = "Payment day must be between 1 and 31")
+        int paymentDay,
+
+        Long version
+    ) {}
+
+    /** Chấm dứt ngay không qua check-out: chỉ chủ trọ/admin, bắt buộc {@code reason}. */
     @PostMapping("/contracts/{id}/terminate")
     public ResponseEntity<ContractResponse> terminateContract(
         @PathVariable UUID id,
-        @RequestParam(name = "requiresMaintenance", defaultValue = "false") boolean requiresMaintenance
+        @RequestParam(name = "requiresMaintenance", defaultValue = "false") boolean requiresMaintenance,
+        @RequestParam(name = "reason", required = false) String reason
     ) {
-        Contract contract = contractUseCase.terminateContract(id, requiresMaintenance);
+        Contract contract = contractUseCase.terminateEarly(id, requiresMaintenance, reason);
         return ResponseEntity.ok(ContractResponse.from(contract));
     }
+
+    @PostMapping("/contracts/{id}/renew")
+    public ResponseEntity<ContractResponse> renewContract(
+        @PathVariable UUID id,
+        @Valid @RequestBody RenewContractRequest request
+    ) {
+        Contract contract = contractUseCase.renewContract(new ContractUseCase.RenewContractCommand(
+            id, request.endDate(), request.rentAmount(), request.version()));
+        return ResponseEntity.ok(ContractResponse.from(contract));
+    }
+
+    public record RenewContractRequest(
+        @NotNull(message = "Cần nhập ngày kết thúc mới")
+        LocalDate endDate,
+        /** Tiền thuê mới cho các kỳ phát hành sau; bỏ trống là giữ nguyên. */
+        BigDecimal rentAmount,
+        Long version
+    ) {}
 
     @GetMapping("/contracts/{id}")
     public ResponseEntity<ContractResponse> getContract(@PathVariable UUID id) {
@@ -96,11 +156,11 @@ public class ContractApiController {
     }
 
     @PostMapping("/contracts/{id}/occupants")
-    public ResponseEntity<ContractResponse.ContractOccupantResponse> addOccupant(
+    public ResponseEntity<ContractResponse.OccupantAddedResponse> addOccupant(
         @PathVariable UUID id,
         @Valid @RequestBody AddOccupantRequest request
     ) {
-        com.phonghub.domain.model.ContractOccupant occupant = contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
+        ContractUseCase.AddOccupantResult result = contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
             id,
             request.fullName(),
             request.identityCardNumber(),
@@ -110,7 +170,8 @@ public class ContractApiController {
             request.checkInDate() != null ? request.checkInDate() : LocalDate.now(),
             request.createAccount()
         ));
-        ContractResponse.ContractOccupantResponse response = ContractResponse.ContractOccupantResponse.from(occupant);
+        ContractResponse.OccupantAddedResponse response = ContractResponse.OccupantAddedResponse.from(
+            result.occupant(), result.accountUsername(), result.temporaryPassword());
         return ResponseEntity.created(URI.create("/api/contracts/" + id + "/occupants/" + response.id())).body(response);
     }
 

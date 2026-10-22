@@ -19,6 +19,9 @@ RUN ./mvnw clean package -DskipTests -B
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
+# Tesseract cho OCR chỉ số đồng hồ (#67), chỉ cần dữ liệu tiếng Anh vì chỉ đọc chữ số (~25 MB)
+RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-eng
+
 # Run as non-root user
 RUN addgroup -S phonghub && adduser -S phonghub -G phonghub
 USER phonghub:phonghub
@@ -31,5 +34,7 @@ EXPOSE 8080
 # Configure JVM flags suitable for container memory constraints
 ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
 ENV SPRING_PROFILES_ACTIVE=prod
+# Image đã có tesseract nên bật OCR; đặt METER_OCR_ENGINE=disabled để tắt mà không cần build lại
+ENV METER_OCR_ENGINE=tesseract
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]

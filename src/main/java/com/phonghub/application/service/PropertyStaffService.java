@@ -92,7 +92,7 @@ public class PropertyStaffService implements PropertyStaffUseCase {
         StaffPropertyAssignment current = assignmentPort.find(userId, propertyId)
             .orElseThrow(() -> new UserNotFoundException("Nhân sự này chưa được phân công vào nhà trọ"));
         User target = userRepository.findById(userId)
-            .orElseThrow(() -> new UserNotFoundException("User not found with ID: " + userId));
+            .orElseThrow(() -> new UserNotFoundException("Không tìm thấy tài khoản: " + userId));
         if (target.role() == UserRole.TECHNICIAN && (canCollectPayment || canManageContracts || canViewDocuments)) {
             throw new IllegalArgumentException("Kỹ thuật viên không có quyền thu tiền hay quản lý hợp đồng");
         }
@@ -109,7 +109,7 @@ public class PropertyStaffService implements PropertyStaffUseCase {
         StaffPropertyAssignment current = assignmentPort.find(userId, propertyId)
             .orElseThrow(() -> new UserNotFoundException("Nhân sự này chưa được phân công vào nhà trọ"));
         User target = userRepository.findById(userId)
-            .orElseThrow(() -> new UserNotFoundException("User not found with ID: " + userId));
+            .orElseThrow(() -> new UserNotFoundException("Không tìm thấy tài khoản: " + userId));
         if (target.role() == UserRole.TECHNICIAN) {
             boolean hasOpenTickets = ticketRepository.findByAssignedTechnicianId(userId).stream()
                 .anyMatch(ticket -> propertyId.equals(ticket.getPropertyId())

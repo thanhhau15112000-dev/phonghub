@@ -93,6 +93,25 @@ class RateLimitFilterTest {
     }
 
     @Test
+    @DisplayName("#164: form đăng nhập/quên mật khẩu bị chặn thì trả trang HTML có nút quay lại, vẫn 429 + Retry-After")
+    void uiBlockedPageIsHtml() throws Exception {
+        props.setLoginAccount(new RateLimitProperties.Rule(1, 300));
+        props.setForgotPasswordTarget(new RateLimitProperties.Rule(1, 900));
+        post("/login", "1.1.1.1", "username", "owner1");
+        MockHttpServletResponse login = post("/login", "1.1.1.1", "username", "owner1");
+        assertEquals(429, login.getStatus());
+        assertEquals("300", login.getHeader("Retry-After"));
+        assertTrue(login.getContentType().startsWith("text/html"), login.getContentType());
+        String html = login.getContentAsString();
+        assertTrue(html.contains("Vui lòng thử lại sau 300 giây"), html);
+        assertTrue(html.contains("href=\"/login\""), html);
+
+        post("/forgot-password", "1.1.1.1", "identifier", "admin");
+        String forgot = post("/forgot-password", "1.1.1.1", "identifier", "admin").getContentAsString();
+        assertTrue(forgot.contains("href=\"/forgot-password\""), forgot);
+    }
+
+    @Test
     @DisplayName("các rule không dùng chung bộ đếm")
     void rulesAreIndependent() throws Exception {
         props.setLogin(new RateLimitProperties.Rule(1, 60));
@@ -170,5 +189,21 @@ class RateLimitFilterTest {
         assertEquals(10, denied.retryAfterSeconds());
         clock.advanceSeconds(10);
         assertTrue(limiter.tryAcquire("r", "k", 1, 10).allowed());
+    }
+
+    @Test
+    @DisplayName("bộ đếm: dọn khóa hết hạn theo cửa sổ của chính khóa đó, không xóa sớm bộ đếm của rule cửa sổ dài")
+    void cleanupKeepsLongerWindows() {
+        FixedWindowRateLimiter limiter = new FixedWindowRateLimiter(clock);
+        assertTrue(limiter.tryAcquire("long", "victim", 1, 900).allowed());
+        assertFalse(limiter.tryAcquire("long", "victim", 1, 900).allowed());
+        for (int i = 0; i <= 10_000; i++) {
+            limiter.tryAcquire("short", "k" + i, 1, 60);
+        }
+        clock.advanceSeconds(61);
+        limiter.tryAcquire("short", "trigger-cleanup", 1, 60);
+
+        assertFalse(limiter.tryAcquire("long", "victim", 1, 900).allowed(),
+            "khóa cửa sổ 900 giây mới qua 61 giây vẫn phải bị chặn");
     }
 }

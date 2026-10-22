@@ -297,13 +297,15 @@ h2 {
 }
 
 .badge-DRAFT,
-.badge-TERMINATED {
+.badge-TERMINATED,
+.badge-CANCELLED {
   background-color: #f1f5f9;
   color: #475569;
   border-color: #cbd5e1;
 }
 .badge-DRAFT::before,
-.badge-TERMINATED::before {
+.badge-TERMINATED::before,
+.badge-CANCELLED::before {
   background-color: #94a3b8;
 }
 
@@ -941,7 +943,24 @@ dialog.modal-dialog::backdrop {
 }
 .header-account { gap: 12px; }
 
+/* Admin có 9 mục menu: ở màn hình ~1366px cụm tài khoản xuống dòng thay vì bẻ đôi từng mục ("Bảng điều / khiển"). */
+.header-bar { flex-wrap: wrap; gap: 12px; }
+.nav-links { flex-wrap: wrap; row-gap: 8px; }
+.nav-links a, .actor-tag { white-space: nowrap; }
+
+.nav-toggle { display: none; }
+/* Chừa chỗ cho nút chat nổi ở góc dưới để không đè chữ chân trang */
+.site-footer { padding: 24px 16px 80px; }
+
 @media (max-width: 768px) {
+  /* Menu thu gọn: chỉ hiện logo và nút mở menu cho tới khi bấm */
+  .header-bar { position: relative; }
+  .nav-toggle { display: inline-flex; position: absolute; top: 10px; right: 16px; background: none;
+    border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 8px; color: var(--text-primary); cursor: pointer; }
+  .header-bar:not(.nav-open) .header-navigation nav,
+  .header-bar:not(.nav-open) .header-account { display: none; }
+  /* Lưới nhiều cột viết inline trong template: điện thoại xếp thành một cột */
+  .grid-cols { grid-template-columns: 1fr !important; }
   .header-bar { flex-direction: column; align-items: stretch; gap: 12px; padding: 12px 16px; }
   .header-navigation { flex-direction: column; align-items: flex-start; gap: 10px; }
   .nav-links, .header-account, .actor-switcher-box { flex-wrap: wrap; gap: 10px; }

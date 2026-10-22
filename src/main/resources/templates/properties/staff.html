@@ -39,7 +39,7 @@
 
     <div class="card">
         <p th:if="${members.isEmpty()}" style="color: var(--text-secondary);">Chưa có nhân sự nào được phân công.</p>
-        <table th:if="${!members.isEmpty()}" class="table">
+        <table th:if="${!members.isEmpty()}" class="data-table">
             <thead>
                 <tr><th>Họ tên</th><th>Tài khoản</th><th>Vai trò</th><th>Quyền</th><th>Thao tác</th></tr>
             </thead>

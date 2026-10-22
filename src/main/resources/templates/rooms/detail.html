@@ -24,7 +24,7 @@
         <div class="flex-between" style="margin-bottom: 16px;">
             <div style="display: flex; align-items: center; gap: 12px;">
                 <h2 style="margin: 0;">Thông tin phòng</h2>
-                <button th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                <button th:if="${currentUser != null and !room.isArchived() and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                         type="button"
                         id="editRoomBtn"
                         class="btn btn-sm btn-secondary"
@@ -40,10 +40,11 @@
             <div style="display: flex; align-items: center; gap: 8px;">
                 <span style="color: var(--text-secondary); font-size: 13px;">Trạng thái:</span>
                 <span th:class="'badge badge-' + ${room.getStatus()}" style="font-size: 13px;" th:text="${uiText.roomStatus(room.getStatus())}">Trống</span>
+                <span th:if="${room.isArchived()}" class="badge badge-DRAFT" style="font-size: 13px;">Ngừng sử dụng</span>
             </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; font-size: 13px;">
+        <div class="grid-cols" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; font-size: 13px;">
             <div>
                 <span style="color: var(--text-secondary);">Tầng:</span>
                 <strong th:text="${room.getFloor()}">1</strong>
@@ -54,7 +55,7 @@
             </div>
             <div>
                 <span style="color: var(--text-secondary);">Giá thuê cơ bản:</span>
-                <strong th:text="${#numbers.formatDecimal(room.getBasePrice(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</strong>
+                <strong th:text="${#numbers.formatDecimal(room.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</strong>
             </div>
             <div>
                 <span style="color: var(--text-secondary);">Số người tối đa:</span>
@@ -63,31 +64,50 @@
         </div>
 
         <!-- Biểu mẫu đổi trạng thái (quản trị viên, nhân viên hoặc chủ trọ) -->
-        <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+        <div th:if="${currentUser != null and !room.isArchived() and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
             <h3 style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Thay đổi trạng thái phòng</h3>
-            <form th:action="@{'/rooms/' + ${room.getId()} + '/status'}" method="post" style="display: flex; gap: 8px; align-items: center;">
+            <p th:if="${activeContract != null}" style="color: var(--text-secondary); font-size: 12px; margin: 0;">
+                Phòng đang có người ở theo hợp đồng nên trạng thái chỉ thay đổi khi kết thúc hợp đồng (trả phòng).
+                Sự cố cần sửa thì tạo phiếu bảo trì, phòng vẫn giữ trạng thái Đang thuê.
+            </p>
+            <p th:if="${activeContract == null and #lists.isEmpty(manualStatuses)}" style="color: var(--text-secondary); font-size: 12px; margin: 0;">
+                Không có trạng thái nào chuyển tay được từ trạng thái hiện tại.
+            </p>
+            <form th:if="${activeContract == null and !#lists.isEmpty(manualStatuses)}" th:action="@{'/rooms/' + ${room.getId()} + '/status'}" method="post" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                 <label class="form-label" style="margin: 0;">Chuyển sang:</label>
                 <select name="status" class="form-control" style="width: auto;">
-                    <option th:each="s : ${allStatuses}"
+                    <option th:each="s : ${manualStatuses}"
                             th:value="${s}"
-                            th:text="${uiText.roomStatus(s)}"
-                            th:selected="${s == room.getStatus()}">
+                            th:text="${uiText.roomStatus(s)}">
                     </option>
                 </select>
                 <button type="submit" class="btn btn-sm btn-primary">Áp dụng thay đổi</button>
             </form>
-            <p style="color: var(--text-secondary); font-size: 11px; margin-top: 4px;">
-                Lưu ý: Các chuyển trạng thái không hợp lệ sẽ bị từ chối theo invariant của domain. Chuyển phòng khỏi trạng thái BẢO TRÌ chỉ được thực hiện khi tất cả yêu cầu đã hoàn tất.
+            <p th:if="${activeContract == null and room.getStatus().name() == 'MAINTENANCE'}" style="color: var(--text-secondary); font-size: 11px; margin-top: 4px;">
+                Phòng chỉ chuyển sang Trống khi các phiếu bảo trì của phòng đã xử lý xong.
             </p>
         </div>
+    </div>
+
+    <!-- Phòng đã ngừng sử dụng (#89) -->
+    <div th:if="${room.isArchived()}" class="card" style="border: 1px dashed var(--border-color); padding: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <p style="margin: 0; font-size: 13px; color: var(--text-secondary);">
+            Phòng đã ngừng sử dụng từ <strong th:text="${#temporals.format(room.getArchivedAt(), 'dd/MM/yyyy HH:mm')}">01/01/2026</strong>:
+            không hiện trong danh sách phòng, không tạo được hợp đồng mới. Lịch sử hợp đồng và bảo trì vẫn xem được.
+        </p>
+        <form th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+              th:action="@{'/rooms/' + ${room.getId()} + '/restore'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button type="submit" class="btn btn-sm btn-primary">Dùng lại phòng</button>
+        </form>
     </div>
 
     <!-- Hợp đồng đang hiệu lực -->
     <div class="card">
         <div class="flex-between" style="margin-bottom: 12px;">
             <h2>Hợp đồng thuê</h2>
-            <a th:if="${activeContract == null and (room.getStatus().name() == 'AVAILABLE' or room.getStatus().name() == 'RESERVED') and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            <a th:if="${activeContract == null and !room.isArchived() and (room.getStatus().name() == 'AVAILABLE' or room.getStatus().name() == 'RESERVED') and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                th:href="@{'/contracts/new?propertyId=' + ${property.id()} + '&roomId=' + ${room.getId()}}"
                class="btn btn-primary btn-sm">+ Tạo hợp đồng</a>
         </div>
@@ -111,10 +131,10 @@
                 <tbody>
                     <tr>
                         <td th:text="${activeContract.getId()}">Mã định danh</td>
-                        <td th:text="${activeContract.getStartDate()}">2026-01-01</td>
-                        <td th:text="${activeContract.getEndDate()}">2027-01-01</td>
-                        <td th:text="${#numbers.formatDecimal(activeContract.getRentAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
-                        <td><span class="badge badge-ACTIVE" th:text="${uiText.contractStatus(activeContract.getStatus())}">Đang hiệu lực</span></td>
+                        <td th:text="${uiText.date(activeContract.getStartDate())}">2026-01-01</td>
+                        <td th:text="${uiText.date(activeContract.getEndDate())}">2027-01-01</td>
+                        <td th:text="${#numbers.formatDecimal(activeContract.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
+                        <td><span th:class="${'badge badge-' + activeContract.getStatus().name()}" th:text="${uiText.contractStatus(activeContract.getStatus())}">Đang hiệu lực</span></td>
                         <td>
                             <a th:href="@{'/contracts/' + ${activeContract.getId()}}" class="btn btn-sm">Xem hợp đồng</a>
                         </td>
@@ -137,6 +157,7 @@
                     </select>
                     <button type="submit" class="btn btn-sm btn-secondary">Thêm từ mẫu</button>
                 </form>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('batchAssetModal').showModal()">Thêm nhiều tài sản</button>
                 <button type="button" class="btn btn-sm btn-primary" onclick="document.getElementById('addAssetModal').showModal()">+ Thêm tài sản</button>
             </div>
         </div>
@@ -173,7 +194,7 @@
                                   th:classappend="${a.status().name() == 'GOOD'} ? 'badge-ACTIVE' : (${a.status().name() == 'DAMAGED'} ? 'badge-REPORTED' : 'badge-REJECTED')"
                                   th:text="${uiText.assetStatus(a.status())}">Tốt</span>
                         </td>
-                        <td th:text="${#numbers.formatDecimal(a.estimatedValue(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</td>
+                        <td th:text="${#numbers.formatDecimal(a.estimatedValue(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</td>
                         <td>
                             <a th:href="@{'/rooms/' + ${room.getId()} + '/assets/' + ${a.id()} + '/qr'}" target="_blank" class="btn btn-sm">Mã QR</a>
                         </td>
@@ -199,7 +220,7 @@
                                     <li th:each="e : ${assetHistory.get(a.id())}">
                                         <strong th:text="${uiText.assetEventType(e.type())}">Hư hỏng</strong>
                                         — <span th:text="${e.description()}">Mô tả</span>
-                                        <span th:if="${e.cost().signum() > 0}" th:text="'(' + ${#numbers.formatDecimal(e.cost(), 0, 'COMMA', 0, 'POINT')} + ' đ)'"></span>
+                                        <span th:if="${e.cost().signum() > 0}" th:text="'(' + ${#numbers.formatDecimal(e.cost(), 0, 'POINT', 0, 'COMMA')} + ' đ)'"></span>
                                         <span style="color: var(--text-secondary);" th:text="${#temporals.format(e.createdAt(), 'dd/MM/yyyy HH:mm')}"></span>
                                     </li>
                                 </ul>
@@ -212,6 +233,59 @@
     </div>
 
     <!-- Hộp thoại thêm tài sản -->
+    <!-- Thêm nhiều tài sản một lần (Jira "Add Facilities to Room in Batch"): tự nhập danh sách, áp thêm cho phòng khác -->
+    <dialog th:if="${canManageAssets}" id="batchAssetModal" class="modal-dialog" style="max-width: 640px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Thêm nhiều tài sản</h3>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('batchAssetModal').close()">✕</button>
+        </div>
+        <form th:action="@{'/rooms/' + ${room.getId()} + '/assets/batch'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">
+                Dòng để trống tên sẽ được bỏ qua; số lượng trống tính là 1. Một dòng sai thì không tài sản nào được thêm.
+            </p>
+            <table class="data-table" id="batchAssetRows" style="margin-bottom: 8px;">
+                <thead>
+                    <tr><th>Tên tài sản</th><th style="width: 90px;">Số lượng</th><th style="width: 160px;">Giá trị ước tính (đ)</th></tr>
+                </thead>
+                <tbody>
+                    <tr th:each="i : ${#numbers.sequence(1, 5)}">
+                        <td><input type="text" name="itemName" class="form-control" maxlength="150" placeholder="VD: Giường, Quạt trần"></td>
+                        <td><input type="number" name="itemQuantity" class="form-control" min="1" value="1"></td>
+                        <td><input type="number" name="itemValue" class="form-control" min="0" step="1000"></td>
+                    </tr>
+                </tbody>
+            </table>
+            <button type="button" class="btn btn-sm btn-secondary" style="margin-bottom: 12px;" onclick="addBatchAssetRow()">+ Thêm dòng</button>
+            <div th:if="${!#lists.isEmpty(batchOtherRooms)}" class="form-group">
+                <label class="form-label">Áp dụng thêm cho các phòng (cùng nhà trọ)</label>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px;">
+                    <label th:each="r : ${batchOtherRooms}" style="display: inline-flex; align-items: center; gap: 4px;">
+                        <input type="checkbox" name="alsoRoomIds" th:value="${r.getId()}">
+                        <span th:text="${r.getRoomNumber()}">P102</span>
+                    </label>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('batchAssetModal').close()">Hủy</button>
+                <button type="submit" class="btn btn-sm btn-primary">Thêm tài sản</button>
+            </div>
+        </form>
+    </dialog>
+    <script th:if="${canManageAssets}">
+        function addBatchAssetRow() {
+            const body = document.querySelector('#batchAssetRows tbody');
+            if (body.rows.length >= 30) {
+                return;
+            }
+            const row = body.rows[0].cloneNode(true);
+            row.querySelectorAll('input').forEach(input => {
+                input.value = input.name === 'itemQuantity' ? '1' : '';
+            });
+            body.appendChild(row);
+        }
+    </script>
+
     <dialog th:if="${canManageAssets}" id="addAssetModal" class="modal-dialog" style="max-width: 480px;">
         <h3 style="margin-top: 0;">Thêm tài sản</h3>
         <form th:action="@{'/rooms/' + ${room.getId()} + '/assets'}" method="post" enctype="multipart/form-data">
@@ -220,7 +294,7 @@
                 <label class="form-label" for="addAssetName">Tên tài sản *</label>
                 <input type="text" id="addAssetName" name="name" class="form-control" required maxlength="150">
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                 <div class="form-group">
                     <label class="form-label" for="addAssetQuantity">Số lượng *</label>
                     <input type="number" id="addAssetQuantity" name="quantity" class="form-control" min="1" value="1" required>
@@ -263,7 +337,7 @@
                     <label class="form-label">Tên tài sản *</label>
                     <input type="text" name="name" class="form-control" th:value="${a.name()}" required maxlength="150">
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div class="form-group">
                         <label class="form-label">Số lượng *</label>
                         <input type="number" name="quantity" class="form-control" min="1" th:value="${a.quantity()}" required>
@@ -355,6 +429,22 @@
         </table>
     </div>
 
+    <!-- Ngừng sử dụng phòng (#89): chủ nhà trọ hoặc quản trị viên -->
+    <div th:if="${currentUser != null and !room.isArchived() and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+         class="card" style="border-color: #fecaca;">
+        <h2>Ngừng sử dụng phòng</h2>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+            Phòng ngừng sử dụng sẽ không hiện trong danh sách và không tạo được hợp đồng mới; lịch sử vẫn được giữ và có thể dùng
+            lại sau. Chỉ thực hiện được khi phòng đang trống hoặc bảo trì, không còn hợp đồng chưa kết thúc, hóa đơn chưa thu hay
+            phiếu bảo trì chưa xong.
+        </p>
+        <form th:action="@{'/rooms/' + ${room.getId()} + '/archive'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button type="submit" class="btn btn-sm btn-danger"
+                    onclick="return confirm('Ngừng sử dụng phòng này? Có thể dùng lại sau.');">Ngừng sử dụng phòng</button>
+        </form>
+    </div>
+
     <!-- Dialog chỉnh sửa thông tin phòng (Chủ nhà hoặc Quản trị viên) -->
     <dialog th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
             id="editRoomModal"
@@ -380,7 +470,7 @@
             <input type="hidden" name="version" th:value="${room.getVersion()}">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="editRoomNumber">Số phòng <span style="color: var(--danger-color, #dc2626);">*</span></label>
                     <input type="text" id="editRoomNumber" name="roomNumber" th:value="${room.getRoomNumber()}" class="form-control" required placeholder="VD: 101, P202">
@@ -391,7 +481,7 @@
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="editAreaSqm">Diện tích (m²)</label>
                     <input type="number" step="0.1" min="0" id="editAreaSqm" name="areaSqm" th:value="${room.getAreaSqm()}" class="form-control" placeholder="VD: 25.5">

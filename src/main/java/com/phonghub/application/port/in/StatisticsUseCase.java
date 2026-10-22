@@ -13,6 +13,7 @@ import java.util.UUID;
 
 /**
  * Thống kê doanh thu, chi phí, công nợ, lấp đầy (owner) và tổng quan hệ thống (admin) — #93, dùng cho dashboard #75.
+ * Số liệu tiền chỉ dành cho owner; tổng quan admin không có tiền (#163).
  *
  * <p>Quy ước số liệu: doanh thu tính theo kỳ của hóa đơn (phát sinh = tổng tiền hóa đơn, đã thu = số đã trả của các
  * hóa đơn đó), bỏ hóa đơn đã hủy; chi phí là phí sửa chữa chủ nhà chịu của phiếu hoàn thành trong kỳ; lợi nhuận ước
@@ -20,7 +21,7 @@ import java.util.UUID;
  */
 public interface StatisticsUseCase {
 
-    /** Owner: nhà của mình (hoặc một nhà qua propertyId); admin: toàn hệ thống hoặc một nhà. Vai trò khác bị 403. */
+    /** Owner: nhà của mình (hoặc một nhà qua propertyId). Admin và vai trò khác bị 403. */
     OwnerSummary ownerSummary(StatsQuery query);
 
     /** Chuỗi doanh thu/chi phí theo tháng, quý hoặc năm, đủ mọi kỳ trong khoảng (kỳ không có dữ liệu = 0). */
@@ -29,7 +30,7 @@ public interface StatisticsUseCase {
     /** Số liệu từng nhà trọ trong phạm vi. */
     List<PropertyStat> ownerProperties(StatsQuery query);
 
-    /** Admin: tổng quan toàn hệ thống. */
+    /** Admin: tổng quan toàn hệ thống (nhà trọ, tài khoản, lấp đầy; không có số liệu tiền). */
     AdminOverview adminOverview(StatsQuery query);
 
     /** Admin: nhà trọ chờ duyệt, cũ nhất trước. */
@@ -121,7 +122,6 @@ public interface StatisticsUseCase {
         long properties,
         Map<PropertyApprovalStatus, Long> propertiesByApproval,
         Map<UserRole, Long> accountsByRole,
-        RevenueTotals revenue,
         Occupancy occupancy
     ) {
         /** Số nhà trọ theo tên trạng thái xác minh (PENDING, VERIFIED, REJECTED), tiện cho template. */

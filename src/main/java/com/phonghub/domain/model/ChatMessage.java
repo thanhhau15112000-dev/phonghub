@@ -35,14 +35,14 @@ public record ChatMessage(
         boolean hasContent = content != null && !content.trim().isEmpty();
         boolean hasMedia = mediaUrl != null && !mediaUrl.trim().isEmpty();
         if (!hasContent && !hasMedia) {
-            throw new IllegalArgumentException("Message must have either text content or media");
+            throw new IllegalArgumentException("Tin nhắn phải có nội dung hoặc tệp đính kèm.");
         }
         if (createdAt == null) {
             createdAt = Instant.now();
         }
     }
 
-    public static ChatMessage create(UUID chatRoomId, UUID senderId, String senderName, String content) {
+    public static ChatMessage create(UUID chatRoomId, UUID senderId, String senderName, String content, Instant createdAt) {
         return new ChatMessage(
             UUID.randomUUID(),
             chatRoomId,
@@ -51,12 +51,13 @@ public record ChatMessage(
             content.trim(),
             null,
             null,
-            Instant.now(),
+            createdAt,
             null
         );
     }
 
-    public static ChatMessage createMedia(UUID chatRoomId, UUID senderId, String senderName, String caption, String mediaUrl, String mediaType) {
+    public static ChatMessage createMedia(UUID chatRoomId, UUID senderId, String senderName, String caption, String mediaUrl, String mediaType,
+        Instant createdAt) {
         return new ChatMessage(
             UUID.randomUUID(),
             chatRoomId,
@@ -65,7 +66,7 @@ public record ChatMessage(
             caption != null ? caption.trim() : "",
             mediaUrl,
             mediaType,
-            Instant.now(),
+            createdAt,
             null
         );
     }

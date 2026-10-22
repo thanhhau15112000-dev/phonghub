@@ -39,7 +39,7 @@ public record MeterSubmission(
             throw new IllegalArgumentException("Submission requires id, room, type, photo, match status and status");
         }
         if (declaredValue == null || declaredValue.signum() < 0) {
-            throw new IllegalArgumentException("Declared value must be zero or more");
+            throw new IllegalArgumentException("Chỉ số khai báo không được âm.");
         }
         if (submittedAt == null) {
             submittedAt = Instant.now();

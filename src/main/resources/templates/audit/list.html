@@ -11,6 +11,10 @@
             <p style="color: var(--text-secondary); font-size: 13px;">
                 Lịch sử đăng nhập, thay đổi dữ liệu và xem giấy tờ. Mật khẩu, token và số giấy tờ đầy đủ không bao giờ được lưu.
             </p>
+            <p th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" id="auditMoneyHiddenNote"
+               style="color: var(--text-secondary); font-size: 13px;">
+                Số tiền trong cột chi tiết được che (***) vì quản trị viên không xem số liệu tài chính của nhà trọ.
+            </p>
         </div>
     </div>
 
@@ -30,13 +34,20 @@
                 <label class="form-label" for="targetType">Đối tượng</label>
                 <select id="targetType" name="targetType" class="form-control">
                     <option value="">Tất cả</option>
-                    <option th:each="t : ${targetTypes}" th:value="${t}" th:text="${t}"
+                    <option th:each="t : ${targetTypes}" th:value="${t}" th:text="${uiText.auditTarget(t)}"
                             th:selected="${t == targetType}">ROOM</option>
                 </select>
             </div>
-            <div class="form-group" style="flex: 1; min-width: 160px;">
+            <div class="form-group" style="flex: 1; min-width: 200px;">
                 <label class="form-label" for="action">Hành động</label>
-                <input id="action" type="text" name="action" class="form-control" th:value="${action}" placeholder="VD: LOGIN_FAILED">
+                <select id="action" name="action" class="form-control">
+                    <option value="">Tất cả</option>
+                    <option th:if="${action != null and !uiText.isKnownAuditAction(action)}" th:value="${action}" th:text="${action}" selected>MÃ_LẠ</option>
+                    <optgroup th:each="g : ${uiText.auditActionGroups()}" th:label="${g.key}">
+                        <option th:each="a : ${g.value}" th:value="${a.key}" th:text="${a.value}"
+                                th:selected="${a.key == action}">Sửa phòng</option>
+                    </optgroup>
+                </select>
             </div>
             <div class="form-group" style="flex: 1; min-width: 200px;">
                 <label class="form-label" for="actorId">Mã người thực hiện</label>
@@ -74,17 +85,29 @@
             <tbody>
             <tr th:each="e : ${entries}">
                 <td th:text="${#temporals.format(e.createdAt(), 'dd/MM/yyyy HH:mm:ss')}">01/01/2026 00:00:00</td>
-                <td><code th:text="${e.action()}">ACTION</code></td>
-                <td>
+                <td class="col-wrap">
+                    <span th:text="${uiText.auditAction(e.action())}">Sửa phòng</span>
+                    <div style="font-size: 11px; color: var(--text-secondary);"><code th:text="${e.action()}">ROOM_UPDATED</code></div>
+                </td>
+                <td class="col-wrap">
                     <span th:if="${e.actorName() != null}" th:text="${e.actorName()}">Tên</span>
                     <span th:if="${e.actorName() == null and e.actorId() != null}" th:text="${e.actorId()}">id</span>
-                    <span th:if="${e.actorId() == null}" style="color: var(--text-secondary);">Hệ thống</span>
+                    <span th:if="${e.actorId() == null}" style="color: var(--text-secondary);"
+                          th:text="${e.action() == 'LOGIN_FAILED' ? 'Người chưa đăng nhập' : 'Hệ thống'}">Hệ thống</span>
                 </td>
                 <td>
-                    <span th:text="${e.targetType()}">ROOM</span>
-                    <div style="font-size: 11px; color: var(--text-secondary); word-break: break-all;" th:text="${e.targetId()}">id</div>
+                    <span th:text="${uiText.auditTarget(e.targetType())}">Phòng</span>
+                    <div th:if="${e.propertyId() != null and propertyNames.get(e.propertyId()) != null}" style="font-size: 12px;"
+                         th:text="${propertyNames.get(e.propertyId())}">Nhà trọ</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); word-break: break-all;"
+                         th:text="${e.targetType() == 'EXPORT' ? uiText.exportDataset(e.targetId()) : e.targetId()}">id</div>
                 </td>
-                <td style="max-width: 360px; word-break: break-word; font-size: 12px;" th:text="${e.details()}">{}</td>
+                <td class="col-wrap" style="max-width: 360px; font-size: 12px;" th:title="${e.details()}">
+                    <div th:each="d : ${detailLines.get(e.id())}">
+                        <span th:if="${d.label() != null}" style="color: var(--text-secondary);" th:text="${d.label() + ':'}">Giá thuê:</span>
+                        <span th:text="${d.value()}">3,500,000 đ → 3,600,000 đ</span>
+                    </div>
+                </td>
             </tr>
             </tbody>
         </table>
@@ -93,7 +116,7 @@
             <a th:if="${page > 0}" class="btn btn-sm" style="text-decoration: none;"
                th:href="@{/audit(propertyId=${propertyId}, actorId=${actorId}, targetType=${targetType}, action=${action}, from=${from}, to=${to}, page=${page - 1})}">&larr; Trang trước</a>
             <span></span>
-            <a th:if="${#lists.size(entries) == pageSize}" class="btn btn-sm" style="text-decoration: none;"
+            <a th:if="${hasNextPage}" class="btn btn-sm" style="text-decoration: none;"
                th:href="@{/audit(propertyId=${propertyId}, actorId=${actorId}, targetType=${targetType}, action=${action}, from=${from}, to=${to}, page=${page + 1})}">Trang sau &rarr;</a>
         </div>
     </div>

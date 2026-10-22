@@ -11,6 +11,7 @@ import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.config.SepayProperties;
 import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.Property;
@@ -207,7 +208,15 @@ public class ContractUiController {
             model.addAttribute("room", room);
             model.addAttribute("primaryTenant", primaryTenant);
             model.addAttribute("occupantTenants", occupantTenants);
-            addPaymentAttributes(model, currentUser, contract, property);
+            // Hóa đơn và thanh toán là số liệu tiền của nhà trọ: quản trị viên, kỹ thuật viên và nhân viên không có
+            // quyền thu tiền/quản lý hợp đồng không xem (#163); trang hợp đồng vẫn hiện, chỉ ẩn phần thanh toán.
+            if (currentUser.role() != UserRole.ADMIN && currentUser.role() != UserRole.TECHNICIAN) {
+                try {
+                    addPaymentAttributes(model, currentUser, contract, property);
+                } catch (UnauthorizedPropertyAccessException ex) {
+                    // không có quyền xem tiền ở nhà trọ này: bỏ qua phần thanh toán
+                }
+            }
 
             return "contracts/detail";
         } catch (DomainException ex) {
@@ -237,6 +246,23 @@ public class ContractUiController {
         return "redirect:/contracts/" + id;
     }
 
+    @PostMapping("/{id}/invoices/{invoiceId}/void")
+    public String voidInvoice(
+        @PathVariable UUID id,
+        @PathVariable UUID invoiceId,
+        @RequestParam(required = false) String reason,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            Invoice invoice = invoiceUseCase.voidInvoice(invoiceId, reason);
+            redirectAttributes.addFlashAttribute("successMessage", String.format(
+                "Đã hủy hóa đơn kỳ %02d/%d. Có thể phát hành lại kỳ này nếu cần.", invoice.getMonth(), invoice.getYear()));
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
+    }
+
     private void addPaymentAttributes(Model model, CurrentUser currentUser, Contract contract, Property property) {
         List<Invoice> invoices = invoiceUseCase.listInvoicesForContract(contract.getId());
         LocalDate today = LocalDate.now();
@@ -247,8 +273,7 @@ public class ContractUiController {
             .orElse(null);
 
         boolean canIssueInvoice = contract.isResiding() && currentUser != null && (
-            currentUser.role() == UserRole.ADMIN
-                || currentUser.role() == UserRole.STAFF
+            currentUser.role() == UserRole.STAFF
                 || (currentUser.role() == UserRole.OWNER && currentUser.id().equals(property.ownerId()))
         );
 
@@ -257,6 +282,10 @@ public class ContractUiController {
         model.addAttribute("today", today);
         model.addAttribute("payableInvoice", payableInvoice);
         model.addAttribute("canIssueInvoice", canIssueInvoice);
+        // Hủy hóa đơn (#89) không phụ thuộc hợp đồng còn hiệu lực: hợp đồng đã kết thúc vẫn có thể còn kỳ lập sai.
+        model.addAttribute("canVoidInvoice", currentUser != null && (
+            currentUser.role() == UserRole.STAFF
+                || (currentUser.role() == UserRole.OWNER && currentUser.id().equals(property.ownerId()))));
         model.addAttribute("defaultInvoicePeriod", YearMonth.now().toString());
         model.addAttribute("bankConfigured", sepayProperties.hasBankAccount());
         model.addAttribute("bankCode", sepayProperties.getBankCode());
@@ -280,7 +309,7 @@ public class ContractUiController {
         RedirectAttributes redirectAttributes
     ) {
         try {
-            contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
+            ContractUseCase.AddOccupantResult result = contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
                 id,
                 fullName,
                 identityCardNumber,
@@ -290,7 +319,15 @@ public class ContractUiController {
                 checkInDate != null ? checkInDate : LocalDate.now(),
                 createAccount
             ));
-            redirectAttributes.addFlashAttribute("successMessage", "Thêm người thuê vào phòng thành công.");
+            String message = "Thêm người thuê vào phòng thành công.";
+            if (result.temporaryPassword() != null) {
+                // Mật khẩu tạm chỉ hiện một lần; người thuê phải đổi ở lần đăng nhập đầu
+                message += " Đã tạo tài khoản đăng nhập: " + result.accountUsername() + " / mật khẩu tạm "
+                    + result.temporaryPassword() + " (chỉ hiện một lần, hãy gửi cho người thuê).";
+            } else if (result.accountUsername() != null) {
+                message += " Đã liên kết với tài khoản có sẵn: " + result.accountUsername() + ".";
+            }
+            redirectAttributes.addFlashAttribute("successMessage", message);
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }
@@ -308,21 +345,74 @@ public class ContractUiController {
         return "redirect:/contracts/" + id;
     }
 
+    @PostMapping("/{id}/edit")
+    public String updateDraftContract(
+        @PathVariable UUID id,
+        @RequestParam java.math.BigDecimal depositAmount,
+        @RequestParam java.math.BigDecimal rentAmount,
+        @RequestParam java.time.LocalDate startDate,
+        @RequestParam java.time.LocalDate endDate,
+        @RequestParam int paymentDay,
+        @RequestParam(required = false) Long version,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            contractUseCase.updateDraftContract(new ContractUseCase.UpdateDraftContractCommand(
+                id, depositAmount, rentAmount, startDate, endDate, paymentDay, version));
+            redirectAttributes.addFlashAttribute("successMessage", "Đã cập nhật điều khoản hợp đồng nháp.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
+    }
+
+    @PostMapping("/{id}/cancel")
+    public String cancelDraftContract(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        try {
+            contractUseCase.cancelDraftContract(id);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã hủy hợp đồng nháp. Hợp đồng vẫn được lưu để tra cứu.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
+    }
+
+    @PostMapping("/{id}/renew")
+    public String renewContract(
+        @PathVariable UUID id,
+        @RequestParam LocalDate endDate,
+        @RequestParam(required = false) java.math.BigDecimal rentAmount,
+        @RequestParam(required = false) Long version,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            Contract renewed = contractUseCase.renewContract(
+                new ContractUseCase.RenewContractCommand(id, endDate, rentAmount, version));
+            redirectAttributes.addFlashAttribute("successMessage", "Đã gia hạn hợp đồng đến ngày "
+                + UiText.INSTANCE.date(renewed.getEndDate()) + ".");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
+    }
+
     @PostMapping("/{id}/terminate")
     public String terminateContract(
         @PathVariable UUID id,
         @RequestParam(name = "requiresMaintenance", defaultValue = "false") boolean requiresMaintenance,
+        @RequestParam(required = false) String reason,
         RedirectAttributes redirectAttributes
     ) {
         try {
-            contractUseCase.terminateContract(id, requiresMaintenance);
+            Contract terminated = contractUseCase.terminateEarly(id, requiresMaintenance, reason);
+            // Lấy trạng thái thật: phòng đang sửa dở vẫn giữ Bảo trì dù không chọn "cần kiểm tra bảo trì"
+            RoomStatus roomStatus = roomRepository.findById(terminated.getRoomId()).map(Room::getStatus)
+                .orElse(requiresMaintenance ? RoomStatus.MAINTENANCE : RoomStatus.AVAILABLE);
             redirectAttributes.addFlashAttribute(
                 "successMessage",
-                "Đã chấm dứt hợp đồng. Phòng hiện ở trạng thái "
-                    + UiText.INSTANCE.roomStatus(requiresMaintenance ? RoomStatus.MAINTENANCE : RoomStatus.AVAILABLE)
-                    + "."
+                "Đã chấm dứt hợp đồng. Phòng hiện ở trạng thái " + UiText.INSTANCE.roomStatus(roomStatus) + "."
             );
-        } catch (DomainException ex) {
+        } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }
         return "redirect:/contracts/" + id;

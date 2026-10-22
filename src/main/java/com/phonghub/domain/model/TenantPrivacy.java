@@ -24,7 +24,7 @@ public record TenantPrivacy(
             throw new IllegalArgumentException("Tenant id cannot be null");
         }
         if (legalHold && (legalHoldReason == null || legalHoldReason.isBlank())) {
-            throw new IllegalArgumentException("Legal hold needs a reason");
+            throw new IllegalArgumentException("Cần nhập lý do giữ dữ liệu.");
         }
     }
 

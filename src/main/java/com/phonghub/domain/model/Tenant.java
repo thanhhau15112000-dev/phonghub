@@ -18,13 +18,13 @@ public record Tenant(
             throw new IllegalArgumentException("Tenant id cannot be null");
         }
         if (fullName == null || fullName.isBlank()) {
-            throw new IllegalArgumentException("Tenant full name cannot be blank");
+            throw new IllegalArgumentException("Họ tên người thuê không được để trống.");
         }
         if (identityCardNumber == null || identityCardNumber.isBlank()) {
-            throw new IllegalArgumentException("Identity card number cannot be blank");
+            throw new IllegalArgumentException("Số CCCD không được để trống.");
         }
         if (phone == null || phone.isBlank()) {
-            throw new IllegalArgumentException("Phone cannot be blank");
+            throw new IllegalArgumentException("Số điện thoại không được để trống.");
         }
         if (createdAt == null) {
             createdAt = Instant.now();

@@ -118,21 +118,24 @@ public class ExportService implements ExportUseCase {
         TableExportPort exporter = request.format() == Format.PDF ? pdfExporter : xlsxExporter;
         byte[] content = exporter.render(table);
         if (auditPort != null) {
-            auditPort.recordEvent(AuditPort.AuditEvent.of("DATA_EXPORTED", user.id(), "EXPORT", request.dataset().name(),
-                Map.of("format", request.format().name(), "properties", scope.size(), "rows", table.rows().size())));
+            audit(user, request, scope, table.rows().size());
         }
         return new ExportFile(name + "." + exporter.extension(), exporter.contentType(), content);
     }
 
     /**
-     * Phạm vi nhà trọ được xuất: hóa đơn/công nợ cần quyền thu tiền, hợp đồng cần quyền quản lý hợp đồng (admin và
-     * owner luôn có ở nhà của mình). Kỹ thuật viên và người thuê không được xuất.
+     * Phạm vi nhà trọ được xuất: hóa đơn/công nợ cần quyền thu tiền, hợp đồng cần quyền quản lý hợp đồng (owner luôn có
+     * ở nhà của mình). Admin chỉ xuất hợp đồng vì không xem số liệu tiền (#163). Kỹ thuật viên và người thuê không được
+     * xuất.
      */
     private List<Property> scope(CurrentUser user, ExportRequest request) {
         if (user == null) {
-            throw new UnauthorizedPropertyAccessException("Authentication required");
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
         }
         boolean contracts = request.dataset() == Dataset.CONTRACTS;
+        if (!contracts) {
+            authorizationService.assertCanViewFinance(user);
+        }
         if (request.propertyId() != null) {
             if (contracts) {
                 authorizationService.assertCanManageContracts(user, request.propertyId());
@@ -155,6 +158,27 @@ public class ExportService implements ExportUseCase {
             default -> throw new UnauthorizedPropertyAccessException(
                 "Chỉ quản trị viên, chủ nhà trọ hoặc nhân viên được phân quyền mới xuất được dữ liệu.");
         };
+    }
+
+    /**
+     * Mỗi nhà trọ có trong file một sự kiện, để chủ nhà thấy ai đã xuất dữ liệu nhà mình trong Nhật ký (#78). File gồm
+     * nhiều nhà (admin, nhân sự nhiều nhà) thì không ghi số nhà/số dòng, tránh lộ quy mô nhà khác cho từng chủ; các
+     * sự kiện cùng lần xuất có chung {@code exportId}.
+     */
+    private void audit(CurrentUser user, ExportRequest request, List<Property> scope, int rows) {
+        String dataset = request.dataset().name();
+        String format = request.format().name();
+        if (scope.size() <= 1) {
+            UUID propertyId = scope.isEmpty() ? null : scope.getFirst().id();
+            auditPort.recordEvent(AuditPort.AuditEvent.of("DATA_EXPORTED", user.id(), "EXPORT", dataset, propertyId,
+                Map.of("format", format, "properties", scope.size(), "rows", rows)));
+            return;
+        }
+        String exportId = UUID.randomUUID().toString();
+        for (Property property : scope) {
+            auditPort.recordEvent(AuditPort.AuditEvent.of("DATA_EXPORTED", user.id(), "EXPORT", dataset, property.id(),
+                Map.of("format", format, "exportId", exportId)));
+        }
     }
 
     private record Data(Map<UUID, Property> properties, List<Contract> contracts, Map<UUID, Room> rooms,
@@ -311,6 +335,7 @@ public class ExportService implements ExportUseCase {
             case ACTIVE -> "Đang hiệu lực";
             case EXPIRED -> "Hết hạn";
             case TERMINATED -> "Đã kết thúc";
+            case CANCELLED -> "Đã hủy";
         };
     }
 }

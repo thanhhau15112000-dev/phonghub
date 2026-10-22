@@ -30,6 +30,12 @@ public class TransactionalRoomAssetUseCase implements RoomAssetUseCase {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public List<RoomAsset> createBatch(CreateBatchCommand command) {
+        return delegate.createBatch(command);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public RoomAsset update(UpdateAssetCommand command) {
         return delegate.update(command);
     }

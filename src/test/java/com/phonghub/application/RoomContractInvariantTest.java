@@ -2,6 +2,7 @@ package com.phonghub.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
@@ -56,11 +57,8 @@ class RoomContractInvariantTest {
             InvalidRoomStateException.class,
             () -> roomUseCase.changeRoomStatus(DataSeeder.ROOM_101_ID, RoomStatus.AVAILABLE)
         );
-        assertEquals(
-            "Cannot manually change status of room 'P101' to AVAILABLE: an ACTIVE contract exists (ID: "
-                + DataSeeder.CONTRACT_1_ID + "). Contract must be terminated via contract lifecycle.",
-            exception.getMessage()
-        );
+        assertTrue(exception.getMessage().startsWith(
+            "Phòng 'P101' đang có người ở theo hợp đồng; trạng thái phòng chỉ thay đổi khi kích hoạt hoặc kết thúc"));
 
         // Assert: Room status remains OCCUPIED
         Room afterRoom = roomRepository.findById(DataSeeder.ROOM_101_ID).orElseThrow();

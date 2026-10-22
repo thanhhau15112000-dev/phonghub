@@ -145,7 +145,7 @@ class ContractServiceCheckOutOccupantUnitTest {
             coTenant.permanentAddress(),
             LocalDate.now().minusDays(5),
             false
-        ));
+        )).occupant();
         activeContract = contractRepo.findById(activeContract.getId()).orElseThrow();
     }
 

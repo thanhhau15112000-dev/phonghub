@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -248,5 +249,31 @@ class TenantServiceUnitTest {
         assertThrows(IllegalArgumentException.class, () -> new TenantUseCase.UpdateTenantCommand(
             tenant1.id(), "Tên", "079201001111", "09012345678", null, null
         ));
+    }
+
+    @Test
+    @DisplayName("#78: người thuê ở nhà của hai chủ, nhật ký sửa thông tin chỉ gắn nhà mà người sửa có quyền")
+    void tenantUpdateAuditScopedToEditorProperties() {
+        Property other = propertyRepo.save(new Property(UUID.randomUUID(), "Nhà chủ khác", "456 Nguyễn Trãi", "", 3,
+            LocalDemoAuthenticationAdapter.OWNER_2_ID, PropertyApprovalStatus.VERIFIED, null, Instant.now()));
+        tenantRepo.linkToProperty(tenant1.id(), other.id(), LocalDemoAuthenticationAdapter.OWNER_2_ID);
+        TenantUseCase.UpdateTenantCommand cmd = new TenantUseCase.UpdateTenantCommand(
+            tenant1.id(), "Nguyễn Văn An", "079201001111", "0901234567", "an@example.com", "Bình Dương");
+
+        tenantService.updateTenant(cmd);
+        assertEquals(List.of(property.id()), tenantUpdateProperties(), "chủ nhà khác không thấy");
+
+        auditAdapter.clear();
+        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_ADMIN);
+        tenantService.updateTenant(cmd);
+        assertEquals(Set.of(property.id(), other.id()), Set.copyOf(tenantUpdateProperties()),
+            "admin sửa thì mọi nhà của người thuê đều thấy");
+    }
+
+    private List<UUID> tenantUpdateProperties() {
+        return auditAdapter.getRecordedEvents().stream()
+            .filter(e -> e.action().equals("TENANT_UPDATE"))
+            .map(AuditPort.AuditEvent::propertyId)
+            .toList();
     }
 }

@@ -39,7 +39,7 @@
                         <option value="">-- Chọn phòng --</option>
                         <option th:each="r : ${rooms}"
                                 th:value="${r.getId()}"
-                                th:text="${r.getRoomNumber() + ' (' + uiText.roomStatus(r.getStatus()) + ' - ' + #numbers.formatDecimal(r.getBasePrice(), 0, 'COMMA', 0, 'POINT') + ' đ)'}"
+                                th:text="${r.getRoomNumber() + ' (' + uiText.roomStatus(r.getStatus()) + ' - ' + #numbers.formatDecimal(r.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ)'}"
                                 th:selected="${selectedRoomId != null and selectedRoomId.equals(r.getId())}">
                         </option>
                     </select>

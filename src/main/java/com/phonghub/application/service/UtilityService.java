@@ -86,7 +86,7 @@ public class UtilityService implements UtilityUseCase {
         Room room = findRoom(command.roomId());
         authorizationService.assertCanManageProperty(user, room.getPropertyId());
         if (command.meterType() == null || command.currentValue() == null) {
-            throw new IllegalArgumentException("Meter type and current value are required");
+            throw new IllegalArgumentException("Cần chọn loại đồng hồ và nhập chỉ số.");
         }
 
         LocalDate today = LocalDate.now();
@@ -126,10 +126,10 @@ public class UtilityService implements UtilityUseCase {
         Room room = findRoom(roomId);
         authorizationService.assertCanManageProperty(user, room.getPropertyId());
         if (meterType == null) {
-            throw new IllegalArgumentException("Meter type is required");
+            throw new IllegalArgumentException("Cần chọn loại đồng hồ.");
         }
         if (!FileSanitizer.isImage(contentType)) {
-            throw new IllegalArgumentException("Meter photos must be jpeg, png or webp");
+            throw new IllegalArgumentException("Ảnh đồng hồ phải là JPEG, PNG hoặc WebP.");
         }
         FileSanitizer.SanitizedFile file = FileSanitizer.sanitize(contentType, content, maxFileSizeBytes);
         MeterOcrPort.OcrResult result = ocrPort.read(meterType, file.contentType(), file.content());
@@ -157,13 +157,17 @@ public class UtilityService implements UtilityUseCase {
     }
 
     private BigDecimal resolvePrevious(RecordReadingCommand command, MeterReading latest, Contract contract) {
-        BigDecimal derived = null;
-        if (latest != null) {
-            derived = latest.currentValue();
-        } else if (contract != null) {
-            derived = handoverRepository.find(contract.getId(), HandoverType.CHECK_IN)
+        BigDecimal checkInValue = contract == null ? null
+            : handoverRepository.find(contract.getId(), HandoverType.CHECK_IN)
                 .filter(handover -> handover.status() == HandoverStatus.APPROVED)
                 .map(handover -> initialOf(handover, command.meterType())).orElse(null);
+        BigDecimal derived = null;
+        if (latest != null && (checkInValue == null || contract.getId().equals(latest.contractId()))) {
+            derived = latest.currentValue();
+        } else if (checkInValue != null) {
+            // Kỳ đầu của hợp đồng mới: tính từ chỉ số lúc nhận phòng, không từ lần ghi của khách trước hay lúc phòng
+            // trống (lần ghi đó luôn trước khi hợp đồng này hiệu lực), để khách mới không trả phần của người trước.
+            derived = checkInValue;
         }
         BigDecimal baseline = command.baselineValue();
         if (derived != null) {
@@ -199,7 +203,7 @@ public class UtilityService implements UtilityUseCase {
         Room room = findRoom(reading.roomId());
         authorizationService.assertCanManageProperty(user, room.getPropertyId());
         if (!FileSanitizer.isImage(contentType)) {
-            throw new IllegalArgumentException("Meter photos must be jpeg, png or webp");
+            throw new IllegalArgumentException("Ảnh đồng hồ phải là JPEG, PNG hoặc WebP.");
         }
         FileSanitizer.SanitizedFile file = FileSanitizer.sanitize(contentType, content, maxFileSizeBytes);
         String key = PrivateFileStorageService.objectKey(room.getPropertyId(), "meters", file.extension());
@@ -225,7 +229,7 @@ public class UtilityService implements UtilityUseCase {
         MeterReading reading = findReading(readingId);
         assertCanView(user, findRoom(reading.roomId()));
         if (reading.photoKey() == null) {
-            throw new UtilityNotFoundException("Meter reading has no photo");
+            throw new UtilityNotFoundException("Chỉ số này chưa có ảnh.");
         }
         return storagePort.createSignedUrl(reading.photoKey(), SIGNED_URL_TTL);
     }
@@ -249,7 +253,7 @@ public class UtilityService implements UtilityUseCase {
     public ServiceRate updateRate(UUID rateId, RateCommand command) {
         CurrentUser user = currentUserPort.getCurrentUser();
         ServiceRate rate = rateRepository.findById(rateId)
-            .orElseThrow(() -> new UtilityNotFoundException("Service rate not found: " + rateId));
+            .orElseThrow(() -> new UtilityNotFoundException("Không tìm thấy đơn giá: " + rateId));
         authorizationService.assertOwnerOrAdmin(user, rate.propertyId());
         String name = command.serviceName() == null ? "" : command.serviceName().trim();
         Optional<ServiceRate> sameName = rateRepository.findByPropertyIdAndName(rate.propertyId(), name);
@@ -290,12 +294,12 @@ public class UtilityService implements UtilityUseCase {
             throw new IllegalArgumentException("Room id is required");
         }
         return roomRepository.findById(roomId)
-            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
+            .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + roomId));
     }
 
     private MeterReading findReading(UUID readingId) {
         return meterRepository.findById(readingId)
-            .orElseThrow(() -> new UtilityNotFoundException("Meter reading not found: " + readingId));
+            .orElseThrow(() -> new UtilityNotFoundException("Không tìm thấy chỉ số: " + readingId));
     }
 
     private void deleteQuietly(String key) {

@@ -57,6 +57,7 @@ public interface PaymentReconciliationUseCase {
         }
     }
 
+    /** Các trường số tiền là null khi người xem là quản trị viên (#163). */
     record ReconciliationRow(
         UUID id,
         Long sepayId,
@@ -77,7 +78,7 @@ public interface PaymentReconciliationUseCase {
 
     /**
      * {@code counts} đếm theo từng trạng thái trong phạm vi và khoảng ngày (trước khi lọc trạng thái) để làm thẻ lọc;
-     * {@code rows} và các tổng tiền đã áp dụng cả bộ lọc trạng thái.
+     * {@code rows} và các tổng tiền đã áp dụng cả bộ lọc trạng thái. Quản trị viên nhận tổng tiền null (#163).
      */
     record ReconciliationReport(
         List<ReconciliationRow> rows,

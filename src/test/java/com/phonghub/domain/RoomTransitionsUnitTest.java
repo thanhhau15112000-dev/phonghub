@@ -4,6 +4,7 @@ import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -100,7 +101,7 @@ class RoomTransitionsUnitTest {
             InvalidRoomStateException.class,
             () -> room.transitionTo(RoomStatus.OCCUPIED)
         );
-        assertTrue(ex.getMessage().contains("cannot move from MAINTENANCE to OCCUPIED"));
+        assertTrue(ex.getMessage().contains("từ Bảo trì sang Đang thuê"));
     }
 
     @Test
@@ -111,7 +112,7 @@ class RoomTransitionsUnitTest {
             InvalidRoomStateException.class,
             room::putUnderMaintenance
         );
-        assertTrue(ex.getMessage().contains("must be AVAILABLE or OCCUPIED"));
+        assertTrue(ex.getMessage().contains("không chuyển sang bảo trì được"));
     }
 
     @Test
@@ -119,5 +120,31 @@ class RoomTransitionsUnitTest {
     void testCannotOccupyMaintenanceRoom() {
         room.putUnderMaintenance();
         assertThrows(InvalidRoomStateException.class, room::occupy);
+    }
+
+    @Test
+    @DisplayName("Đổi tay: phòng có người ở theo hợp đồng không có lựa chọn nào; không bao giờ tự đặt Đang thuê")
+    void testManualTargets() {
+        assertEquals(List.of(RoomStatus.RESERVED, RoomStatus.MAINTENANCE), room.manualTargets(false));
+        assertTrue(room.manualTargets(true).isEmpty());
+
+        room.reserve();
+        assertEquals(List.of(RoomStatus.AVAILABLE), room.manualTargets(false));
+
+        room.occupy();
+        assertTrue(room.manualTargets(true).isEmpty());
+        // Phòng Đang thuê mà không còn hợp đồng (dữ liệu cũ) chỉ đi qua Bảo trì rồi mới Trống
+        assertEquals(List.of(RoomStatus.MAINTENANCE), room.manualTargets(false));
+    }
+
+    @Test
+    @DisplayName("Dữ liệu cũ: phòng có người ở đang Bảo trì vẫn trả phòng được và giữ Bảo trì")
+    void testVacateFromMaintenanceKeepsMaintenance() {
+        room.occupy();
+        room.putUnderMaintenance();
+
+        room.vacate(false);
+
+        assertEquals(RoomStatus.MAINTENANCE, room.getStatus());
     }
 }

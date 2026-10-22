@@ -168,6 +168,7 @@ public class InMemoryStatisticsQueryAdapter implements StatisticsQueryPort {
     @Override
     public List<ApprovalCount> propertyApprovalCounts() {
         return properties.findAll().stream()
+            .filter(p -> !p.isArchived())
             .collect(Collectors.groupingBy(
                 p -> p.approvalStatus() != null ? p.approvalStatus() : PropertyApprovalStatus.VERIFIED,
                 Collectors.counting()))
@@ -179,7 +180,7 @@ public class InMemoryStatisticsQueryAdapter implements StatisticsQueryPort {
     @Override
     public List<PendingPropertyRow> pendingProperties() {
         return properties.findAll().stream()
-            .filter(p -> p.approvalStatus() == PropertyApprovalStatus.PENDING)
+            .filter(p -> p.approvalStatus() == PropertyApprovalStatus.PENDING && !p.isArchived())
             .sorted(Comparator.comparing(Property::createdAt, Comparator.nullsLast(Comparator.naturalOrder())))
             .map(p -> {
                 Optional<User> owner = p.ownerId() == null ? Optional.empty() : users.findById(p.ownerId());

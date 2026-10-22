@@ -22,11 +22,12 @@
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="form-group">
                 <label class="form-label">Chọn phòng *</label>
-                <select name="roomId" class="form-control" required>
+                <select name="roomId" id="roomSelect" class="form-control" required>
                     <option value="">-- Chọn phòng --</option>
                     <option th:each="r : ${rooms}"
                             th:value="${r.getId()}"
-                            th:text="${'Phòng ' + r.getRoomNumber() + ' (' + uiText.roomStatus(r.getStatus()) + ')'}"
+                            th:attr="data-status=${r.getStatus().name()}"
+                            th:text="${'Phòng ' + r.getRoomNumber() + (propertyNames.size() > 1 ? ' — ' + propertyNames.get(r.getPropertyId()) : '') + ' (' + uiText.roomStatus(r.getStatus()) + ')'}"
                             th:selected="${selectedRoomId != null and selectedRoomId.equals(r.getId())}">
                     </option>
                 </select>
@@ -67,11 +68,15 @@
                         </option>
                     </select>
                 </div>
-                <div class="form-group" style="flex: 1; display: flex; align-items: center; padding-top: 20px;">
+                <!-- Chỉ người quản lý đổi trạng thái phòng, và chỉ với phòng đang trống -->
+                <div th:if="${currentUser.role().name() != 'TENANT'}" class="form-group" style="flex: 1; display: flex; flex-direction: column; justify-content: center; padding-top: 20px;">
                     <label style="font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                        <input type="checkbox" name="setRoomMaintenance" value="true" checked>
+                        <input type="checkbox" id="setRoomMaintenance" name="setRoomMaintenance" value="true">
                         Chuyển trạng thái phòng sang BẢO TRÌ
                     </label>
+                    <small id="roomMaintenanceHint" style="display: none; color: var(--text-secondary); font-size: 11px;">
+                        Phòng đang có người ở hoặc đã đặt: giữ nguyên trạng thái phòng, phiếu vẫn được tạo.
+                    </small>
                 </div>
             </div>
 
@@ -122,6 +127,26 @@
             }
             select.addEventListener('change', render);
             render();
+
+            // Phòng trống mới chuyển được sang bảo trì; phòng đang ở/đã đặt thì khóa ô này
+            var roomSelect = document.getElementById('roomSelect');
+            var maintenanceBox = document.getElementById('setRoomMaintenance');
+            var maintenanceHint = document.getElementById('roomMaintenanceHint');
+            function syncMaintenanceBox() {
+                if (!maintenanceBox) {
+                    return;
+                }
+                var option = roomSelect.options[roomSelect.selectedIndex];
+                var status = option ? option.getAttribute('data-status') : null;
+                var locked = status === 'OCCUPIED' || status === 'RESERVED';
+                maintenanceBox.disabled = locked;
+                if (locked) {
+                    maintenanceBox.checked = false;
+                }
+                maintenanceHint.style.display = locked ? 'block' : 'none';
+            }
+            roomSelect.addEventListener('change', syncMaintenanceBox);
+            syncMaintenanceBox();
         })();
     </script>
 </main>

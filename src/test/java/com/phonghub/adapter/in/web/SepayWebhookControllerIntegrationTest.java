@@ -1,13 +1,16 @@
 package com.phonghub.adapter.in.web;
 
-import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPaymentRepository;
+import com.phonghub.domain.model.PaymentStatus;
+import com.phonghub.domain.model.PaymentTransaction;
+import java.math.BigDecimal;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,9 +25,6 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class SepayWebhookControllerIntegrationTest {
-
-    private static final String ADMIN =
-        com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter.ADMIN_ID.toString();
 
     @Autowired
     private MockMvc mockMvc;
@@ -65,13 +65,12 @@ class SepayWebhookControllerIntegrationTest {
             .andExpect(jsonPath("$.message", is("Xử lý giao dịch SePay thành công")))
             .andExpect(jsonPath("$.paymentId").isNotEmpty());
 
-        mockMvc.perform(get("/api/v1/payments/transactions").header("X-User-Id", ADMIN))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$", hasSize(1)))
-            .andExpect(jsonPath("$[0].sepayId", is(99001)))
-            .andExpect(jsonPath("$[0].gateway", is("Vietcombank")))
-            .andExpect(jsonPath("$[0].transferAmount", is(2000000)))
-            .andExpect(jsonPath("$[0].status", is("SUCCESS")));
+        List<PaymentTransaction> stored = paymentRepository.findAll();
+        assertEquals(1, stored.size());
+        assertEquals(99001L, stored.getFirst().sepayId());
+        assertEquals("Vietcombank", stored.getFirst().gateway());
+        assertEquals(0, new BigDecimal("2000000").compareTo(stored.getFirst().transferAmount()));
+        assertEquals(PaymentStatus.SUCCESS, stored.getFirst().status());
     }
 
     @Test
@@ -108,8 +107,6 @@ class SepayWebhookControllerIntegrationTest {
             .andExpect(jsonPath("$.message", is("Giao dịch đã được ghi nhận trước đó")));
 
         // Exactly 1 record in repository
-        mockMvc.perform(get("/api/v1/payments/transactions").header("X-User-Id", ADMIN))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$", hasSize(1)));
+        assertEquals(1, paymentRepository.findAll().size());
     }
 }

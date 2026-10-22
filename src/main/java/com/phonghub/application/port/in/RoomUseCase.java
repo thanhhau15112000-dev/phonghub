@@ -21,6 +21,15 @@ public interface RoomUseCase {
     Room getRoom(UUID roomId);
     Room changeRoomStatus(UUID roomId, RoomStatus targetStatus);
 
+    /**
+     * Ngừng sử dụng (xóa mềm) phòng (#89), chỉ chủ nhà trọ hoặc admin. Phòng phải trống hoặc đang bảo trì; còn hợp đồng
+     * chưa kết thúc, hóa đơn chưa thu hay phiếu bảo trì chưa xong thì từ chối (409).
+     */
+    Room archiveRoom(UUID roomId);
+
+    /** Dùng lại phòng đã ngừng sử dụng (chủ nhà trọ hoặc admin). */
+    Room restoreRoom(UUID roomId);
+
     record CreateRoomCommand(
         UUID propertyId,
         String roomNumber,
@@ -34,16 +43,16 @@ public interface RoomUseCase {
                 throw new IllegalArgumentException("Property id cannot be null");
             }
             if (roomNumber == null || roomNumber.isBlank()) {
-                throw new IllegalArgumentException("Room number cannot be blank");
+                throw new IllegalArgumentException("Số phòng không được để trống.");
             }
             if (basePrice == null || basePrice.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Base price cannot be negative");
+                throw new IllegalArgumentException("Giá thuê không được âm.");
             }
             if (maxOccupants <= 0) {
-                throw new IllegalArgumentException("Max occupants must be positive");
+                throw new IllegalArgumentException("Số người tối đa phải lớn hơn 0.");
             }
             if (areaSqm != null && areaSqm.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Area cannot be negative");
+                throw new IllegalArgumentException("Diện tích không được âm.");
             }
         }
     }
@@ -73,16 +82,16 @@ public interface RoomUseCase {
                 throw new IllegalArgumentException("Room id cannot be null");
             }
             if (roomNumber == null || roomNumber.isBlank()) {
-                throw new IllegalArgumentException("Room number cannot be blank");
+                throw new IllegalArgumentException("Số phòng không được để trống.");
             }
             if (basePrice == null || basePrice.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Base price cannot be negative");
+                throw new IllegalArgumentException("Giá thuê không được âm.");
             }
             if (maxOccupants <= 0) {
-                throw new IllegalArgumentException("Max occupants must be positive");
+                throw new IllegalArgumentException("Số người tối đa phải lớn hơn 0.");
             }
             if (areaSqm != null && areaSqm.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Area cannot be negative");
+                throw new IllegalArgumentException("Diện tích không được âm.");
             }
         }
     }

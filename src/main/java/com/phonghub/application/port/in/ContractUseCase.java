@@ -12,12 +12,67 @@ public interface ContractUseCase {
     Contract createContract(CreateContractCommand command);
     Contract activateContract(UUID contractId);
     Contract terminateContract(UUID contractId, boolean requiresMaintenance);
+
+    /**
+     * Chấm dứt hợp đồng ngay, không qua biên bản check-out (người thuê bỏ đi, vi phạm...): chỉ chủ nhà trọ hoặc quản trị
+     * viên, bắt buộc có lý do (ghi vào nhật ký). Trả phòng thông thường dùng quy trình check-out.
+     */
+    Contract terminateEarly(UUID contractId, boolean requiresMaintenance, String reason);
+
+    /**
+     * Gia hạn hợp đồng người thuê còn ở: dời ngày kết thúc, có thể đổi tiền thuê cho các kỳ phát hành sau. Hợp đồng đã
+     * hết hạn chưa trả phòng trở lại hiệu lực. {@code expectedVersion} lệch thì 409.
+     */
+    Contract renewContract(RenewContractCommand command);
+
+    record RenewContractCommand(UUID contractId, LocalDate newEndDate, BigDecimal newRentAmount, Long expectedVersion) {
+        public RenewContractCommand {
+            if (contractId == null) {
+                throw new IllegalArgumentException("Contract id is required");
+            }
+        }
+    }
+
+    /**
+     * Sửa điều khoản hợp đồng nháp (#89): tiền cọc, tiền thuê, ngày bắt đầu/kết thúc, ngày thanh toán. Hợp đồng không còn
+     * nháp thì 409; {@code expectedVersion} lệch (người khác vừa sửa) cũng 409.
+     */
+    Contract updateDraftContract(UpdateDraftContractCommand command);
+
+    /** Hủy hợp đồng nháp (#89): chuyển CANCELLED, không xóa cứng. Hợp đồng không còn nháp thì 409. */
+    Contract cancelDraftContract(UUID contractId);
+
+    record UpdateDraftContractCommand(
+        UUID contractId,
+        java.math.BigDecimal depositAmount,
+        java.math.BigDecimal rentAmount,
+        java.time.LocalDate startDate,
+        java.time.LocalDate endDate,
+        int paymentDay,
+        Long expectedVersion
+    ) {
+        public UpdateDraftContractCommand {
+            if (contractId == null) {
+                throw new IllegalArgumentException("Contract id is required");
+            }
+        }
+    }
     Contract getContract(UUID contractId);
     List<Contract> listContractsForProperty(UUID propertyId);
     Optional<Contract> getActiveContractForTenant(UUID tenantUserId);
     List<Contract> listContractsForTenant(UUID tenantUserId);
-    ContractOccupant addOccupant(AddOccupantCommand command);
+    AddOccupantResult addOccupant(AddOccupantCommand command);
     ContractOccupant checkOutOccupant(CheckOutOccupantCommand command);
+
+    /**
+     * Người ở cùng vừa thêm. Khi có tạo tài khoản mới, kèm tên đăng nhập và mật khẩu tạm (chỉ trả về một lần, người dùng
+     * phải đổi ở lần đăng nhập đầu); liên kết với tài khoản người thuê có sẵn thì chỉ có tên đăng nhập.
+     */
+    record AddOccupantResult(ContractOccupant occupant, String accountUsername, String temporaryPassword) {
+        public static AddOccupantResult withoutAccount(ContractOccupant occupant) {
+            return new AddOccupantResult(occupant, null, null);
+        }
+    }
 
     record CheckOutOccupantCommand(
         UUID contractId,
@@ -88,28 +143,28 @@ public interface ContractUseCase {
                 throw new IllegalArgumentException("Room id cannot be null");
             }
             if (primaryTenantFullName == null || primaryTenantFullName.isBlank()) {
-                throw new IllegalArgumentException("Primary tenant full name cannot be blank");
+                throw new IllegalArgumentException("Họ tên người thuê chính không được để trống.");
             }
             if (primaryTenantIdCard == null || primaryTenantIdCard.isBlank()) {
-                throw new IllegalArgumentException("Primary tenant ID card cannot be blank");
+                throw new IllegalArgumentException("Số CCCD người thuê chính không được để trống.");
             }
             if (primaryTenantPhone == null || primaryTenantPhone.isBlank()) {
-                throw new IllegalArgumentException("Primary tenant phone cannot be blank");
+                throw new IllegalArgumentException("Số điện thoại người thuê chính không được để trống.");
             }
             if (depositAmount == null || depositAmount.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Deposit amount cannot be negative");
+                throw new IllegalArgumentException("Tiền cọc không được âm.");
             }
             if (rentAmount == null || rentAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalArgumentException("Rent amount must be greater than zero");
+                throw new IllegalArgumentException("Tiền thuê phải lớn hơn 0.");
             }
             if (startDate == null || endDate == null) {
-                throw new IllegalArgumentException("Dates cannot be null");
+                throw new IllegalArgumentException("Ngày bắt đầu và ngày kết thúc không được để trống.");
             }
             if (!endDate.isAfter(startDate)) {
-                throw new IllegalArgumentException("End date must be after start date");
+                throw new IllegalArgumentException("Ngày kết thúc phải sau ngày bắt đầu.");
             }
             if (paymentDay < 1 || paymentDay > 31) {
-                throw new IllegalArgumentException("Payment day must be between 1 and 31");
+                throw new IllegalArgumentException("Ngày thanh toán phải từ 1 đến 31.");
             }
         }
     }

@@ -63,6 +63,33 @@ public class RoomAssetApiController {
         return ResponseEntity.status(201).body(created);
     }
 
+    /** Thêm nhiều tài sản một lần, có thể áp thêm cho các phòng khác cùng nhà trọ; tất cả hoặc không gì cả. */
+    @PostMapping("/rooms/{roomId}/assets/batch")
+    public ResponseEntity<List<AssetResponse>> createBatch(
+        @PathVariable UUID roomId,
+        @Valid @RequestBody BatchRequest request
+    ) {
+        List<RoomAssetUseCase.BatchItem> items = request.items() == null ? List.of() : request.items().stream()
+            .map(item -> new RoomAssetUseCase.BatchItem(item.name(), item.quantity() == null ? 1 : item.quantity(),
+                item.estimatedValue()))
+            .toList();
+        List<AssetResponse> created = useCase.createBatch(
+                new RoomAssetUseCase.CreateBatchCommand(roomId, request.alsoRoomIds(), items))
+            .stream().map(AssetResponse::from).toList();
+        return ResponseEntity.status(201).body(created);
+    }
+
+    public record BatchRequest(
+        @jakarta.validation.constraints.NotEmpty List<@Valid BatchItemRequest> items,
+        List<UUID> alsoRoomIds
+    ) {}
+
+    public record BatchItemRequest(
+        @NotBlank @Size(max = 150) String name,
+        @Min(1) Integer quantity,
+        @DecimalMin("0") BigDecimal estimatedValue
+    ) {}
+
     @GetMapping("/assets/{assetId}")
     public AssetResponse get(@PathVariable UUID assetId) {
         return AssetResponse.from(useCase.get(assetId));

@@ -100,7 +100,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
             .sorted(Comparator.comparing(TenantDocument::type))
             .map(document -> summarize(document, tenant))
             .toList();
-        audit("TENANT_DOCUMENTS_VIEWED", user, tenantId, Map.of("count", summaries.size()));
+        audit("TENANT_DOCUMENTS_VIEWED", user, propertyId, tenantId, Map.of("count", summaries.size()));
         return summaries;
     }
 
@@ -110,14 +110,14 @@ public class TenantDocumentService implements TenantDocumentUseCase {
         authorizationService.assertCanAccessTenantDocuments(user, propertyId, tenantId);
         Tenant tenant = findTenant(tenantId);
         TenantDocument document = findDocument(tenantId, type);
-        audit("TENANT_DOCUMENT_VIEWED", user, tenantId, Map.of("type", type.name()));
+        audit("TENANT_DOCUMENT_VIEWED", user, propertyId, tenantId, Map.of("type", type.name()));
         return summarize(document, tenant);
     }
 
     @Override
     public DocumentSummary upload(UploadDocumentCommand command) {
         if (command == null || command.type() == null) {
-            throw new IllegalArgumentException("Document type is required");
+            throw new IllegalArgumentException("Cần chọn loại giấy tờ.");
         }
         CurrentUser user = currentUserPort.getCurrentUser();
         authorizationService.assertCanAccessTenantDocuments(user, command.propertyId(), command.tenantId());
@@ -163,7 +163,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
             deleteQuietly(previous.frontImageKey());
             deleteQuietly(previous.backImageKey());
         }
-        audit("TENANT_DOCUMENT_UPLOADED", user, command.tenantId(),
+        audit("TENANT_DOCUMENT_UPLOADED", user, command.propertyId(), command.tenantId(),
             Map.of("type", command.type().name(), "replaced", previous != null));
         return summarize(saved, tenant);
     }
@@ -176,7 +176,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
 
         if (!passwordMatches(user, password)) {
             recordFailure(user.id());
-            audit("TENANT_DOCUMENT_REVEAL_FAILED", user, tenantId, Map.of("type", type.name()));
+            audit("TENANT_DOCUMENT_REVEAL_FAILED", user, propertyId, tenantId, Map.of("type", type.name()));
             throw new DocumentRevealDeniedException();
         }
         failedReveals.remove(user.id());
@@ -191,7 +191,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
             decryptImage(document.frontImageKey(), document.frontContentType()),
             document.hasBackImage() ? decryptImage(document.backImageKey(), document.backContentType()) : null
         );
-        audit("TENANT_DOCUMENT_REVEALED", user, tenantId, Map.of("type", type.name()));
+        audit("TENANT_DOCUMENT_REVEALED", user, propertyId, tenantId, Map.of("type", type.name()));
         return revealed;
     }
 
@@ -204,7 +204,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
         documentRepository.delete(tenantId, type);
         deleteQuietly(document.frontImageKey());
         deleteQuietly(document.backImageKey());
-        audit("TENANT_DOCUMENT_DELETED", user, tenantId, Map.of("type", type.name()));
+        audit("TENANT_DOCUMENT_DELETED", user, propertyId, tenantId, Map.of("type", type.name()));
     }
 
     private void assertNotLocked(UUID tenantId) {
@@ -251,12 +251,12 @@ public class TenantDocumentService implements TenantDocumentUseCase {
     private Prepared prepareImage(DocumentFile file, boolean required) {
         if (file == null || file.content() == null || file.content().length == 0) {
             if (required) {
-                throw new IllegalArgumentException("Front image of the document is required");
+                throw new IllegalArgumentException("Cần ảnh mặt trước giấy tờ.");
             }
             return null;
         }
         if (!FileSanitizer.isImage(file.contentType())) {
-            throw new IllegalArgumentException("Document images must be jpeg, png or webp");
+            throw new IllegalArgumentException("Ảnh giấy tờ phải là JPEG, PNG hoặc WebP.");
         }
         FileSanitizer.SanitizedFile sanitized = FileSanitizer.sanitize(
             file.contentType(), file.content(), maxFileSizeBytes);
@@ -268,7 +268,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
             return null;
         }
         if (command.number() == null || command.number().isBlank()) {
-            throw new IllegalArgumentException("Driving licence number is required");
+            throw new IllegalArgumentException("Cần nhập số giấy phép lái xe.");
         }
         TenantDataProtectionPort.ProtectedValue value = protector.protect(command.number());
         if (documentRepository.existsByTypeAndNumberHmacForOtherTenant(
@@ -314,7 +314,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
 
     private Tenant findTenant(UUID tenantId) {
         return tenantRepository.findById(tenantId)
-            .orElseThrow(() -> new TenantNotFoundException("Tenant not found: " + tenantId));
+            .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy người thuê: " + tenantId));
     }
 
     private TenantDocument findDocument(UUID tenantId, DocumentType type) {
@@ -322,10 +322,12 @@ public class TenantDocumentService implements TenantDocumentUseCase {
             .orElseThrow(() -> new TenantDocumentNotFoundException("Document " + type + " not found for tenant"));
     }
 
-    private void audit(String action, CurrentUser user, UUID tenantId, Map<String, Object> details) {
+    /** Gắn nhà trọ đang thao tác: người thuê có thể thuộc nhiều nhà, không để adapter đoán theo nhà gần nhất. */
+    private void audit(String action, CurrentUser user, UUID propertyId, UUID tenantId, Map<String, Object> details) {
         Map<String, Object> payload = new HashMap<>(details);
         payload.put("tenantId", tenantId.toString());
-        auditPort.recordEvent(AuditPort.AuditEvent.of(action, user.id(), "TENANT_DOCUMENT", tenantId.toString(), payload));
+        auditPort.recordEvent(AuditPort.AuditEvent.of(action, user.id(), "TENANT_DOCUMENT", tenantId.toString(), propertyId,
+            payload));
     }
 
     private record Prepared(String contentType, byte[] content) {}

@@ -4,15 +4,10 @@ import com.phonghub.adapter.in.web.api.dto.SepayWebhookRequest;
 import com.phonghub.adapter.in.web.api.dto.SepayWebhookResponse;
 import com.phonghub.application.port.in.SepayWebhookUseCase;
 import com.phonghub.domain.exception.UnauthorizedWebhookException;
-import com.phonghub.domain.model.PaymentTransaction;
 import jakarta.validation.Valid;
-import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -60,16 +55,5 @@ public class SepayWebhookController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(SepayWebhookResponse.error("Lỗi xử lý webhook: " + ex.getMessage()));
         }
-    }
-
-    @GetMapping("/transactions")
-    public ResponseEntity<List<PaymentTransaction>> listTransactions() {
-        return ResponseEntity.ok(sepayWebhookUseCase.getAllTransactions());
-    }
-
-    @GetMapping("/transactions/{id}")
-    public ResponseEntity<PaymentTransaction> getTransaction(@PathVariable UUID id) {
-        Optional<PaymentTransaction> tx = sepayWebhookUseCase.getTransactionById(id);
-        return tx.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 }

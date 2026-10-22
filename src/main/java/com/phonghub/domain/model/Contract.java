@@ -1,6 +1,7 @@
 package com.phonghub.domain.model;
 
 import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.exception.InvalidContractStateException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -15,11 +16,11 @@ public class Contract {
     private final UUID propertyId;
     private final UUID roomId;
     private final UUID primaryTenantId;
-    private final BigDecimal depositAmount;
-    private final BigDecimal rentAmount;
-    private final LocalDate startDate;
-    private final LocalDate endDate;
-    private final int paymentDay;
+    private BigDecimal depositAmount;
+    private BigDecimal rentAmount;
+    private LocalDate startDate;
+    private LocalDate endDate;
+    private int paymentDay;
     private ContractStatus status;
     private final List<ContractOccupant> occupants;
     private final Instant createdAt;
@@ -54,19 +55,19 @@ public class Contract {
             throw new IllegalArgumentException("Primary tenant id cannot be null");
         }
         if (depositAmount == null || depositAmount.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Deposit amount cannot be negative");
+            throw new IllegalArgumentException("Tiền cọc không được âm.");
         }
         if (rentAmount == null || rentAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Rent amount must be greater than zero");
+            throw new IllegalArgumentException("Tiền thuê phải lớn hơn 0.");
         }
         if (startDate == null || endDate == null) {
-            throw new IllegalArgumentException("Start date and end date cannot be null");
+            throw new IllegalArgumentException("Ngày bắt đầu và ngày kết thúc không được để trống.");
         }
         if (!endDate.isAfter(startDate)) {
-            throw new IllegalArgumentException("End date must be after start date");
+            throw new IllegalArgumentException("Ngày kết thúc phải sau ngày bắt đầu.");
         }
         if (paymentDay < 1 || paymentDay > 31) {
-            throw new IllegalArgumentException("Payment day must be between 1 and 31");
+            throw new IllegalArgumentException("Ngày thanh toán phải từ 1 đến 31.");
         }
 
         this.id = id;
@@ -125,10 +126,10 @@ public class Contract {
         }
         boolean exists = occupants.stream().anyMatch(o -> o.tenantId().equals(tenantId));
         if (exists) {
-            throw new DomainException("Tenant is already an occupant in this contract");
+            throw new DomainException("Người này đã có trong danh sách người ở của hợp đồng.");
         }
         if (isPrimary && occupants.stream().anyMatch(ContractOccupant::isPrimary)) {
-            throw new DomainException("Contract already has a primary occupant");
+            throw new DomainException("Hợp đồng đã có người thuê chính.");
         }
         ContractOccupant occupant = new ContractOccupant(
             UUID.randomUUID(),
@@ -147,9 +148,11 @@ public class Contract {
         if (tenantId == null) {
             throw new IllegalArgumentException("Tenant id cannot be null");
         }
-        if (this.status != ContractStatus.ACTIVE) {
+        // Hợp đồng đã hết hạn nhưng chưa trả phòng (#87) vẫn có người ở nên vẫn ghi nhận được người ở cùng rời đi
+        if (!isResiding()) {
             throw new DomainException(String.format(
-                "Chỉ có thể ghi nhận rời phòng cho hợp đồng đang có hiệu lực (ACTIVE). Trạng thái hiện tại: '%s'.",
+                "Chỉ có thể ghi nhận rời phòng cho hợp đồng còn người ở (đang hiệu lực hoặc đã hết hạn nhưng chưa trả "
+                    + "phòng). Trạng thái hiện tại: '%s'.",
                 this.status
             ));
         }
@@ -201,10 +204,61 @@ public class Contract {
         return updated;
     }
 
+    /**
+     * Sửa điều khoản hợp đồng nháp (#89). Ngày vào ở của người ở trùng ngày bắt đầu cũ được dời theo ngày bắt đầu mới.
+     */
+    public void updateDraftTerms(
+        BigDecimal newDeposit,
+        BigDecimal newRent,
+        LocalDate newStartDate,
+        LocalDate newEndDate,
+        int newPaymentDay
+    ) {
+        if (this.status != ContractStatus.DRAFT) {
+            throw new InvalidContractStateException(String.format(
+                "Chỉ sửa được hợp đồng ở trạng thái nháp. Trạng thái hiện tại: '%s'.", status));
+        }
+        if (newDeposit == null || newDeposit.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Tiền cọc không được âm.");
+        }
+        if (newRent == null || newRent.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Tiền thuê phải lớn hơn 0.");
+        }
+        if (newStartDate == null || newEndDate == null) {
+            throw new IllegalArgumentException("Ngày bắt đầu và ngày kết thúc không được để trống.");
+        }
+        if (!newEndDate.isAfter(newStartDate)) {
+            throw new IllegalArgumentException("Ngày kết thúc phải sau ngày bắt đầu.");
+        }
+        if (newPaymentDay < 1 || newPaymentDay > 31) {
+            throw new IllegalArgumentException("Ngày thanh toán phải từ 1 đến 31.");
+        }
+        LocalDate oldStart = this.startDate;
+        this.occupants.replaceAll(o -> o.checkOutDate() == null && o.checkInDate().equals(oldStart)
+            ? new ContractOccupant(o.id(), o.contractId(), o.tenantId(), o.isPrimary(), newStartDate, null)
+            : o);
+        this.depositAmount = newDeposit;
+        this.rentAmount = newRent;
+        this.startDate = newStartDate;
+        this.endDate = newEndDate;
+        this.paymentDay = newPaymentDay;
+        this.updatedAt = Instant.now();
+    }
+
+    /** Hủy hợp đồng nháp (#89): không xóa cứng, chuyển sang CANCELLED để còn lịch sử. */
+    public void cancelDraft() {
+        if (this.status != ContractStatus.DRAFT) {
+            throw new InvalidContractStateException(String.format(
+                "Chỉ hủy được hợp đồng ở trạng thái nháp. Trạng thái hiện tại: '%s'.", status));
+        }
+        this.status = ContractStatus.CANCELLED;
+        this.updatedAt = Instant.now();
+    }
+
     public void activate() {
         if (this.status != ContractStatus.DRAFT) {
             throw new DomainException(String.format(
-                "Contract %s cannot be activated because it is in status %s (must be DRAFT)",
+                "Hợp đồng %s không kích hoạt được vì đang ở trạng thái %s (chỉ kích hoạt hợp đồng nháp).",
                 id, status
             ));
         }
@@ -216,7 +270,7 @@ public class Contract {
     public void terminate() {
         if (!isResiding()) {
             throw new DomainException(String.format(
-                "Contract %s cannot be terminated because it is in status %s (must be ACTIVE or EXPIRED)",
+                "Hợp đồng %s không kết thúc được vì đang ở trạng thái %s (chỉ kết thúc hợp đồng đang hiệu lực hoặc đã hết hạn).",
                 id, status
             ));
         }
@@ -224,10 +278,43 @@ public class Contract {
         this.updatedAt = Instant.now();
     }
 
+    /**
+     * Gia hạn hợp đồng người thuê còn ở: dời ngày kết thúc, có thể đổi tiền thuê (áp dụng cho các kỳ hóa đơn phát
+     * hành sau). Hợp đồng đã hết hạn mà chưa trả phòng (#87) trở lại hiệu lực.
+     */
+    public void renew(LocalDate newEndDate, BigDecimal newRent, LocalDate today) {
+        if (!isResiding()) {
+            throw new InvalidContractStateException(String.format(
+                "Chỉ gia hạn được hợp đồng đang hiệu lực hoặc đã hết hạn nhưng chưa trả phòng. Trạng thái hiện tại: '%s'.",
+                status));
+        }
+        if (newEndDate == null) {
+            throw new IllegalArgumentException("Cần nhập ngày kết thúc mới.");
+        }
+        if (!newEndDate.isAfter(endDate)) {
+            throw new IllegalArgumentException(String.format(
+                "Ngày kết thúc mới phải sau ngày kết thúc hiện tại (%s).", endDate));
+        }
+        if (today != null && newEndDate.isBefore(today)) {
+            throw new IllegalArgumentException("Ngày kết thúc mới không được trước hôm nay.");
+        }
+        if (newRent != null && newRent.signum() <= 0) {
+            throw new IllegalArgumentException("Tiền thuê phải lớn hơn 0.");
+        }
+        this.endDate = newEndDate;
+        if (newRent != null) {
+            this.rentAmount = newRent;
+        }
+        if (this.status == ContractStatus.EXPIRED) {
+            this.status = ContractStatus.ACTIVE;
+        }
+        this.updatedAt = Instant.now();
+    }
+
     public void expire() {
         if (this.status != ContractStatus.ACTIVE) {
             throw new DomainException(String.format(
-                "Contract %s cannot be expired because it is in status %s (must be ACTIVE)",
+                "Hợp đồng %s không chuyển sang hết hạn được vì đang ở trạng thái %s (chỉ hợp đồng đang hiệu lực).",
                 id, status
             ));
         }

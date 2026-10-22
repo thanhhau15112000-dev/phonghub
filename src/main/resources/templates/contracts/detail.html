@@ -9,7 +9,7 @@
 
     <div class="page-title-row">
         <div>
-            <h1>Hợp đồng <span th:text="${#strings.substring(contract.getId().toString(), 0, 8)}">Mã</span></h1>
+            <h1>Hợp đồng phòng <span th:text="${room.getRoomNumber()}">P101</span></h1>
             <p style="color: var(--text-secondary); font-size: 13px;">
                 Nhà trọ: <strong th:text="${property.name()}">Nhà trọ</strong> | Phòng: <strong th:text="${room.getRoomNumber()}">P101</strong>
             </p>
@@ -39,21 +39,27 @@
                     <button type="submit" class="btn btn-primary">Kích hoạt hợp đồng (chuyển phòng sang đang thuê)</button>
                 </form>
 
-                <!-- Nút chấm dứt khi đang có hiệu lực hoặc đã hết hạn mà chưa trả phòng (#87) -->
-                <form th:if="${contract.isResiding()}" th:action="@{'/contracts/' + ${contract.getId()} + '/terminate'}" method="post" style="display: flex; align-items: center; gap: 8px;">
+                <!-- Hợp đồng nháp sửa / hủy được (#89); hủy giữ lại bản ghi với trạng thái "Đã hủy" -->
+                <button th:if="${contract.getStatus().name() == 'DRAFT'}" type="button" id="editDraftBtn" class="btn btn-secondary"
+                        onclick="document.getElementById('editDraftModal').showModal()">Sửa điều khoản</button>
+                <form th:if="${contract.getStatus().name() == 'DRAFT'}" th:action="@{'/contracts/' + ${contract.getId()} + '/cancel'}" method="post">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <label style="font-size: 12px; display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" name="requiresMaintenance" value="true">
-                        Cần kiểm tra bảo trì
-                    </label>
-                    <button type="submit" class="btn btn-danger">Chấm dứt hợp đồng</button>
+                    <button type="submit" class="btn btn-danger"
+                            onclick="return confirm('Hủy hợp đồng nháp này? Hợp đồng sẽ chuyển sang trạng thái Đã hủy và không kích hoạt được nữa.');">Hủy hợp đồng nháp</button>
                 </form>
+
+                <!-- Hợp đồng còn người ở (đang hiệu lực hoặc hết hạn chưa trả phòng, #87): gia hạn hoặc chấm dứt ngay -->
+                <button th:if="${contract.isResiding()}" type="button" class="btn btn-secondary"
+                        onclick="document.getElementById('renewModal').showModal()">Gia hạn hợp đồng</button>
+                <button th:if="${contract.isResiding() and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                        type="button" class="btn btn-danger"
+                        onclick="document.getElementById('terminateModal').showModal()">Chấm dứt ngay…</button>
             </div>
         </div>
     </div>
 
     <!-- Thông tin hợp đồng -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
         <!-- Bên trái: Điều khoản thuê -->
         <div class="card">
             <h2>Điều khoản thuê</h2>
@@ -65,19 +71,19 @@
                     </tr>
                     <tr>
                         <td style="color: var(--text-secondary);">Ngày bắt đầu:</td>
-                        <td th:text="${contract.getStartDate()}">2026-01-01</td>
+                        <td th:text="${uiText.date(contract.getStartDate())}">2026-01-01</td>
                     </tr>
                     <tr>
                         <td style="color: var(--text-secondary);">Ngày kết thúc:</td>
-                        <td th:text="${contract.getEndDate()}">2027-01-01</td>
+                        <td th:text="${uiText.date(contract.getEndDate())}">2027-01-01</td>
                     </tr>
                     <tr>
                         <td style="color: var(--text-secondary);">Tiền thuê hàng tháng:</td>
-                        <td th:text="${#numbers.formatDecimal(contract.getRentAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                        <td th:text="${#numbers.formatDecimal(contract.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     </tr>
                     <tr>
                         <td style="color: var(--text-secondary);">Tiền đặt cọc:</td>
-                        <td th:text="${#numbers.formatDecimal(contract.getDepositAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                        <td th:text="${#numbers.formatDecimal(contract.getDepositAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     </tr>
                     <tr>
                         <td style="color: var(--text-secondary);">Ngày thanh toán hàng tháng:</td>
@@ -176,10 +182,10 @@
                         </td>
                         <td th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).maskedIdentityCardNumber() : '—'}">CCCD</td>
                         <td th:text="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId()) ? occupantTenants.get(occ.tenantId()).phone() : '—'}">SĐT</td>
-                        <td th:text="${occ.checkInDate()}">2026-01-01</td>
+                        <td th:text="${uiText.date(occ.checkInDate())}">2026-01-01</td>
                         <td>
                             <span th:if="${occ.checkOutDate() == null}" class="badge badge-ACTIVE" style="font-size: 11px; padding: 2px 6px;">Đang ở</span>
-                            <span th:if="${occ.checkOutDate() != null}" class="badge badge-TERMINATED" style="font-size: 11px; padding: 2px 6px;" th:text="'Đã rời ' + ${occ.checkOutDate()}">Đã rời</span>
+                            <span th:if="${occ.checkOutDate() != null}" class="badge badge-TERMINATED" style="font-size: 11px; padding: 2px 6px;" th:text="${'Đã rời ' + uiText.date(occ.checkOutDate())}">Đã rời</span>
                         </td>
                         <td th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" style="display: flex; gap: 4px; align-items: center;">
                             <a th:if="${occupantTenants != null and occupantTenants.containsKey(occ.tenantId())}"
@@ -208,8 +214,8 @@
         </div>
     </div>
 
-    <!-- Thanh toán tiền thuê -->
-    <div class="card" id="payments" style="margin-top: 20px;">
+    <!-- Thanh toán tiền thuê (quản trị viên không xem số liệu tiền, #163) -->
+    <div th:if="${invoices != null}" class="card" id="payments" style="margin-top: 20px;">
         <div class="flex-between" style="margin-bottom: 12px;">
             <h2 style="margin: 0;">Thanh toán tiền thuê</h2>
             <form th:if="${canIssueInvoice}" th:action="@{'/contracts/' + ${contract.getId()} + '/invoices'}" method="post" style="display: flex; align-items: center; gap: 8px;">
@@ -232,12 +238,12 @@
                         </tr>
                         <tr>
                             <td style="color: var(--text-secondary);">Số tiền cần chuyển:</td>
-                            <td style="font-weight: 600;" th:text="${#numbers.formatDecimal(payableInvoice.remainingAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
+                            <td style="font-weight: 600;" th:text="${#numbers.formatDecimal(payableInvoice.remainingAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                         </tr>
                         <tr>
                             <td style="color: var(--text-secondary);">Hạn thanh toán:</td>
                             <td>
-                                <span th:text="${payableInvoice.getDueDate()}">2026-10-05</span>
+                                <span th:text="${uiText.date(payableInvoice.getDueDate())}">2026-10-05</span>
                                 <span th:class="'badge badge-' + ${uiText.invoiceBadge(payableInvoice, today)}" th:text="${uiText.invoiceState(payableInvoice, today)}">Đến hạn</span>
                             </td>
                         </tr>
@@ -290,19 +296,30 @@
                         <a th:if="${inv.isConsolidated()}" th:href="@{'/invoices/' + ${inv.getConsolidatedIntoInvoiceId()} + '/pay'}" style="color: var(--accent); font-size: 12px;">Xem hóa đơn tháng</a>
                         <ul th:if="${#lists.size(inv.getItems()) > 1}" style="margin: 4px 0 0; padding-left: 16px; font-size: 12px; color: var(--text-secondary);">
                             <li th:each="item : ${inv.getItems()}"
-                                th:text="${item.name() + ': ' + #numbers.formatDecimal(item.totalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">Mục</li>
+                                th:text="${item.name() + ': ' + #numbers.formatDecimal(item.totalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">Mục</li>
                         </ul>
                         <div th:each="warning : ${invoiceWarnings.get(inv.getId())}"
                              style="margin-top: 4px; font-size: 12px; color: var(--warning, #b45309);" th:text="'⚠ ' + ${warning}">Cảnh báo</div>
                     </td>
-                    <td th:text="${#numbers.formatDecimal(inv.getTotalAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">3,500,000 đ</td>
-                    <td th:text="${#numbers.formatDecimal(inv.getPaidAmount(), 0, 'COMMA', 0, 'POINT') + ' đ'}">0 đ</td>
-                    <td th:text="${inv.getDueDate()}">2026-10-05</td>
+                    <td th:text="${#numbers.formatDecimal(inv.getTotalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
+                    <td th:text="${#numbers.formatDecimal(inv.getPaidAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</td>
+                    <td th:text="${uiText.date(inv.getDueDate())}">2026-10-05</td>
                     <td style="font-family: monospace;" th:text="${inv.getPaymentCode() != null ? inv.getPaymentCode() : '—'}">PHXXXXXXXX</td>
                     <td><span th:class="'badge badge-' + ${uiText.invoiceBadge(inv, today)}" th:text="${uiText.invoiceState(inv, today)}">Đến hạn</span></td>
                     <td>
                         <a th:if="${inv.isPayable()}" th:href="@{'/invoices/' + ${inv.getId()} + '/pay'}" class="btn btn-sm btn-primary">Thanh toán</a>
                         <a th:if="${inv.getPaidAmount().signum() > 0}" th:href="@{'/invoices/' + ${inv.getId()} + '/receipt'}" class="btn btn-sm">Biên lai</a>
+                        <!-- Hủy hóa đơn tiền thuê chưa có tiền (#89); hủy xong có thể phát hành lại kỳ đó -->
+                        <details th:if="${canVoidInvoice and inv.isPayable() and inv.getPaidAmount().signum() == 0 and inv.getType().name() == 'RENT'}"
+                                 class="invoice-void" style="display: inline-block; margin-left: 4px;">
+                            <summary class="btn btn-sm btn-danger" style="list-style: none; cursor: pointer;">Hủy</summary>
+                            <form th:action="@{'/contracts/' + ${contract.getId()} + '/invoices/' + ${inv.getId()} + '/void'}" method="post"
+                                  style="display: flex; gap: 6px; margin-top: 6px;">
+                                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                <input type="text" name="reason" class="form-control" required maxlength="500" placeholder="Lý do hủy" style="min-width: 160px;">
+                                <button type="submit" class="btn btn-sm btn-danger">Xác nhận hủy</button>
+                            </form>
+                        </details>
                     </td>
                 </tr>
             </tbody>
@@ -340,7 +357,7 @@
                 <input type="text" id="addOccupantFullName" name="fullName" class="form-control" required placeholder="VD: Nguyễn Văn B">
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="addOccupantIdCard">Số CCCD / Định danh <span style="color: var(--danger-color, #dc2626);">*</span></label>
                     <input type="text" id="addOccupantIdCard" name="identityCardNumber" class="form-control" required placeholder="12 chữ số">
@@ -351,14 +368,14 @@
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="addOccupantEmail">Email</label>
                     <input type="email" id="addOccupantEmail" name="email" class="form-control" placeholder="tenant@gmail.com">
                 </div>
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="addOccupantCheckInDate">Ngày nhận phòng</label>
-                    <input type="date" id="addOccupantCheckInDate" name="checkInDate" th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}" class="form-control">
+                    <input type="date" id="addOccupantCheckInDate" name="checkInDate" th:value="${#temporals.format(#temporals.createNow(), 'dd/MM/yyyy')}" class="form-control">
                 </div>
             </div>
 
@@ -413,7 +430,7 @@
                 <input type="text" id="editTenantFullName" name="fullName" class="form-control" required placeholder="VD: Nguyễn Văn A">
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="editTenantIdCard">Số CCCD / Định danh <span style="color: var(--danger-color, #dc2626);">*</span></label>
                     <input type="text" id="editTenantIdCard" name="identityCardNumber" class="form-control" required placeholder="12 chữ số">
@@ -472,7 +489,7 @@
 
             <div class="form-group" style="margin-bottom: 16px;">
                 <label class="form-label" for="checkOutDateInput">Ngày rời phòng <span style="color: var(--danger-color, #dc2626);">*</span></label>
-                <input type="date" id="checkOutDateInput" name="checkOutDate" class="form-control" required th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}">
+                <input type="date" id="checkOutDateInput" name="checkOutDate" class="form-control" required th:value="${#temporals.format(#temporals.createNow(), 'dd/MM/yyyy')}">
             </div>
 
             <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-color);">
@@ -511,6 +528,111 @@
             document.getElementById('checkOutModal').showModal();
         }
     </script>
+
+    <!-- Dialog sửa điều khoản hợp đồng nháp (#89) -->
+    <dialog th:if="${contract.getStatus().name() == 'DRAFT' and currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            id="editDraftModal" class="modal-dialog" style="max-width: 520px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Sửa điều khoản hợp đồng nháp</h3>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('editDraftModal').close()">✕</button>
+        </div>
+        <form th:action="@{'/contracts/' + ${contract.getId()} + '/edit'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <input type="hidden" name="version" th:value="${contract.getVersion()}">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="draftRent">Tiền thuê / tháng (VNĐ) *</label>
+                    <input type="number" id="draftRent" name="rentAmount" class="form-control" min="1" step="1000" required th:value="${contract.getRentAmount()}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="draftDeposit">Tiền cọc (VNĐ) *</label>
+                    <input type="number" id="draftDeposit" name="depositAmount" class="form-control" min="0" step="1000" required th:value="${contract.getDepositAmount()}">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="draftStart">Ngày bắt đầu *</label>
+                    <input type="date" id="draftStart" name="startDate" class="form-control" required th:value="${contract.getStartDate()}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="draftEnd">Ngày kết thúc *</label>
+                    <input type="date" id="draftEnd" name="endDate" class="form-control" required th:value="${contract.getEndDate()}">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="draftPaymentDay">Ngày thanh toán hằng tháng (1–31) *</label>
+                <input type="number" id="draftPaymentDay" name="paymentDay" class="form-control" min="1" max="31" required th:value="${contract.getPaymentDay()}">
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('editDraftModal').close()">Đóng</button>
+                <button type="submit" class="btn btn-sm btn-primary">Lưu thay đổi</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Dialog gia hạn hợp đồng người thuê còn ở (đang hiệu lực hoặc đã hết hạn chưa trả phòng) -->
+    <dialog th:if="${contract.isResiding() and currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            id="renewModal" class="modal-dialog" style="max-width: 480px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Gia hạn hợp đồng</h3>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('renewModal').close()">✕</button>
+        </div>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-top: 0;">
+            Ngày kết thúc hiện tại: <strong th:text="${uiText.date(contract.getEndDate())}">01/01/2027</strong>.
+            <span th:if="${contract.getStatus().name() == 'EXPIRED'}">Hợp đồng đã hết hạn sẽ trở lại hiệu lực.</span>
+        </p>
+        <form th:action="@{'/contracts/' + ${contract.getId()} + '/renew'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <input type="hidden" name="version" th:value="${contract.getVersion()}">
+            <div class="form-group">
+                <label class="form-label" for="renewEnd">Ngày kết thúc mới *</label>
+                <input type="date" id="renewEnd" name="endDate" class="form-control" required
+                       th:min="${contract.getEndDate().plusDays(1)}" th:value="${contract.getEndDate().plusYears(1)}">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="renewRent">Tiền thuê mới / tháng (VNĐ)</label>
+                <input type="number" id="renewRent" name="rentAmount" class="form-control" min="1" step="1000"
+                       th:placeholder="${'Giữ nguyên ' + #numbers.formatDecimal(contract.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">
+                <small style="color: var(--text-secondary); font-size: 11px;">Bỏ trống để giữ nguyên. Tiền thuê mới áp dụng cho các kỳ hóa đơn phát hành sau khi gia hạn.</small>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('renewModal').close()">Đóng</button>
+                <button type="submit" class="btn btn-sm btn-primary">Gia hạn</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Dialog chấm dứt hợp đồng ngay (không qua biên bản check-out): chỉ chủ trọ/quản trị viên, bắt buộc lý do -->
+    <dialog th:if="${contract.isResiding() and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            id="terminateModal" class="modal-dialog" style="max-width: 520px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Chấm dứt hợp đồng ngay</h3>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('terminateModal').close()">✕</button>
+        </div>
+        <div style="font-size: 13px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 12px;">
+            Chấm dứt ngay <strong>không lập biên bản check-out</strong>: không đối chiếu tài sản, không có xác nhận của người thuê
+            và không tính khấu trừ cọc. Trả phòng thông thường hãy dùng nút <strong>Check-out</strong>.
+            <div th:if="${invoices != null and !#lists.isEmpty(invoices.?[payable])}" style="margin-top: 8px; color: var(--danger, #b91c1c);">
+                Hợp đồng còn <strong th:text="${#lists.size(invoices.?[payable])}">1</strong> hóa đơn chưa thu xong; các hóa đơn này vẫn giữ để thu tiếp sau khi chấm dứt.
+            </div>
+        </div>
+        <form th:action="@{'/contracts/' + ${contract.getId()} + '/terminate'}" method="post">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group">
+                <label class="form-label" for="terminateReason">Lý do chấm dứt *</label>
+                <textarea id="terminateReason" name="reason" class="form-control" rows="3" maxlength="500" required
+                          placeholder="Ví dụ: Người thuê bỏ đi không báo, vi phạm nội quy..."></textarea>
+            </div>
+            <label style="font-size: 13px; display: flex; align-items: center; gap: 6px; margin-bottom: 12px;">
+                <input type="checkbox" name="requiresMaintenance" value="true">
+                Phòng cần kiểm tra bảo trì sau khi trả
+            </label>
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('terminateModal').close()">Đóng</button>
+                <button type="submit" class="btn btn-sm btn-danger">Chấm dứt hợp đồng</button>
+            </div>
+        </form>
+    </dialog>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>

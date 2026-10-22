@@ -113,6 +113,7 @@ public class MaintenanceUiController {
         List<Property> accessibleProperties = propertyUseCase.listAccessibleProperties();
         java.util.Map<UUID, String> propertyNames = new java.util.HashMap<>();
         accessibleProperties.forEach(p -> propertyNames.put(p.id(), p.name()));
+        model.addAttribute("roomNumbers", roomNumbers(visible));
 
         model.addAttribute("currentUser", currentUser);
         model.addAttribute("tickets", visible);
@@ -130,6 +131,19 @@ public class MaintenanceUiController {
         return "maintenance/list";
     }
 
+    /** Số phòng của các phiếu đang hiển thị; phòng người xem không được xem thì để trống. */
+    private java.util.Map<UUID, String> roomNumbers(List<MaintenanceTicket> tickets) {
+        java.util.Map<UUID, String> numbers = new java.util.HashMap<>();
+        for (UUID roomId : tickets.stream().map(MaintenanceTicket::getRoomId).distinct().toList()) {
+            try {
+                numbers.put(roomId, roomUseCase.getRoom(roomId).getRoomNumber());
+            } catch (DomainException ex) {
+                // không có quyền xem phòng này: hiển thị "—"
+            }
+        }
+        return numbers;
+    }
+
     @GetMapping("/new")
     public String newTicketForm(
         @RequestParam(required = false) UUID roomId,
@@ -138,12 +152,19 @@ public class MaintenanceUiController {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         List<Property> properties = propertyUseCase.listAccessibleProperties();
         List<Room> rooms = new ArrayList<>();
+        java.util.Map<UUID, String> propertyNames = new java.util.LinkedHashMap<>();
         for (Property p : properties) {
-            rooms.addAll(roomUseCase.listRoomsForProperty(p.id()));
+            List<Room> propertyRooms = roomUseCase.listRoomsForProperty(p.id());
+            rooms.addAll(propertyRooms);
+            if (!propertyRooms.isEmpty()) {
+                propertyNames.put(p.id(), p.name());
+            }
         }
 
         model.addAttribute("currentUser", currentUser);
         model.addAttribute("rooms", rooms);
+        // Có phòng ở nhiều nhà trọ thì ghi kèm tên nhà để không nhầm các phòng trùng số
+        model.addAttribute("propertyNames", propertyNames);
         model.addAttribute("selectedRoomId", roomId);
         model.addAttribute("priorities", MaintenancePriority.values());
         model.addAttribute("causes", MaintenanceCause.values());
@@ -215,6 +236,7 @@ public class MaintenanceUiController {
             model.addAttribute("actorNames", actorNames);
             model.addAttribute("now", java.time.Instant.now());
             model.addAttribute("liableParties", LiableParty.values());
+            model.addAttribute("priorities", MaintenancePriority.values());
             model.addAttribute("today", LocalDate.now());
             model.addAttribute("feeInvoice", invoiceUseCase.findFeeInvoiceForTicket(id).orElse(null));
             model.addAttribute("quote", maintenanceUseCase.visibleQuote(id));
@@ -312,6 +334,41 @@ public class MaintenanceUiController {
         return "redirect:/maintenance/" + id;
     }
 
+    @PostMapping("/{id}/edit")
+    public String updateTicket(
+        @PathVariable UUID id,
+        @RequestParam String title,
+        @RequestParam String description,
+        @RequestParam(required = false) com.phonghub.domain.model.MaintenancePriority priority,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            maintenanceUseCase.updateTicket(new MaintenanceUseCase.UpdateMaintenanceTicketCommand(
+                id, title, description, priority));
+            redirectAttributes.addFlashAttribute("successMessage", "Đã cập nhật nội dung phiếu bảo trì.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
+                ? "Bạn không có quyền sửa phiếu bảo trì này." : ex.getMessage());
+        }
+        return "redirect:/maintenance/" + id;
+    }
+
+    @PostMapping("/{id}/cancel")
+    public String cancelTicket(
+        @PathVariable UUID id,
+        @RequestParam(required = false) String reason,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            maintenanceUseCase.cancelTicket(id, reason);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã hủy phiếu bảo trì.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
+                ? "Bạn không có quyền hủy phiếu bảo trì này." : ex.getMessage());
+        }
+        return "redirect:/maintenance/" + id;
+    }
+
     @PostMapping("/{id}/quote")
     public String quoteTicket(
         @PathVariable UUID id,
@@ -385,10 +442,15 @@ public class MaintenanceUiController {
             String message = resolved.getStatus() == com.phonghub.domain.model.MaintenanceStatus.AWAITING_PAYMENT
                 ? "Đã ghi nhận chi phí sửa chữa. Phiếu chuyển sang chờ người thuê thanh toán."
                 : "Đã hoàn tất xử lý yêu cầu.";
-            redirectAttributes.addFlashAttribute(
-                "successMessage",
-                message + (releaseRoomToAvailable ? " Phòng đã được chuyển về trạng thái trống." : "")
-            );
+            String roomNote = "";
+            if (releaseRoomToAvailable) {
+                // Phòng còn người ở theo hợp đồng không bị đánh dấu trống: báo đúng trạng thái thật
+                boolean released = roomUseCase.getRoom(resolved.getRoomId()).getStatus()
+                    == com.phonghub.domain.model.RoomStatus.AVAILABLE;
+                roomNote = released ? " Phòng đã được chuyển về trạng thái trống."
+                    : " Phòng vẫn có người ở theo hợp đồng nên giữ nguyên trạng thái.";
+            }
+            redirectAttributes.addFlashAttribute("successMessage", message + roomNote);
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
                 ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."

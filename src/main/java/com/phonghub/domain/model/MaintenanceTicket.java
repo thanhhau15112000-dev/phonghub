@@ -16,8 +16,8 @@ public class MaintenanceTicket {
     private final UUID propertyId;
     private final UUID requestedByTenantId;
     private UUID assignedTechnicianId;
-    private final String title;
-    private final String description;
+    private String title;
+    private String description;
     private MaintenancePriority priority;
     private MaintenanceStatus status;
     private BigDecimal repairCost;
@@ -132,10 +132,10 @@ public class MaintenanceTicket {
             throw new IllegalArgumentException("Property id cannot be null");
         }
         if (title == null || title.isBlank()) {
-            throw new IllegalArgumentException("Title cannot be blank");
+            throw new IllegalArgumentException("Tiêu đề không được để trống.");
         }
         if (description == null || description.isBlank()) {
-            throw new IllegalArgumentException("Description cannot be blank");
+            throw new IllegalArgumentException("Mô tả không được để trống.");
         }
 
         this.id = id;
@@ -251,7 +251,7 @@ public class MaintenanceTicket {
         }
         if (this.status == MaintenanceStatus.RESOLVED || this.status == MaintenanceStatus.REJECTED
             || this.status == MaintenanceStatus.AWAITING_PAYMENT) {
-            throw new MaintenanceTicketException("Cannot assign technician to a ticket that is already " + status);
+            throw new MaintenanceTicketException("Không thể phân công kỹ thuật viên cho phiếu đang ở trạng thái " + status);
         }
         MaintenanceStatus before = this.status;
         this.assignedTechnicianId = technicianId;
@@ -296,7 +296,7 @@ public class MaintenanceTicket {
         }
         if (this.status == MaintenanceStatus.RESOLVED || this.status == MaintenanceStatus.REJECTED
             || this.status == MaintenanceStatus.AWAITING_PAYMENT) {
-            throw new MaintenanceTicketException("Cannot assign technician to a ticket that is already " + status);
+            throw new MaintenanceTicketException("Không thể phân công kỹ thuật viên cho phiếu đang ở trạng thái " + status);
         }
         MaintenanceStatus before = this.status;
         this.assignedTechnicianId = technicianId;
@@ -307,7 +307,7 @@ public class MaintenanceTicket {
 
     public void startWork() {
         if (this.status != MaintenanceStatus.ASSIGNED) {
-            throw new MaintenanceTicketException("Ticket must be ASSIGNED before starting work");
+            throw new MaintenanceTicketException("Phiếu phải được phân công kỹ thuật viên trước khi bắt đầu sửa.");
         }
         this.status = MaintenanceStatus.IN_PROGRESS;
         this.updatedAt = Instant.now();
@@ -316,15 +316,15 @@ public class MaintenanceTicket {
 
     public void resolve(String notes, BigDecimal cost) {
         if (this.status != MaintenanceStatus.ASSIGNED && this.status != MaintenanceStatus.IN_PROGRESS) {
-            throw new MaintenanceTicketException("Ticket cannot be resolved from status " + status + " (must be ASSIGNED or IN_PROGRESS)");
+            throw new MaintenanceTicketException("Chỉ hoàn tất được phiếu đã phân công hoặc đang xử lý; trạng thái hiện tại: " + status);
         }
         if (notes == null || notes.isBlank()) {
-            throw new MaintenanceTicketException("Resolution notes are required to resolve a ticket");
+            throw new MaintenanceTicketException("Cần ghi kết quả xử lý trước khi hoàn tất phiếu.");
         }
         this.resolutionNotes = notes.trim();
         if (cost != null) {
             if (cost.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Repair cost cannot be negative");
+                throw new IllegalArgumentException("Chi phí sửa chữa không được âm.");
             }
             this.repairCost = cost;
         }
@@ -421,7 +421,7 @@ public class MaintenanceTicket {
     /** Hóa đơn phí sửa chữa đã thanh toán đủ. */
     public void markFeePaid() {
         if (this.status != MaintenanceStatus.AWAITING_PAYMENT) {
-            throw new MaintenanceTicketException("Ticket is not awaiting payment: " + status);
+            throw new MaintenanceTicketException("Phiếu không ở trạng thái chờ thanh toán: " + status);
         }
         this.status = MaintenanceStatus.RESOLVED;
         this.updatedAt = Instant.now();
@@ -447,7 +447,51 @@ public class MaintenanceTicket {
     public boolean isWorkFinished() {
         return isResolved()
             || this.status == MaintenanceStatus.AWAITING_PAYMENT
-            || this.status == MaintenanceStatus.REJECTED;
+            || this.status == MaintenanceStatus.REJECTED
+            || this.status == MaintenanceStatus.CANCELLED;
+    }
+
+    /** Phiếu chưa bắt đầu xử lý (vừa báo hoặc mới giao, kỹ thuật viên chưa nhận làm) thì còn sửa/hủy được (#89). */
+    public boolean isEditable() {
+        return this.status == MaintenanceStatus.REPORTED || this.status == MaintenanceStatus.ASSIGNED;
+    }
+
+    /**
+     * Sửa nội dung phiếu chưa xử lý (#89). Đổi mức ưu tiên thì tính lại hạn xử lý từ lúc tạo phiếu theo SLA mới
+     * ({@code sla} null là không đặt hạn) và cho phép cảnh báo quá hạn lại.
+     */
+    public void updateRequest(String newTitle, String newDescription, MaintenancePriority newPriority, Duration sla) {
+        if (!isEditable()) {
+            throw new InvalidMaintenanceStateException(
+                "Chỉ sửa được phiếu chưa xử lý (vừa báo hoặc mới giao), phiếu hiện ở trạng thái " + status);
+        }
+        if (newTitle == null || newTitle.isBlank()) {
+            throw new IllegalArgumentException("Tiêu đề không được để trống");
+        }
+        if (newDescription == null || newDescription.isBlank()) {
+            throw new IllegalArgumentException("Mô tả không được để trống");
+        }
+        MaintenancePriority priorityAfter = newPriority != null ? newPriority : this.priority;
+        if (priorityAfter != this.priority) {
+            this.dueAt = sla == null ? null : createdAt.plus(sla);
+            this.slaNotifiedAt = null;
+        }
+        this.title = newTitle.trim();
+        this.description = newDescription.trim();
+        this.priority = priorityAfter;
+        this.updatedAt = Instant.now();
+    }
+
+    /** Hủy phiếu chưa xử lý (#89): chuyển CANCELLED, ghi mốc vào dòng thời gian, không xóa phiếu. */
+    public void cancel(String reason) {
+        if (!isEditable()) {
+            throw new InvalidMaintenanceStateException(
+                "Chỉ hủy được phiếu chưa xử lý (vừa báo hoặc mới giao), phiếu hiện ở trạng thái " + status);
+        }
+        MaintenanceStatus before = this.status;
+        this.status = MaintenanceStatus.CANCELLED;
+        this.updatedAt = Instant.now();
+        recordEvent(before, reason == null || reason.isBlank() ? "Hủy phiếu" : "Hủy phiếu: " + reason.trim());
     }
 
     public UUID getId() {

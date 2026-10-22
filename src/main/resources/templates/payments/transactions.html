@@ -52,24 +52,30 @@
             </a>
         </div>
 
-        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;"
-           th:text="'Đã nhận ' + ${#numbers.formatDecimal(report.totalReceived(), 0, 'COMMA', 0, 'POINT')} + ' đ · đã cộng vào hóa đơn ' + ${#numbers.formatDecimal(report.totalApplied(), 0, 'COMMA', 0, 'POINT')} + ' đ · tiền dư chờ xử lý ' + ${#numbers.formatDecimal(report.totalExcess(), 0, 'COMMA', 0, 'POINT')} + ' đ'">Tổng</p>
+        <!-- Quản trị viên không xem số liệu tiền (#163): tổng và các cột tiền là null nên được ẩn -->
+        <p th:if="${report.totalReceived() == null}" id="moneyHiddenNote"
+           style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+            Số tiền được ẩn vì quản trị viên không xem số liệu tài chính của nhà trọ.
+        </p>
+        <p th:if="${report.totalReceived() != null}" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;"
+           th:text="'Đã nhận ' + ${#numbers.formatDecimal(report.totalReceived(), 0, 'POINT', 0, 'COMMA')} + ' đ · đã cộng vào hóa đơn ' + ${#numbers.formatDecimal(report.totalApplied(), 0, 'POINT', 0, 'COMMA')} + ' đ · tiền dư chờ xử lý ' + ${#numbers.formatDecimal(report.totalExcess(), 0, 'POINT', 0, 'COMMA')} + ' đ'">Tổng</p>
 
         <div th:if="${#lists.isEmpty(report.rows())}" class="empty-state">
             <p>Không có giao dịch nào khớp bộ lọc.</p>
         </div>
 
-        <table th:if="${!#lists.isEmpty(report.rows())}" class="data-table" id="transactionTable">
+        <table th:if="${!#lists.isEmpty(report.rows())}" th:with="showMoney=${report.totalReceived() != null}"
+               class="data-table" id="transactionTable">
             <thead>
                 <tr>
                     <th>Thời gian</th>
                     <th>Mã tham chiếu</th>
                     <th>Nhà trọ / phòng</th>
-                    <th class="col-number">Số tiền</th>
-                    <th class="col-number">Đã cộng</th>
-                    <th class="col-number">Dư</th>
+                    <th th:if="${showMoney}" class="col-number">Số tiền</th>
+                    <th th:if="${showMoney}" class="col-number">Đã cộng</th>
+                    <th th:if="${showMoney}" class="col-number">Dư</th>
                     <th>Đối soát</th>
-                    <th class="col-actions">Hóa đơn</th>
+                    <th th:if="${showMoney}" class="col-actions">Hóa đơn</th>
                 </tr>
             </thead>
             <tbody>
@@ -80,9 +86,9 @@
                         <span th:text="${r.propertyName() != null ? r.propertyName() : '—'}">Nhà trọ</span>
                         <span th:if="${r.roomNumber() != null}" style="color: var(--text-secondary);" th:text="' · ' + ${r.roomNumber()}">· P101</span>
                     </td>
-                    <td class="col-number" th:text="${#numbers.formatDecimal(r.amount(), 0, 'COMMA', 0, 'POINT')}">0</td>
-                    <td class="col-number" th:text="${#numbers.formatDecimal(r.appliedAmount(), 0, 'COMMA', 0, 'POINT')}">0</td>
-                    <td class="col-number" th:text="${#numbers.formatDecimal(r.excessAmount(), 0, 'COMMA', 0, 'POINT')}">0</td>
+                    <td th:if="${showMoney}" class="col-number" th:text="${#numbers.formatDecimal(r.amount(), 0, 'POINT', 0, 'COMMA')}">0</td>
+                    <td th:if="${showMoney}" class="col-number" th:text="${#numbers.formatDecimal(r.appliedAmount(), 0, 'POINT', 0, 'COMMA')}">0</td>
+                    <td th:if="${showMoney}" class="col-number" th:text="${#numbers.formatDecimal(r.excessAmount(), 0, 'POINT', 0, 'COMMA')}">0</td>
                     <td>
                         <span class="badge" th:text="${statusLabels[r.status().name()]}"
                               th:style="${r.status().name() == 'MATCHED' ? 'background:#dcfce7;color:#166534;'
@@ -91,7 +97,7 @@
                         <div th:if="${r.reviewReason() != null}" style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;"
                              th:text="${reasonLabels[r.reviewReason().name()]}">Lý do</div>
                     </td>
-                    <td class="col-actions">
+                    <td th:if="${showMoney}" class="col-actions">
                         <div class="table-actions" th:if="${r.invoiceId() != null}">
                             <a th:href="@{'/invoices/' + ${r.invoiceId()} + '/pay'}" class="btn btn-sm btn-secondary">Hóa đơn</a>
                             <a th:if="${r.appliedAmount().signum() > 0}" th:href="@{'/invoices/' + ${r.invoiceId()} + '/receipt'}" class="btn btn-sm">Biên lai</a>

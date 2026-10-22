@@ -34,6 +34,30 @@ public class TransactionalContractUseCase implements ContractUseCase {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Contract terminateEarly(UUID contractId, boolean requiresMaintenance, String reason) {
+        return delegate.terminateEarly(contractId, requiresMaintenance, reason);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Contract renewContract(RenewContractCommand command) {
+        return delegate.renewContract(command);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Contract updateDraftContract(UpdateDraftContractCommand command) {
+        return delegate.updateDraftContract(command);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Contract cancelDraftContract(UUID contractId) {
+        return delegate.cancelDraftContract(contractId);
+    }
+
+    @Override
     public Contract getContract(UUID contractId) {
         return delegate.getContract(contractId);
     }
@@ -55,7 +79,7 @@ public class TransactionalContractUseCase implements ContractUseCase {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public com.phonghub.domain.model.ContractOccupant addOccupant(AddOccupantCommand command) {
+    public AddOccupantResult addOccupant(AddOccupantCommand command) {
         return delegate.addOccupant(command);
     }
 

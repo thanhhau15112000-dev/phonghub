@@ -250,12 +250,12 @@ public class MeterSubmissionService implements MeterSubmissionUseCase {
 
     private MeterSubmission find(UUID id) {
         return submissionRepository.findById(id)
-            .orElseThrow(() -> new UtilityNotFoundException("Meter submission not found: " + id));
+            .orElseThrow(() -> new UtilityNotFoundException("Không tìm thấy chỉ số đã gửi: " + id));
     }
 
     private Room findRoom(UUID roomId) {
         return roomRepository.findById(roomId)
-            .orElseThrow(() -> new RoomNotFoundException("Room not found with ID: " + roomId));
+            .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + roomId));
     }
 
     private void deleteQuietly(String key) {
