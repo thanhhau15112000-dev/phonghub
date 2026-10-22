@@ -55,6 +55,7 @@ import com.phonghub.application.service.NotificationInboxService;
 import com.phonghub.application.service.NotificationService;
 import com.phonghub.application.port.in.SepayWebhookUseCase;
 import com.phonghub.application.port.out.PaymentRepositoryPort;
+import com.phonghub.application.port.out.SepayGatewayOrderRepositoryPort;
 import com.phonghub.application.service.SepayPaymentService;
 import com.phonghub.application.port.in.InvoiceUseCase;
 import com.phonghub.application.port.in.FileStorageUseCase;
@@ -570,7 +571,8 @@ public class PhongHubConfiguration {
         UserRepositoryPort userRepository,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
-        SepayProperties sepayProperties
+        SepayProperties sepayProperties,
+        SepayGatewayOrderRepositoryPort gatewayOrderRepository
     ) {
         SepayPaymentService service = new SepayPaymentService(
             paymentRepository,
@@ -582,7 +584,8 @@ public class PhongHubConfiguration {
             userRepository,
             currentUserPort,
             authorizationService,
-            sepayProperties
+            sepayProperties,
+            gatewayOrderRepository
         );
         return new TransactionalSepayWebhookUseCase(service);
     }

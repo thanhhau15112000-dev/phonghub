@@ -192,6 +192,11 @@ public class InMemoryPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemorySepayGatewayOrderRepository sepayGatewayOrderRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemorySepayGatewayOrderRepository();
+    }
+
+    @Bean
     public com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository invoiceRepository() {
         return new com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository();
     }
