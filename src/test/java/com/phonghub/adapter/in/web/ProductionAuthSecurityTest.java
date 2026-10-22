@@ -66,6 +66,10 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
     "spring.datasource.url=jdbc:postgresql://localhost:5432/mock",
     "spring.datasource.username=mock",
     "spring.datasource.password=mock",
+    // DataSource là mock: Hibernate khởi động không đọc metadata hay kiểm tra schema từ CSDL.
+    "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect",
+    "spring.jpa.properties.hibernate.boot.allow_jdbc_metadata_access=false",
+    "spring.jpa.properties.hibernate.hbm2ddl.auto=none",
     "spring.data.redis.url=redis://localhost:6379",
     "phonghub.security.tenant-data.key-id=v1",
     "phonghub.security.tenant-data.encryption-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",

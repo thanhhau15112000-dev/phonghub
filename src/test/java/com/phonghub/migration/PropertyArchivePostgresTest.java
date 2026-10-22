@@ -1,11 +1,11 @@
 package com.phonghub.migration;
 
+import com.phonghub.application.port.out.PropertyRepositoryPort;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresStatisticsQueryAdapter;
 import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.application.port.out.StatisticsQueryPort;
@@ -40,7 +40,8 @@ class PropertyArchivePostgresTest {
         Flyway.configure().dataSource(ds).locations("classpath:db/migration", "classpath:db/seed/docker")
             .load().migrate();
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
-        PostgresPropertyRepository properties = new PostgresPropertyRepository(jdbc);
+        JpaTestContext jpa = JpaTestContext.over(ds);
+        PropertyRepositoryPort properties = jpa.properties();
         PostgresStatisticsQueryAdapter stats = new PostgresStatisticsQueryAdapter(jdbc, new AesGcmTenantDataProtector(
             "test-v1", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="));
 

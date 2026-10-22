@@ -71,6 +71,12 @@ public class TransactionalHandoverUseCase implements HandoverUseCase {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public Handover skip(HandoverType type, UUID contractId) {
+        return delegate.skip(type, contractId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public Handover reject(HandoverType type, UUID contractId, String reason) {
         return delegate.reject(type, contractId, reason);
     }

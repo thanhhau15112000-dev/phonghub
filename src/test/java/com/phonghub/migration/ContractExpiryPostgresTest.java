@@ -1,11 +1,11 @@
 package com.phonghub.migration;
 
+import com.phonghub.application.port.out.ContractRepositoryPort;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.phonghub.adapter.out.persistence.postgres.PostgresContractReminderRepository;
-import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
 import java.sql.Connection;
@@ -46,7 +46,9 @@ class ContractExpiryPostgresTest {
         }
 
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
-        PostgresContractRepository contracts = new PostgresContractRepository(jdbc);
+
+        JpaTestContext jpa = JpaTestContext.over(ds);
+        ContractRepositoryPort contracts = jpa.contracts();
         PostgresContractReminderRepository reminders = new PostgresContractReminderRepository(jdbc);
         Contract contract = contracts.findById(contractId).orElseThrow();
 
