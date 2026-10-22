@@ -675,4 +675,53 @@ class PhongHubUiIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Đã rời " + LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")))));
     }
+
+    @Test
+    @DisplayName("Tenant navigation shows own-room home and hides manager-only links")
+    void testTenantNavigationMatchesRole() throws Exception {
+        mockMvc.perform(get("/dashboard")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.TENANT_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("<title>Phòng thuê của tôi — PhongHub</title>")))
+            .andExpect(content().string(containsString("<a href=\"/dashboard\">Phòng thuê của tôi</a>")))
+            .andExpect(content().string(not(containsString(">Bảng điều khiển<"))))
+            .andExpect(content().string(not(containsString("href=\"/properties\""))))
+            .andExpect(content().string(containsString("href=\"/contracts\"")))
+            .andExpect(content().string(containsString("href=\"/maintenance/new\"")));
+    }
+
+    @Test
+    @DisplayName("Manager roles keep dashboard, properties and report-issue links")
+    void testManagerNavigationMatchesRole() throws Exception {
+        for (UUID userId : List.of(
+            LocalDemoAuthenticationAdapter.ADMIN_ID,
+            LocalDemoAuthenticationAdapter.OWNER_1_ID,
+            LocalDemoAuthenticationAdapter.STAFF_1_ID
+        )) {
+            mockMvc.perform(get("/dashboard").header("X-User-Id", userId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("<a href=\"/dashboard\">Bảng điều khiển</a>")))
+                .andExpect(content().string(containsString("href=\"/properties\"")))
+                .andExpect(content().string(containsString("href=\"/maintenance/new\"")));
+        }
+    }
+
+    @Test
+    @DisplayName("Technician does not see or reach the report-issue form")
+    void testTechnicianCannotReportMaintenance() throws Exception {
+        String techId = LocalDemoAuthenticationAdapter.TECH_1_ID.toString();
+        mockMvc.perform(get("/dashboard").header("X-User-Id", techId))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("/maintenance/new"))));
+        mockMvc.perform(get("/maintenance").header("X-User-Id", techId))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("/maintenance/new"))));
+        mockMvc.perform(get("/properties/" + DataSeeder.PROP_1_ID).header("X-User-Id", techId))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("/maintenance/new"))));
+        mockMvc.perform(get("/maintenance/new").header("X-User-Id", techId))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/maintenance"))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
 }

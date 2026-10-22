@@ -147,9 +147,14 @@ public class MaintenanceUiController {
     @GetMapping("/new")
     public String newTicketForm(
         @RequestParam(required = false) UUID roomId,
-        Model model
+        Model model,
+        RedirectAttributes redirectAttributes
     ) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
+        if (!currentUser.role().canReportMaintenance()) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Kỹ thuật viên không tạo yêu cầu bảo trì; chỉ nhận và xử lý phiếu được giao.");
+            return "redirect:/maintenance";
+        }
         List<Property> properties = propertyUseCase.listAccessibleProperties();
         List<Room> rooms = new ArrayList<>();
         java.util.Map<UUID, String> propertyNames = new java.util.LinkedHashMap<>();

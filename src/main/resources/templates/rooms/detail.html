@@ -400,7 +400,7 @@
     <div class="card">
         <div class="flex-between" style="margin-bottom: 12px;">
             <h2>Các yêu cầu bảo trì của phòng này</h2>
-            <a th:href="@{'/maintenance/new?roomId=' + ${room.getId()}}" class="btn btn-sm btn-primary">+ Báo hỏng</a>
+            <a th:if="${currentUser.role().canReportMaintenance()}" th:href="@{'/maintenance/new?roomId=' + ${room.getId()}}" class="btn btn-sm btn-primary">+ Báo hỏng</a>
         </div>
 
         <div th:if="${#lists.isEmpty(tickets)}" class="empty-state">
