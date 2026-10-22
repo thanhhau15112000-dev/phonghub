@@ -1,12 +1,12 @@
 package com.phonghub.migration;
 
-import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
+import com.phonghub.application.port.out.ContractRepositoryPort;
+import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverItemRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverPhotoRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyHouseRulesRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetRepository;
-import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantDocumentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantRepository;
 import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
@@ -40,7 +40,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -89,12 +88,14 @@ class CheckOutPostgresTest {
         }
 
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
+
+        JpaTestContext jpa = JpaTestContext.over(ds);
         var protector = new AesGcmTenantDataProtector("test-v1",
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
         PostgresHandoverRepository handovers = new PostgresHandoverRepository(jdbc);
         PostgresHandoverItemRepository items = new PostgresHandoverItemRepository(jdbc);
-        PostgresContractRepository contractRepo = new PostgresContractRepository(jdbc);
-        PostgresRoomRepository roomRepo = new PostgresRoomRepository(jdbc);
+        ContractRepositoryPort contractRepo = jpa.contracts();
+        RoomRepositoryPort roomRepo = jpa.rooms();
 
         // an approved check-in with one asset, then a check-out draft that reports it as damaged
         Handover checkIn = handovers.save(Handover.draft(contractId, HandoverType.CHECK_IN, BigDecimal.TEN,
@@ -128,7 +129,7 @@ class CheckOutPostgresTest {
             new PostgresPropertyHouseRulesRepository(jdbc), contractRepo, new PostgresRoomAssetRepository(jdbc),
             new PostgresTenantRepository(jdbc, protector), new PostgresTenantDocumentRepository(jdbc), contracts,
             new InMemoryFileStorageAdapter(), currentUser, mock(AuthorizationService.class), audit, 1024 * 1024);
-        TransactionTemplate tx = new TransactionTemplate(new DataSourceTransactionManager(ds));
+        TransactionTemplate tx = new TransactionTemplate(jpa.transactionManager());
 
         tx.execute(status -> service.create(HandoverType.CHECK_OUT, new HandoverUseCase.HandoverCommand(contractId,
             new BigDecimal("20"), new BigDecimal("5"), "Trả phòng", null)));

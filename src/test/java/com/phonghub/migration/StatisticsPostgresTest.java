@@ -1,12 +1,11 @@
 package com.phonghub.migration;
 
+import com.phonghub.application.port.out.RoomRepositoryPort;
+import com.phonghub.application.port.out.PropertyRepositoryPort;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
-import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyRepository;
-import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresStatisticsQueryAdapter;
 import com.phonghub.adapter.out.persistence.postgres.PostgresUserRepository;
 import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
@@ -85,6 +84,8 @@ class StatisticsPostgresTest {
         }
 
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
+
+        JpaTestContext jpa = JpaTestContext.over(ds);
         TenantDataProtectionPort protector = new AesGcmTenantDataProtector("test-v1",
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
         PostgresStatisticsQueryAdapter stats = new PostgresStatisticsQueryAdapter(jdbc, protector);
@@ -93,7 +94,7 @@ class StatisticsPostgresTest {
         new PostgresUserRepository(jdbc, protector).save(new User(ownerId, "stats.owner", "stats.owner@example.com",
             "Chủ Thống Kê", "0999888777", UserRole.OWNER, User.UserStatus.ACTIVE, false, Instant.parse("2030-03-10T00:00:00Z")));
 
-        PostgresPropertyRepository properties = new PostgresPropertyRepository(jdbc);
+        PropertyRepositoryPort properties = jpa.properties();
         UUID p = UUID.randomUUID();
         UUID pending = UUID.randomUUID();
         properties.save(new Property(p, "Nhà thống kê", "addr", null, 3, ownerId, PropertyApprovalStatus.VERIFIED, null,
@@ -101,11 +102,11 @@ class StatisticsPostgresTest {
         properties.save(new Property(pending, "Nhà chờ duyệt thống kê", "addr 2", null, 1, ownerId,
             PropertyApprovalStatus.PENDING, null, Instant.now()));
 
-        PostgresRoomRepository rooms = new PostgresRoomRepository(jdbc);
+        RoomRepositoryPort rooms = jpa.rooms();
         Room r1 = rooms.save(room(p, "S1", RoomStatus.OCCUPIED));
         Room r2 = rooms.save(room(p, "S2", RoomStatus.MAINTENANCE));
         Room r3 = rooms.save(room(p, "S3", RoomStatus.AVAILABLE));
-        Contract contract = new PostgresContractRepository(jdbc).save(new Contract(UUID.randomUUID(), p, r1.getId(),
+        Contract contract = jpa.contracts().save(new Contract(UUID.randomUUID(), p, r1.getId(),
             tenantId, new BigDecimal("1000000"), new BigDecimal("3000000"), LocalDate.of(2026, 1, 1),
             LocalDate.of(2027, 1, 1), 5, ContractStatus.ACTIVE, List.of(), Instant.now(), Instant.now()));
 

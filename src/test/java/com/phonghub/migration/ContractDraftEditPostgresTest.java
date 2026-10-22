@@ -1,9 +1,9 @@
 package com.phonghub.migration;
 
+import com.phonghub.application.port.out.ContractRepositoryPort;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
 import java.math.BigDecimal;
@@ -37,7 +37,8 @@ class ContractDraftEditPostgresTest {
         Flyway.configure().dataSource(ds).locations("classpath:db/migration", "classpath:db/seed/docker")
             .load().migrate();
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
-        PostgresContractRepository contracts = new PostgresContractRepository(jdbc);
+        JpaTestContext jpa = JpaTestContext.over(ds);
+        ContractRepositoryPort contracts = jpa.contracts();
         Map<String, Object> room = jdbc.queryForMap("SELECT id, property_id FROM rooms LIMIT 1", Map.of());
         UUID tenantId = UUID.fromString(jdbc.getJdbcTemplate().queryForObject("SELECT id::text FROM tenants LIMIT 1",
             String.class));

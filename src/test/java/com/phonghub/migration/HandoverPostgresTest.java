@@ -1,6 +1,5 @@
 package com.phonghub.migration;
 
-import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverItemRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverPhotoRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverRepository;
@@ -39,7 +38,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -104,6 +102,8 @@ class HandoverPostgresTest {
         }
 
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
+
+        JpaTestContext jpa = JpaTestContext.over(ds);
         var protector = new AesGcmTenantDataProtector("test-v1",
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
         PostgresHandoverRepository handovers = new PostgresHandoverRepository(jdbc);
@@ -120,12 +120,12 @@ class HandoverPostgresTest {
             }
         };
         HandoverService service = new HandoverService(handovers, photos, new PostgresHandoverItemRepository(jdbc),
-            new PostgresPropertyHouseRulesRepository(jdbc), new PostgresContractRepository(jdbc),
+            new PostgresPropertyHouseRulesRepository(jdbc), jpa.contracts(),
             new PostgresRoomAssetRepository(jdbc), new PostgresTenantRepository(jdbc, protector),
             new PostgresTenantDocumentRepository(jdbc), mock(com.phonghub.application.port.in.ContractUseCase.class),
             new InMemoryFileStorageAdapter(), currentUser,
             authorization, failingAudit, 1024 * 1024);
-        TransactionTemplate tx = new TransactionTemplate(new DataSourceTransactionManager(ds));
+        TransactionTemplate tx = new TransactionTemplate(jpa.transactionManager());
 
         Handover draft = tx.execute(status -> service.create(HandoverType.CHECK_IN, new com.phonghub.application.port.in.HandoverUseCase
             .HandoverCommand(contractId, new BigDecimal("12.5"), new BigDecimal("3"), "Sạch", "1 chìa")));

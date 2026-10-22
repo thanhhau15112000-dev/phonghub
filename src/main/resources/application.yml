@@ -10,6 +10,9 @@ spring:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
       - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
       - org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration
+      # JPA được cấu hình tường minh trong JpaPersistenceConfiguration (chỉ profile prod/docker).
+      - org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration
+      - org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration
   servlet:
     multipart:
       max-file-size: ${STORAGE_MAX_FILE_SIZE_BYTES:10485760}

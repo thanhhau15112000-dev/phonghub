@@ -1,6 +1,6 @@
 package com.phonghub.migration;
 
-import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
+import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresLateFeePolicyRepository;
 import com.phonghub.application.service.LateFeeAssessmentService;
@@ -62,7 +62,8 @@ class LateFeePostgresTest {
     void policyAndAssessment() throws Exception {
         PGSimpleDataSource ds = migrated();
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
-        PostgresContractRepository contracts = new PostgresContractRepository(jdbc);
+        JpaTestContext jpa = JpaTestContext.over(ds);
+        ContractRepositoryPort contracts = jpa.contracts();
         PostgresInvoiceRepository invoices = new PostgresInvoiceRepository(jdbc);
         PostgresLateFeePolicyRepository policies = new PostgresLateFeePolicyRepository(jdbc);
 
