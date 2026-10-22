@@ -65,6 +65,13 @@ class PaymentSimulationIntegrationTest {
     @BeforeEach
     void resetData() {
         sepayProperties.setSimulationEnabled(true);
+        sepayProperties.setBankCode(null);
+        sepayProperties.setBankAccountNumber(null);
+        sepayProperties.setBankAccountName(null);
+        sepayProperties.setSandboxCheckoutEnabled(false);
+        sepayProperties.setMerchantId(null);
+        sepayProperties.setSecretKey(null);
+        sepayProperties.setPublicBaseUrl(null);
         userRepository.clear();
         propertyRepository.clear();
         assignmentRepository.clear();
@@ -83,6 +90,13 @@ class PaymentSimulationIntegrationTest {
     @AfterEach
     void restore() {
         sepayProperties.setSimulationEnabled(true);
+        sepayProperties.setBankCode(null);
+        sepayProperties.setBankAccountNumber(null);
+        sepayProperties.setBankAccountName(null);
+        sepayProperties.setSandboxCheckoutEnabled(false);
+        sepayProperties.setMerchantId(null);
+        sepayProperties.setSecretKey(null);
+        sepayProperties.setPublicBaseUrl(null);
     }
 
     private MockHttpServletRequestBuilder as(MockHttpServletRequestBuilder builder, String userId) {
@@ -95,15 +109,28 @@ class PaymentSimulationIntegrationTest {
     }
 
     @Test
-    @DisplayName("Pay page auto-refreshes, shows the test-mode button, and the status endpoint reports payment")
+    @DisplayName("Pay page shows a simple simulator checkout that records payment and returns to the paid invoice")
     void payPageAndStatus() throws Exception {
         Invoice invoice = issueRent();
         String payUrl = "/invoices/" + invoice.getId() + "/pay";
+        sepayProperties.setBankCode("MBBank");
+        sepayProperties.setBankAccountNumber("0000000001");
+        sepayProperties.setBankAccountName("LE THANH HAU");
+        sepayProperties.setSandboxCheckoutEnabled(true);
+        sepayProperties.setMerchantId("SP-TEST-123");
+        sepayProperties.setSecretKey("sandbox-secret");
+        sepayProperties.setPublicBaseUrl("https://phonghub.example");
 
         mockMvc.perform(as(get(payUrl), TENANT))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Chế độ thử nghiệm")))
+            .andExpect(content().string(containsString(">Thanh toán</button>")))
             .andExpect(content().string(containsString("/invoices/" + invoice.getId() + "/simulate-payment")))
+            .andExpect(content().string(not(containsString("Môi trường mô phỏng"))))
+            .andExpect(content().string(not(containsString("Mô phỏng chuyển khoản"))))
+            .andExpect(content().string(not(containsString("Mã QR chuyển khoản"))))
+            .andExpect(content().string(not(containsString("MBBank"))))
+            .andExpect(content().string(not(containsString("LE THANH HAU"))))
+            .andExpect(content().string(not(containsString("sepay-checkout"))))
             // URL nằm trong script nên Thymeleaf escape dấu "/" thành "\\/"
             .andExpect(content().string(containsString(invoice.getId() + "\\/status")))
             .andExpect(content().string(containsString("fetch(statusUrl")));
@@ -115,6 +142,7 @@ class PaymentSimulationIntegrationTest {
 
         mockMvc.perform(as(post("/invoices/" + invoice.getId() + "/simulate-payment"), TENANT))
             .andExpect(status().is3xxRedirection())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl(payUrl))
             .andExpect(flash().attributeExists("successMessage"));
 
         mockMvc.perform(as(get("/invoices/" + invoice.getId() + "/status"), TENANT))
@@ -125,7 +153,7 @@ class PaymentSimulationIntegrationTest {
             "simulated transaction is recorded with a negative id that cannot clash with SePay");
 
         mockMvc.perform(as(get(payUrl), TENANT))
-            .andExpect(content().string(containsString("đã được thanh toán đủ")))
+            .andExpect(content().string(containsString("Khoản này đã được thanh toán đủ.")))
             .andExpect(content().string(not(containsString("simulate-payment"))));
     }
 
