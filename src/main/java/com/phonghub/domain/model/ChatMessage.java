@@ -10,7 +10,7 @@ public record ChatMessage(
     UUID senderId,
     String senderName,
     String content,
-    String mediaUrl,
+    String mediaKey,
     String mediaType,
     Instant createdAt,
     Instant deletedAt
@@ -33,7 +33,7 @@ public record ChatMessage(
         Objects.requireNonNull(senderId, "senderId must not be null");
         Objects.requireNonNull(senderName, "senderName must not be null");
         boolean hasContent = content != null && !content.trim().isEmpty();
-        boolean hasMedia = mediaUrl != null && !mediaUrl.trim().isEmpty();
+        boolean hasMedia = mediaKey != null && !mediaKey.trim().isEmpty();
         if (!hasContent && !hasMedia) {
             throw new IllegalArgumentException("Tin nhắn phải có nội dung hoặc tệp đính kèm.");
         }
@@ -56,7 +56,7 @@ public record ChatMessage(
         );
     }
 
-    public static ChatMessage createMedia(UUID chatRoomId, UUID senderId, String senderName, String caption, String mediaUrl, String mediaType,
+    public static ChatMessage createMedia(UUID chatRoomId, UUID senderId, String senderName, String caption, String mediaKey, String mediaType,
         Instant createdAt) {
         return new ChatMessage(
             UUID.randomUUID(),
@@ -64,7 +64,7 @@ public record ChatMessage(
             senderId,
             senderName,
             caption != null ? caption.trim() : "",
-            mediaUrl,
+            mediaKey,
             mediaType,
             createdAt,
             null
@@ -72,7 +72,7 @@ public record ChatMessage(
     }
 
     public boolean hasMedia() {
-        return mediaUrl != null && !mediaUrl.isBlank();
+        return mediaKey != null && !mediaKey.isBlank();
     }
 
     public boolean isImage() {

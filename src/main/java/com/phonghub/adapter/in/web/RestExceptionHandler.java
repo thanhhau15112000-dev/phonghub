@@ -230,7 +230,8 @@ public class RestExceptionHandler {
         UserNotFoundException.class,
         TenantNotFoundException.class,
         NotificationNotFoundException.class,
-        com.phonghub.domain.exception.ChatRoomNotFoundException.class
+        com.phonghub.domain.exception.ChatRoomNotFoundException.class,
+        com.phonghub.domain.exception.ChatMessageNotFoundException.class
     })
     public ProblemDetail handleNotFound(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());

@@ -3,9 +3,12 @@ package com.phonghub.application;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryChatMessageRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryChatRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
+import com.phonghub.adapter.out.storage.InMemoryFileStorageAdapter;
 import com.phonghub.application.port.out.ChatEventPublisherPort;
 import com.phonghub.application.port.out.CurrentUser;
+import com.phonghub.application.port.out.FileStoragePort;
 import com.phonghub.application.service.ChatService;
+import com.phonghub.domain.exception.ChatMessageNotFoundException;
 import com.phonghub.domain.exception.ChatRoomNotFoundException;
 import com.phonghub.domain.exception.InvalidChatTargetException;
 import com.phonghub.domain.exception.UnauthorizedChatAccessException;
@@ -14,12 +17,19 @@ import com.phonghub.domain.model.ChatRoom;
 import com.phonghub.domain.model.ChatRoomType;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,6 +37,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ChatServiceUnitTest {
+
+    private static final long MAX_MEDIA_BYTES = 1024 * 1024;
 
     /** Đồng hồ luôn tăng: hai tin gửi liền nhau không trùng thời điểm dù đồng hồ máy (Windows) có độ phân giải thấp. */
     private static final class IncreasingClock extends Clock {
@@ -54,6 +66,7 @@ class ChatServiceUnitTest {
     private InMemoryChatMessageRepository chatMessageRepo;
     private InMemoryUserRepository userRepo;
     private ChatEventPublisherPort eventPublisher;
+    private InMemoryFileStorageAdapter storage;
     private ChatService chatService;
 
     private CurrentUser userA;
@@ -67,8 +80,10 @@ class ChatServiceUnitTest {
         userRepo = new InMemoryUserRepository();
         eventPublisher = (roomId, message) -> {}; // no-op for unit test
 
-        chatService = new ChatService(chatRoomRepo, chatMessageRepo, userRepo, eventPublisher,
-            new com.phonghub.adapter.out.storage.LocalMediaStorageAdapter(), new IncreasingClock());
+        storage = new InMemoryFileStorageAdapter();
+
+        chatService = new ChatService(chatRoomRepo, chatMessageRepo, userRepo, eventPublisher, storage,
+            MAX_MEDIA_BYTES, new IncreasingClock());
 
         UUID idA = UUID.randomUUID();
         UUID idB = UUID.randomUUID();
@@ -198,59 +213,154 @@ class ChatServiceUnitTest {
     }
 
     @Test
-    @DisplayName("Gửi hình ảnh và video thành công với MediaStoragePort")
+    @DisplayName("Gửi ảnh và video: lưu vào kho private theo khóa của phòng, tải lại qua URL có chữ ký")
     void sendMediaMessageSuccess() {
         ChatRoom room = chatService.getOrCreateDirectRoom(userA, userB.id());
 
-        byte[] fakeImage = new byte[] { 1, 2, 3, 4 };
-        ChatMessage imageMsg = chatService.sendMediaMessage(
-            userA, room.id(), "photo.png", "image/png", fakeImage, "Ảnh phòng trọ mới"
-        );
+        ChatMessage imageMsg = chatService.sendMediaMessage(userA, room.id(), "image/png", pngBytes(), "Ảnh phòng trọ mới");
 
-        assertNotNull(imageMsg);
-        assertTrue(imageMsg.hasMedia());
         assertTrue(imageMsg.isImage());
-        assertFalse(imageMsg.isVideo());
-        assertEquals("IMAGE", imageMsg.mediaType());
-        assertNotNull(imageMsg.mediaUrl());
         assertEquals("Ảnh phòng trọ mới", imageMsg.content());
+        assertTrue(imageMsg.mediaKey().matches("chat/" + room.id() + "/[0-9a-f-]{36}\\.png"));
+        URI signed = chatService.mediaSignedUrl(userB, room.id(), imageMsg.id());
+        assertTrue(storage.openSignedUrl(signed).isPresent());
 
-        byte[] fakeVideo = new byte[] { 5, 6, 7, 8 };
-        ChatMessage videoMsg = chatService.sendMediaMessage(
-            userA, room.id(), "tour.mp4", "video/mp4", fakeVideo, null
-        );
+        ChatMessage videoMsg = chatService.sendMediaMessage(userA, room.id(), "video/mp4", mp4Bytes(), null);
 
-        assertNotNull(videoMsg);
-        assertTrue(videoMsg.hasMedia());
         assertTrue(videoMsg.isVideo());
-        assertEquals("VIDEO", videoMsg.mediaType());
-        assertNotNull(videoMsg.mediaUrl());
+        assertTrue(videoMsg.mediaKey().endsWith(".mp4"));
+        assertArrayEquals(mp4Bytes(), storage.get(videoMsg.mediaKey()));
 
-        // Kiểm tra danh sách tóm tắt phòng hiển thị nhãn media
         var rooms = chatService.getRoomsForUser(userA);
         var targetRoomSummary = rooms.stream().filter(r -> r.id().equals(room.id())).findFirst().orElseThrow();
         assertEquals("[Video]", targetRoomSummary.lastMessageContent());
     }
 
     @Test
-    @DisplayName("Gửi media vượt quá 25MB phải ném IllegalArgumentException")
+    @DisplayName("Media vượt giới hạn dung lượng bị từ chối và không lưu tin nhắn")
     void sendMediaExceedsLimitThrows() {
         ChatRoom room = chatService.getOrCreateDirectRoom(userA, userB.id());
-        byte[] largeBytes = new byte[26 * 1024 * 1024];
+        byte[] largeVideo = new byte[(int) MAX_MEDIA_BYTES + 1];
+        System.arraycopy(mp4Bytes(), 0, largeVideo, 0, 12);
 
-        assertThrows(IllegalArgumentException.class, () -> {
-            chatService.sendMediaMessage(userA, room.id(), "big.mp4", "video/mp4", largeBytes, null);
-        });
+        assertThrows(IllegalArgumentException.class,
+            () -> chatService.sendMediaMessage(userA, room.id(), "video/mp4", largeVideo, null));
+        assertTrue(chatMessageRepo.findByRoomId(room.id(), null, 10).isEmpty());
     }
 
     @Test
-    @DisplayName("Gửi tệp không hỗ trợ phải ném IllegalArgumentException")
+    @DisplayName("Tệp không phải ảnh/video được hỗ trợ hoặc sai chữ ký nội dung bị từ chối")
     void sendMediaUnsupportedFormatThrows() {
         ChatRoom room = chatService.getOrCreateDirectRoom(userA, userB.id());
-        byte[] docBytes = new byte[] { 1, 2, 3 };
 
-        assertThrows(IllegalArgumentException.class, () -> {
-            chatService.sendMediaMessage(userA, room.id(), "contract.pdf", "application/pdf", docBytes, null);
-        });
+        assertThrows(IllegalArgumentException.class, () -> chatService.sendMediaMessage(
+            userA, room.id(), "application/pdf", "%PDF-1.4".getBytes(StandardCharsets.US_ASCII), null));
+        assertThrows(IllegalArgumentException.class, () -> chatService.sendMediaMessage(
+            userA, room.id(), "image/gif", "GIF89a".getBytes(StandardCharsets.US_ASCII), null));
+        assertThrows(IllegalArgumentException.class, () -> chatService.sendMediaMessage(
+            userA, room.id(), "image/png", new byte[] {1, 2, 3, 4}, null));
+        assertTrue(chatMessageRepo.findByRoomId(room.id(), null, 10).isEmpty());
+    }
+
+    @Test
+    @DisplayName("Người ngoài phòng 1-1 không tải lên được và không lấy được URL media")
+    void mediaAccessRequiresRoomMembership() {
+        ChatRoom room = chatService.getOrCreateDirectRoom(userA, userB.id());
+        ChatMessage imageMsg = chatService.sendMediaMessage(userA, room.id(), "image/png", pngBytes(), null);
+
+        assertThrows(UnauthorizedChatAccessException.class,
+            () -> chatService.mediaSignedUrl(userC, room.id(), imageMsg.id()));
+        assertThrows(UnauthorizedChatAccessException.class,
+            () -> chatService.sendMediaMessage(userC, room.id(), "image/png", pngBytes(), null));
+    }
+
+    @Test
+    @DisplayName("Tin nhắn thuộc phòng khác hoặc không có media trả về không tìm thấy")
+    void mediaSignedUrlRejectsForeignRoomAndTextMessage() {
+        ChatRoom roomAB = chatService.getOrCreateDirectRoom(userA, userB.id());
+        ChatRoom roomAC = chatService.getOrCreateDirectRoom(userA, userC.id());
+        ChatMessage imageMsg = chatService.sendMediaMessage(userA, roomAB.id(), "image/png", pngBytes(), null);
+        ChatMessage textMsg = chatService.sendMessage(userA, roomAB.id(), "Xin chào");
+
+        assertThrows(ChatMessageNotFoundException.class,
+            () -> chatService.mediaSignedUrl(userA, roomAC.id(), imageMsg.id()));
+        assertThrows(ChatMessageNotFoundException.class,
+            () -> chatService.mediaSignedUrl(userA, roomAB.id(), textMsg.id()));
+        assertThrows(ChatMessageNotFoundException.class,
+            () -> chatService.mediaSignedUrl(userA, roomAB.id(), UUID.randomUUID()));
+    }
+
+    @Test
+    @DisplayName("Lỗi kho lưu trữ trả về cho người gọi, không lưu tin nhắn")
+    void storageFailurePropagatesWithoutSavingMessage() {
+        FileStoragePort failing = new FileStoragePort() {
+            @Override
+            public void put(String objectKey, String contentType, byte[] content) {
+                throw new IllegalStateException("Supabase Storage unavailable");
+            }
+
+            @Override
+            public byte[] get(String objectKey) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public URI createSignedUrl(String objectKey, Duration ttl) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public void delete(String objectKey) {
+                throw new UnsupportedOperationException();
+            }
+        };
+        ChatService service = new ChatService(chatRoomRepo, chatMessageRepo, userRepo, eventPublisher, failing,
+            MAX_MEDIA_BYTES, new IncreasingClock());
+        ChatRoom room = service.getOrCreateDirectRoom(userA, userB.id());
+
+        assertThrows(IllegalStateException.class,
+            () -> service.sendMediaMessage(userA, room.id(), "image/png", pngBytes(), null));
+        assertTrue(chatMessageRepo.findByRoomId(room.id(), null, 10).isEmpty());
+    }
+
+    @Test
+    @DisplayName("Lưu tin nhắn thất bại thì xóa đối tượng vừa tải lên")
+    void messageSaveFailureDeletesStoredObject() {
+        String[] storedKey = new String[1];
+        InMemoryFileStorageAdapter trackingStorage = new InMemoryFileStorageAdapter() {
+            @Override
+            public void put(String objectKey, String contentType, byte[] content) {
+                storedKey[0] = objectKey;
+                super.put(objectKey, contentType, content);
+            }
+        };
+        InMemoryChatMessageRepository failingRepo = new InMemoryChatMessageRepository() {
+            @Override
+            public ChatMessage save(ChatMessage message) {
+                throw new IllegalStateException("database unavailable");
+            }
+        };
+        ChatService service = new ChatService(chatRoomRepo, failingRepo, userRepo, eventPublisher, trackingStorage,
+            MAX_MEDIA_BYTES, new IncreasingClock());
+        ChatRoom room = service.getOrCreateDirectRoom(userA, userB.id());
+
+        assertThrows(IllegalStateException.class,
+            () -> service.sendMediaMessage(userA, room.id(), "image/png", pngBytes(), null));
+        assertNotNull(storedKey[0]);
+        assertThrows(IllegalArgumentException.class, () -> trackingStorage.get(storedKey[0]));
+    }
+
+    private static byte[] pngBytes() {
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            ImageIO.write(new BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB), "png", out);
+            return out.toByteArray();
+        } catch (IOException ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
+    private static byte[] mp4Bytes() {
+        return new byte[] {0, 0, 0, 0x18, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'};
     }
 }

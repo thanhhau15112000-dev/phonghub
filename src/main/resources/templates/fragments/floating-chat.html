@@ -1,5 +1,6 @@
 <div th:fragment="floatingChatWidget" th:if="${currentUser != null}" id="phonghubFloatingChatContainer"
-     th:data-user-id="${currentUser.id()}" th:data-user-name="${currentUser.fullName()}">
+     th:data-user-id="${currentUser.id()}" th:data-user-name="${currentUser.fullName()}"
+     th:data-max-upload-bytes="${maxUploadBytes}">
     <style>
         /* Tương tác mượt mà cho các phần tử chat PhongHub (Theme: Trắng viền xám) */
         #phonghubMessengerToggleBtn:hover {
@@ -241,7 +242,7 @@
                         <polyline points="21 15 16 10 5 21"/>
                     </svg>
                 </button>
-                <input type="file" id="phonghubDockedFileInput" accept="image/*,video/*" style="display: none;">
+                <input type="file" id="phonghubDockedFileInput" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" style="display: none;">
 
                 <input type="text" id="phonghubDockedInput" placeholder="Aa" autocomplete="off"
                        style="flex: 1; background-color: #f1f5f9; color: #0f172a; border-radius: 20px; border: 1px solid #cbd5e1; padding: 7px 12px; font-size: 13.5px; outline: none; transition: border-color 0.15s ease;">
@@ -335,6 +336,8 @@
             const mediaFileName = document.getElementById('phonghubDockedMediaFileName');
             const mediaCancelBtn = document.getElementById('phonghubDockedMediaCancelBtn');
             let selectedMediaFile = null;
+            const maxUploadBytes = Number(document.getElementById('phonghubFloatingChatContainer').dataset.maxUploadBytes);
+            const maxUploadMb = Math.floor(maxUploadBytes / (1024 * 1024));
 
             if (attachBtn && fileInput) {
                 attachBtn.addEventListener('click', () => {
@@ -344,8 +347,8 @@
                 fileInput.addEventListener('change', () => {
                     if (fileInput.files && fileInput.files[0]) {
                         selectedMediaFile = fileInput.files[0];
-                        if (selectedMediaFile.size > 25 * 1024 * 1024) {
-                            alert('Kích thước tệp vượt quá giới hạn 25MB. Vui lòng chọn tệp nhỏ hơn.');
+                        if (selectedMediaFile.size > maxUploadBytes) {
+                            alert(`Kích thước tệp vượt quá giới hạn ${maxUploadMb}MB. Vui lòng chọn tệp nhỏ hơn.`);
                             selectedMediaFile = null;
                             fileInput.value = '';
                             return;
@@ -503,7 +506,7 @@
                         const saved = await res.json();
                         appendDockedMessageUI(saved);
                     } else {
-                        alert('Không thể gửi tệp tin media. Vui lòng kiểm tra định dạng hoặc kích thước (tối đa 25MB).');
+                        alert(`Không thể gửi tệp tin media. Chỉ nhận ảnh JPEG/PNG/WebP hoặc video MP4/WebM/MOV, tối đa ${maxUploadMb}MB.`);
                     }
                 } catch (err) {
                     console.error('Lỗi khi gửi tệp media:', err);

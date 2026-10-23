@@ -16,12 +16,19 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.matchesPattern;
+import static org.hamcrest.Matchers.startsWith;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -200,20 +207,88 @@ class ChatApiControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("Upload ảnh thành công qua endpoint POST /api/chat/rooms/{roomId}/media")
+    @DisplayName("Upload ảnh qua POST /api/chat/rooms/{roomId}/media trả URL endpoint media, không lộ khóa kho")
     void uploadMediaSuccess() throws Exception {
         authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_TENANT_1);
-        org.springframework.mock.web.MockMultipartFile mockFile = new org.springframework.mock.web.MockMultipartFile(
-            "file", "room_sample.jpg", "image/jpeg", "image-content".getBytes()
-        );
 
-        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/chat/rooms/" + ChatRoom.GLOBAL_ROOM_ID + "/media")
-                .file(mockFile)
+        String body = mockMvc.perform(multipart("/api/chat/rooms/" + ChatRoom.GLOBAL_ROOM_ID + "/media")
+                .file(new MockMultipartFile("file", "room_sample.png", "image/png", pngBytes()))
                 .param("caption", "Ảnh phòng thực tế"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.id").isNotEmpty())
-            .andExpect(jsonPath("$.mediaUrl").isNotEmpty())
+            .andExpect(jsonPath("$.mediaUrl", matchesPattern(
+                "/api/chat/rooms/" + ChatRoom.GLOBAL_ROOM_ID + "/messages/[0-9a-f-]{36}/media")))
+            .andExpect(jsonPath("$.mediaKey").doesNotExist())
             .andExpect(jsonPath("$.mediaType", is("IMAGE")))
-            .andExpect(jsonPath("$.content", is("Ảnh phòng thực tế")));
+            .andExpect(jsonPath("$.content", is("Ảnh phòng thực tế")))
+            .andReturn().getResponse().getContentAsString();
+        String mediaUrl = new tools.jackson.databind.ObjectMapper().readTree(body).get("mediaUrl").asText();
+
+        mockMvc.perform(get(mediaUrl))
+            .andExpect(status().isFound())
+            .andExpect(header().string("Location", startsWith("memory://private-files/")))
+            .andExpect(header().string("Cache-Control", "no-store"));
+
+        mockMvc.perform(get("/api/chat/rooms/" + ChatRoom.GLOBAL_ROOM_ID + "/messages"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].mediaUrl", is(mediaUrl)))
+            .andExpect(jsonPath("$[0].mediaKey").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("Sự kiện SSE new_message của tin media mang URL endpoint, không mang khóa kho")
+    void mediaSseEventDoesNotExposeStorageKey() throws Exception {
+        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_TENANT_1);
+        MvcResult stream = mockMvc.perform(get("/api/chat/stream"))
+            .andExpect(request().asyncStarted())
+            .andReturn();
+
+        mockMvc.perform(multipart("/api/chat/rooms/" + ChatRoom.GLOBAL_ROOM_ID + "/media")
+                .file(new MockMultipartFile("file", "room_sample.png", "image/png", pngBytes())))
+            .andExpect(status().isOk());
+
+        String events = stream.getResponse().getContentAsString();
+        assertTrue(events.contains("event:new_message"), events);
+        assertTrue(events.contains("\"mediaUrl\":\"/api/chat/rooms/" + ChatRoom.GLOBAL_ROOM_ID + "/messages/"), events);
+        assertFalse(events.contains("mediaKey"), events);
+        assertFalse(events.contains("chat/" + ChatRoom.GLOBAL_ROOM_ID), events);
+    }
+
+    @Test
+    @DisplayName("Tải media: người ngoài phòng 1-1 bị 403, sai phòng bị 404, tệp sai định dạng bị 400")
+    void mediaEndpointEnforcesRoomAccess() throws Exception {
+        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_TENANT_1);
+        String room = mockMvc.perform(post("/api/chat/rooms/direct")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"targetUserId\":\"" + LocalDemoAuthenticationAdapter.OWNER_1_ID + "\"}"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        String roomId = new tools.jackson.databind.ObjectMapper().readTree(room).get("id").asText();
+        String body = mockMvc.perform(multipart("/api/chat/rooms/" + roomId + "/media")
+                .file(new MockMultipartFile("file", "a.png", "image/png", pngBytes())))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        String messageId = new tools.jackson.databind.ObjectMapper().readTree(body).get("id").asText();
+
+        mockMvc.perform(multipart("/api/chat/rooms/" + roomId + "/media")
+                .file(new MockMultipartFile("file", "a.jpg", "image/jpeg", "image-content".getBytes())))
+            .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/chat/rooms/" + ChatRoom.GLOBAL_ROOM_ID + "/messages/" + messageId + "/media"))
+            .andExpect(status().isNotFound());
+
+        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_STAFF_1);
+        mockMvc.perform(get("/api/chat/rooms/" + roomId + "/messages/" + messageId + "/media"))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(multipart("/api/chat/rooms/" + roomId + "/media")
+                .file(new MockMultipartFile("file", "a.png", "image/png", pngBytes())))
+            .andExpect(status().isForbidden());
+    }
+
+    private static byte[] pngBytes() throws java.io.IOException {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(2, 2, java.awt.image.BufferedImage.TYPE_INT_RGB),
+            "png", out);
+        return out.toByteArray();
     }
 }

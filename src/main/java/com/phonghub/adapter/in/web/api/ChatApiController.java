@@ -13,10 +13,12 @@ import com.phonghub.domain.model.ChatRoom;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -79,7 +81,7 @@ public class ChatApiController {
     }
 
     @GetMapping("/rooms/{roomId}/messages")
-    public ResponseEntity<List<ChatMessage>> getMessages(
+    public ResponseEntity<List<ChatMessageResponse>> getMessages(
         @PathVariable UUID roomId,
         @RequestParam(required = false) Instant before,
         @RequestParam(defaultValue = "30") int limit
@@ -91,7 +93,7 @@ public class ChatApiController {
         if (peerLastRead != null) {
             responseBuilder.header("X-Peer-Last-Read-At", peerLastRead.toString());
         }
-        return responseBuilder.body(messages);
+        return responseBuilder.body(messages.stream().map(ChatMessageResponse::from).toList());
     }
 
     @GetMapping("/rooms/{roomId}/seen")
@@ -106,17 +108,17 @@ public class ChatApiController {
     public record SendMessageRequest(@NotBlank String content) {}
 
     @PostMapping("/rooms/{roomId}/messages")
-    public ResponseEntity<ChatMessage> sendMessage(
+    public ResponseEntity<ChatMessageResponse> sendMessage(
         @PathVariable UUID roomId,
         @Valid @RequestBody SendMessageRequest request
     ) {
         CurrentUser user = requireUser();
         ChatMessage message = chatMessageUseCase.sendMessage(user, roomId, request.content());
-        return ResponseEntity.ok(message);
+        return ResponseEntity.ok(ChatMessageResponse.from(message));
     }
 
     @PostMapping(value = "/rooms/{roomId}/media", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ChatMessage> sendMedia(
+    public ResponseEntity<ChatMessageResponse> sendMedia(
         @PathVariable UUID roomId,
         @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
         @RequestParam(value = "caption", required = false) String caption
@@ -128,12 +130,19 @@ public class ChatApiController {
         ChatMessage message = chatMessageUseCase.sendMediaMessage(
             user,
             roomId,
-            file.getOriginalFilename(),
             file.getContentType(),
             file.getBytes(),
             caption
         );
-        return ResponseEntity.ok(message);
+        return ResponseEntity.ok(ChatMessageResponse.from(message));
+    }
+
+    @GetMapping("/rooms/{roomId}/messages/{messageId}/media")
+    public ResponseEntity<Void> media(@PathVariable UUID roomId, @PathVariable UUID messageId) {
+        CurrentUser user = requireUser();
+        URI target = chatMessageUseCase.mediaSignedUrl(user, roomId, messageId);
+        return ResponseEntity.status(302).header(HttpHeaders.LOCATION, target.toString())
+            .header(HttpHeaders.CACHE_CONTROL, "no-store").build();
     }
 
     @PostMapping("/rooms/{roomId}/read")
