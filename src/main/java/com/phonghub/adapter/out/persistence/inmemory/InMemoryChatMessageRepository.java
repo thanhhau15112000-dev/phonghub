@@ -33,6 +33,11 @@ public class InMemoryChatMessageRepository implements ChatMessageRepositoryPort 
     }
 
     @Override
+    public Optional<ChatMessage> findById(UUID id) {
+        return messages.stream().filter(m -> m.id().equals(id)).findFirst();
+    }
+
+    @Override
     public Optional<ChatMessage> findLatestMessageByRoomId(UUID roomId) {
         return messages.stream()
             .filter(m -> m.chatRoomId().equals(roomId))

@@ -27,19 +27,22 @@ public class GlobalUiAdvice {
     private final Optional<NotificationUseCase> notificationUseCase;
     private final Optional<NotificationInboxUseCase> notificationInbox;
     private final Optional<com.phonghub.application.port.in.ChatMessageUseCase> chatMessageUseCase;
+    private final long maxUploadBytes;
 
     public GlobalUiAdvice(
         @Value("${phonghub.demo.enabled:true}") boolean demoEnabled,
         Optional<DemoActorPort> demoActorPort,
         Optional<NotificationUseCase> notificationUseCase,
         Optional<NotificationInboxUseCase> notificationInbox,
-        Optional<com.phonghub.application.port.in.ChatMessageUseCase> chatMessageUseCase
+        Optional<com.phonghub.application.port.in.ChatMessageUseCase> chatMessageUseCase,
+        @Value("${phonghub.storage.max-file-size-bytes}") long maxUploadBytes
     ) {
         this.demoEnabled = demoEnabled;
         this.demoActorPort = demoActorPort;
         this.notificationUseCase = notificationUseCase;
         this.notificationInbox = notificationInbox;
         this.chatMessageUseCase = chatMessageUseCase;
+        this.maxUploadBytes = maxUploadBytes;
     }
 
     /**
@@ -64,6 +67,12 @@ public class GlobalUiAdvice {
     @ModelAttribute("demoUsers")
     public Map<UUID, CurrentUser> demoUsers() {
         return (demoEnabled && demoActorPort.isPresent()) ? demoActorPort.get().getAllDemoUsers() : Collections.emptyMap();
+    }
+
+    /** Giới hạn dung lượng tệp để widget chat kiểm tra trước khi tải lên. */
+    @ModelAttribute("maxUploadBytes")
+    public long maxUploadBytes() {
+        return maxUploadBytes;
     }
 
     @ModelAttribute("uiText")

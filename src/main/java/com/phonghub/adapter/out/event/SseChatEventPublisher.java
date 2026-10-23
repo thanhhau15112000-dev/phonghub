@@ -1,6 +1,7 @@
 package com.phonghub.adapter.out.event;
 
 import com.phonghub.application.port.out.ChatEventPublisherPort;
+import com.phonghub.adapter.in.web.api.ChatMessageResponse;
 import com.phonghub.domain.model.ChatMessage;
 import java.io.IOException;
 import java.util.List;
@@ -52,7 +53,7 @@ public class SseChatEventPublisher implements ChatEventPublisherPort {
                 try {
                     emitter.send(SseEmitter.event()
                         .name("new_message")
-                        .data(message));
+                        .data(ChatMessageResponse.from(message)));
                 } catch (Exception e) {
                     removeEmitter(userId, emitter);
                 }

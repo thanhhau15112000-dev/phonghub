@@ -9,6 +9,7 @@ import java.util.UUID;
 public interface ChatMessageRepositoryPort {
     ChatMessage save(ChatMessage message);
     List<ChatMessage> findByRoomId(UUID roomId, Instant before, int limit);
+    Optional<ChatMessage> findById(UUID id);
     Optional<ChatMessage> findLatestMessageByRoomId(UUID roomId);
     int countUnreadMessages(UUID roomId, UUID userId, Instant since);
 }

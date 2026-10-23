@@ -8,7 +8,9 @@ import com.phonghub.application.port.out.ChatEventPublisherPort;
 import com.phonghub.application.port.out.ChatMessageRepositoryPort;
 import com.phonghub.application.port.out.ChatRoomRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
+import com.phonghub.application.port.out.FileStoragePort;
 import com.phonghub.application.port.out.UserRepositoryPort;
+import com.phonghub.domain.exception.ChatMessageNotFoundException;
 import com.phonghub.domain.exception.ChatRoomNotFoundException;
 import com.phonghub.domain.exception.InvalidChatTargetException;
 import com.phonghub.domain.exception.UnauthorizedChatAccessException;
@@ -18,7 +20,9 @@ import com.phonghub.domain.model.ChatRoom;
 import com.phonghub.domain.model.ChatRoomMember;
 import com.phonghub.domain.model.ChatRoomType;
 import com.phonghub.domain.model.User;
+import java.net.URI;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -29,11 +33,14 @@ import java.util.UUID;
 
 public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
 
+    private static final Duration MEDIA_SIGNED_URL_TTL = Duration.ofMinutes(10);
+
     private final ChatRoomRepositoryPort chatRoomRepositoryPort;
     private final ChatMessageRepositoryPort chatMessageRepositoryPort;
     private final UserRepositoryPort userRepositoryPort;
     private final ChatEventPublisherPort chatEventPublisherPort;
-    private final com.phonghub.application.port.out.MediaStoragePort mediaStoragePort;
+    private final FileStoragePort storagePort;
+    private final long maxMediaBytes;
     private final Clock clock;
 
     public ChatService(
@@ -41,14 +48,19 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         ChatMessageRepositoryPort chatMessageRepositoryPort,
         UserRepositoryPort userRepositoryPort,
         ChatEventPublisherPort chatEventPublisherPort,
-        com.phonghub.application.port.out.MediaStoragePort mediaStoragePort,
+        FileStoragePort storagePort,
+        long maxMediaBytes,
         Clock clock
     ) {
         this.chatRoomRepositoryPort = Objects.requireNonNull(chatRoomRepositoryPort, "chatRoomRepositoryPort must not be null");
         this.chatMessageRepositoryPort = Objects.requireNonNull(chatMessageRepositoryPort, "chatMessageRepositoryPort must not be null");
         this.userRepositoryPort = Objects.requireNonNull(userRepositoryPort, "userRepositoryPort must not be null");
         this.chatEventPublisherPort = Objects.requireNonNull(chatEventPublisherPort, "chatEventPublisherPort must not be null");
-        this.mediaStoragePort = Objects.requireNonNull(mediaStoragePort, "mediaStoragePort must not be null");
+        this.storagePort = Objects.requireNonNull(storagePort, "storagePort must not be null");
+        if (maxMediaBytes <= 0) {
+            throw new IllegalArgumentException("maxMediaBytes must be positive");
+        }
+        this.maxMediaBytes = maxMediaBytes;
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
@@ -208,56 +220,58 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
     public ChatMessage sendMediaMessage(
         CurrentUser currentUser,
         UUID roomId,
-        String originalFilename,
         String contentType,
         byte[] bytes,
         String caption
     ) {
         assertAuthenticated(currentUser);
-        if (bytes == null || bytes.length == 0) {
-            throw new IllegalArgumentException("Dữ liệu tệp không được để trống");
-        }
-        if (bytes.length > 25 * 1024 * 1024) {
-            throw new IllegalArgumentException("Kích thước tệp vượt quá giới hạn 25MB");
-        }
-
         ChatRoom room = getRoomById(currentUser, roomId);
-        String mediaType = detectMediaType(contentType, originalFilename);
-        String mediaUrl = mediaStoragePort.store(originalFilename, contentType, bytes);
-        String textContent = caption != null ? caption.trim() : "";
 
-        ChatMessage message = ChatMessage.createMedia(
-            room.id(),
-            currentUser.id(),
-            currentUser.fullName(),
-            textContent,
-            mediaUrl,
-            mediaType,
-            clock.instant()
-        );
+        boolean video = FileSanitizer.isVideo(contentType);
+        if (!video && !FileSanitizer.isImage(contentType)) {
+            throw new IllegalArgumentException("Chỉ nhận ảnh jpeg/png/webp hoặc video mp4/webm/mov");
+        }
+        FileSanitizer.SanitizedFile file = video
+            ? FileSanitizer.sanitizeVideo(contentType, bytes, maxMediaBytes)
+            : FileSanitizer.sanitize(contentType, bytes, maxMediaBytes);
+        String key = "chat/" + room.id() + "/" + UUID.randomUUID() + "." + file.extension();
+        storagePort.put(key, file.contentType(), file.content());
 
-        ChatMessage saved = chatMessageRepositoryPort.save(message);
+        ChatMessage saved;
+        try {
+            saved = chatMessageRepositoryPort.save(ChatMessage.createMedia(
+                room.id(),
+                currentUser.id(),
+                currentUser.fullName(),
+                caption != null ? caption.trim() : "",
+                key,
+                video ? "VIDEO" : "IMAGE",
+                clock.instant()
+            ));
+        } catch (RuntimeException ex) {
+            deleteQuietly(key);
+            throw ex;
+        }
         chatRoomRepositoryPort.updateLastRead(roomId, currentUser.id(), clock.instant());
         chatEventPublisherPort.publishNewMessage(roomId, saved);
         return saved;
     }
 
-    private String detectMediaType(String contentType, String filename) {
-        if (contentType != null) {
-            String ct = contentType.toLowerCase();
-            if (ct.startsWith("image/")) return "IMAGE";
-            if (ct.startsWith("video/")) return "VIDEO";
+    @Override
+    public URI mediaSignedUrl(CurrentUser currentUser, UUID roomId, UUID messageId) {
+        ChatRoom room = getRoomById(currentUser, roomId);
+        ChatMessage message = chatMessageRepositoryPort.findById(messageId)
+            .filter(found -> found.chatRoomId().equals(room.id()) && found.hasMedia())
+            .orElseThrow(() -> new ChatMessageNotFoundException("Không tìm thấy tệp đính kèm của tin nhắn: " + messageId));
+        return storagePort.createSignedUrl(message.mediaKey(), MEDIA_SIGNED_URL_TTL);
+    }
+
+    private void deleteQuietly(String key) {
+        try {
+            storagePort.delete(key);
+        } catch (RuntimeException ignored) {
+            // best effort
         }
-        if (filename != null) {
-            String fn = filename.toLowerCase();
-            if (fn.endsWith(".png") || fn.endsWith(".jpg") || fn.endsWith(".jpeg") || fn.endsWith(".gif") || fn.endsWith(".webp")) {
-                return "IMAGE";
-            }
-            if (fn.endsWith(".mp4") || fn.endsWith(".webm") || fn.endsWith(".mov") || fn.endsWith(".avi") || fn.endsWith(".mkv")) {
-                return "VIDEO";
-            }
-        }
-        throw new IllegalArgumentException("Định dạng tệp không được hỗ trợ. Chỉ chấp nhận hình ảnh hoặc video.");
     }
 
     @Override

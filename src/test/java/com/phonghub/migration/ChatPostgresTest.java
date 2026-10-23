@@ -94,7 +94,7 @@ class ChatPostgresTest {
         ChatMessage m2 = messages.save(new ChatMessage(UUID.randomUUID(), directId, TENANT, "Nguyễn Văn A",
             "Phòng em bị dột", T0.plusSeconds(120), null));
         ChatMessage m3 = messages.save(new ChatMessage(UUID.randomUUID(), directId, TENANT, "Nguyễn Văn A", "",
-            "https://cdn.example/leak.jpg", "IMAGE", T0.plusSeconds(180), null));
+            "chat/" + directId + "/photo.jpg", "IMAGE", T0.plusSeconds(180), null));
         assertEquals(List.of(m2.id(), m3.id()), messages.findByRoomId(directId, null, 2).stream()
             .map(ChatMessage::id).toList());
         assertEquals(List.of(m1.id(), m2.id()), messages.findByRoomId(directId, m3.createdAt(), 10).stream()
@@ -103,14 +103,16 @@ class ChatPostgresTest {
         ChatMessage latest = messages.findLatestMessageByRoomId(directId).orElseThrow();
         assertEquals(m3.id(), latest.id());
         assertTrue(latest.isImage());
-        assertEquals("https://cdn.example/leak.jpg", latest.mediaUrl());
+        assertEquals("chat/" + directId + "/photo.jpg", latest.mediaKey());
+        assertEquals(m3.id(), messages.findById(m3.id()).orElseThrow().id());
+        assertTrue(messages.findById(UUID.randomUUID()).isEmpty());
         assertTrue(messages.findLatestMessageByRoomId(ChatRoom.GLOBAL_ROOM_ID).isEmpty());
 
         // tin chỉ có ảnh lưu content NULL vẫn đọc ra chuỗi rỗng
         UUID mediaOnly = UUID.randomUUID();
         jdbc.update("""
-            INSERT INTO chat_messages (id, chat_room_id, sender_id, sender_name, content, media_url, media_type, created_at)
-            VALUES (:id, :room, :sender, 'Nhân viên Q7', NULL, 'https://cdn.example/v.mp4', 'VIDEO', :at)
+            INSERT INTO chat_messages (id, chat_room_id, sender_id, sender_name, content, media_key, media_type, created_at)
+            VALUES (:id, :room, :sender, 'Nhân viên Q7', NULL, 'chat/v.mp4', 'VIDEO', :at)
             """, Map.of("id", mediaOnly, "room", directId, "sender", STAFF,
             "at", Timestamp.from(T0.plusSeconds(240))));
         ChatMessage video = messages.findLatestMessageByRoomId(directId).orElseThrow();

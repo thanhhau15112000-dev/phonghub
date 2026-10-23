@@ -33,7 +33,7 @@ public class PostgresChatMessageRepository implements ChatMessageRepositoryPort 
         UUID.fromString(rs.getString("sender_id")),
         rs.getString("sender_name"),
         rs.getString("content") != null ? rs.getString("content") : "",
-        rs.getString("media_url"),
+        rs.getString("media_key"),
         rs.getString("media_type"),
         toInstant(rs.getTimestamp("created_at")),
         toInstant(rs.getTimestamp("deleted_at"))
@@ -42,8 +42,8 @@ public class PostgresChatMessageRepository implements ChatMessageRepositoryPort 
     @Override
     public ChatMessage save(ChatMessage message) {
         String sql = """
-            INSERT INTO chat_messages (id, chat_room_id, sender_id, sender_name, content, media_url, media_type, created_at, deleted_at)
-            VALUES (:id, :roomId, :senderId, :senderName, :content, :mediaUrl, :mediaType, :createdAt, :deletedAt)
+            INSERT INTO chat_messages (id, chat_room_id, sender_id, sender_name, content, media_key, media_type, created_at, deleted_at)
+            VALUES (:id, :roomId, :senderId, :senderName, :content, :mediaKey, :mediaType, :createdAt, :deletedAt)
             """;
         MapSqlParameterSource params = new MapSqlParameterSource()
             .addValue("id", message.id())
@@ -51,7 +51,7 @@ public class PostgresChatMessageRepository implements ChatMessageRepositoryPort 
             .addValue("senderId", message.senderId())
             .addValue("senderName", message.senderName())
             .addValue("content", message.content())
-            .addValue("mediaUrl", message.mediaUrl())
+            .addValue("mediaKey", message.mediaKey())
             .addValue("mediaType", message.mediaType())
             .addValue("createdAt", Timestamp.from(message.createdAt()))
             .addValue("deletedAt", message.deletedAt() != null ? Timestamp.from(message.deletedAt()) : null);
@@ -69,7 +69,7 @@ public class PostgresChatMessageRepository implements ChatMessageRepositoryPort 
 
         if (before != null) {
             sql = """
-                SELECT id, chat_room_id, sender_id, sender_name, content, media_url, media_type, created_at, deleted_at
+                SELECT id, chat_room_id, sender_id, sender_name, content, media_key, media_type, created_at, deleted_at
                 FROM chat_messages
                 WHERE chat_room_id = :roomId AND created_at < :before
                 ORDER BY created_at DESC
@@ -78,7 +78,7 @@ public class PostgresChatMessageRepository implements ChatMessageRepositoryPort 
             params.addValue("before", Timestamp.from(before));
         } else {
             sql = """
-                SELECT id, chat_room_id, sender_id, sender_name, content, media_url, media_type, created_at, deleted_at
+                SELECT id, chat_room_id, sender_id, sender_name, content, media_key, media_type, created_at, deleted_at
                 FROM chat_messages
                 WHERE chat_room_id = :roomId
                 ORDER BY created_at DESC
@@ -93,9 +93,19 @@ public class PostgresChatMessageRepository implements ChatMessageRepositoryPort 
     }
 
     @Override
+    public Optional<ChatMessage> findById(UUID id) {
+        String sql = """
+            SELECT id, chat_room_id, sender_id, sender_name, content, media_key, media_type, created_at, deleted_at
+            FROM chat_messages
+            WHERE id = :id
+            """;
+        return jdbcTemplate.query(sql, Map.of("id", id), rowMapper).stream().findFirst();
+    }
+
+    @Override
     public Optional<ChatMessage> findLatestMessageByRoomId(UUID roomId) {
         String sql = """
-            SELECT id, chat_room_id, sender_id, sender_name, content, media_url, media_type, created_at, deleted_at
+            SELECT id, chat_room_id, sender_id, sender_name, content, media_key, media_type, created_at, deleted_at
             FROM chat_messages
             WHERE chat_room_id = :roomId
             ORDER BY created_at DESC
