@@ -1,0 +1,420 @@
+' Sơ đồ use case PhongHub theo ký hiệu UML (đi kèm docs/use-cases.md).
+' Xuất ảnh: java -jar plantuml.jar -charset UTF-8 -tpng docs/uml/phonghub-use-cases.puml
+' hoặc dán từng khối @startuml ... @enduml vào https://www.plantuml.com/plantuml
+' Mỗi khối là một sơ đồ: tổng quan tác nhân, rồi từng nhóm chức năng.
+
+@startuml uc-00-tac-nhan
+title PhongHub - Tác nhân và quan hệ tổng quát hóa
+left to right direction
+skinparam actorStyle awesome
+actor "Người dùng\nđã đăng nhập" as USER
+actor "Quản trị viên" as ADMIN
+actor "Chủ trọ" as OWNER
+actor "Nhân viên" as STAFF
+actor "Kỹ thuật viên" as TECH
+actor "Người thuê" as TENANT
+actor "Người thuê chính" as PRIMARY
+actor "Người ở cùng" as OCC
+actor "Nhân viên có quyền\nquản lý hợp đồng" as SM
+actor "Nhân viên có quyền\nthu tiền" as SP
+actor "Nhân viên có quyền\nxem giấy tờ" as SD
+actor "Khách" as GUEST
+actor "Bộ hẹn giờ" as CLOCK <<system>>
+actor "SePay" as SEPAY <<system>>
+actor "Dịch vụ xác thực" as AUTH <<system>>
+actor "Kho tệp riêng tư" as STORE <<system>>
+ADMIN --|> USER
+OWNER --|> USER
+STAFF --|> USER
+TECH --|> USER
+TENANT --|> USER
+PRIMARY --|> TENANT
+OCC --|> TENANT
+SM --|> STAFF
+SP --|> STAFF
+SD --|> STAFF
+@enduml
+
+@startuml uc-01-tai-khoan
+title 1. Tài khoản và xác thực
+left to right direction
+skinparam actorStyle awesome
+actor "Khách" as GUEST
+actor "Người dùng\nđã đăng nhập" as USER
+actor "Quản trị viên" as ADMIN
+actor "Dịch vụ xác thực" as AUTH <<system>>
+rectangle "PhongHub" {
+  usecase "UC-01 Đăng nhập" as UC01
+  usecase "UC-02 Yêu cầu cấp lại mật khẩu" as UC02
+  usecase "UC-03 Đổi mật khẩu" as UC03
+  usecase "UC-04 Cập nhật hồ sơ cá nhân" as UC04
+  usecase "UC-05 Đăng xuất" as UC05
+  usecase "UC-06 Tạo tài khoản" as UC06
+  usecase "UC-07 Cập nhật, khóa, xóa tài khoản" as UC07
+  usecase "UC-08 Đặt lại mật khẩu cho người dùng" as UC08
+}
+GUEST -- UC01
+GUEST -- UC02
+USER -- UC03
+USER -- UC04
+USER -- UC05
+ADMIN -- UC06
+ADMIN -- UC07
+ADMIN -- UC08
+UC03 .> UC01 : <<extend>>\nlần đầu đăng nhập
+UC08 .> UC02 : <<extend>>\nxử lý yêu cầu
+UC01 -- AUTH
+UC03 -- AUTH
+UC06 -- AUTH
+UC07 -- AUTH
+UC08 -- AUTH
+@enduml
+
+@startuml uc-02-nha-tro
+title 2. Nhà trọ và nhân sự
+left to right direction
+skinparam actorStyle awesome
+actor "Chủ trọ" as OWNER
+actor "Quản trị viên" as ADMIN
+actor "Nhân viên" as STAFF
+rectangle "PhongHub" {
+  usecase "UC-09 Tạo nhà trọ" as UC09
+  usecase "UC-10 Duyệt hoặc từ chối nhà trọ" as UC10
+  usecase "UC-11 Cập nhật thông tin nhà trọ" as UC11
+  usecase "UC-12 Ẩn hoặc khôi phục nhà trọ" as UC12
+  usecase "UC-13 Phân công nhân sự và cấp quyền" as UC13
+  usecase "UC-14 Soạn nội quy nhà trọ" as UC14
+  usecase "UC-15 Cấu hình phạt trả trễ" as UC15
+  usecase "UC-16 Cấu hình đơn giá dịch vụ" as UC16
+}
+OWNER -- UC09
+OWNER -- UC11
+OWNER -- UC12
+OWNER -- UC13
+OWNER -- UC14
+OWNER -- UC15
+OWNER -- UC16
+STAFF -- UC14
+UC09 -- ADMIN
+UC10 -- ADMIN
+UC11 -- ADMIN
+UC12 -- ADMIN
+UC13 -- ADMIN
+UC14 -- ADMIN
+UC15 -- ADMIN
+UC16 -- ADMIN
+UC10 .> UC11 : <<extend>>\nđổi địa chỉ
+@enduml
+
+@startuml uc-03-phong
+title 3. Phòng và tài sản
+left to right direction
+skinparam actorStyle awesome
+actor "Chủ trọ" as OWNER
+actor "Nhân viên" as STAFF
+actor "Quản trị viên" as ADMIN
+actor "Kỹ thuật viên" as TECH
+actor "Người thuê" as TENANT
+actor "Kho tệp riêng tư" as STORE <<system>>
+rectangle "PhongHub" {
+  usecase "UC-17 Tạo phòng" as UC17
+  usecase "UC-18 Cập nhật thông tin phòng" as UC18
+  usecase "UC-19 Đổi trạng thái phòng" as UC19
+  usecase "UC-20 Ẩn hoặc khôi phục phòng" as UC20
+  usecase "UC-21 Tìm kiếm và xem phòng" as UC21
+  usecase "UC-22 Quản lý tài sản trong phòng" as UC22
+  usecase "UC-23 Ghi sự kiện tài sản và in mã QR" as UC23
+}
+OWNER -- UC17
+OWNER -- UC18
+OWNER -- UC19
+OWNER -- UC20
+OWNER -- UC21
+OWNER -- UC22
+OWNER -- UC23
+STAFF -- UC17
+STAFF -- UC19
+STAFF -- UC21
+STAFF -- UC22
+STAFF -- UC23
+UC17 -- ADMIN
+UC18 -- ADMIN
+UC19 -- ADMIN
+UC20 -- ADMIN
+UC21 -- ADMIN
+UC22 -- ADMIN
+UC23 -- ADMIN
+UC21 -- TECH
+UC21 -- TENANT
+UC22 -- STORE
+@enduml
+
+@startuml uc-04-nguoi-thue
+title 4. Người thuê và dữ liệu cá nhân
+left to right direction
+skinparam actorStyle awesome
+actor "Chủ trọ" as OWNER
+actor "Quản trị viên" as ADMIN
+actor "Nhân viên" as STAFF
+actor "Nhân viên có quyền\nxem giấy tờ" as SD
+actor "Người thuê" as TENANT
+actor "Bộ hẹn giờ" as CLOCK <<system>>
+actor "Kho tệp riêng tư" as STORE <<system>>
+SD --|> STAFF
+rectangle "PhongHub" {
+  usecase "UC-24 Thêm người thuê vào nhà trọ" as UC24
+  usecase "UC-25 Tìm kiếm, ẩn, khôi phục người thuê" as UC25
+  usecase "UC-26 Cập nhật thông tin người thuê" as UC26
+  usecase "UC-27 Quản lý giấy tờ tùy thân" as UC27
+  usecase "UC-28 Xem đầy đủ giấy tờ" as UC28
+  usecase "UC-29 Giữ hoặc xóa dữ liệu người thuê" as UC29
+  usecase "UC-30 Tự động xóa dữ liệu hết hạn lưu trữ" as UC30
+}
+OWNER -- UC24
+OWNER -- UC25
+OWNER -- UC26
+OWNER -- UC27
+OWNER -- UC28
+OWNER -- UC29
+STAFF -- UC24
+STAFF -- UC25
+STAFF -- UC26
+SD -- UC27
+SD -- UC28
+UC24 -- ADMIN
+UC27 -- ADMIN
+UC28 -- ADMIN
+UC29 -- ADMIN
+UC27 -- TENANT
+UC28 -- TENANT
+UC29 -- TENANT
+UC30 -- CLOCK
+UC27 -- STORE
+UC28 -- STORE
+UC30 -- STORE
+UC25 -- ADMIN
+UC26 -- ADMIN
+@enduml
+
+@startuml uc-05-hop-dong
+title 5. Hợp đồng
+left to right direction
+skinparam actorStyle awesome
+actor "Chủ trọ" as OWNER
+actor "Quản trị viên" as ADMIN
+actor "Nhân viên có quyền\nquản lý hợp đồng" as SM
+actor "Người thuê" as TENANT
+actor "Bộ hẹn giờ" as CLOCK <<system>>
+actor "Dịch vụ xác thực" as AUTH <<system>>
+rectangle "PhongHub" {
+  usecase "UC-31 Tạo hợp đồng thuê" as UC31
+  usecase "UC-32 Sửa hoặc hủy hợp đồng nháp" as UC32
+  usecase "UC-33 Kích hoạt hợp đồng" as UC33
+  usecase "UC-34 Xem hợp đồng" as UC34
+  usecase "UC-35 Quản lý người ở cùng" as UC35
+  usecase "UC-36 Gia hạn hợp đồng" as UC36
+  usecase "UC-37 Chấm dứt hợp đồng sớm" as UC37
+  usecase "UC-38 Tự động hết hạn và nhắc hết hạn" as UC38
+}
+OWNER -- UC31
+OWNER -- UC32
+OWNER -- UC33
+OWNER -- UC34
+OWNER -- UC35
+OWNER -- UC36
+OWNER -- UC37
+SM -- UC31
+SM -- UC32
+SM -- UC33
+SM -- UC34
+SM -- UC36
+UC31 -- ADMIN
+UC35 -- ADMIN
+UC37 -- ADMIN
+UC34 -- TENANT
+UC38 -- CLOCK
+UC35 -- AUTH
+UC32 -- ADMIN
+UC33 -- ADMIN
+UC34 -- ADMIN
+UC36 -- ADMIN
+@enduml
+
+@startuml uc-06-ban-giao
+title 6. Bàn giao phòng
+left to right direction
+skinparam actorStyle awesome
+actor "Chủ trọ" as OWNER
+actor "Quản trị viên" as ADMIN
+actor "Nhân viên có quyền\nquản lý hợp đồng" as SM
+actor "Người thuê chính" as PRIMARY
+actor "Người thuê" as TENANT
+actor "Kho tệp riêng tư" as STORE <<system>>
+PRIMARY --|> TENANT
+rectangle "PhongHub" {
+  usecase "UC-39 Lập biên bản check-in" as UC39
+  usecase "UC-40 Xác nhận biên bản bàn giao" as UC40
+  usecase "UC-41 Duyệt, từ chối, mở lại biên bản" as UC41
+  usecase "UC-42 Lập biên bản check-out\nvà quyết toán tiền cọc" as UC42
+  usecase "UC-43 So sánh check-in/check-out\nvà xuất PDF" as UC43
+  usecase "UC-27 Quản lý giấy tờ tùy thân" as UC27
+}
+OWNER -- UC39
+OWNER -- UC41
+OWNER -- UC42
+OWNER -- UC43
+SM -- UC39
+SM -- UC41
+SM -- UC42
+SM -- UC43
+UC39 -- ADMIN
+UC41 -- ADMIN
+UC42 -- ADMIN
+UC40 -- PRIMARY
+UC43 -- TENANT
+UC40 .> UC27 : <<include>>\ncheck-in cần CCCD
+UC39 -- STORE
+UC42 -- STORE
+note bottom of UC41
+  Duyệt check-out: chỉ chủ trọ
+  hoặc quản trị viên.
+end note
+UC43 -- ADMIN
+@enduml
+
+@startuml uc-07-dien-nuoc
+title 7. Điện nước
+left to right direction
+skinparam actorStyle awesome
+actor "Người thuê" as TENANT
+actor "Chủ trọ" as OWNER
+actor "Nhân viên" as STAFF
+actor "Quản trị viên" as ADMIN
+rectangle "PhongHub" {
+  usecase "UC-44 Gửi chỉ số điện nước" as UC44
+  usecase "UC-45 Duyệt chỉ số người thuê gửi" as UC45
+  usecase "UC-46 Ghi chỉ số điện nước" as UC46
+  usecase "Gợi ý chỉ số từ ảnh (OCR)" as OCR
+}
+TENANT -- UC44
+OWNER -- UC45
+OWNER -- UC46
+STAFF -- UC45
+STAFF -- UC46
+UC45 -- ADMIN
+UC46 -- ADMIN
+OCR .> UC46 : <<extend>>\ncó ảnh đồng hồ
+@enduml
+
+@startuml uc-08-hoa-don
+title 8. Hóa đơn và thanh toán
+left to right direction
+skinparam actorStyle awesome
+actor "Chủ trọ" as OWNER
+actor "Nhân viên có quyền\nquản lý hợp đồng" as SM
+actor "Nhân viên có quyền\nthu tiền" as SP
+actor "Người thuê" as TENANT
+actor "Bộ hẹn giờ" as CLOCK <<system>>
+actor "SePay" as SEPAY <<system>>
+rectangle "PhongHub" {
+  usecase "UC-47 Tạo kỳ thanh toán" as UC47
+  usecase "UC-48 Tự động phát hành hóa đơn tháng" as UC48
+  usecase "UC-49 Hủy hóa đơn" as UC49
+  usecase "UC-50 Xem và thanh toán hóa đơn" as UC50
+  usecase "UC-51 Ghi nhận thanh toán từ SePay" as UC51
+  usecase "UC-52 Tính phạt trả trễ" as UC52
+  usecase "UC-53 Nhắc hóa đơn sắp đến hạn" as UC53
+  usecase "UC-54 Đối soát giao dịch và biên lai" as UC54
+}
+OWNER -- UC47
+OWNER -- UC49
+OWNER -- UC54
+SM -- UC47
+SM -- UC49
+SP -- UC54
+TENANT -- UC50
+TENANT -- UC54
+UC48 -- CLOCK
+UC52 -- CLOCK
+UC53 -- CLOCK
+UC51 -- SEPAY
+UC50 -- SEPAY
+UC50 .> UC51 : <<include>>
+@enduml
+
+@startuml uc-09-bao-tri
+title 9. Bảo trì
+left to right direction
+skinparam actorStyle awesome
+actor "Người thuê" as TENANT
+actor "Chủ trọ" as OWNER
+actor "Nhân viên" as STAFF
+actor "Quản trị viên" as ADMIN
+actor "Kỹ thuật viên" as TECH
+actor "Bộ hẹn giờ" as CLOCK <<system>>
+actor "Kho tệp riêng tư" as STORE <<system>>
+rectangle "PhongHub" {
+  usecase "UC-55 Báo hỏng" as UC55
+  usecase "UC-56 Đính kèm ảnh/video" as UC56
+  usecase "UC-57 Sửa hoặc hủy phiếu" as UC57
+  usecase "UC-58 Giao kỹ thuật viên\nhoặc từ chối phiếu" as UC58
+  usecase "UC-59 Báo giá sửa chữa" as UC59
+  usecase "UC-60 Nhận việc và hoàn tất sửa chữa" as UC60
+  usecase "UC-61 Nghiệm thu hoặc yêu cầu sửa lại" as UC61
+  usecase "UC-62 Miễn phí sửa chữa" as UC62
+  usecase "UC-63 Cảnh báo quá hạn xử lý" as UC63
+}
+TENANT -- UC55
+TENANT -- UC56
+TENANT -- UC57
+TENANT -- UC61
+OWNER -- UC55
+OWNER -- UC56
+OWNER -- UC57
+OWNER -- UC58
+OWNER -- UC59
+OWNER -- UC62
+STAFF -- UC58
+STAFF -- UC59
+STAFF -- UC62
+UC58 -- ADMIN
+UC59 -- TECH
+UC60 -- TECH
+UC63 -- CLOCK
+UC56 .> UC55 : <<extend>>
+UC56 -- STORE
+STAFF -- UC55
+STAFF -- UC56
+STAFF -- UC57
+UC55 -- ADMIN
+UC56 -- ADMIN
+UC57 -- ADMIN
+UC59 -- ADMIN
+UC62 -- ADMIN
+@enduml
+
+@startuml uc-10-giao-tiep-bao-cao
+title 10-11. Giao tiếp, báo cáo và giám sát
+left to right direction
+skinparam actorStyle awesome
+actor "Người dùng\nđã đăng nhập" as USER
+actor "Quản trị viên" as ADMIN
+actor "Chủ trọ" as OWNER
+actor "Nhân viên có quyền\nquản lý hợp đồng" as SM
+actor "Nhân viên có quyền\nthu tiền" as SP
+rectangle "PhongHub" {
+  usecase "UC-64 Nhắn tin" as UC64
+  usecase "UC-65 Xem thông báo" as UC65
+  usecase "UC-66 Xem dashboard và thống kê" as UC66
+  usecase "UC-67 Xuất dữ liệu" as UC67
+  usecase "UC-68 Xem nhật ký hoạt động" as UC68
+}
+USER -- UC64
+USER -- UC65
+USER -- UC66
+OWNER -- UC67
+SM -- UC67
+SP -- UC67
+UC68 -- ADMIN
+UC68 -- OWNER
+@enduml

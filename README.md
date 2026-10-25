@@ -19,6 +19,9 @@ tập trung vào các nghiệp vụ property, room, contract và maintenance tic
   (migration V10-V12).
 - Snapshot này không được gọi là release-ready. Việc deploy thật, CORS, URL
   runtime và dữ liệu Supabase cần được xác minh riêng.
+- Đặc tả use case (tác nhân, sơ đồ, luồng chính/phụ, ma trận phân quyền):
+  [docs/use-cases.md](docs/use-cases.md); sơ đồ UML dạng PlantUML ở
+  [docs/uml/phonghub-use-cases.puml](docs/uml/phonghub-use-cases.puml).
 
 ## Kiến trúc
 
