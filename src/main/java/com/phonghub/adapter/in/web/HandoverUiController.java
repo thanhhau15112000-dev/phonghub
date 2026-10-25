@@ -8,6 +8,7 @@ import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.AssetStatus;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.HandoverPhotoKind;
@@ -21,6 +22,8 @@ import java.math.BigDecimal;
 import java.net.URI;
 import java.util.UUID;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -176,12 +179,25 @@ public class HandoverUiController {
     }
 
     @GetMapping("/photos/{photoId}")
-    public ResponseEntity<Void> photo(
+    public ResponseEntity<byte[]> photo(
         @PathVariable UUID contractId,
         @PathVariable String kind,
         @PathVariable UUID photoId
     ) {
-        URI target = handoverUseCase.photoSignedUrl(typeOf(kind), contractId, photoId);
+        HandoverType type = typeOf(kind);
+        URI target;
+        try {
+            target = handoverUseCase.photoSignedUrl(type, contractId, photoId);
+        } catch (UnauthorizedPropertyAccessException ex) {
+            // Ảnh được mở bằng thẻ img hoặc tab mới: người ngoài hợp đồng nhận 403 thay vì bị chuyển trang
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).header(HttpHeaders.CACHE_CONTROL, "no-store").build();
+        }
+        if (!"https".equalsIgnoreCase(target.getScheme()) && !"http".equalsIgnoreCase(target.getScheme())) {
+            // Kho in-memory (profile docker/test) chỉ có URL nội bộ memory:// mà trình duyệt không mở được
+            HandoverUseCase.PhotoFile file = handoverUseCase.photoFile(type, contractId, photoId);
+            return ResponseEntity.ok().contentType(MediaType.parseMediaType(file.contentType()))
+                .header(HttpHeaders.CACHE_CONTROL, "no-store").body(file.content());
+        }
         return ResponseEntity.status(302).header(HttpHeaders.LOCATION, target.toString())
             .header(HttpHeaders.CACHE_CONTROL, "no-store").build();
     }

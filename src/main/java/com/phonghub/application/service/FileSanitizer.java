@@ -110,7 +110,7 @@ public final class FileSanitizer {
         try {
             var image = ImageIO.read(new ByteArrayInputStream(content));
             if (image == null) {
-                throw new IllegalArgumentException("Image payload is corrupt");
+                throw new IllegalArgumentException("Không đọc được ảnh: tệp bị hỏng hoặc dùng định dạng màu không hỗ trợ.");
             }
             ByteArrayOutputStream output = new ByteArrayOutputStream();
             if (!ImageIO.write(image, format, output)) {
@@ -118,7 +118,7 @@ public final class FileSanitizer {
             }
             return output.toByteArray();
         } catch (IOException ex) {
-            throw new IllegalArgumentException("Image payload is corrupt", ex);
+            throw new IllegalArgumentException("Không đọc được ảnh: tệp bị hỏng hoặc dùng định dạng màu không hỗ trợ.", ex);
         }
     }
 
@@ -131,7 +131,7 @@ public final class FileSanitizer {
                 int size = ByteBuffer.wrap(content, offset + 4, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
                 int paddedSize = size + (size & 1);
                 if (size < 0 || offset + 8L + paddedSize > content.length) {
-                    throw new IllegalArgumentException("WebP payload is corrupt");
+                    throw new IllegalArgumentException("Không đọc được ảnh WebP: tệp bị hỏng.");
                 }
                 if (!type.equals("EXIF") && !type.equals("XMP ")) {
                     byte[] chunk = Arrays.copyOfRange(content, offset, offset + 8 + paddedSize);
