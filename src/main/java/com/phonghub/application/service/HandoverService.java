@@ -15,6 +15,7 @@ import com.phonghub.application.port.out.RoomAssetRepositoryPort;
 import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.domain.exception.ContractNotFoundException;
+import com.phonghub.domain.exception.FileStorageUnavailableException;
 import com.phonghub.domain.exception.HandoverAlreadyExistsException;
 import com.phonghub.domain.exception.HandoverNotFoundException;
 import com.phonghub.domain.exception.InvalidHandoverStateException;
@@ -45,9 +46,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HandoverService implements HandoverUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(HandoverService.class);
     private static final int MAX_PHOTOS = 20;
     private static final Duration SIGNED_URL_TTL = Duration.ofMinutes(10);
 
@@ -192,7 +196,14 @@ public class HandoverService implements HandoverUseCase {
         }
         FileSanitizer.SanitizedFile file = FileSanitizer.sanitize(contentType, content, maxFileSizeBytes);
         String key = PrivateFileStorageService.objectKey(contract.getPropertyId(), "handover", file.extension());
-        storagePort.put(key, file.contentType(), file.content());
+        try {
+            storagePort.put(key, file.contentType(), file.content());
+        } catch (RuntimeException ex) {
+            // Chưa ghi bản ghi ảnh nên không có bản ghi mồ côi; lỗi gốc (bucket, khóa, mạng) chỉ ghi log
+            log.error("Không lưu được ảnh biên bản {} vào kho lưu trữ (key {})", handover.id(), key, ex);
+            throw new FileStorageUnavailableException(
+                "Không lưu được ảnh vào kho lưu trữ, vui lòng thử lại sau. Nếu lỗi lặp lại, hãy báo quản trị viên.", ex);
+        }
         HandoverPhoto saved;
         try {
             saved = photoRepository.save(new HandoverPhoto(UUID.randomUUID(), handover.id(), kind, key,
@@ -400,14 +411,37 @@ public class HandoverService implements HandoverUseCase {
 
     @Override
     public URI photoSignedUrl(HandoverType type, UUID contractId, UUID photoId) {
+        HandoverPhoto photo = findViewablePhoto(type, contractId, photoId);
+        try {
+            return storagePort.createSignedUrl(photo.imageKey(), SIGNED_URL_TTL);
+        } catch (RuntimeException ex) {
+            throw photoUnavailable(photo, ex);
+        }
+    }
+
+    @Override
+    public PhotoFile photoFile(HandoverType type, UUID contractId, UUID photoId) {
+        HandoverPhoto photo = findViewablePhoto(type, contractId, photoId);
+        try {
+            return new PhotoFile(photo.contentType(), storagePort.get(photo.imageKey()));
+        } catch (RuntimeException ex) {
+            throw photoUnavailable(photo, ex);
+        }
+    }
+
+    private HandoverPhoto findViewablePhoto(HandoverType type, UUID contractId, UUID photoId) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(contractId);
         assertCanView(user, contract);
         Handover handover = findHandover(contractId, type);
-        HandoverPhoto photo = photoRepository.findById(photoId)
+        return photoRepository.findById(photoId)
             .filter(found -> found.handoverId().equals(handover.id()))
             .orElseThrow(() -> new HandoverNotFoundException("Không tìm thấy ảnh biên bản: " + photoId));
-        return storagePort.createSignedUrl(photo.imageKey(), SIGNED_URL_TTL);
+    }
+
+    private static FileStorageUnavailableException photoUnavailable(HandoverPhoto photo, RuntimeException cause) {
+        log.error("Không lấy được ảnh biên bản {} từ kho lưu trữ (key {})", photo.id(), photo.imageKey(), cause);
+        return new FileStorageUnavailableException("Không mở được ảnh từ kho lưu trữ, vui lòng thử lại sau.", cause);
     }
 
     @Override

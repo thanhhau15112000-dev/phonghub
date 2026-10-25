@@ -17,6 +17,7 @@ import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.application.service.HandoverService;
+import com.phonghub.domain.exception.FileStorageUnavailableException;
 import com.phonghub.domain.exception.HandoverAlreadyExistsException;
 import com.phonghub.domain.exception.InvalidHandoverStateException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
@@ -34,6 +35,7 @@ import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -72,6 +75,7 @@ class HandoverServiceUnitTest {
     private ContractUseCase contractUseCase;
     private CurrentUserPort currentUser;
     private AuthorizationService authorization;
+    private FileStoragePort storage;
     private HandoverService service;
     private Contract contract;
     private Tenant tenant;
@@ -89,6 +93,7 @@ class HandoverServiceUnitTest {
         contractUseCase = mock(ContractUseCase.class);
         currentUser = mock(CurrentUserPort.class);
         authorization = mock(AuthorizationService.class);
+        storage = mock(FileStoragePort.class);
 
         tenant = new Tenant(UUID.randomUUID(), UUID.randomUUID(), "Nguyen A", "079201001111", "0900000001",
             null, null, Instant.now());
@@ -103,7 +108,7 @@ class HandoverServiceUnitTest {
         when(items.save(any(), any())).thenAnswer(inv -> inv.getArgument(0));
 
         service = new HandoverService(handovers, photos, items, rules, contracts, assets, tenants, documents,
-            contractUseCase, mock(FileStoragePort.class), currentUser, authorization, mock(AuditPort.class),
+            contractUseCase, storage, currentUser, authorization, mock(AuditPort.class),
             1024 * 1024);
     }
 
@@ -184,6 +189,50 @@ class HandoverServiceUnitTest {
 
         assertThrows(InvalidHandoverStateException.class, () -> service.addPhoto(HandoverType.CHECK_IN,
             contract.getId(), HandoverPhotoKind.ROOM, "image/png", new byte[]{1}));
+    }
+
+    private static final byte[] PNG = Base64.getDecoder().decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
+    @Test
+    void addPhotoReportsStorageFailureWithoutCreatingARecord() {
+        givenHandover(existing(HandoverType.CHECK_IN, HandoverStatus.DRAFT));
+        doThrow(new IllegalStateException("404 Bucket not found")).when(storage).put(anyString(), anyString(), any());
+
+        FileStorageUnavailableException ex = assertThrows(FileStorageUnavailableException.class, () ->
+            service.addPhoto(HandoverType.CHECK_IN, contract.getId(), HandoverPhotoKind.ROOM, "image/png", PNG));
+
+        assertEquals(true, ex.getMessage().startsWith("Không lưu được ảnh vào kho lưu trữ"));
+        verify(photos, never()).save(any());
+    }
+
+    @Test
+    void addPhotoRemovesStoredFileWhenTheRecordCannotBeSaved() {
+        givenHandover(existing(HandoverType.CHECK_IN, HandoverStatus.DRAFT));
+        when(photos.save(any())).thenThrow(new IllegalStateException("db down"));
+        ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
+
+        assertThrows(IllegalStateException.class, () ->
+            service.addPhoto(HandoverType.CHECK_IN, contract.getId(), HandoverPhotoKind.ROOM, "image/png", PNG));
+
+        verify(storage).put(key.capture(), eq("image/png"), any());
+        verify(storage).delete(key.getValue());
+    }
+
+    @Test
+    void viewingAPhotoReportsStorageFailure() {
+        Handover handover = existing(HandoverType.CHECK_IN, HandoverStatus.DRAFT);
+        givenHandover(handover);
+        HandoverPhoto photo = new HandoverPhoto(UUID.randomUUID(), handover.id(), HandoverPhotoKind.ROOM, "k.png",
+            "image/png", Instant.now(), staff.id());
+        when(photos.findById(photo.id())).thenReturn(Optional.of(photo));
+        when(storage.createSignedUrl(eq("k.png"), any())).thenThrow(new IllegalStateException("timeout"));
+        when(storage.get("k.png")).thenThrow(new IllegalStateException("timeout"));
+
+        assertThrows(FileStorageUnavailableException.class, () ->
+            service.photoSignedUrl(HandoverType.CHECK_IN, contract.getId(), photo.id()));
+        assertThrows(FileStorageUnavailableException.class, () ->
+            service.photoFile(HandoverType.CHECK_IN, contract.getId(), photo.id()));
     }
 
     @Test

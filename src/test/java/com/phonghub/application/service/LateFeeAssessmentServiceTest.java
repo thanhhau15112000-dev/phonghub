@@ -36,6 +36,7 @@ class LateFeeAssessmentServiceTest {
     private List<AuditPort.AuditEvent> events;
     private LateFeeAssessmentService service;
     private Invoice invoice;
+    private Contract contract;
 
     @BeforeEach
     void setUp() {
@@ -45,7 +46,7 @@ class LateFeeAssessmentServiceTest {
         events = new ArrayList<>();
         service = new LateFeeAssessmentService(invoices, contracts, policies, events::add);
 
-        Contract contract = new Contract(
+        contract = new Contract(
             UUID.randomUUID(), propertyId, UUID.randomUUID(), UUID.randomUUID(),
             new BigDecimal("3000000"), new BigDecimal("3500000"), LocalDate.of(2026, 1, 15), LocalDate.of(2027, 1, 15), 5,
             ContractStatus.ACTIVE, List.of(), Instant.now(), Instant.now());
@@ -93,6 +94,20 @@ class LateFeeAssessmentServiceTest {
         assertFalse(service.assessInvoice(invoice.getId(), DUE.plusDays(30)), "chưa cấu hình chính sách");
         assertEquals(0, new BigDecimal("3500000").compareTo(total()));
         assertTrue(events.isEmpty());
+    }
+
+    @Test
+    @DisplayName("#208: kỳ tạo sau ngày thanh toán không bị phạt ngay, chỉ phạt khi qua hạn mới (ngày tạo + 3)")
+    void invoiceIssuedAfterPaymentDayIsNotFinedOnIssue() {
+        policy(true, 0);
+        LocalDate issuedOn = LocalDate.of(2026, 10, 25);
+        Invoice late = invoices.save(Invoice.issueMonthlyRent(
+            contract, YearMonth.of(2026, 10), "PHLATE0003", List.of(), issuedOn));
+
+        assertFalse(service.findInvoicesToAssess(issuedOn).contains(late.getId()));
+        assertFalse(service.assessInvoice(late.getId(), issuedOn), "vừa tạo, chưa tới hạn");
+        assertFalse(service.assessInvoice(late.getId(), late.getDueDate()), "đúng hạn chưa quá hạn");
+        assertTrue(service.assessInvoice(late.getId(), late.getDueDate().plusDays(1)));
     }
 
     @Test
