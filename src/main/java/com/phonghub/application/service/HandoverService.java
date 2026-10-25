@@ -513,7 +513,11 @@ public class HandoverService implements HandoverUseCase {
         List<HandoverPhoto> photos = photoRepository.findByHandoverId(handover.id());
         for (HandoverPhotoKind required : HandoverPhotoKind.values()) {
             if (photos.stream().noneMatch(photo -> photo.kind() == required)) {
-                throw new IllegalArgumentException("Cần ít nhất một ảnh loại " + required + " trước khi gửi");
+                throw new IllegalArgumentException("Cần ít nhất một ảnh " + switch (required) {
+                    case ROOM -> "phòng";
+                    case METER_ELECTRIC -> "đồng hồ điện";
+                    case METER_WATER -> "đồng hồ nước";
+                } + " trước khi gửi");
             }
         }
         if (type == HandoverType.CHECK_IN && MISSING_BASELINE_NOTE.equals(handover.roomCondition())) {

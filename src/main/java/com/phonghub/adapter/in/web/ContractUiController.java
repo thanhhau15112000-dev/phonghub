@@ -196,7 +196,7 @@ public class ContractUiController {
                 endDate,
                 paymentDay
             ));
-            redirectAttributes.addFlashAttribute("successMessage", "Đã tạo hợp đồng ở trạng thái bản nháp. Bạn có thể kích hoạt hợp đồng.");
+            redirectAttributes.addFlashAttribute("successMessage", "Đã tạo hợp đồng ở trạng thái bản nháp. Hãy lập biên bản check-in; hợp đồng được kích hoạt sau khi biên bản được duyệt.");
             return "redirect:/contracts/" + contract.getId();
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
