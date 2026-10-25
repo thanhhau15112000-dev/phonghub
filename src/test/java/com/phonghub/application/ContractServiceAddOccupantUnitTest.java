@@ -19,6 +19,7 @@ import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
 import com.phonghub.domain.model.ContractStatus;
+import com.phonghub.domain.model.ContractStatus;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
@@ -28,6 +29,7 @@ import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -107,6 +109,17 @@ class ContractServiceAddOccupantUnitTest {
             "primary@phonghub.local",
             "TP.HCM"
         ));
+        userRepo.save(new User(
+            LocalDemoAuthenticationAdapter.TENANT_1_ID,
+            "primary-tenant",
+            "primary@phonghub.local",
+            "Nguyễn Văn A",
+            "0901234567",
+            UserRole.TENANT,
+            User.UserStatus.ACTIVE,
+            false,
+            Instant.now()
+        ));
 
         // Create and activate contract
         activeContract = contractService.createContract(new ContractUseCase.CreateContractCommand(
@@ -125,6 +138,188 @@ class ContractServiceAddOccupantUnitTest {
         ));
         contractService.activateContract(activeContract.getId());
         activeContract = contractRepo.findById(activeContract.getId()).orElseThrow();
+    }
+
+    @Test
+    @DisplayName("Selected tenant account links to an existing profile matched by identity card")
+    void selectedTenantAccountLinksToExistingProfile() {
+        Tenant unlinked = tenantRepo.save(Tenant.create(
+            null, "Lê Thị D", "079200004444", "0911222444", "d@example.com", null));
+        User account = tenantAccount("tenant-d", "d@example.com", "Lê Thị D");
+
+        Contract contract = contractService.createContract(createContractCommand(
+            "079200004444", account.id()));
+
+        assertEquals(unlinked.id(), contract.getPrimaryTenantId());
+        assertEquals(account.id(), tenantRepo.findById(unlinked.id()).orElseThrow().userId());
+    }
+
+    @Test
+    @DisplayName("Selected tenant account is saved on a newly created tenant profile")
+    void selectedTenantAccountLinksToNewProfile() {
+        User account = tenantAccount("tenant-new", "new-tenant@example.com", "Đỗ Thị P");
+
+        Contract contract = contractService.createContract(createContractCommand("079200010008", account.id()));
+
+        Tenant created = tenantRepo.findByIdentityCardNumber("079200010008").orElseThrow();
+        assertEquals(account.id(), created.userId());
+        assertEquals(created.id(), contract.getPrimaryTenantId());
+    }
+
+    @Test
+    @DisplayName("Contract creation rejects an account that is not a tenant")
+    void createContractRejectsNonTenantAccount() {
+        User admin = new User(UUID.randomUUID(), "admin-user", "admin-user@example.com", "Admin User", null,
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now());
+        userRepo.save(admin);
+
+        assertThrows(IllegalArgumentException.class,
+            () -> contractService.createContract(createContractCommand("079200005555", admin.id())));
+        assertTrue(tenantRepo.findByIdentityCardNumber("079200005555").isEmpty());
+    }
+
+    @Test
+    @DisplayName("Contract creation rejects an account already linked to a different tenant profile")
+    void createContractRejectsAccountLinkedToDifferentTenant() {
+        User account = tenantAccount("tenant-e", "e@example.com", "Ngô Thị E");
+        Tenant linked = tenantRepo.save(Tenant.create(
+            account.id(), "Ngô Thị E", "079200006666", "0911222666", "e@example.com", null));
+
+        assertThrows(DomainException.class,
+            () -> contractService.createContract(createContractCommand("079200007777", account.id())));
+        assertTrue(tenantRepo.findByIdentityCardNumber("079200007777").isEmpty());
+        assertEquals(linked.id(), tenantRepo.findByUserId(account.id()).orElseThrow().id());
+    }
+
+    @Test
+    @DisplayName("Contract creation rejects linking an existing identity profile to a different account")
+    void createContractRejectsDifferentAccountForExistingIdentityProfile() {
+        User existingAccount = tenantAccount("tenant-existing", "existing@example.com", "Lý Thị Q");
+        User selectedAccount = tenantAccount("tenant-selected", "selected@example.com", "Lý Thị Q");
+        Tenant linked = tenantRepo.save(Tenant.create(
+            existingAccount.id(), "Lý Thị Q", "079200010009", "0911222999", "existing@example.com", null));
+
+        assertThrows(DomainException.class,
+            () -> contractService.createContract(createContractCommand("079200010009", selectedAccount.id())));
+        assertEquals(existingAccount.id(), tenantRepo.findById(linked.id()).orElseThrow().userId());
+    }
+
+    @Test
+    @DisplayName("Bulk add accepts multiple linked, available tenants in one operation")
+    void bulkAddExistingOccupantsSuccessfully() {
+        room.updateInfo("P101", 1, new BigDecimal("25.0"), new BigDecimal("3500000"), 3);
+        roomRepo.save(room);
+        Tenant first = linkedAvailableTenant("079200008888", "Phạm Văn F");
+        Tenant second = linkedAvailableTenant("079200009999", "Vũ Thị G");
+
+        List<ContractOccupant> added = contractService.addExistingOccupants(
+            new ContractUseCase.AddExistingOccupantsCommand(
+                activeContract.getId(), List.of(first.id(), second.id()), LocalDate.now()));
+
+        assertEquals(2, added.size());
+        assertEquals(3, contractRepo.findById(activeContract.getId()).orElseThrow().getOccupants().size());
+        assertFalse(contractService.listAvailableOccupants(activeContract.getId()).stream()
+            .anyMatch(tenant -> tenant.id().equals(first.id()) || tenant.id().equals(second.id())));
+    }
+
+    @Test
+    @DisplayName("Bulk add rejects the entire batch when capacity is exceeded")
+    void bulkAddRejectsBatchWhenCapacityIsExceeded() {
+        Tenant first = linkedAvailableTenant("079200010001", "Trần Văn H");
+        Tenant second = linkedAvailableTenant("079200010002", "Nguyễn Thị I");
+
+        assertThrows(InvalidRoomCapacityException.class, () -> contractService.addExistingOccupants(
+            new ContractUseCase.AddExistingOccupantsCommand(
+                activeContract.getId(), List.of(first.id(), second.id()), LocalDate.now())));
+
+        assertEquals(1, contractRepo.findById(activeContract.getId()).orElseThrow().getOccupants().size());
+    }
+
+    @Test
+    @DisplayName("Bulk capacity check counts the primary tenant when a legacy contract has no occupant rows")
+    void bulkCapacityCountsPrimaryTenantWhenOccupantRowsAreMissing() {
+        Contract legacyContract = new Contract(
+            activeContract.getId(), activeContract.getPropertyId(), activeContract.getRoomId(),
+            activeContract.getPrimaryTenantId(), activeContract.getDepositAmount(), activeContract.getRentAmount(),
+            activeContract.getStartDate(), activeContract.getEndDate(), activeContract.getPaymentDay(),
+            ContractStatus.ACTIVE, List.of(), activeContract.getCreatedAt(), activeContract.getUpdatedAt());
+        contractRepo.save(legacyContract);
+        Tenant first = linkedAvailableTenant("079200010010", "Lê Văn R");
+        Tenant second = linkedAvailableTenant("079200010011", "Bùi Thị S");
+
+        assertThrows(InvalidRoomCapacityException.class, () -> contractService.addExistingOccupants(
+            new ContractUseCase.AddExistingOccupantsCommand(
+                activeContract.getId(), List.of(first.id(), second.id()), LocalDate.now())));
+
+        assertTrue(contractRepo.findById(activeContract.getId()).orElseThrow().getOccupants().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Bulk add rejects the entire batch when one selected tenant already resides elsewhere")
+    void bulkAddRejectsBatchWhenOneTenantAlreadyResidesElsewhere() {
+        room.updateInfo("P101", 1, new BigDecimal("25.0"), new BigDecimal("3500000"), 3);
+        roomRepo.save(room);
+        Tenant available = linkedAvailableTenant("079200010005", "Trần Văn L");
+        Tenant residing = linkedAvailableTenant("079200010006", "Nguyễn Thị M");
+        Room anotherRoom = roomRepo.save(Room.create(property.id(), "P102", 1, new BigDecimal("25.0"),
+            new BigDecimal("3500000"), 2));
+        Contract otherContract = Contract.create(property.id(), anotherRoom.getId(), residing.id(),
+            new BigDecimal("3500000"), new BigDecimal("3500000"), LocalDate.now(),
+            LocalDate.now().plusMonths(6), 5);
+        otherContract.activate();
+        contractRepo.save(otherContract);
+
+        assertThrows(DuplicateActiveContractException.class, () -> contractService.addExistingOccupants(
+            new ContractUseCase.AddExistingOccupantsCommand(
+                activeContract.getId(), List.of(available.id(), residing.id()), LocalDate.now())));
+
+        assertEquals(1, contractRepo.findById(activeContract.getId()).orElseThrow().getOccupants().size());
+    }
+
+    @Test
+    @DisplayName("Bulk add rejects profiles hidden from the property")
+    void bulkAddRejectsHiddenPropertyProfile() {
+        Tenant hidden = linkedAvailableTenant("079200010007", "Võ Thị N");
+        tenantRepo.setHidden(hidden.id(), property.id(), Instant.now(), LocalDemoAuthenticationAdapter.OWNER_1_ID);
+
+        assertThrows(DomainException.class, () -> contractService.addExistingOccupants(
+            new ContractUseCase.AddExistingOccupantsCommand(
+                activeContract.getId(), List.of(hidden.id()), LocalDate.now())));
+
+        assertEquals(1, contractRepo.findById(activeContract.getId()).orElseThrow().getOccupants().size());
+    }
+
+    @Test
+    @DisplayName("Bulk add candidates are limited to available tenants linked to the contract property")
+    void availableOccupantsAreScopedAndExcludeCurrentResidents() {
+        Tenant linked = linkedAvailableTenant("079200010003", "Võ Văn J");
+        Tenant otherProperty = tenantRepo.save(Tenant.create(null, "Phan Văn K", "079200010004", "0900000004", null, null));
+        tenantRepo.linkToProperty(otherProperty.id(), UUID.randomUUID(), LocalDemoAuthenticationAdapter.OWNER_1_ID);
+
+        List<Tenant> available = contractService.listAvailableOccupants(activeContract.getId());
+
+        assertEquals(List.of(linked.id()), available.stream().map(Tenant::id).toList());
+        assertFalse(available.stream().anyMatch(t -> t.id().equals(primaryTenant.id())));
+    }
+
+    private Tenant linkedAvailableTenant(String idCard, String fullName) {
+        Tenant tenant = tenantRepo.save(Tenant.create(null, fullName, idCard, "0900000000", null, null));
+        tenantRepo.linkToProperty(tenant.id(), property.id(), LocalDemoAuthenticationAdapter.OWNER_1_ID);
+        return tenant;
+    }
+
+    private User tenantAccount(String username, String email, String fullName) {
+        User user = new User(UUID.randomUUID(), username, email, fullName, "0911222333", UserRole.TENANT,
+            User.UserStatus.ACTIVE, false, Instant.now());
+        return userRepo.save(user);
+    }
+
+    private ContractUseCase.CreateContractCommand createContractCommand(String idCard, UUID userId) {
+        Room anotherRoom = roomRepo.save(Room.create(property.id(), "P102", 1, new BigDecimal("25.0"),
+            new BigDecimal("3500000"), 2));
+        return new ContractUseCase.CreateContractCommand(
+            property.id(), anotherRoom.getId(), "Tenant Test", idCard, "0901234000", null, userId,
+            new BigDecimal("3500000"), new BigDecimal("3500000"), LocalDate.now(), LocalDate.now().plusMonths(6), 5);
     }
 
     @Test

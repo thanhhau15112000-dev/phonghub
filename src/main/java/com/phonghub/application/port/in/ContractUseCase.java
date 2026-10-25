@@ -2,6 +2,7 @@ package com.phonghub.application.port.in;
 
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
+import com.phonghub.domain.model.Tenant;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -62,6 +63,9 @@ public interface ContractUseCase {
     Optional<Contract> getActiveContractForTenant(UUID tenantUserId);
     List<Contract> listContractsForTenant(UUID tenantUserId);
     AddOccupantResult addOccupant(AddOccupantCommand command);
+    /** Existing profiles visible in the property's tenant list that are not currently residing in a contract. */
+    List<Tenant> listAvailableOccupants(UUID contractId);
+    List<ContractOccupant> addExistingOccupants(AddExistingOccupantsCommand command);
     ContractOccupant checkOutOccupant(CheckOutOccupantCommand command);
 
     /**
@@ -115,6 +119,27 @@ public interface ContractUseCase {
             if (phone == null || phone.isBlank()) {
                 throw new IllegalArgumentException("Số điện thoại không được để trống");
             }
+            if (checkInDate == null) {
+                checkInDate = LocalDate.now();
+            }
+        }
+    }
+
+    record AddExistingOccupantsCommand(UUID contractId, List<UUID> tenantIds, LocalDate checkInDate) {
+        public AddExistingOccupantsCommand {
+            if (contractId == null) {
+                throw new IllegalArgumentException("Contract ID cannot be null");
+            }
+            if (tenantIds == null || tenantIds.isEmpty()) {
+                throw new IllegalArgumentException("Chọn ít nhất một người thuê.");
+            }
+            if (tenantIds.stream().anyMatch(java.util.Objects::isNull)) {
+                throw new IllegalArgumentException("Tenant ID cannot be null");
+            }
+            if (tenantIds.stream().distinct().count() != tenantIds.size()) {
+                throw new IllegalArgumentException("Không thể chọn trùng hồ sơ người thuê.");
+            }
+            tenantIds = List.copyOf(tenantIds);
             if (checkInDate == null) {
                 checkInDate = LocalDate.now();
             }
