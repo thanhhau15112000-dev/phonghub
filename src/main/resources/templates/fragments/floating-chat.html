@@ -140,6 +140,28 @@
             transform: translateY(-2px);
             box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2) !important;
         }
+        /*
+         * Điện thoại: khung chat rộng 348px đặt cách lề phải 86px (JS đặt lại khi đổi bố cục) tràn mép trái
+         * khi màn hình hẹp hơn khoảng 434px. Ở đây các khung chiếm gần hết chiều ngang; !important để thắng
+         * giá trị right do updateWindowsLayout() ghi trực tiếp vào style.
+         */
+        @media (max-width: 480px) {
+            #phonghubDockedMessengerBox,
+            #phonghubNewMessageModal {
+                left: 8px !important;
+                right: 8px !important;
+                width: auto !important;
+                max-height: calc(100vh - 16px);
+            }
+            #phonghubChatToastContainer {
+                left: 8px !important;
+                right: 8px !important;
+            }
+            .phonghub-chat-toast {
+                min-width: 0 !important;
+                max-width: none !important;
+            }
+        }
     </style>
 
     <!-- Cột bên phải (right: 20px) dành cho các nút tròn: Dưới cùng là nút Soạn tin nhắn, phía trên là các Avatar chat thu nhỏ -->
