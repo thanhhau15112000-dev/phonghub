@@ -193,6 +193,11 @@ public class MaintenanceService implements MaintenanceUseCase {
 
     @Override
     public MaintenanceTicket assignTechnician(UUID ticketId, UUID technicianId) {
+        return assignTechnician(ticketId, technicianId, null);
+    }
+
+    @Override
+    public MaintenanceTicket assignTechnician(UUID ticketId, UUID technicianId, String reason) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
             .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + ticketId));
@@ -210,13 +215,42 @@ public class MaintenanceService implements MaintenanceUseCase {
             throw new IllegalArgumentException("Kỹ thuật viên chưa được phân công vào nhà trọ của phiếu này");
         }
         UUID previous = ticket.getAssignedTechnicianId();
-        ticket.assign(technician.id());
+        boolean reassignment = previous != null && !previous.equals(technician.id());
+        ticket.assign(technician.id(), reason);
         ticket.attributeEventsTo(actorIdOf(currentUser));
         MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
-        audit("MAINTENANCE_TECHNICIAN_ASSIGNED", currentUser, saved, Map.of(
-            "technicianId", technician.id().toString(), "previousTechnicianId", previous == null ? "NONE" : previous.toString()
-        ));
+        Map<String, Object> details = new java.util.LinkedHashMap<>();
+        details.put("technicianId", technician.id().toString());
+        details.put("previousTechnicianId", previous == null ? "NONE" : previous.toString());
+        if (reassignment) {
+            details.put("reason", reason.trim());
+        }
+        audit(reassignment ? "MAINTENANCE_TECHNICIAN_REASSIGNED" : "MAINTENANCE_TECHNICIAN_ASSIGNED",
+            currentUser, saved, details);
+        if (reassignment) {
+            notifyTechnicianReassignment(saved, previous, technician, reason.trim());
+        }
         return saved;
+    }
+
+    private void notifyTechnicianReassignment(
+        MaintenanceTicket ticket,
+        UUID previousTechnicianId,
+        User newTechnician,
+        String reason
+    ) {
+        if (notificationRepository == null || userRepository == null) {
+            return;
+        }
+        String link = "/maintenance/" + ticket.getId();
+        String oldMessage = "Phiếu bảo trì \"" + ticket.getTitle() + "\" đã được giao lại cho "
+            + newTechnician.fullName() + ". Lý do: " + reason;
+        userRepository.findById(previousTechnicianId).ifPresent(previous -> notificationRepository.save(
+            Notification.createForUser("Phiếu bảo trì đã được giao lại", oldMessage, previous, link)));
+        String newMessage = "Bạn được giao xử lý lại phiếu bảo trì \"" + ticket.getTitle()
+            + "\". Lý do giao lại: " + reason;
+        notificationRepository.save(Notification.createForUser("Bạn được giao phiếu bảo trì", newMessage,
+            newTechnician, link));
     }
 
     @Override

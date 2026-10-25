@@ -1710,14 +1710,15 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Mục | Nội dung |
 |---|---|
 | Tác nhân chính | Chủ trọ, Nhân viên, Quản trị viên |
-| Mô tả | Giao phiếu cho kỹ thuật viên của nhà trọ, đổi người được giao, hoặc từ chối phiếu không hợp lệ. |
-| Tiền điều kiện | Phiếu `REPORTED` hoặc `ASSIGNED`. |
-| Hậu điều kiện | Phiếu `ASSIGNED` cho kỹ thuật viên (hiện trong danh sách việc của kỹ thuật viên), hoặc `REJECTED` kèm lý do. |
+| Mô tả | Giao phiếu cho kỹ thuật viên của nhà trọ, giao lại phiếu đang xử lý, hoặc từ chối phiếu chưa xử lý. |
+| Tiền điều kiện | Giao lần đầu: phiếu `REPORTED` hoặc `ASSIGNED`. Giao lại: phiếu `ASSIGNED` hoặc `IN_PROGRESS`. |
+| Hậu điều kiện | Phiếu `ASSIGNED` cho kỹ thuật viên mới; nếu giao lại, kỹ thuật viên cũ mất quyền và cả hai kỹ thuật viên nhận thông báo. |
 | Kênh | Web `/maintenance/{id}/assign`, `/reject`; API tương ứng |
 
 **Luồng chính**
-1. Người quản lý chọn kỹ thuật viên trong danh sách kỹ thuật viên đã được phân công vào nhà trọ.
-2. Hệ thống giao phiếu cho kỹ thuật viên.
+1. Người quản lý chọn kỹ thuật viên khác trong danh sách kỹ thuật viên đã được phân công vào nhà trọ.
+2. Khi giao lại, người quản lý nhập lý do.
+3. Hệ thống giao phiếu cho kỹ thuật viên mới, ghi người giao/kỹ thuật viên cũ và mới/lý do vào audit cùng timeline, rồi bắt đầu lại mốc thời gian giao.
 
 **Luồng thay thế**
 - 1a. Từ chối phiếu: nhập lý do; phiếu `REJECTED`; người báo phiếu nhận thông báo "Yêu cầu bảo trì bị từ chối" kèm lý do.
@@ -1821,6 +1822,13 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 **Luồng chính**
 1. Hệ thống tìm phiếu còn việc phải làm đã qua hạn xử lý và chưa được báo.
 2. Hệ thống gửi thông báo và đánh dấu đã báo.
+
+**Mốc giao việc và thiếu nhân lực (#223; độc lập với SLA)**
+- Tính từ lần giao gần nhất: phiếu `ASSIGNED` hoặc `IN_PROGRESS` chưa hoàn tất quá thời hạn mặc định 72 giờ sẽ được đánh dấu thiếu nhân lực.
+- Người thuê, chủ trọ và nhân viên phụ trách nhà trọ (staff có quyền quản lý hợp đồng) nhận thông báo. Chủ trọ và nhân viên thấy danh sách kỹ thuật viên khác được phân công vào nhà trọ để giao lại.
+- Nếu sau 24 giờ kể từ thông báo phiếu chưa được giao lại hoặc hoàn tất, hệ thống tự chuyển sang `CANCELLED`, lưu lý do "Hủy tự động do thiếu nhân lực", ghi audit và timeline, rồi báo người thuê/chủ trọ/nhân viên.
+- Bộ hẹn giờ chạy mỗi giờ và lúc khởi động. Lặp lại an toàn: mỗi lần cảnh báo và tự hủy chỉ ghi một lần.
+- Có thể cấu hình bằng `phonghub.maintenance.assignment-timeout` (mặc định `PT72H`) và `phonghub.maintenance.understaffed-cancel-after` (mặc định `PT24H`).
 
 ### 5.10. Giao tiếp
 

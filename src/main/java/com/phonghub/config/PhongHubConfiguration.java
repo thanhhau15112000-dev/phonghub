@@ -463,6 +463,32 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.service.MaintenanceAssignmentTimeoutPolicy maintenanceAssignmentTimeoutPolicy(
+        @org.springframework.beans.factory.annotation.Value(
+            "${phonghub.maintenance.assignment-timeout:PT72H}") String assignmentTimeout,
+        @org.springframework.beans.factory.annotation.Value(
+            "${phonghub.maintenance.understaffed-cancel-after:PT24H}") String cancelAfter
+    ) {
+        return new com.phonghub.application.service.MaintenanceAssignmentTimeoutPolicy(
+            java.time.Duration.parse(assignmentTimeout), java.time.Duration.parse(cancelAfter));
+    }
+
+    @Bean
+    public com.phonghub.application.service.MaintenanceAssignmentTimeoutService maintenanceAssignmentTimeoutService(
+        MaintenanceTicketRepositoryPort ticketRepo,
+        PropertyRepositoryPort propertyRepo,
+        StaffPropertyAssignmentPort assignmentRepo,
+        TenantRepositoryPort tenantRepo,
+        UserRepositoryPort userRepo,
+        NotificationRepositoryPort notificationRepo,
+        AuditPort auditPort,
+        com.phonghub.application.service.MaintenanceAssignmentTimeoutPolicy timeoutPolicy
+    ) {
+        return new com.phonghub.application.service.MaintenanceAssignmentTimeoutService(
+            ticketRepo, propertyRepo, assignmentRepo, tenantRepo, userRepo, notificationRepo, auditPort, timeoutPolicy);
+    }
+
+    @Bean
     public MaintenanceUseCase maintenanceUseCase(
         MaintenanceTicketRepositoryPort ticketRepo,
         RoomRepositoryPort roomRepo,

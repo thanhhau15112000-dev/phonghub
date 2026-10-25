@@ -4,6 +4,7 @@ import com.phonghub.adapter.in.web.api.dto.MaintenanceTicketResponse;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.in.MaintenanceAttachmentUseCase;
 import com.phonghub.application.port.in.MaintenanceSubmissionUseCase;
+import com.phonghub.application.service.MaintenanceAssignmentTimeoutPolicy;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceTicket;
 import jakarta.validation.Valid;
@@ -31,16 +32,29 @@ import java.io.IOException;
 public class MaintenanceApiController {
 
     private final MaintenanceUseCase maintenanceUseCase;
+    private final MaintenanceAssignmentTimeoutPolicy timeoutPolicy;
     private final MaintenanceSubmissionUseCase submissionUseCase;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public MaintenanceApiController(MaintenanceUseCase maintenanceUseCase, MaintenanceSubmissionUseCase submissionUseCase) {
+    public MaintenanceApiController(
+        MaintenanceUseCase maintenanceUseCase,
+        MaintenanceAssignmentTimeoutPolicy timeoutPolicy,
+        MaintenanceSubmissionUseCase submissionUseCase
+    ) {
         this.maintenanceUseCase = maintenanceUseCase;
+        this.timeoutPolicy = timeoutPolicy;
         this.submissionUseCase = submissionUseCase;
     }
 
-    public MaintenanceApiController(MaintenanceUseCase maintenanceUseCase) {
-        this(maintenanceUseCase, null);
+    public MaintenanceApiController(
+        MaintenanceUseCase maintenanceUseCase,
+        MaintenanceAssignmentTimeoutPolicy timeoutPolicy
+    ) {
+        this(maintenanceUseCase, timeoutPolicy, null);
+    }
+
+    private MaintenanceTicketResponse response(MaintenanceTicket ticket) {
+        return MaintenanceTicketResponse.from(ticket, timeoutPolicy);
     }
 
     @GetMapping("/properties/{propertyId}/maintenance")
@@ -60,7 +74,7 @@ public class MaintenanceApiController {
             request.priority() != null ? request.priority() : MaintenancePriority.MEDIUM,
             request.setRoomMaintenance()
         ));
-        MaintenanceTicketResponse response = MaintenanceTicketResponse.from(ticket);
+        MaintenanceTicketResponse response = response(ticket);
         return ResponseEntity.created(URI.create("/api/maintenance/" + response.id())).body(response);
     }
 
@@ -90,7 +104,7 @@ public class MaintenanceApiController {
     @PostMapping("/maintenance/{id}/accept")
     public ResponseEntity<MaintenanceTicketResponse> acceptTicket(@PathVariable UUID id) {
         MaintenanceTicket ticket = maintenanceUseCase.acceptTicket(id);
-        return ResponseEntity.ok(MaintenanceTicketResponse.from(ticket));
+        return ResponseEntity.ok(response(ticket));
     }
 
     @PostMapping("/maintenance/{id}/assign")
@@ -98,8 +112,8 @@ public class MaintenanceApiController {
         @PathVariable UUID id,
         @Valid @RequestBody AssignTicketRequest request
     ) {
-        return ResponseEntity.ok(MaintenanceTicketResponse.from(
-            maintenanceUseCase.assignTechnician(id, request.technicianId())));
+        return ResponseEntity.ok(response(
+            maintenanceUseCase.assignTechnician(id, request.technicianId(), request.reason())));
     }
 
     @PostMapping("/maintenance/{id}/reject")
@@ -107,7 +121,7 @@ public class MaintenanceApiController {
         @PathVariable UUID id,
         @Valid @RequestBody RejectTicketRequest request
     ) {
-        return ResponseEntity.ok(MaintenanceTicketResponse.from(
+        return ResponseEntity.ok(response(
             maintenanceUseCase.rejectTicket(id, request.reason())));
     }
 
@@ -117,7 +131,7 @@ public class MaintenanceApiController {
         @PathVariable UUID id,
         @Valid @RequestBody UpdateTicketRequest request
     ) {
-        return ResponseEntity.ok(MaintenanceTicketResponse.from(maintenanceUseCase.updateTicket(
+        return ResponseEntity.ok(response(maintenanceUseCase.updateTicket(
             new MaintenanceUseCase.UpdateMaintenanceTicketCommand(
                 id, request.title(), request.description(), request.priority()))));
     }
@@ -128,7 +142,7 @@ public class MaintenanceApiController {
         @PathVariable UUID id,
         @RequestBody(required = false) CancelTicketRequest request
     ) {
-        return ResponseEntity.ok(MaintenanceTicketResponse.from(
+        return ResponseEntity.ok(response(
             maintenanceUseCase.cancelTicket(id, request == null ? null : request.reason())));
     }
 
@@ -151,7 +165,7 @@ public class MaintenanceApiController {
             request.repairCost(),
             request.releaseRoomToAvailable()
         ));
-        return ResponseEntity.ok(MaintenanceTicketResponse.from(ticket));
+        return ResponseEntity.ok(response(ticket));
     }
 
     /** Báo giá trước khi sửa (#83): kỹ thuật viên được giao, owner/staff quản lý nhà trọ hoặc admin. */
@@ -171,7 +185,7 @@ public class MaintenanceApiController {
     /** Người thuê xác nhận đã sửa đạt. */
     @PostMapping("/maintenance/{id}/verify")
     public ResponseEntity<MaintenanceTicketResponse> verifyTicket(@PathVariable UUID id) {
-        return ResponseEntity.ok(MaintenanceTicketResponse.from(maintenanceUseCase.verifyTicket(id)));
+        return ResponseEntity.ok(response(maintenanceUseCase.verifyTicket(id)));
     }
 
     /** Người thuê phản hồi chưa đạt, phiếu mở lại để sửa tiếp. */
@@ -180,7 +194,7 @@ public class MaintenanceApiController {
         @PathVariable UUID id,
         @Valid @RequestBody ReopenTicketRequest request
     ) {
-        return ResponseEntity.ok(MaintenanceTicketResponse.from(maintenanceUseCase.reopenTicket(id, request.feedback())));
+        return ResponseEntity.ok(response(maintenanceUseCase.reopenTicket(id, request.feedback())));
     }
 
     /** Timeline trạng thái của phiếu: ai chuyển trạng thái nào, lúc nào. */
@@ -195,7 +209,7 @@ public class MaintenanceApiController {
     @GetMapping("/maintenance/{id}")
     public ResponseEntity<MaintenanceTicketResponse> getTicket(@PathVariable UUID id) {
         MaintenanceTicket ticket = maintenanceUseCase.getTicket(id);
-        return ResponseEntity.ok(MaintenanceTicketResponse.from(ticket));
+        return ResponseEntity.ok(response(ticket));
     }
 
     public record CreateTicketRequest(
@@ -215,7 +229,10 @@ public class MaintenanceApiController {
 
     public record TimelineEntry(String from, String to, UUID actorId, String note, java.time.Instant at) {}
 
-    public record AssignTicketRequest(@NotNull(message = "Technician ID is required") UUID technicianId) {}
+    public record AssignTicketRequest(
+        @NotNull(message = "Technician ID is required") UUID technicianId,
+        String reason
+    ) {}
 
     public record RejectTicketRequest(@NotBlank(message = "Reason is required") String reason) {}
 
