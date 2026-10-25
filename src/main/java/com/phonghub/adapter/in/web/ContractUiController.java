@@ -334,11 +334,18 @@ public class ContractUiController {
                 .filter(link -> link.hiddenAt() == null)
                 .map(TenantRepositoryPort.PropertyLink::tenantId)
                 .collect(java.util.stream.Collectors.toSet());
-            accounts = tenantRepository.findAllByIds(linkedTenantIds).stream()
+            List<Tenant> tenants = tenantRepository.findAll();
+            Set<UUID> linkedUserIds = tenants.stream()
+                .filter(tenant -> linkedTenantIds.contains(tenant.id()))
                 .map(Tenant::userId)
                 .filter(java.util.Objects::nonNull)
-                .map(userId -> userRepository.findById(userId).orElse(null))
+                .collect(java.util.stream.Collectors.toSet());
+            Set<UUID> alreadyLinkedUserIds = tenants.stream()
+                .map(Tenant::userId)
                 .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+            accounts = userRepository.findByRole(UserRole.TENANT).stream()
+                .filter(user -> !alreadyLinkedUserIds.contains(user.id()) || linkedUserIds.contains(user.id()))
                 .toList();
         }
 
