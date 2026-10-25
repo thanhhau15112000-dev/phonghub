@@ -12,8 +12,11 @@ import java.util.UUID;
 public interface MaintenanceUseCase {
     MaintenanceTicket createTicket(CreateMaintenanceTicketCommand command);
     MaintenanceTicket acceptTicket(UUID ticketId);
-    /** Owner/staff giao phiếu cho kỹ thuật viên đã được phân công vào nhà trọ của phiếu. */
-    MaintenanceTicket assignTechnician(UUID ticketId, UUID technicianId);
+    /** Owner/staff giao phiếu lần đầu hoặc giao lại; nếu đổi kỹ thuật viên thì bắt buộc có lý do. */
+    MaintenanceTicket assignTechnician(UUID ticketId, UUID technicianId, String reason);
+    default MaintenanceTicket assignTechnician(UUID ticketId, UUID technicianId) {
+        return assignTechnician(ticketId, technicianId, null);
+    }
     /** Owner/staff từ chối phiếu chưa xử lý; bắt buộc có lý do, người thuê được thông báo. */
     MaintenanceTicket rejectTicket(UUID ticketId, String reason);
 

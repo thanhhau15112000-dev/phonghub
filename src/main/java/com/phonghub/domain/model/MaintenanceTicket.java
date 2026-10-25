@@ -27,6 +27,8 @@ public class MaintenanceTicket {
     private String rejectionReason;
     private Instant dueAt;
     private Instant slaNotifiedAt;
+    private Instant assignedAt;
+    private Instant understaffedNotifiedAt;
     private final Instant createdAt;
     private Instant updatedAt;
     private long version;
@@ -155,6 +157,9 @@ public class MaintenanceTicket {
         this.dueAt = dueAt;
         this.slaNotifiedAt = slaNotifiedAt;
         this.createdAt = createdAt != null ? createdAt : Instant.now();
+        this.assignedAt = assignedTechnicianId != null
+            && (this.status == MaintenanceStatus.ASSIGNED || this.status == MaintenanceStatus.IN_PROGRESS)
+            ? this.createdAt : null;
         this.updatedAt = updatedAt != null ? updatedAt : this.createdAt;
     }
 
@@ -245,6 +250,49 @@ public class MaintenanceTicket {
         this.slaNotifiedAt = now;
     }
 
+    public boolean isAssignmentTimeoutDue(Instant now, java.time.Duration timeout) {
+        return assignedTechnicianId != null
+            && (status == MaintenanceStatus.ASSIGNED || status == MaintenanceStatus.IN_PROGRESS)
+            && assignedAt != null
+            && understaffedNotifiedAt == null
+            && !now.isBefore(assignedAt.plus(timeout));
+    }
+
+    public boolean isUnderstaffedCancellationDue(Instant now, java.time.Duration cancelAfter) {
+        return (status == MaintenanceStatus.ASSIGNED || status == MaintenanceStatus.IN_PROGRESS)
+            && understaffedNotifiedAt != null
+            && !now.isBefore(understaffedNotifiedAt.plus(cancelAfter));
+    }
+
+    public void markUnderstaffed(Instant now) {
+        if (assignedTechnicianId == null
+            || (status != MaintenanceStatus.ASSIGNED && status != MaintenanceStatus.IN_PROGRESS)
+            || assignedAt == null
+            || understaffedNotifiedAt != null) {
+            throw new MaintenanceTicketException("Phiếu không đủ điều kiện đánh dấu thiếu nhân lực");
+        }
+        understaffedNotifiedAt = now;
+        updatedAt = now;
+        recordEvent(status, "Phiếu thiếu nhân lực sau thời gian chờ giao việc");
+    }
+
+    public void autoCancelForUnderstaffing(Instant now) {
+        if (understaffedNotifiedAt == null
+            || (status != MaintenanceStatus.ASSIGNED && status != MaintenanceStatus.IN_PROGRESS)) {
+            throw new MaintenanceTicketException("Phiếu không còn đủ điều kiện tự hủy do thiếu nhân lực");
+        }
+        MaintenanceStatus before = status;
+        status = MaintenanceStatus.CANCELLED;
+        updatedAt = now;
+        recordEvent(before, "Hủy tự động do thiếu nhân lực");
+    }
+
+    /** Khôi phục các mốc giao việc đã lưu trong persistence adapter. */
+    public void restoreAssignmentTimeoutState(Instant assignedAt, Instant understaffedNotifiedAt) {
+        this.assignedAt = assignedAt;
+        this.understaffedNotifiedAt = understaffedNotifiedAt;
+    }
+
     public void assignTo(UUID technicianId) {
         if (technicianId == null) {
             throw new IllegalArgumentException("Technician id cannot be null");
@@ -256,23 +304,43 @@ public class MaintenanceTicket {
         MaintenanceStatus before = this.status;
         this.assignedTechnicianId = technicianId;
         this.status = MaintenanceStatus.ASSIGNED;
-        this.updatedAt = Instant.now();
+        this.assignedAt = Instant.now();
+        this.understaffedNotifiedAt = null;
+        this.updatedAt = assignedAt;
         recordEvent(before, "Giao việc cho kỹ thuật viên");
     }
 
-    /** Quản lý giao (hoặc giao lại) phiếu cho kỹ thuật viên khi chưa bắt đầu xử lý. */
+    /** Quản lý giao phiếu lần đầu hoặc giao lại phiếu đang được xử lý cho kỹ thuật viên khác. */
     public void assign(UUID technicianId) {
+        assign(technicianId, null);
+    }
+
+    public void assign(UUID technicianId, String reason) {
         if (technicianId == null) {
             throw new IllegalArgumentException("Technician id cannot be null");
         }
-        if (this.status != MaintenanceStatus.REPORTED && this.status != MaintenanceStatus.ASSIGNED) {
-            throw new MaintenanceTicketException("Chỉ giao được phiếu chưa xử lý (REPORTED/ASSIGNED), phiếu hiện ở " + status);
+        if (status != MaintenanceStatus.REPORTED && status != MaintenanceStatus.ASSIGNED
+            && status != MaintenanceStatus.IN_PROGRESS) {
+            throw new MaintenanceTicketException("Không thể giao kỹ thuật viên cho phiếu đang ở trạng thái " + status);
         }
-        MaintenanceStatus before = this.status;
-        this.assignedTechnicianId = technicianId;
-        this.status = MaintenanceStatus.ASSIGNED;
-        this.updatedAt = Instant.now();
-        recordEvent(before, before == MaintenanceStatus.ASSIGNED ? "Giao lại cho kỹ thuật viên khác" : "Giao việc cho kỹ thuật viên");
+        UUID previousTechnicianId = assignedTechnicianId;
+        if (previousTechnicianId != null && previousTechnicianId.equals(technicianId)) {
+            throw new MaintenanceTicketException("Kỹ thuật viên này đang được giao xử lý phiếu");
+        }
+        boolean reassignment = previousTechnicianId != null;
+        if (reassignment && (reason == null || reason.isBlank())) {
+            throw new IllegalArgumentException("Cần ghi lý do giao lại kỹ thuật viên");
+        }
+        MaintenanceStatus before = status;
+        assignedTechnicianId = technicianId;
+        status = MaintenanceStatus.ASSIGNED;
+        assignedAt = Instant.now();
+        understaffedNotifiedAt = null;
+        updatedAt = assignedAt;
+        String note = reassignment
+            ? "Giao lại cho kỹ thuật viên khác. Lý do: " + reason.trim()
+            : "Giao việc cho kỹ thuật viên";
+        recordEvent(before, note);
     }
 
     /** Từ chối phiếu chưa xử lý; bắt buộc có lý do để người thuê biết. */
@@ -333,6 +401,7 @@ public class MaintenanceTicket {
         }
         MaintenanceStatus before = this.status;
         this.status = chargesTenant() ? MaintenanceStatus.AWAITING_PAYMENT : MaintenanceStatus.RESOLVED;
+        this.understaffedNotifiedAt = null;
         this.updatedAt = Instant.now();
         recordEvent(before, this.status == MaintenanceStatus.AWAITING_PAYMENT
             ? "Đã sửa xong, chờ người thuê thanh toán phí" : "Hoàn tất xử lý");
@@ -405,6 +474,8 @@ public class MaintenanceTicket {
             throw new IllegalArgumentException("Phản hồi tối đa 1000 ký tự.");
         }
         this.status = assignedTechnicianId != null ? MaintenanceStatus.ASSIGNED : MaintenanceStatus.REPORTED;
+        this.assignedAt = assignedTechnicianId != null ? Instant.now() : null;
+        this.understaffedNotifiedAt = null;
         this.updatedAt = Instant.now();
         recordEvent(MaintenanceStatus.RESOLVED, "Người thuê phản hồi chưa đạt: " + feedback.trim());
     }
@@ -512,6 +583,14 @@ public class MaintenanceTicket {
 
     public UUID getAssignedTechnicianId() {
         return assignedTechnicianId;
+    }
+
+    public Instant getAssignedAt() {
+        return assignedAt;
+    }
+
+    public Instant getUnderstaffedNotifiedAt() {
+        return understaffedNotifiedAt;
     }
 
     public String getTitle() {

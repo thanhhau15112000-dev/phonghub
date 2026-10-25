@@ -72,6 +72,29 @@
         </div>
     </div>
 
+    <div th:if="${ticket.getAssignedAt() != null}" class="card" style="margin-bottom: 20px;" id="assignment-timeout">
+        <h2>Thời hạn xử lý từ lần giao gần nhất</h2>
+        <p style="font-size: 13px;">Đã giao lúc <strong th:text="${#temporals.format(ticket.getAssignedAt(), 'dd/MM/yyyy HH:mm')}">26/10/2026 10:00</strong>;
+            thời gian đã giao <strong th:text="${assignmentElapsed}">12 giờ</strong>.</p>
+        <p th:if="${assignmentActive and ticket.getUnderstaffedNotifiedAt() == null and !assignmentOverdue}" style="font-size: 13px; color: var(--text-secondary);"
+           th:text="${assignmentTimeRemaining + ' đến mốc ' + assignmentDeadline}">Còn 60 giờ</p>
+        <p th:if="${assignmentActive and ticket.getUnderstaffedNotifiedAt() == null and assignmentOverdue}" class="badge badge-danger"
+           style="background: #ef4444; color: #fff;">Đã quá mốc 72 giờ; phiếu đang chờ hệ thống báo thiếu nhân lực.</p>
+        <p th:if="${!assignmentActive}" style="font-size: 13px; color: var(--text-secondary);">
+            Thời hạn xử lý đã dừng vì phiếu đã đóng.
+        </p>
+        <div th:if="${assignmentActive and ticket.getUnderstaffedNotifiedAt() != null and autoCancelAt != null}" class="badge badge-danger"
+             style="background: #ef4444; color: #fff; padding: 8px;">
+            <span>Đã báo thiếu nhân lực lúc <strong th:text="${understaffedAt}">26/10/2026 10:00</strong>.</span>
+            <span> Phiếu sẽ tự hủy sau <strong th:text="${understaffedCancelAfter}">24 giờ</strong>, lúc
+                <strong th:text="${autoCancelAt}">27/10/2026 10:00</strong> nếu chưa được giao lại hoặc hoàn tất.</span>
+        </div>
+        <p th:if="${!assignmentActive and ticket.getUnderstaffedNotifiedAt() != null}"
+           style="font-size: 13px; color: var(--text-secondary);">
+            Thời hạn tự hủy đã dừng vì phiếu đã đóng; xem lịch sử bên dưới để biết kết quả.
+        </p>
+    </div>
+
     <!-- Báo giá sửa chữa (#83): người thuê chỉ thấy khi là bên chịu phí -->
     <div th:if="${quote != null or ((currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED' or ticket.getStatus().name() == 'IN_PROGRESS'))}"
          class="card" style="margin-bottom: 20px;" id="quote">
@@ -224,22 +247,35 @@
         </form>
     </div>
 
-    <!-- Owner/staff: giao kỹ thuật viên hoặc từ chối phiếu chưa xử lý -->
-    <div th:if="${(currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED')}" class="card" style="margin-bottom: 20px;">
-        <h2>Phân công và từ chối</h2>
+    <!-- Owner/staff: giao việc, giao lại cả khi đang xử lý, hoặc từ chối phiếu chưa bắt đầu -->
+    <div th:if="${(currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED' or ticket.getStatus().name() == 'IN_PROGRESS')}" class="card" style="margin-bottom: 20px;">
+        <h2>Phân công kỹ thuật viên</h2>
+        <p th:if="${ticket.getAssignedTechnicianId() != null}" style="font-size: 13px; color: var(--text-secondary);">
+            Giao lại sẽ thu hồi quyền xử lý của kỹ thuật viên hiện tại và bắt đầu lại mốc 72 giờ.
+        </p>
+        <p th:if="${technicians.isEmpty()}" style="font-size: 13px; color: var(--text-secondary);">
+            Nhà trọ chưa có kỹ thuật viên khác được phân công.
+        </p>
         <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/assign'}" method="post" style="margin-bottom: 16px;">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-            <label class="form-label" for="technicianId">Giao cho kỹ thuật viên</label>
+            <label class="form-label" for="technicianId"
+                   th:text="${ticket.getAssignedTechnicianId() != null ? 'Giao lại cho kỹ thuật viên khác' : 'Giao cho kỹ thuật viên'}">Giao cho kỹ thuật viên</label>
             <div style="display: flex; gap: 8px;">
                 <select id="technicianId" name="technicianId" class="form-control" required>
                     <option value="" disabled selected>Chọn kỹ thuật viên của nhà trọ</option>
-                    <option th:each="tech : ${technicians}" th:value="${tech.id()}" th:text="${tech.fullName()}"
-                            th:selected="${tech.id() == ticket.getAssignedTechnicianId()}">Kỹ thuật viên</option>
+                    <option th:each="tech : ${technicians}" th:value="${tech.id()}" th:text="${tech.fullName()}">Kỹ thuật viên</option>
                 </select>
-                <button type="submit" class="btn btn-primary">Giao việc</button>
+                <button type="submit" class="btn btn-primary"
+                        th:text="${ticket.getAssignedTechnicianId() != null ? 'Giao lại' : 'Giao việc'}">Giao việc</button>
+            </div>
+            <div th:if="${ticket.getAssignedTechnicianId() != null}" class="form-group" style="margin-top: 12px;">
+                <label class="form-label" for="reassignmentReason">Lý do giao lại *</label>
+                <input type="text" id="reassignmentReason" name="reason" class="form-control" maxlength="500"
+                       placeholder="Nêu lý do cần thay kỹ thuật viên" required>
             </div>
         </form>
-        <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/reject'}" method="post">
+        <form th:if="${ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED'}"
+              th:action="@{'/maintenance/' + ${ticket.getId()} + '/reject'}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <label class="form-label" for="rejectReason">Từ chối yêu cầu (người thuê sẽ nhận được lý do)</label>
             <div style="display: flex; gap: 8px;">

@@ -332,6 +332,9 @@ public final class UiText {
         groups.put("Biên bản bàn giao", handover);
         groups.put("Bảo trì", labels(
             "MAINTENANCE_TECHNICIAN_ASSIGNED", "Phân công kỹ thuật viên",
+            "MAINTENANCE_TECHNICIAN_REASSIGNED", "Giao lại kỹ thuật viên",
+            "MAINTENANCE_TICKET_UNDERSTAFFED", "Báo thiếu nhân lực",
+            "MAINTENANCE_TICKET_AUTO_CANCELLED", "Tự hủy do thiếu nhân lực",
             "MAINTENANCE_TICKET_UPDATED", "Sửa phiếu bảo trì",
             "MAINTENANCE_TICKET_CANCELLED", "Hủy phiếu bảo trì",
             "MAINTENANCE_TICKET_REJECTED", "Từ chối phiếu bảo trì",

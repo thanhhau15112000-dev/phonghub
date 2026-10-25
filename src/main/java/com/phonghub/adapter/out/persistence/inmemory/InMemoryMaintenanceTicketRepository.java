@@ -39,6 +39,7 @@ public class InMemoryMaintenanceTicketRepository implements MaintenanceTicketRep
             t.getUpdatedAt()
         );
         copy.restoreQuote(t.getQuote());
+        copy.restoreAssignmentTimeoutState(t.getAssignedAt(), t.getUnderstaffedNotifiedAt());
         return copy;
     }
 

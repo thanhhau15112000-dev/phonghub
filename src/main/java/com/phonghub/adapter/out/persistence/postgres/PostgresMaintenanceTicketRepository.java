@@ -61,6 +61,8 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
             ticket.restoreQuote(new MaintenanceTicket.Quote(quoteAmount, rs.getString("quote_note"),
                 quotedBy != null ? UUID.fromString(quotedBy) : null, nullableInstant(rs.getTimestamp("quoted_at"))));
         }
+        ticket.restoreAssignmentTimeoutState(nullableInstant(rs.getTimestamp("assigned_at")),
+            nullableInstant(rs.getTimestamp("understaffed_notified_at")));
         ticket.restoreVersion(rs.getLong("version"));
         return ticket;
     };
@@ -76,8 +78,8 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
     @Override
     public MaintenanceTicket save(MaintenanceTicket ticket) {
         String sql = """
-            INSERT INTO maintenance_tickets (id, room_id, requested_by_tenant_id, assigned_technician_id, title, description, priority, status, repair_cost, resolution_notes, cause_category, liable_party, reject_reason, due_at, sla_notified_at, quote_amount, quote_note, quoted_by, quoted_at, created_at, updated_at, version)
-            VALUES (:id, :roomId, :tenantId, :technicianId, :title, :description, :priority, :status, :repairCost, :resolutionNotes, :causeCategory, :liableParty, :rejectReason, :dueAt, :slaNotifiedAt, :quoteAmount, :quoteNote, :quotedBy, :quotedAt, :createdAt, :updatedAt, :version)
+            INSERT INTO maintenance_tickets (id, room_id, requested_by_tenant_id, assigned_technician_id, title, description, priority, status, repair_cost, resolution_notes, cause_category, liable_party, reject_reason, due_at, sla_notified_at, assigned_at, understaffed_notified_at, quote_amount, quote_note, quoted_by, quoted_at, created_at, updated_at, version)
+            VALUES (:id, :roomId, :tenantId, :technicianId, :title, :description, :priority, :status, :repairCost, :resolutionNotes, :causeCategory, :liableParty, :rejectReason, :dueAt, :slaNotifiedAt, :assignedAt, :understaffedNotifiedAt, :quoteAmount, :quoteNote, :quotedBy, :quotedAt, :createdAt, :updatedAt, :version)
             ON CONFLICT (id) DO UPDATE SET
                 assigned_technician_id = EXCLUDED.assigned_technician_id,
                 title = EXCLUDED.title,
@@ -90,6 +92,8 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
                 reject_reason = EXCLUDED.reject_reason,
                 due_at = EXCLUDED.due_at,
                 sla_notified_at = EXCLUDED.sla_notified_at,
+                assigned_at = EXCLUDED.assigned_at,
+                understaffed_notified_at = EXCLUDED.understaffed_notified_at,
                 quote_amount = EXCLUDED.quote_amount,
                 quote_note = EXCLUDED.quote_note,
                 quoted_by = EXCLUDED.quoted_by,
@@ -117,6 +121,9 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
             .addValue("rejectReason", ticket.getRejectionReason())
             .addValue("dueAt", ticket.getDueAt() == null ? null : Timestamp.from(ticket.getDueAt()))
             .addValue("slaNotifiedAt", ticket.getSlaNotifiedAt() == null ? null : Timestamp.from(ticket.getSlaNotifiedAt()))
+            .addValue("assignedAt", ticket.getAssignedAt() == null ? null : Timestamp.from(ticket.getAssignedAt()))
+            .addValue("understaffedNotifiedAt", ticket.getUnderstaffedNotifiedAt() == null ? null
+                : Timestamp.from(ticket.getUnderstaffedNotifiedAt()))
             .addValue("quoteAmount", ticket.getQuote() == null ? null : ticket.getQuote().amount())
             .addValue("quoteNote", ticket.getQuote() == null ? null : ticket.getQuote().note())
             .addValue("quotedBy", ticket.getQuote() == null ? null : ticket.getQuote().quotedBy())

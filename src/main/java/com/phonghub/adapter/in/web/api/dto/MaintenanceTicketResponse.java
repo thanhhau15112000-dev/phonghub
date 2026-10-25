@@ -1,5 +1,6 @@
 package com.phonghub.adapter.in.web.api.dto;
 
+import com.phonghub.application.service.MaintenanceAssignmentTimeoutPolicy;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
@@ -23,9 +24,20 @@ public record MaintenanceTicketResponse(
     Instant dueAt,
     boolean overdue,
     Instant createdAt,
-    Instant updatedAt
+    Instant updatedAt,
+    Instant assignedAt,
+    Instant understaffedNotifiedAt,
+    Instant autoCancelAt
 ) {
     public static MaintenanceTicketResponse from(MaintenanceTicket ticket) {
+        return from(ticket, MaintenanceAssignmentTimeoutPolicy.defaults());
+    }
+
+    public static MaintenanceTicketResponse from(
+        MaintenanceTicket ticket,
+        MaintenanceAssignmentTimeoutPolicy timeoutPolicy
+    ) {
+        Instant notifiedAt = ticket.getUnderstaffedNotifiedAt();
         return new MaintenanceTicketResponse(
             ticket.getId(),
             ticket.getRoomId(),
@@ -42,7 +54,10 @@ public record MaintenanceTicketResponse(
             ticket.getDueAt(),
             ticket.isOverdue(Instant.now()),
             ticket.getCreatedAt(),
-            ticket.getUpdatedAt()
+            ticket.getUpdatedAt(),
+            ticket.getAssignedAt(),
+            notifiedAt,
+            notifiedAt == null ? null : notifiedAt.plus(timeoutPolicy.understaffedCancelAfter())
         );
     }
 }
