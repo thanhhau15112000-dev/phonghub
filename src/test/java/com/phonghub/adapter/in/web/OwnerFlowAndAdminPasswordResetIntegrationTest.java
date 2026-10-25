@@ -13,8 +13,13 @@ import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
+import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.User;
+import com.phonghub.domain.model.UserRole;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -98,6 +103,74 @@ class OwnerFlowAndAdminPasswordResetIntegrationTest {
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/contracts"))
             .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("Owner can create a contract with an available tenant account without exposing another property's tenant")
+    void ownerContractFormListsAvailableTenantAccount() throws Exception {
+        User availableTenant = userRepository.save(new User(
+            UUID.randomUUID(),
+            "available-tenant",
+            "available.tenant@example.test",
+            "Available Tenant Account",
+            "0900000991",
+            UserRole.TENANT,
+            User.UserStatus.ACTIVE,
+            true,
+            Instant.now()
+        ));
+
+        User tenantLinkedElsewhere = userRepository.save(new User(
+            UUID.randomUUID(),
+            "tenant-linked-elsewhere",
+            "linked.elsewhere@example.test",
+            "Tenant Linked Elsewhere",
+            "0900000992",
+            UserRole.TENANT,
+            User.UserStatus.ACTIVE,
+            false,
+            Instant.now()
+        ));
+        Tenant otherPropertyTenant = tenantRepository.save(Tenant.create(
+            tenantLinkedElsewhere.id(),
+            "Tenant Linked Elsewhere",
+            "079000000992",
+            "0900000992",
+            tenantLinkedElsewhere.email(),
+            null
+        ));
+        tenantRepository.linkToProperty(otherPropertyTenant.id(), DataSeeder.PROP_2_ID,
+            LocalDemoAuthenticationAdapter.OWNER_2_ID);
+
+        mockMvc.perform(get("/contracts/new")
+                .param("propertyId", DataSeeder.PROP_1_ID.toString())
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Available Tenant Account")))
+            .andExpect(content().string(containsString("available.tenant@example.test")))
+            .andExpect(content().string(not(containsString("Tenant Linked Elsewhere"))))
+            .andExpect(content().string(not(containsString("linked.elsewhere@example.test"))));
+
+        mockMvc.perform(post("/contracts")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .param("propertyId", DataSeeder.PROP_1_ID.toString())
+                .param("roomId", DataSeeder.ROOM_104_ID.toString())
+                .param("primaryTenantUserId", availableTenant.id().toString())
+                .param("primaryTenantFullName", availableTenant.fullName())
+                .param("primaryTenantIdCard", "079000000991")
+                .param("primaryTenantPhone", availableTenant.phone())
+                .param("primaryTenantEmail", availableTenant.email())
+                .param("depositAmount", "4000000")
+                .param("rentAmount", "4000000")
+                .param("startDate", LocalDate.now().toString())
+                .param("endDate", LocalDate.now().plusMonths(6).toString())
+                .param("paymentDay", "5"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(flash().attributeExists("successMessage"));
+
+        Tenant linkedTenant = tenantRepository.findByUserId(availableTenant.id()).orElseThrow();
+        assertEquals("079000000991", linkedTenant.identityCardNumber());
+        assertEquals(Set.of(DataSeeder.PROP_1_ID), tenantRepository.findLinkedPropertyIds(linkedTenant.id()));
     }
 
     @Test
