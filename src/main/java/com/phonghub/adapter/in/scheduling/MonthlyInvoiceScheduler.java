@@ -81,7 +81,7 @@ public class MonthlyInvoiceScheduler {
             }
             for (UUID contractId : contractIds) {
                 try {
-                    if (monthlyInvoiceUseCase.issueForContract(contractId, period)) {
+                    if (monthlyInvoiceUseCase.issueForContract(contractId, period, today)) {
                         created++;
                         log.info("Đã tự động tạo hóa đơn tháng {} cho hợp đồng {}", period, contractId);
                     }

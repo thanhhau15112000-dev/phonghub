@@ -8,6 +8,7 @@ import com.phonghub.application.port.out.MeterReadingRepositoryPort;
 import com.phonghub.application.port.out.ServiceRateRepositoryPort;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
@@ -62,12 +63,12 @@ public class MonthlyInvoiceService implements MonthlyInvoiceUseCase {
     }
 
     @Override
-    public boolean issueForContract(UUID contractId, YearMonth period) {
+    public boolean issueForContract(UUID contractId, YearMonth period, LocalDate today) {
         Optional<Contract> contract = contractRepository.findById(contractId);
         if (contract.isEmpty() || !isEligible(contract.get(), period) || issuer.exists(contract.get(), period)) {
             return false;
         }
-        issuer.issue(contract.get(), period);
+        issuer.issue(contract.get(), period, today);
         return true;
     }
 

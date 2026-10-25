@@ -104,6 +104,19 @@ class MonthlyInvoiceAutomationUnitTest {
     }
 
     @Test
+    @DisplayName("#208: a backfilled invoice created after the payment day is due three days later, not overdue")
+    void backfillAfterPaymentDayIsNotOverdue() {
+        Contract active = contract(ContractStatus.ACTIVE, LocalDate.of(2026, 8, 1), LocalDate.of(2027, 8, 1));
+        LocalDate lateRun = LocalDate.of(2026, 10, 15); // job bị lỡ (instance ngủ) tới sau ngày thanh toán 5
+
+        scheduler.run(lateRun);
+
+        Invoice october = rentInvoices(active).getFirst();
+        assertEquals(LocalDate.of(2026, 10, 18), october.getDueDate());
+        assertFalse(october.isOverdue(lateRun));
+    }
+
+    @Test
     @DisplayName("The first month of a contract and months beyond its term are not auto-issued")
     void firstMonthAndTermBoundaries() {
         Contract startsThisMonth = contract(ContractStatus.ACTIVE, LocalDate.of(2026, 10, 10), LocalDate.of(2027, 10, 10));
@@ -154,11 +167,11 @@ class MonthlyInvoiceAutomationUnitTest {
             }
 
             @Override
-            public boolean issueForContract(UUID contractId, YearMonth period) {
+            public boolean issueForContract(UUID contractId, YearMonth period, LocalDate today) {
                 if (contractId.equals(bad.getId())) {
                     throw new IllegalStateException("boom");
                 }
-                return service.issueForContract(contractId, period);
+                return service.issueForContract(contractId, period, today);
             }
 
             @Override

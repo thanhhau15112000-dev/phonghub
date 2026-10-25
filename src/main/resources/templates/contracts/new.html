@@ -46,7 +46,23 @@
                 </div>
             </div>
 
-            <h2 style="margin-top: 16px; margin-bottom: 16px;">2. Thông tin người thuê chính</h2>
+            <h2 style="margin-top: 16px; margin-bottom: 12px;">2. Liên kết tài khoản người thuê (không bắt buộc)</h2>
+            <div class="form-group">
+                <label class="form-label" for="primaryTenantAccount">Tài khoản người thuê đã tạo</label>
+                <select id="primaryTenantAccount" name="primaryTenantUserId" class="form-control">
+                    <option value="">Nhập hồ sơ người thuê mới hoặc bỏ qua liên kết tài khoản</option>
+                    <option th:each="account : ${tenantAccounts}"
+                            th:value="${account.id()}"
+                            th:text="${account.fullName() + ' · ' + account.email()}"
+                            th:attr="data-full-name=${account.fullName()},data-phone=${account.phone() != null ? account.phone() : ''},data-email=${account.email()}">
+                    </option>
+                </select>
+                <p style="color: var(--text-secondary); font-size: 12px; margin: 6px 0 0;">
+                    Chọn tài khoản TENANT đã tạo để liên kết với hợp đồng. Tên, số điện thoại và email sẽ được điền sẵn; cần nhập CCCD để tạo hoặc khớp hồ sơ người thuê.
+                </p>
+            </div>
+
+            <h2 style="margin-top: 16px; margin-bottom: 16px;">3. Thông tin người thuê chính</h2>
             <div class="form-row">
                 <div class="form-group" style="flex: 2;">
                     <label class="form-label">Họ và tên *</label>
@@ -68,7 +84,7 @@
                 </div>
             </div>
 
-            <h2 style="margin-top: 16px; margin-bottom: 16px;">3. Tài chính và thời hạn hợp đồng</h2>
+            <h2 style="margin-top: 16px; margin-bottom: 16px;">4. Tài chính và thời hạn hợp đồng</h2>
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label">Tiền thuê hàng tháng (VND) *</label>
@@ -103,5 +119,36 @@
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const accountSelect = document.getElementById('primaryTenantAccount');
+        if (!accountSelect) return;
+
+        const fields = {
+            fullName: document.querySelector('[name="primaryTenantFullName"]'),
+            phone: document.querySelector('[name="primaryTenantPhone"]'),
+            email: document.querySelector('[name="primaryTenantEmail"]')
+        };
+        let lastAutofilled = null;
+
+        accountSelect.addEventListener('change', () => {
+            if (lastAutofilled) {
+                Object.entries(fields).forEach(([key, field]) => {
+                    if (field.value === lastAutofilled[key]) field.value = '';
+                });
+            }
+            const option = accountSelect.selectedOptions[0];
+            lastAutofilled = null;
+            if (!option || !option.value) return;
+
+            lastAutofilled = {
+                fullName: option.dataset.fullName || '',
+                phone: option.dataset.phone || '',
+                email: option.dataset.email || ''
+            };
+            Object.entries(fields).forEach(([key, field]) => { field.value = lastAutofilled[key]; });
+        });
+    });
+</script>
 </body>
 </html>
