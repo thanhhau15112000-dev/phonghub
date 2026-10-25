@@ -2,6 +2,7 @@ package com.phonghub.application.service;
 
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.HandoverUseCase;
+import com.phonghub.application.port.in.RoomAssetUseCase;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
@@ -34,6 +35,7 @@ import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.PropertyHouseRules;
 import com.phonghub.domain.model.RoomAsset;
 import com.phonghub.domain.model.RoomConditionItem;
+import com.phonghub.domain.model.RoomConditionSnapshot;
 import com.phonghub.domain.model.Tenant;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -56,6 +58,8 @@ public class HandoverService implements HandoverUseCase {
     private static final Logger log = LoggerFactory.getLogger(HandoverService.class);
     private static final int MAX_PHOTOS = 20;
     private static final Duration SIGNED_URL_TTL = Duration.ofMinutes(10);
+    private static final String MISSING_BASELINE_NOTE =
+        "Chưa có dữ liệu hiện trạng. Vui lòng kiểm tra và cập nhật chỉ số điện, nước trước khi gửi.";
 
     private final HandoverRepositoryPort handoverRepository;
     private final HandoverPhotoRepositoryPort photoRepository;
@@ -73,6 +77,7 @@ public class HandoverService implements HandoverUseCase {
     private final long maxFileSizeBytes;
     private final NotificationDispatcher notifications;
     private final RoomConditionRepositoryPort roomConditionRepository;
+    private final RoomAssetUseCase roomAssetUseCase;
 
     public HandoverService(
         HandoverRepositoryPort handoverRepository,
@@ -92,7 +97,7 @@ public class HandoverService implements HandoverUseCase {
     ) {
         this(handoverRepository, photoRepository, itemRepository, rulesRepository, contractRepository, assetRepository,
             tenantRepository, documentRepository, contractUseCase, storagePort, currentUserPort, authorizationService,
-            auditPort, maxFileSizeBytes, null, null);
+            auditPort, maxFileSizeBytes, null, null, null);
     }
 
     /** {@code notifications} null thì không gửi thông báo yêu cầu xác nhận/duyệt biên bản (#86). */
@@ -115,7 +120,7 @@ public class HandoverService implements HandoverUseCase {
     ) {
         this(handoverRepository, photoRepository, itemRepository, rulesRepository, contractRepository, assetRepository,
             tenantRepository, documentRepository, contractUseCase, storagePort, currentUserPort, authorizationService,
-            auditPort, maxFileSizeBytes, notifications, null);
+            auditPort, maxFileSizeBytes, notifications, null, null);
     }
 
     /** Room condition is optional for legacy/manual callers; configured application wiring supplies it. */
@@ -137,8 +142,33 @@ public class HandoverService implements HandoverUseCase {
         NotificationDispatcher notifications,
         RoomConditionRepositoryPort roomConditionRepository
     ) {
+        this(handoverRepository, photoRepository, itemRepository, rulesRepository, contractRepository, assetRepository,
+            tenantRepository, documentRepository, contractUseCase, storagePort, currentUserPort, authorizationService,
+            auditPort, maxFileSizeBytes, notifications, roomConditionRepository, null);
+    }
+
+    public HandoverService(
+        HandoverRepositoryPort handoverRepository,
+        HandoverPhotoRepositoryPort photoRepository,
+        HandoverItemRepositoryPort itemRepository,
+        PropertyHouseRulesRepositoryPort rulesRepository,
+        ContractRepositoryPort contractRepository,
+        RoomAssetRepositoryPort assetRepository,
+        TenantRepositoryPort tenantRepository,
+        TenantDocumentRepositoryPort documentRepository,
+        ContractUseCase contractUseCase,
+        FileStoragePort storagePort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        long maxFileSizeBytes,
+        NotificationDispatcher notifications,
+        RoomConditionRepositoryPort roomConditionRepository,
+        RoomAssetUseCase roomAssetUseCase
+    ) {
         this.notifications = notifications;
         this.roomConditionRepository = roomConditionRepository;
+        this.roomAssetUseCase = roomAssetUseCase;
         this.handoverRepository = handoverRepository;
         this.photoRepository = photoRepository;
         this.itemRepository = itemRepository;
@@ -156,16 +186,63 @@ public class HandoverService implements HandoverUseCase {
     }
 
     @Override
+    public Handover prepareCheckIn(UUID contractId) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        Contract contract = findContract(contractId);
+        authorizationService.assertCanManageContracts(user, contract.getPropertyId());
+        if (contract.getStatus() != com.phonghub.domain.model.ContractStatus.DRAFT) {
+            throw new InvalidHandoverStateException("Chỉ chuẩn bị check-in cho hợp đồng nháp.");
+        }
+        Handover existing = handoverRepository.find(contractId, HandoverType.CHECK_IN).orElse(null);
+        if (existing != null) return existing;
+
+        RoomConditionSnapshot baseline = roomConditionRepository == null ? null
+            : roomConditionRepository.findLatestByRoomId(contract.getRoomId()).orElse(null);
+        Handover previousCheckOut = contractRepository.findByRoomId(contract.getRoomId()).stream()
+            .filter(previous -> !previous.getId().equals(contractId))
+            .map(previous -> handoverRepository.find(previous.getId(), HandoverType.CHECK_OUT).orElse(null))
+            .filter(previous -> previous != null && previous.status() == HandoverStatus.APPROVED
+                && previous.approvedAt() != null)
+            .max(java.util.Comparator.comparing(Handover::approvedAt)).orElse(null);
+        boolean checkoutIsNewer = previousCheckOut != null
+            && (baseline == null || previousCheckOut.approvedAt().isAfter(baseline.createdAt()));
+        BigDecimal electric = checkoutIsNewer ? previousCheckOut.initialElectricMeter()
+            : baseline == null ? BigDecimal.ZERO : baseline.electricMeter();
+        BigDecimal water = checkoutIsNewer ? previousCheckOut.initialWaterMeter()
+            : baseline == null ? BigDecimal.ZERO : baseline.waterMeter();
+        String condition = checkoutIsNewer ? previousCheckOut.roomCondition()
+            : baseline == null ? MISSING_BASELINE_NOTE : baseline.conditionNote();
+        Handover saved = handoverRepository.save(Handover.draft(contractId, HandoverType.CHECK_IN,
+            electric, water, condition, null, user.id()));
+        List<HandoverItem> baselineItems = checkoutIsNewer
+            ? itemRepository.findByHandoverId(previousCheckOut.id()).stream()
+                .map(item -> new HandoverItem(UUID.randomUUID(), saved.id(), item.assetId(), item.assetName(),
+                    item.quantity(), item.status(), item.conditionNote(), BigDecimal.ZERO)).toList()
+            : baseline == null ? null : roomConditionRepository.findItemsBySnapshotId(baseline.id()).stream()
+                .map(item -> snapshot(saved.id(), item)).toList();
+        if (baselineItems == null) {
+            baselineItems = assetRepository.findActiveByRoomId(contract.getRoomId()).stream()
+                .map(asset -> snapshot(saved.id(), asset)).toList();
+        }
+        itemRepository.replaceAll(saved.id(), baselineItems, user.id());
+        audit(HandoverType.CHECK_IN, "CREATED", user, saved,
+            Map.of("items", baselineItems.size(), "source", checkoutIsNewer ? "previous_check_out"
+                : baseline == null ? "room_assets" : "room_condition"));
+        return saved;
+    }
+
+    @Override
     public Handover create(HandoverType type, HandoverCommand command) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(command.contractId());
         authorizationService.assertCanManageContracts(user, contract.getPropertyId());
         // Check-in cần hợp đồng đang hiệu lực; check-out được cả khi hợp đồng đã hết hạn mà chưa trả phòng (#87).
-        boolean allowed = type == HandoverType.CHECK_OUT ? contract.isResiding() : contract.isActive();
+        boolean allowed = type == HandoverType.CHECK_OUT ? contract.isResiding()
+            : contract.isActive() || contract.getStatus() == com.phonghub.domain.model.ContractStatus.DRAFT;
         if (!allowed) {
             throw new InvalidHandoverStateException(String.format(
                 "Chỉ lập biên bản cho hợp đồng đang hiệu lực%s. Trạng thái hiện tại: %s.",
-                type == HandoverType.CHECK_OUT ? " hoặc đã hết hạn nhưng chưa trả phòng" : " (ACTIVE)",
+                type == HandoverType.CHECK_OUT ? " hoặc đã hết hạn nhưng chưa trả phòng" : " (DRAFT hoặc ACTIVE)",
                 contract.getStatus()));
         }
         Handover checkIn = handoverRepository.find(contract.getId(), HandoverType.CHECK_IN).orElse(null);
@@ -180,7 +257,9 @@ public class HandoverService implements HandoverUseCase {
         Handover saved = handoverRepository.save(Handover.draft(contract.getId(), type,
             command.initialElectricMeter(), command.initialWaterMeter(), command.roomCondition(),
             command.keysProvided(), user.id()));
-        if (type == HandoverType.CHECK_OUT) {
+        if (type == HandoverType.CHECK_IN) {
+            itemRepository.replaceAll(saved.id(), checkInSnapshotItems(saved.id(), contract.getRoomId()), user.id());
+        } else {
             List<HandoverItem> start = itemRepository.findByHandoverId(checkIn.id()).stream()
                 .map(item -> new HandoverItem(UUID.randomUUID(), saved.id(), item.assetId(), item.assetName(),
                     item.quantity(), item.status(), null, BigDecimal.ZERO))
@@ -189,6 +268,32 @@ public class HandoverService implements HandoverUseCase {
         }
         audit(type, "CREATED", user, saved, Map.of());
         return saved;
+    }
+
+    @Override
+    public HandoverItem addCheckInAsset(UUID contractId, NewAssetCommand command) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        Contract contract = findContract(contractId);
+        authorizationService.assertCanManageContracts(user, contract.getPropertyId());
+        Handover handover = findHandover(contractId, HandoverType.CHECK_IN);
+        if (contract.getStatus() != com.phonghub.domain.model.ContractStatus.DRAFT
+            || handover.status() != HandoverStatus.DRAFT) {
+            throw new InvalidHandoverStateException("Chỉ thêm tài sản khi check-in của hợp đồng nháp đang ở trạng thái DRAFT.");
+        }
+        if (command == null || command.name() == null || command.name().isBlank() || command.quantity() <= 0
+            || command.status() == null) {
+            throw new IllegalArgumentException("Tên, số lượng và tình trạng tài sản là bắt buộc.");
+        }
+        if (roomAssetUseCase == null) {
+            throw new IllegalStateException("Room asset use case is not configured.");
+        }
+        RoomAsset asset = roomAssetUseCase.create(new RoomAssetUseCase.CreateAssetCommand(contract.getRoomId(), null,
+            command.name(), null, command.quantity(), command.note(), null, command.estimatedValue(), command.status()));
+        HandoverItem item = snapshot(handover.id(), asset);
+        itemRepository.save(item, user.id());
+        audit(HandoverType.CHECK_IN, "ASSET_ADDED", user, handover,
+            Map.of("assetId", asset.id().toString(), "name", asset.name()));
+        return item;
     }
 
     @Override
@@ -307,20 +412,17 @@ public class HandoverService implements HandoverUseCase {
                 throw new IllegalArgumentException("Cần ít nhất một ảnh loại " + required + " trước khi gửi");
             }
         }
+        if (type == HandoverType.CHECK_IN && MISSING_BASELINE_NOTE.equals(handover.roomCondition())) {
+            throw new IllegalArgumentException("Phòng chưa có hiện trạng trước đó. Hãy nhập chỉ số điện, nước và tình trạng thực tế trước khi gửi.");
+        }
 
         int itemCount;
         if (type == HandoverType.CHECK_IN) {
-            List<HandoverItem> items = roomConditionRepository == null ? null
-                : roomConditionRepository.findLatestByRoomId(contract.getRoomId())
-                    .map(baseline -> roomConditionRepository.findItemsBySnapshotId(baseline.id()).stream()
-                        .map(item -> snapshot(handover.id(), item)).toList())
-                    .orElse(null);
-            if (items == null) {
-                // Phòng cũ chưa có biên bản hiện trạng thì giữ cách chụp từ tài sản đang gắn với phòng.
-                items = assetRepository.findActiveByRoomId(contract.getRoomId()).stream()
-                    .map(asset -> snapshot(handover.id(), asset)).toList();
+            List<HandoverItem> items = itemRepository.findByHandoverId(handover.id());
+            if (items.isEmpty()) {
+                items = checkInSnapshotItems(handover.id(), contract.getRoomId());
+                itemRepository.replaceAll(handover.id(), items, user.id());
             }
-            itemRepository.replaceAll(handover.id(), items, user.id());
             itemCount = items.size();
         } else {
             itemCount = itemRepository.findByHandoverId(handover.id()).size();
@@ -340,6 +442,18 @@ public class HandoverService implements HandoverUseCase {
                 link(type, contractId));
         }
         return saved;
+    }
+
+    private List<HandoverItem> checkInSnapshotItems(UUID handoverId, UUID roomId) {
+        if (roomConditionRepository != null) {
+            RoomConditionSnapshot baseline = roomConditionRepository.findLatestByRoomId(roomId).orElse(null);
+            if (baseline != null) {
+                return roomConditionRepository.findItemsBySnapshotId(baseline.id()).stream()
+                    .map(item -> snapshot(handoverId, item)).toList();
+            }
+        }
+        // Phòng cũ chưa có biên bản hiện trạng thì giữ cách chụp từ tài sản đang gắn với phòng.
+        return assetRepository.findActiveByRoomId(roomId).stream().map(asset -> snapshot(handoverId, asset)).toList();
     }
 
     @Override
@@ -392,6 +506,10 @@ public class HandoverService implements HandoverUseCase {
 
         if (type == HandoverType.CHECK_IN) {
             Handover saved = handoverRepository.save(handover.approve(user.id()));
+            if (contract.getStatus() == com.phonghub.domain.model.ContractStatus.DRAFT) {
+                // TransactionalHandoverUseCase giữ việc duyệt và kích hoạt trong cùng transaction.
+                contractUseCase.activateContract(contractId);
+            }
             audit(type, "APPROVED", user, saved, Map.of());
             return saved;
         }
@@ -485,6 +603,18 @@ public class HandoverService implements HandoverUseCase {
         CurrentUser user = currentUserPort.getCurrentUser();
         authorizationService.assertCanAccessProperty(user, propertyId);
         return rulesRepository.findByPropertyId(propertyId).orElse(null);
+    }
+
+    @Override
+    public PropertyHouseRules getHouseRulesForContract(UUID contractId) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        Contract contract = findContract(contractId);
+        if (user != null && user.isTenant()) {
+            assertCanView(user, contract);
+        } else {
+            authorizationService.assertCanAccessProperty(user, contract.getPropertyId());
+        }
+        return rulesRepository.findByPropertyId(contract.getPropertyId()).orElse(null);
     }
 
     @Override

@@ -6,6 +6,8 @@ import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
+import com.phonghub.application.port.out.HandoverRepositoryPort;
+import com.phonghub.application.port.out.DraftHandoverCleanupPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
@@ -22,6 +24,8 @@ import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
 import com.phonghub.domain.model.ContractStatus;
+import com.phonghub.domain.model.HandoverStatus;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
@@ -52,6 +56,8 @@ public class ContractService implements ContractUseCase {
     private final AuthorizationService authorizationService;
     private final AuditPort auditPort;
     private final TenantAccountLinker accountLinker;
+    private final HandoverRepositoryPort handoverRepository;
+    private final DraftHandoverCleanupPort draftHandoverCleanupPort;
 
     public ContractService(
         ContractRepositoryPort contractRepository,
@@ -64,6 +70,39 @@ public class ContractService implements ContractUseCase {
         AuthorizationService authorizationService,
         AuditPort auditPort
     ) {
+        this(contractRepository, roomRepository, propertyRepository, tenantRepository, userRepository, identityProviderPort,
+            currentUserPort, authorizationService, auditPort, null);
+    }
+
+    public ContractService(
+        ContractRepositoryPort contractRepository,
+        RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
+        TenantRepositoryPort tenantRepository,
+        UserRepositoryPort userRepository,
+        IdentityProviderPort identityProviderPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        HandoverRepositoryPort handoverRepository
+    ) {
+        this(contractRepository, roomRepository, propertyRepository, tenantRepository, userRepository, identityProviderPort,
+            currentUserPort, authorizationService, auditPort, handoverRepository, null);
+    }
+
+    public ContractService(
+        ContractRepositoryPort contractRepository,
+        RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
+        TenantRepositoryPort tenantRepository,
+        UserRepositoryPort userRepository,
+        IdentityProviderPort identityProviderPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        HandoverRepositoryPort handoverRepository,
+        DraftHandoverCleanupPort draftHandoverCleanupPort
+    ) {
         this.contractRepository = contractRepository;
         this.roomRepository = roomRepository;
         this.propertyRepository = propertyRepository;
@@ -73,6 +112,8 @@ public class ContractService implements ContractUseCase {
         this.authorizationService = authorizationService;
         this.auditPort = auditPort;
         this.accountLinker = new TenantAccountLinker(tenantRepository, userRepository, identityProviderPort, auditPort);
+        this.handoverRepository = handoverRepository;
+        this.draftHandoverCleanupPort = draftHandoverCleanupPort;
     }
 
     public ContractService(
@@ -97,6 +138,19 @@ public class ContractService implements ContractUseCase {
         AuthorizationService authorizationService
     ) {
         this(contractRepository, roomRepository, propertyRepository, tenantRepository, null, null, currentUserPort, authorizationService, null);
+    }
+
+    public ContractService(
+        ContractRepositoryPort contractRepository,
+        RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
+        TenantRepositoryPort tenantRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        HandoverRepositoryPort handoverRepository
+    ) {
+        this(contractRepository, roomRepository, propertyRepository, tenantRepository, null, null, currentUserPort,
+            authorizationService, null, handoverRepository, null);
     }
 
     @Override
@@ -179,6 +233,14 @@ public class ContractService implements ContractUseCase {
                 "Chỉ có thể kích hoạt hợp đồng ở trạng thái DRAFT. Trạng thái hiện tại: '%s'.",
                 contract.getStatus()
             ));
+        }
+
+        boolean checkInApproved = handoverRepository != null
+            && handoverRepository.find(contractId, HandoverType.CHECK_IN)
+                .filter(handover -> handover.status() == HandoverStatus.APPROVED && handover.confirmedByTenant())
+                .isPresent();
+        if (!checkInApproved) {
+            throw new InvalidContractStateException("Cần có biên bản check-in được người thuê xác nhận và duyệt trước khi kích hoạt hợp đồng.");
         }
 
         // Invariant: Do not allow two active contracts for one room
@@ -325,6 +387,13 @@ public class ContractService implements ContractUseCase {
         Contract contract = contractRepository.findById(contractId)
             .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
         validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
+
+        if (contract.getStatus() != ContractStatus.DRAFT) {
+            throw new InvalidContractStateException("Chỉ có thể hủy hợp đồng ở trạng thái DRAFT.");
+        }
+        if (draftHandoverCleanupPort != null) {
+            draftHandoverCleanupPort.cancelDraftCheckIn(contractId, currentUser == null ? null : currentUser.id());
+        }
 
         contract.cancelDraft();
         Contract saved = contractRepository.save(contract);

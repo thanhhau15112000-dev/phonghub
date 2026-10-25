@@ -1,6 +1,7 @@
 package com.phonghub.application;
 
 import com.phonghub.application.port.in.ContractUseCase;
+import com.phonghub.application.port.in.RoomAssetUseCase;
 import com.phonghub.application.port.in.HandoverUseCase.HandoverCommand;
 import com.phonghub.application.port.in.HandoverUseCase.ItemCommand;
 import com.phonghub.application.port.out.AuditPort;
@@ -56,6 +57,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -73,6 +75,7 @@ class HandoverServiceUnitTest {
     private PropertyHouseRulesRepositoryPort rules;
     private ContractRepositoryPort contracts;
     private RoomAssetRepositoryPort assets;
+    private RoomAssetUseCase assetUseCase;
     private RoomConditionRepositoryPort roomConditions;
     private TenantRepositoryPort tenants;
     private TenantDocumentRepositoryPort documents;
@@ -92,6 +95,7 @@ class HandoverServiceUnitTest {
         rules = mock(PropertyHouseRulesRepositoryPort.class);
         contracts = mock(ContractRepositoryPort.class);
         assets = mock(RoomAssetRepositoryPort.class);
+        assetUseCase = mock(RoomAssetUseCase.class);
         roomConditions = mock(RoomConditionRepositoryPort.class);
         tenants = mock(TenantRepositoryPort.class);
         documents = mock(TenantDocumentRepositoryPort.class);
@@ -111,10 +115,12 @@ class HandoverServiceUnitTest {
         when(handovers.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(photos.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(items.save(any(), any())).thenAnswer(inv -> inv.getArgument(0));
+        when(assets.findActiveByRoomId(any())).thenReturn(List.of());
+        when(contracts.findByRoomId(any())).thenReturn(List.of());
 
         service = new HandoverService(handovers, photos, items, rules, contracts, assets, tenants, documents,
             contractUseCase, storage, currentUser, authorization, mock(AuditPort.class),
-            1024 * 1024, null, roomConditions);
+            1024 * 1024, null, roomConditions, assetUseCase);
     }
 
     private HandoverCommand command() {
@@ -147,6 +153,59 @@ class HandoverServiceUnitTest {
 
         assertThrows(InvalidHandoverStateException.class, () -> service.create(HandoverType.CHECK_IN, command()));
         verify(handovers, never()).save(any());
+    }
+
+    @Test
+    void prepareCheckInUsesLatestRoomConditionAndReturnsExistingDraftOnRepeat() {
+        contract = Contract.create(propertyId, roomId, tenant.id(), new BigDecimal("3000000"),
+            new BigDecimal("2500000"), LocalDate.now(), LocalDate.now().plusMonths(6), 5);
+        when(contracts.findById(contract.getId())).thenReturn(Optional.of(contract));
+        RoomConditionSnapshot baseline = new RoomConditionSnapshot(UUID.randomUUID(), roomId,
+            new BigDecimal("123.5"), new BigDecimal("45.25"), "Tường vừa sơn", null, null, Instant.now(), staff.id());
+        RoomConditionItem baselineAsset = new RoomConditionItem(UUID.randomUUID(), baseline.id(), UUID.randomUUID(),
+            0, "Máy lạnh", 1, AssetStatus.GOOD, "Mới vệ sinh", new BigDecimal("5000000"));
+        when(roomConditions.findLatestByRoomId(roomId)).thenReturn(Optional.of(baseline));
+        when(roomConditions.findItemsBySnapshotId(baseline.id())).thenReturn(List.of(baselineAsset));
+        java.util.concurrent.atomic.AtomicReference<Handover> saved = new java.util.concurrent.atomic.AtomicReference<>();
+        when(handovers.find(contract.getId(), HandoverType.CHECK_IN)).thenAnswer(inv -> Optional.ofNullable(saved.get()));
+        when(handovers.save(any())).thenAnswer(inv -> {
+            Handover handover = inv.getArgument(0);
+            saved.set(handover);
+            return handover;
+        });
+
+        Handover first = service.prepareCheckIn(contract.getId());
+        Handover second = service.prepareCheckIn(contract.getId());
+
+        assertEquals(new BigDecimal("123.5"), first.initialElectricMeter());
+        assertEquals(new BigDecimal("45.25"), first.initialWaterMeter());
+        assertEquals("Tường vừa sơn", first.roomCondition());
+        assertEquals(first.id(), second.id());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<HandoverItem>> captor = ArgumentCaptor.forClass(List.class);
+        verify(items, times(1)).replaceAll(eq(first.id()), captor.capture(), eq(staff.id()));
+        assertEquals("Máy lạnh", captor.getValue().getFirst().assetName());
+    }
+
+    @Test
+    void addingCheckInAssetCreatesRoomAssetAndHandoverSnapshot() {
+        contract = Contract.create(propertyId, roomId, tenant.id(), new BigDecimal("3000000"),
+            new BigDecimal("2500000"), LocalDate.now(), LocalDate.now().plusMonths(6), 5);
+        when(contracts.findById(contract.getId())).thenReturn(Optional.of(contract));
+        Handover draft = existing(HandoverType.CHECK_IN, HandoverStatus.DRAFT);
+        givenHandover(draft);
+        RoomAsset asset = new RoomAsset(UUID.randomUUID(), roomId, "A-1", "Tủ lạnh", null, 1, AssetStatus.GOOD,
+            "Hoạt động", null, new BigDecimal("2000000"), null, Instant.now(), staff.id(), Instant.now(), staff.id());
+        when(assetUseCase.create(any())).thenReturn(asset);
+
+        HandoverItem saved = service.addCheckInAsset(contract.getId(),
+            new com.phonghub.application.port.in.HandoverUseCase.NewAssetCommand("Tủ lạnh", 1, AssetStatus.GOOD,
+                "Hoạt động", new BigDecimal("2000000")));
+
+        assertEquals(asset.id(), saved.assetId());
+        assertEquals("Tủ lạnh", saved.assetName());
+        verify(assetUseCase).create(any());
+        verify(items).save(saved, staff.id());
     }
 
     @Test
@@ -402,6 +461,18 @@ class HandoverServiceUnitTest {
 
         assertEquals(HandoverStatus.APPROVED, approved.status());
         verify(contractUseCase, never()).terminateContract(any(), anyBoolean());
+    }
+
+    @Test
+    void approvingCheckInActivatesDraftContract() {
+        contract = Contract.create(propertyId, roomId, tenant.id(), new BigDecimal("3000000"),
+            new BigDecimal("2500000"), LocalDate.now(), LocalDate.now().plusMonths(6), 5);
+        when(contracts.findById(contract.getId())).thenReturn(Optional.of(contract));
+        givenHandover(existing(HandoverType.CHECK_IN, HandoverStatus.PENDING_APPROVAL));
+
+        service.approve(HandoverType.CHECK_IN, contract.getId(), null);
+
+        verify(contractUseCase).activateContract(contract.getId());
     }
 
     // ---- lỗ hổng đã xác nhận trong audit; bật lại khi đã sửa ----

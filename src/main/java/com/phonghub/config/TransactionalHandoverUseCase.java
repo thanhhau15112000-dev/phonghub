@@ -22,8 +22,20 @@ public class TransactionalHandoverUseCase implements HandoverUseCase {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public Handover prepareCheckIn(UUID contractId) {
+        return delegate.prepareCheckIn(contractId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public Handover create(HandoverType type, HandoverCommand command) {
         return delegate.create(type, command);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public HandoverItem addCheckInAsset(UUID contractId, NewAssetCommand command) {
+        return delegate.addCheckInAsset(contractId, command);
     }
 
     @Override
@@ -103,6 +115,11 @@ public class TransactionalHandoverUseCase implements HandoverUseCase {
     @Transactional(readOnly = true)
     public PropertyHouseRules getHouseRules(UUID propertyId) {
         return delegate.getHouseRules(propertyId);
+    }
+
+    @Override
+    public PropertyHouseRules getHouseRulesForContract(UUID contractId) {
+        return delegate.getHouseRulesForContract(contractId);
     }
 
     @Override

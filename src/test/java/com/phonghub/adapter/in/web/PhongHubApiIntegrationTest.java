@@ -4,6 +4,7 @@ import tools.jackson.databind.ObjectMapper;
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
@@ -17,6 +18,8 @@ import com.phonghub.adapter.in.web.api.PropertyApiController;
 import com.phonghub.adapter.in.web.api.RoomApiController;
 import com.phonghub.adapter.in.web.api.TenantApiController;
 import com.phonghub.domain.model.MaintenancePriority;
+import com.phonghub.domain.model.Handover;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
 import java.math.BigDecimal;
@@ -68,6 +71,9 @@ class PhongHubApiIntegrationTest {
     private InMemoryContractRepository contractRepository;
 
     @Autowired
+    private InMemoryHandoverRepository handoverRepository;
+
+    @Autowired
     private InMemoryMaintenanceTicketRepository ticketRepository;
 
     @BeforeEach
@@ -78,6 +84,7 @@ class PhongHubApiIntegrationTest {
         roomRepository.clear();
         tenantRepository.clear();
         contractRepository.clear();
+        handoverRepository.clear();
         ticketRepository.clear();
 
         DataSeeder.seedAll(
@@ -252,7 +259,17 @@ class PhongHubApiIntegrationTest {
 
         String contractId = objectMapper.readTree(response).get("id").asText();
 
-        // Activate contract
+        // API cannot activate without an approved check-in.
+        mockMvc.perform(post("/api/contracts/" + contractId + "/activate")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isConflict());
+
+        java.util.UUID actorId = LocalDemoAuthenticationAdapter.ADMIN_ID;
+        Handover checkIn = Handover.draft(java.util.UUID.fromString(contractId), HandoverType.CHECK_IN,
+            BigDecimal.ZERO, BigDecimal.ZERO, "Phòng đã kiểm tra", null, actorId)
+            .send("terms-hash", null, null, actorId).tenantConfirm(actorId).approve(actorId);
+        handoverRepository.save(checkIn);
+
         mockMvc.perform(post("/api/contracts/" + contractId + "/activate")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())

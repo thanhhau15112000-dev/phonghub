@@ -1167,20 +1167,22 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Mục | Nội dung |
 |---|---|
 | Tác nhân chính | Như UC-31 |
-| Mô tả | Đưa hợp đồng nháp vào hiệu lực. |
+| Mô tả | Bắt đầu check-in cho hợp đồng nháp; chỉ đưa hợp đồng vào hiệu lực sau khi biên bản được người thuê chính xác nhận và người quản lý duyệt. |
 | Tiền điều kiện | Hợp đồng `DRAFT`. |
-| Hậu điều kiện | Hợp đồng `ACTIVE`; phòng `OCCUPIED`; có nhật ký `CONTRACT_ACTIVATED`. Từ đây lập được biên bản check-in (UC-39) và kỳ thanh toán (UC-47). |
+| Hậu điều kiện | Hệ thống tạo hoặc mở biên bản check-in `DRAFT`; hợp đồng vẫn `DRAFT`, phòng vẫn `AVAILABLE`. Khi UC-41 duyệt check-in, hợp đồng thành `ACTIVE`, phòng `OCCUPIED` và có nhật ký `CONTRACT_ACTIVATED`. |
 | Kênh | Web `/contracts/{id}/activate`; API `POST /api/contracts/{id}/activate` |
 
 **Luồng chính**
-1. Tác nhân chọn "Kích hoạt".
-2. Hệ thống kiểm tra phòng chưa có hợp đồng hiệu lực khác.
-3. Hệ thống khóa hồ sơ của người thuê chính và người ở cùng (theo thứ tự cố định để tránh khóa chéo), kiểm tra không ai đang ở theo hợp đồng khác.
-4. Hệ thống chuyển hợp đồng sang `ACTIVE`, phòng sang `OCCUPIED`.
+1. Tác nhân chọn "Lập biên bản check-in"; nếu đã có biên bản, hệ thống mở đúng biên bản đó.
+2. Hệ thống điền chỉ số, ghi chú và tài sản từ mốc hiện trạng phòng hoặc check-out đã duyệt gần nhất; nếu không có mốc thì yêu cầu người quản lý nhập hiện trạng thực tế.
+3. Người quản lý hoàn thiện biên bản và gửi người thuê; người thuê chính xác nhận sau khi có ảnh CCCD.
+4. Người quản lý duyệt. Hệ thống kiểm tra phòng chưa có hợp đồng hiệu lực khác, khóa hồ sơ người thuê chính và người ở cùng theo thứ tự cố định, kiểm tra không ai đang ở theo hợp đồng khác.
+5. Trong một transaction, hệ thống duyệt biên bản, chuyển hợp đồng sang `ACTIVE`, phòng sang `OCCUPIED`.
 
 **Ngoại lệ**
 - E1. Hợp đồng không ở `DRAFT`: từ chối.
-- E2. Phòng đã có hợp đồng hiệu lực, hoặc một người thuê đang ở theo hợp đồng khác (kể cả hợp đồng đã hết hạn mà chưa trả phòng): E-409.
+- E2. Chưa có check-in đã được người thuê chính xác nhận và người quản lý duyệt: không kích hoạt; API trả `409`.
+- E3. Phòng đã có hợp đồng hiệu lực, hoặc một người thuê đang ở theo hợp đồng khác (kể cả hợp đồng đã hết hạn mà chưa trả phòng): E-409.
 
 #### UC-34. Xem hợp đồng
 
@@ -1292,14 +1294,14 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 |---|---|
 | Tác nhân chính | Chủ trọ, Nhân viên có quyền quản lý hợp đồng, Quản trị viên |
 | Tác nhân phụ | Kho tệp riêng tư |
-| Mô tả | Ghi chỉ số điện nước ban đầu, tình trạng phòng, số chìa khóa, tình trạng từng tài sản, ảnh; gửi người thuê xác nhận. |
-| Tiền điều kiện | Hợp đồng `ACTIVE`. |
-| Hậu điều kiện | Biên bản `PENDING_TENANT`; người thuê chính nhận thông báo. |
+| Mô tả | Ghi chỉ số điện nước ban đầu, tình trạng phòng, số chìa khóa, tài sản và ảnh; gửi người thuê xác nhận. Với hợp đồng mới, duyệt biên bản cũng kích hoạt hợp đồng và chuyển phòng sang đang thuê. |
+| Tiền điều kiện | Hợp đồng `DRAFT` hoặc hợp đồng `ACTIVE` cũ chưa có check-in. |
+| Hậu điều kiện | Biên bản `PENDING_TENANT`; người thuê chính nhận thông báo. Hợp đồng mới vẫn `DRAFT`, phòng chưa `OCCUPIED`. |
 | Kênh | Web `/contracts/{id}/handover`; API `/api/contracts/{id}/check-in…` |
 
 **Luồng chính**
 1. Tác nhân tạo biên bản, nhập chỉ số điện nước ban đầu, tình trạng phòng, ghi chú bàn giao.
-2. Hệ thống tạo mục kiểm tra từ danh sách tài sản của phòng; tác nhân ghi tình trạng từng tài sản.
+2. Hệ thống điền tài sản từ mốc hiện trạng phòng hoặc check-out đã duyệt gần nhất. Nếu phòng chưa có tài sản, biên bản ghi rõ "Phòng không có tài sản bàn giao"; người quản lý có thể thêm tài sản trực tiếp và lưu vào kho phòng.
 3. Tác nhân tải ảnh theo loại: phòng, đồng hồ điện, đồng hồ nước.
 4. Tác nhân chọn "Gửi cho khách thuê".
 5. Hệ thống kiểm tra đủ ảnh từng loại bắt buộc, chốt bản điều khoản hợp đồng và nội quy hiện tại (kèm mã băm).
@@ -1350,7 +1352,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 **Luồng chính**
 1. Người quản lý mở biên bản chờ duyệt.
 2. Người quản lý chọn "Duyệt".
-3. Hệ thống chuyển biên bản sang `APPROVED` và ghi thời điểm duyệt.
+3. Hệ thống chuyển biên bản sang `APPROVED` và ghi thời điểm duyệt. Nếu hợp đồng đang `DRAFT`, cùng transaction chuyển hợp đồng sang `ACTIVE` và phòng sang `OCCUPIED`; nếu hợp đồng `ACTIVE` cũ thì giữ nguyên trạng thái hợp đồng/phòng.
 
 **Luồng thay thế**
 - 2a. Từ chối: nhập lý do; biên bản `REJECTED`.
