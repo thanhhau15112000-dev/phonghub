@@ -23,10 +23,14 @@ import org.junit.jupiter.api.Test;
 class InvoiceUnitTest {
 
     private Contract contract(ContractStatus status, int paymentDay) {
+        return contract(status, paymentDay, LocalDate.of(2026, 1, 15), LocalDate.of(2027, 1, 15));
+    }
+
+    private Contract contract(ContractStatus status, int paymentDay, LocalDate startDate, LocalDate endDate) {
         return new Contract(
             UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
             new BigDecimal("3000000"), new BigDecimal("3500000"),
-            LocalDate.of(2026, 1, 15), LocalDate.of(2027, 1, 15), paymentDay,
+            startDate, endDate, paymentDay,
             status, List.of(), Instant.now(), Instant.now()
         );
     }
@@ -38,6 +42,43 @@ class InvoiceUnitTest {
         assertEquals(LocalDate.of(2026, 2, 28), feb.getDueDate());
         assertEquals(InvoiceStatus.ISSUED, feb.getStatus());
         assertEquals(0, new BigDecimal("3500000").compareTo(feb.getTotalAmount()));
+    }
+
+    @Test
+    @DisplayName("First month's due date is not before the contract start date when payment day has passed")
+    void firstMonthDueDateCannotPrecedeContractStart() {
+        LocalDate startDate = LocalDate.of(2026, 10, 25);
+        Contract contract = contract(ContractStatus.ACTIVE, 5, startDate, LocalDate.of(2027, 10, 24));
+
+        Invoice invoice = Invoice.issueMonthlyRent(contract, YearMonth.of(2026, 10), "PHAAAA2222");
+
+        assertEquals(startDate, invoice.getDueDate());
+        assertFalse(invoice.isOverdue(startDate));
+        assertTrue(invoice.isOverdue(startDate.plusDays(1)));
+        assertEquals(0, new BigDecimal("3500000").compareTo(invoice.getTotalAmount()), "first-month rent is not prorated");
+    }
+
+    @Test
+    @DisplayName("First month's configured payment day remains when it is on or after the contract start")
+    void firstMonthKeepsPaymentDayWhenItHasNotPassed() {
+        Contract contract = contract(
+            ContractStatus.ACTIVE, 5, LocalDate.of(2026, 10, 2), LocalDate.of(2027, 10, 1));
+
+        Invoice invoice = Invoice.issueMonthlyRent(contract, YearMonth.of(2026, 10), "PHAAAA2222");
+
+        assertEquals(LocalDate.of(2026, 10, 5), invoice.getDueDate());
+    }
+
+    @Test
+    @DisplayName("First month's due date is clamped to the contract start when a short-month payment day has passed")
+    void shortMonthFirstDueDateCannotPrecedeContractStart() {
+        LocalDate startDate = LocalDate.of(2026, 2, 20);
+        Contract contract = contract(ContractStatus.ACTIVE, 31, startDate, LocalDate.of(2027, 2, 19));
+
+        Invoice invoice = Invoice.issueMonthlyRent(contract, YearMonth.of(2026, 2), "PHAAAA2222");
+
+        assertEquals(LocalDate.of(2026, 2, 28), invoice.getDueDate());
+        assertFalse(invoice.isOverdue(startDate));
     }
 
     @Test
