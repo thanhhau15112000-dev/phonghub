@@ -26,6 +26,7 @@ public record LateFeePolicy(
         FIXED
     }
 
+    public static final int MIN_GRACE_DAYS = 7;
     public static final int MAX_GRACE_DAYS = 365;
 
     public LateFeePolicy {
@@ -44,8 +45,8 @@ public record LateFeePolicy(
         if (feeType == FeeType.PERCENT && feeValue.compareTo(BigDecimal.valueOf(100)) > 0) {
             throw new DomainException("Phạt theo phần trăm không được vượt quá 100%.");
         }
-        if (graceDays < 0 || graceDays > MAX_GRACE_DAYS) {
-            throw new DomainException("Số ngày ân hạn phải từ 0 đến " + MAX_GRACE_DAYS + ".");
+        if (graceDays < MIN_GRACE_DAYS || graceDays > MAX_GRACE_DAYS) {
+            throw new DomainException("Số ngày ân hạn phải từ " + MIN_GRACE_DAYS + " đến " + MAX_GRACE_DAYS + ".");
         }
         if (capAmount != null && capAmount.signum() < 0) {
             throw new DomainException("Mức phạt tối đa không được âm.");
@@ -59,7 +60,7 @@ public record LateFeePolicy(
     }
 
     public static LateFeePolicy disabled(UUID propertyId) {
-        return new LateFeePolicy(propertyId, false, FeeType.PERCENT, BigDecimal.ZERO, 0, null, Instant.now(), null);
+        return new LateFeePolicy(propertyId, false, FeeType.PERCENT, BigDecimal.ZERO, MIN_GRACE_DAYS, null, Instant.now(), null);
     }
 
     /**

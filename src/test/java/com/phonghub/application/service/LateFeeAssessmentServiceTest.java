@@ -67,8 +67,8 @@ class LateFeeAssessmentServiceTest {
     @Test
     @DisplayName("phạt tăng theo ngày quá hạn sau ân hạn; chạy lại cùng ngày không cộng dồn")
     void dailyFeeIsIdempotentForSameDay() {
-        policy(true, 2);
-        LocalDate today = DUE.plusDays(3);
+        policy(true, 7);
+        LocalDate today = DUE.plusDays(8);
 
         assertTrue(service.assessInvoice(invoice.getId(), today));
         assertFalse(service.assessInvoice(invoice.getId(), today));
@@ -86,11 +86,11 @@ class LateFeeAssessmentServiceTest {
     @Test
     @DisplayName("chưa quá hạn, còn trong ân hạn hoặc chính sách tắt thì không phạt")
     void noFeeCases() {
-        policy(true, 5);
+        policy(true, 7);
         assertFalse(service.assessInvoice(invoice.getId(), DUE), "đúng hạn chưa quá hạn");
-        assertFalse(service.assessInvoice(invoice.getId(), DUE.plusDays(5)), "còn trong ân hạn");
+        assertFalse(service.assessInvoice(invoice.getId(), DUE.plusDays(7)), "đủ 7 ngày quá hạn vẫn chưa phạt");
 
-        policy(false, 0);
+        policy(false, 7);
         assertFalse(service.assessInvoice(invoice.getId(), DUE.plusDays(30)), "chính sách tắt");
 
         policies.clear();
@@ -102,7 +102,7 @@ class LateFeeAssessmentServiceTest {
     @Test
     @DisplayName("A backfilled cycle is not fined until its due date passes")
     void invoiceIssuedAfterPaymentDayIsNotFinedOnIssue() {
-        policy(true, 0);
+        policy(true, 7);
         LocalDate issuedOn = LocalDate.of(2026, 10, 25);
         Invoice late = invoices.save(Invoice.issueMonthlyRent(
             contract, YearMonth.of(2026, 10), "PHLATE0003", List.of(), issuedOn));
@@ -110,13 +110,14 @@ class LateFeeAssessmentServiceTest {
         assertFalse(service.findInvoicesToAssess(issuedOn).contains(late.getId()));
         assertFalse(service.assessInvoice(late.getId(), issuedOn), "vừa tạo, chưa tới hạn");
         assertFalse(service.assessInvoice(late.getId(), late.getDueDate()), "đúng hạn chưa quá hạn");
-        assertTrue(service.assessInvoice(late.getId(), late.getDueDate().plusDays(1)));
+        assertFalse(service.assessInvoice(late.getId(), late.getDueDate().plusDays(7)), "chờ đủ 7 ngày quá hạn");
+        assertTrue(service.assessInvoice(late.getId(), late.getDueDate().plusDays(8)));
     }
 
     @Test
     @DisplayName("hóa đơn đã thanh toán đủ không bị phạt")
     void paidInvoiceIsSkipped() {
-        policy(true, 0);
+        policy(true, 7);
         Invoice stored = invoices.findById(invoice.getId()).orElseThrow();
         stored.applyPayment(new BigDecimal("3500000"), Instant.now());
         invoices.save(stored);
@@ -128,9 +129,9 @@ class LateFeeAssessmentServiceTest {
     @Test
     @DisplayName("scheduler đếm số hóa đơn thay đổi và một hóa đơn lỗi không chặn các hóa đơn còn lại")
     void schedulerIsolatesFailures() {
-        policy(true, 0);
+        policy(true, 7);
         LateFeeScheduler scheduler = new LateFeeScheduler(service);
-        LocalDate today = DUE.plusDays(1);
+        LocalDate today = DUE.plusDays(8);
 
         assertEquals(1, scheduler.run(today));
         assertEquals(0, scheduler.run(today), "chạy lại không thay đổi gì");
