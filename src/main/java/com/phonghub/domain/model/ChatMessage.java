@@ -56,21 +56,7 @@ public record ChatMessage(
         );
     }
 
-    public static ChatMessage createMedia(UUID chatRoomId, UUID senderId, String senderName, String caption, String mediaUrl, String mediaType,
-        Instant createdAt) {
-        return new ChatMessage(
-            UUID.randomUUID(),
-            chatRoomId,
-            senderId,
-            senderName,
-            caption != null ? caption.trim() : "",
-            mediaUrl,
-            mediaType,
-            createdAt,
-            null
-        );
-    }
-
+    /** Chat chỉ còn văn bản (#201); media chỉ còn ở tin cũ gửi trước khi gỡ chức năng. */
     public boolean hasMedia() {
         return mediaUrl != null && !mediaUrl.isBlank();
     }

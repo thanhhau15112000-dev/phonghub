@@ -2,19 +2,22 @@ package com.phonghub.adapter.out.event;
 
 import com.phonghub.application.port.out.ChatEventPublisherPort;
 import com.phonghub.domain.model.ChatMessage;
+import com.phonghub.domain.model.ChatRoom;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.function.Supplier;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 public class SseChatEventPublisher implements ChatEventPublisherPort {
 
-    private static final Logger log = LoggerFactory.getLogger(SseChatEventPublisher.class);
+    /** Trình duyệt chờ chừng này trước khi tự kết nối lại khi luồng SSE bị ngắt. */
+    private static final long RECONNECT_DELAY_MS = 3_000;
+
     private final Map<UUID, List<SseEmitter>> userEmitters = new ConcurrentHashMap<>();
 
     public SseEmitter subscribe(UUID userId) {
@@ -27,7 +30,7 @@ public class SseChatEventPublisher implements ChatEventPublisherPort {
         emitter.onError(e -> removeEmitter(userId, emitter));
 
         try {
-            emitter.send(SseEmitter.event().name("init").data("connected"));
+            emitter.send(SseEmitter.event().name("init").reconnectTime(RECONNECT_DELAY_MS).data("connected"));
         } catch (IOException e) {
             removeEmitter(userId, emitter);
         }
@@ -46,36 +49,49 @@ public class SseChatEventPublisher implements ChatEventPublisherPort {
     }
 
     @Override
-    public void publishNewMessage(UUID roomId, ChatMessage message) {
+    public void publishNewMessage(ChatRoom room, ChatMessage message) {
+        sendToReaders(room, () -> SseEmitter.event().name("new_message").data(message));
+    }
+
+    @Override
+    public void publishReadReceipt(ChatRoom room, UUID userId, Instant readAt) {
+        Map<String, String> receipt = Map.of(
+            "roomId", room.id().toString(),
+            "userId", userId.toString(),
+            "readAt", readAt.toString()
+        );
+        sendToReaders(room, () -> SseEmitter.event().name("message_seen").data(receipt));
+    }
+
+    /**
+     * Gửi dòng chú thích cho mọi kết nối đang mở. Proxy (Cloudflare, Render) cắt kết nối im lặng quá lâu,
+     * và trình duyệt không tự kết nối lại khi proxy trả trang lỗi thay cho luồng SSE.
+     */
+    public void sendHeartbeat() {
         userEmitters.forEach((userId, emitters) -> {
             for (SseEmitter emitter : emitters) {
-                try {
-                    emitter.send(SseEmitter.event()
-                        .name("new_message")
-                        .data(message));
-                } catch (Exception e) {
-                    removeEmitter(userId, emitter);
-                }
+                send(userId, emitter, SseEmitter.event().comment("ping"));
             }
         });
     }
 
-    @Override
-    public void publishReadReceipt(UUID roomId, UUID userId, java.time.Instant readAt) {
-        userEmitters.forEach((subUserId, emitters) -> {
+    /** Mỗi lần gửi cần builder mới: {@code build()} ghi thêm vào chính builder. */
+    private void sendToReaders(ChatRoom room, Supplier<SseEmitter.SseEventBuilder> event) {
+        userEmitters.forEach((userId, emitters) -> {
+            if (!room.hasMember(userId)) {
+                return;
+            }
             for (SseEmitter emitter : emitters) {
-                try {
-                    emitter.send(SseEmitter.event()
-                        .name("message_seen")
-                        .data(Map.of(
-                            "roomId", roomId.toString(),
-                            "userId", userId.toString(),
-                            "readAt", readAt.toString()
-                        )));
-                } catch (Exception e) {
-                    removeEmitter(subUserId, emitter);
-                }
+                send(userId, emitter, event.get());
             }
         });
+    }
+
+    private void send(UUID userId, SseEmitter emitter, SseEmitter.SseEventBuilder event) {
+        try {
+            emitter.send(event);
+        } catch (Exception e) {
+            removeEmitter(userId, emitter);
+        }
     }
 }

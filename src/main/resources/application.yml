@@ -74,5 +74,3 @@ phonghub:
     merchant-id: ${SEPAY_MERCHANT_ID:}
     secret-key: ${SEPAY_SECRET_KEY:}
     public-base-url: ${SEPAY_PUBLIC_BASE_URL:}
-  chat:
-    supabase-bucket: ${SUPABASE_CHAT_BUCKET:chat-media}

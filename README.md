@@ -303,18 +303,19 @@ dịch chuyển khoản thật tiếp tục được đối soát qua
 Chi tiết request/response được định nghĩa trong controller và DTO tương ứng.
 Frontend nên dùng API contract đó thay vì phụ thuộc vào fixture local.
 
-### Hệ thống Chat Real-time & Lưu trữ Media
+### Hệ thống Chat Real-time
+
+Chat chỉ gửi văn bản; chức năng gửi ảnh/video đã gỡ (#201). Tin cũ có tệp đính kèm vẫn hiển thị phần chữ, cột `media_url`/`media_type` trong `chat_messages` được giữ nguyên.
 
 Hệ thống trò chuyện được thiết kế theo chuẩn Hexagonal Architecture (Ports & Adapters):
 - **Inbound Port:** `ChatRoomUseCase`, `ChatMessageUseCase`
 - **Outbound Ports:**
   - `ChatMessageRepositoryPort`, `ChatRoomRepositoryPort` (PostgreSQL / In-Memory)
-  - `ChatEventPublisherPort` (SSE Broadcast)
-  - `MediaStoragePort` (Lưu trữ và phân phối hình ảnh/video qua CDN)
-- **Cơ chế lưu trữ Media (Images & Videos):**
-  - **Môi trường Production:** `SupabaseMediaStorageAdapter` tải tệp lên bucket Supabase Storage (`chat-media`) qua REST API và trả về URL CDN công khai (`/storage/v1/object/public/...`) giúp tối ưu tốc độ phân phối và bộ nhớ đệm.
-  - **Môi trường Local / Docker:** Tự động fallback sang `LocalMediaStorageAdapter` lưu trữ tại thư mục cục bộ `uploads/chat-media/` và phục vụ qua Spring Web MVC Resource Handler (`/uploads/**`), đảm bảo chạy mượt mà ngay cả khi ngắt mạng hoặc chưa cấu hình Supabase credentials.
-  - **Giới hạn & Định dạng:** Hỗ trợ kích thước tệp tối đa 25MB. Hỗ trợ ảnh (`.jpg, .png, .webp, .gif`) và video (`.mp4, .webm, .mov`). Hiển thị trực quan với thumbnail phóng to và trình phát video HTML5 tích hợp ngay trong bong bóng chat.
+  - `ChatEventPublisherPort` (SSE qua `GET /api/chat/stream`)
+- **Realtime (SSE):**
+  - Sự kiện `new_message` và `message_seen` chỉ gửi cho người được đọc phòng: phòng 1-1 chỉ hai thành viên, Kênh Chung mọi người đã đăng nhập.
+  - Server gửi heartbeat mỗi 25 giây để proxy (Cloudflare, Render) không cắt kết nối im lặng; header `Cache-Control: no-cache, no-transform` và `X-Accel-Buffering: no` để proxy không gom dữ liệu.
+  - Widget tự kết nối lại (kể cả khi proxy trả trang lỗi làm trình duyệt bỏ luồng SSE) và tải lại tin của phòng đang mở cùng số tin chưa đọc sau khi kết nối lại.
 
 ## Cấu hình production
 
