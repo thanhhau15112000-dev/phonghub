@@ -284,6 +284,15 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.MaintenanceSubmissionUseCase maintenanceSubmissionUseCase(
+        MaintenanceUseCase maintenanceUseCase,
+        com.phonghub.application.port.in.MaintenanceAttachmentUseCase attachmentUseCase
+    ) {
+        return new TransactionalMaintenanceSubmissionUseCase(
+            new com.phonghub.application.service.MaintenanceSubmissionService(maintenanceUseCase, attachmentUseCase));
+    }
+
+    @Bean
     public com.phonghub.application.port.in.MeterSubmissionUseCase meterSubmissionUseCase(
         com.phonghub.application.port.out.MeterSubmissionRepositoryPort submissionRepo,
         RoomRepositoryPort roomRepo,

@@ -46,6 +46,12 @@ public class TransactionalTenantUseCase implements TenantUseCase {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public Tenant linkAccountByEmail(UUID tenantId, String email) {
+        return delegate.linkAccountByEmail(tenantId, email);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public TenantAccountResult issueTenantAccount(IssueTenantAccountCommand command) {
         return delegate.issueTenantAccount(command);
     }

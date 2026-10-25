@@ -790,9 +790,7 @@ class PhongHubApiIntegrationTest {
             "0908888999",
             "lan@phonghub.local",
             "Bình Phước",
-            LocalDate.now(),
-            false
-        );
+            LocalDate.now());
 
         mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
@@ -814,9 +812,7 @@ class PhongHubApiIntegrationTest {
             "0908888999",
             "lan@phonghub.local",
             "Bình Phước",
-            LocalDate.now(),
-            false
-        );
+            LocalDate.now());
 
         mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString())
@@ -832,7 +828,7 @@ class PhongHubApiIntegrationTest {
     void testStaffWithoutContractPermissionCannotAddOccupant() throws Exception {
         ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
             "Trần Thị Lan", "079200008889", "0908888998", "lan2@phonghub.local", "Bình Phước",
-            LocalDate.now(), false);
+            LocalDate.now());
 
         mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_2_ID.toString())
@@ -858,9 +854,7 @@ class PhongHubApiIntegrationTest {
             "0908888999",
             null,
             null,
-            LocalDate.now(),
-            false
-        );
+            LocalDate.now());
 
         mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
@@ -883,9 +877,7 @@ class PhongHubApiIntegrationTest {
             tenant1.phone(),
             tenant1.email(),
             null,
-            LocalDate.now(),
-            false
-        );
+            LocalDate.now());
 
         mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
@@ -905,9 +897,7 @@ class PhongHubApiIntegrationTest {
             "",
             null,
             null,
-            LocalDate.now(),
-            false
-        );
+            LocalDate.now());
 
         mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())

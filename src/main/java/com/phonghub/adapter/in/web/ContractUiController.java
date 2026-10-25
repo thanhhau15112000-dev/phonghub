@@ -9,7 +9,6 @@ import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
-import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.config.SepayProperties;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
@@ -50,7 +49,6 @@ public class ContractUiController {
     private final RoomUseCase roomUseCase;
     private final RoomRepositoryPort roomRepository;
     private final TenantRepositoryPort tenantRepository;
-    private final UserRepositoryPort userRepository;
     private final CurrentUserPort currentUserPort;
     private final TenantUseCase tenantUseCase;
     private final InvoiceUseCase invoiceUseCase;
@@ -62,7 +60,6 @@ public class ContractUiController {
         RoomUseCase roomUseCase,
         RoomRepositoryPort roomRepository,
         TenantRepositoryPort tenantRepository,
-        UserRepositoryPort userRepository,
         CurrentUserPort currentUserPort,
         TenantUseCase tenantUseCase,
         InvoiceUseCase invoiceUseCase,
@@ -73,7 +70,6 @@ public class ContractUiController {
         this.roomUseCase = roomUseCase;
         this.roomRepository = roomRepository;
         this.tenantRepository = tenantRepository;
-        this.userRepository = userRepository;
         this.currentUserPort = currentUserPort;
         this.tenantUseCase = tenantUseCase;
         this.invoiceUseCase = invoiceUseCase;
@@ -113,6 +109,7 @@ public class ContractUiController {
     public String newContractForm(
         @RequestParam(required = false) UUID propertyId,
         @RequestParam(required = false) UUID roomId,
+        @RequestParam(required = false) UUID tenantProfileId,
         Model model,
         RedirectAttributes redirectAttributes
     ) {
@@ -152,6 +149,7 @@ public class ContractUiController {
             ? List.of() : contractUseCase.listAvailablePrimaryTenants(propertyId, null));
         model.addAttribute("defaultStartDate", LocalDate.now());
         model.addAttribute("defaultEndDate", LocalDate.now().plusYears(1));
+        model.addAttribute("selectedTenantId", tenantProfileId);
 
         return "contracts/new";
     }
@@ -195,6 +193,8 @@ public class ContractUiController {
             Property property = propertyUseCase.getProperty(contract.getPropertyId());
             Room room = roomUseCase.getRoom(contract.getRoomId());
             Tenant primaryTenant = tenantRepository.findById(contract.getPrimaryTenantId()).orElse(null);
+            // Cùng một hàm đếm chỗ với tầng service, nên "Còn N chỗ" luôn khớp với việc chặn khi thêm người
+            long currentOccupantCount = contract.residingOccupantCount(LocalDate.now());
 
             java.util.Map<UUID, Tenant> occupantTenants = new java.util.HashMap<>();
             if (contract.getOccupants() != null) {
@@ -209,8 +209,7 @@ public class ContractUiController {
             if (currentUser != null && contract.isActive()) {
                 try {
                     availableOccupants = contractUseCase.listAvailableOccupants(contract.getId());
-                    long residingCount = countResidingOccupants(contract, LocalDate.now());
-                    remainingOccupantSlots = Math.max(0, room.getMaxOccupants() - (int) residingCount);
+                    remainingOccupantSlots = Math.max(0, room.getMaxOccupants() - (int) currentOccupantCount);
                     canManageOccupants = true;
                 } catch (DomainException ex) {
                     // Hide occupant controls unless the use case confirms the user's contract permission.
@@ -221,11 +220,30 @@ public class ContractUiController {
             model.addAttribute("contract", contract);
             model.addAttribute("property", property);
             model.addAttribute("room", room);
+            model.addAttribute("currentOccupantCount", currentOccupantCount);
+            model.addAttribute("remainingCapacity", Math.max(0, room.getMaxOccupants() - (int) currentOccupantCount));
             model.addAttribute("primaryTenant", primaryTenant);
             model.addAttribute("occupantTenants", occupantTenants);
             model.addAttribute("availableOccupants", availableOccupants);
             model.addAttribute("remainingOccupantSlots", remainingOccupantSlots);
             model.addAttribute("canManageOccupants", canManageOccupants);
+            List<Tenant> propertyTenantProfiles = new ArrayList<>();
+            java.util.Set<UUID> busyTenantIds = new java.util.HashSet<>();
+            if (canManageOccupants) {
+                for (TenantUseCase.PropertyTenantView view
+                    : tenantUseCase.listTenants(contract.getPropertyId(), null, false, 0, 50).items()) {
+                    UUID profileId = view.tenant().id();
+                    if (contract.getOccupants().stream().noneMatch(occupant -> occupant.tenantId().equals(profileId))) {
+                        propertyTenantProfiles.add(view.tenant());
+                        if (view.hasActiveContract()) {
+                            busyTenantIds.add(profileId);
+                        }
+                    }
+                }
+            }
+            model.addAttribute("tenantChoices", canManageOccupants
+                ? TenantChoice.merge(propertyTenantProfiles, busyTenantIds, List.of())
+                : List.<TenantChoice>of());
             // Hóa đơn và thanh toán là số liệu tiền của nhà trọ: quản trị viên, kỹ thuật viên và nhân viên không có
             // quyền thu tiền/quản lý hợp đồng không xem (#163); trang hợp đồng vẫn hiện, chỉ ẩn phần thanh toán.
             if (currentUser.role() != UserRole.ADMIN && currentUser.role() != UserRole.TECHNICIAN) {
@@ -314,16 +332,6 @@ public class ContractUiController {
             : null);
     }
 
-    private long countResidingOccupants(Contract contract, LocalDate today) {
-        long count = contract.getOccupants().stream()
-            .filter(occupant -> occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(today))
-            .count();
-        boolean primaryCounted = contract.getOccupants().stream()
-            .anyMatch(occupant -> occupant.isPrimary() && occupant.tenantId().equals(contract.getPrimaryTenantId())
-                && (occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(today)));
-        return contract.isResiding() && !primaryCounted ? count + 1 : count;
-    }
-
     @PostMapping("/{id}/occupants")
     public String addOccupant(
         @PathVariable UUID id,
@@ -333,7 +341,8 @@ public class ContractUiController {
         @RequestParam(required = false) String email,
         @RequestParam(required = false) String permanentAddress,
         @RequestParam(required = false) LocalDate checkInDate,
-        @RequestParam(defaultValue = "true") boolean createAccount,
+        @RequestParam(required = false) UUID tenantProfileId,
+        @RequestParam(required = false) UUID tenantUserId,
         RedirectAttributes redirectAttributes
     ) {
         try {
@@ -345,7 +354,8 @@ public class ContractUiController {
                 email,
                 permanentAddress,
                 checkInDate != null ? checkInDate : LocalDate.now(),
-                true
+                tenantProfileId,
+                tenantUserId
             ));
             String message = "Thêm người thuê vào phòng thành công.";
             if (result.temporaryPassword() != null) {
@@ -378,6 +388,47 @@ public class ContractUiController {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }
         return "redirect:/contracts/" + id;
+    }
+
+    @PostMapping("/{id}/occupants/batch")
+    public String addOccupantsBatch(
+        @PathVariable UUID id,
+        @RequestParam(name = "fullNames", required = false) List<String> fullNames,
+        @RequestParam(name = "identityCardNumbers", required = false) List<String> identityCardNumbers,
+        @RequestParam(name = "phones", required = false) List<String> phones,
+        @RequestParam(name = "emails", required = false) List<String> emails,
+        @RequestParam(name = "permanentAddresses", required = false) List<String> permanentAddresses,
+        @RequestParam(name = "tenantProfileIds", required = false) List<String> tenantProfileIds,
+        @RequestParam(name = "tenantUserIds", required = false) List<String> tenantUserIds,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            // Spring biến một giá trị rỗng đơn lẻ thành danh sách rỗng (một dòng chọn hồ sơ có CCCD để trống), nên đọc từng
+            // cột theo vị trí thay vì so kích thước; thiếu thông tin thì AddOccupantCommand báo đúng trường còn thiếu
+            int rows = fullNames == null ? 0 : fullNames.size();
+            List<ContractUseCase.AddOccupantCommand> occupants = new ArrayList<>();
+            for (int index = 0; index < rows; index++) {
+                occupants.add(new ContractUseCase.AddOccupantCommand(id,
+                    fullNames.get(index), valueAt(identityCardNumbers, index), valueAt(phones, index),
+                    valueAt(emails, index), valueAt(permanentAddresses, index), LocalDate.now(),
+                    parseOptionalUuid(valueAt(tenantProfileIds, index)), parseOptionalUuid(valueAt(tenantUserIds, index))));
+            }
+            ContractUseCase.AddOccupantsResult result = contractUseCase.addOccupants(
+                new ContractUseCase.AddOccupantsCommand(id, occupants));
+            redirectAttributes.addFlashAttribute("successMessage", "Đã thêm " + result.results().size()
+                + " hồ sơ người thuê vào hợp đồng.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
+    }
+
+    private static String valueAt(List<String> values, int index) {
+        return values != null && index < values.size() ? values.get(index) : null;
+    }
+
+    private static UUID parseOptionalUuid(String value) {
+        return value == null || value.isBlank() ? null : UUID.fromString(value);
     }
 
     @PostMapping("/{id}/activate")

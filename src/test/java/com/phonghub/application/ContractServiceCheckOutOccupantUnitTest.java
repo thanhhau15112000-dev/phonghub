@@ -106,6 +106,8 @@ class ContractServiceCheckOutOccupantUnitTest {
 
         room = roomRepo.save(Room.create(property.id(), "P101", 1, new BigDecimal("25.0"), new BigDecimal("3500000"), 3));
 
+        userRepo.save(new User(LocalDemoAuthenticationAdapter.TENANT_1_ID, "primary@phonghub.local", "Nguyễn Văn A",
+            "0901234567", UserRole.TENANT, User.UserStatus.ACTIVE, Instant.now()));
         primaryTenant = tenantRepo.save(Tenant.create(
             LocalDemoAuthenticationAdapter.TENANT_1_ID,
             "Nguyễn Văn A",
@@ -155,9 +157,7 @@ class ContractServiceCheckOutOccupantUnitTest {
             coTenant.phone(),
             coTenant.email(),
             coTenant.permanentAddress(),
-            LocalDate.now().minusDays(5),
-            false
-        )).occupant();
+            LocalDate.now().minusDays(5))).occupant();
         coTenant = tenantRepo.findById(coTenant.id()).orElseThrow();
         activeContract = contractRepo.findById(activeContract.getId()).orElseThrow();
     }

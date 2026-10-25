@@ -163,8 +163,7 @@ public class ContractApiController {
             request.phone(),
             request.email(),
             request.permanentAddress(),
-            request.checkInDate() != null ? request.checkInDate() : LocalDate.now(),
-            true
+            request.checkInDate() != null ? request.checkInDate() : LocalDate.now()
         ));
         ContractResponse.OccupantAddedResponse response = ContractResponse.OccupantAddedResponse.from(
             result.occupant(), result.accountUsername(), result.temporaryPassword());
@@ -185,9 +184,7 @@ public class ContractApiController {
 
         String permanentAddress,
 
-        LocalDate checkInDate,
-
-        boolean createAccount
+        LocalDate checkInDate
     ) {}
 
     @PostMapping("/contracts/{contractId}/occupants/{tenantId}/check-out")

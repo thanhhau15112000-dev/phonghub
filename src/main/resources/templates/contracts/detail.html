@@ -343,7 +343,7 @@
                 </div>
                 <div>
                     <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Thêm người thuê vào phòng</h3>
-                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Phòng <strong th:text="${room.getRoomNumber()}">P101</strong> — Sức chứa: <strong th:text="${room.getMaxOccupants()}">2</strong> người</p>
+                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Phòng <strong th:text="${room.getRoomNumber()}">P101</strong> — Đang ở: <strong th:text="${currentOccupantCount + '/' + room.getMaxOccupants()}">1/2</strong> — Còn <strong th:text="${remainingCapacity}">1</strong> chỗ</p>
                 </div>
             </div>
             <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('addOccupantModal').close()">✕</button>
@@ -389,6 +389,10 @@
                         </span>
                     </label>
                 </div>
+                <div class="form-group" style="margin: 10px 0 0;">
+                    <label class="form-label" for="bulkOccupantCheckInDate">Ngày nhận phòng (áp dụng cho tất cả người đã chọn)</label>
+                    <input type="date" id="bulkOccupantCheckInDate" name="checkInDate" th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}" class="form-control" style="max-width: 220px;">
+                </div>
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px;">
                     <span id="bulkOccupantCount" style="font-size: 12px; color: var(--text-secondary);" aria-live="polite">Chưa chọn ai</span>
                     <button id="bulkOccupantSubmit" type="submit" class="btn btn-sm btn-primary" disabled>Thêm người đã chọn</button>
@@ -399,52 +403,156 @@
             </div>
         </section>
 
-        <details th:if="${remainingOccupantSlots > 0}" style="border-top: 1px solid var(--border-color); padding-top: 12px;">
-            <summary style="cursor: pointer; font-size: 13px; font-weight: 600;">Thêm người mới chưa có hồ sơ</summary>
-        <form th:action="@{'/contracts/' + ${contract.getId()} + '/occupants'}" method="post" style="margin-top: 12px;">
-            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <details th:if="${remainingCapacity > 0}" style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-bottom: 12px;">
+            <summary style="cursor: pointer; font-size: 13px; font-weight: 600;">Thêm 1 người: chọn người đã có tài khoản hoặc nhập mới</summary>
+            <form data-occupant-panel="single" style="margin-top: 12px;"
+                  th:action="@{'/contracts/' + ${contract.getId()} + '/occupants'}" method="post">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
 
-            <div class="form-group" style="margin-bottom: 12px;">
-                <label class="form-label" for="addOccupantFullName">Họ và tên <span style="color: var(--danger-color, #dc2626);">*</span></label>
-                <input type="text" id="addOccupantFullName" name="fullName" class="form-control" required placeholder="VD: Nguyễn Văn B">
-            </div>
-
-            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-                <div class="form-group" style="margin: 0;">
-                    <label class="form-label" for="addOccupantIdCard">Số CCCD / Định danh <span style="color: var(--danger-color, #dc2626);">*</span></label>
-                    <input type="text" id="addOccupantIdCard" name="identityCardNumber" class="form-control" required placeholder="12 chữ số">
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label">Ai là người thuê?</label>
+                    <div th:replace="~{fragments/tenant-picker :: field('tenantProfileId', 'tenantUserId')}"></div>
                 </div>
-                <div class="form-group" style="margin: 0;">
-                    <label class="form-label" for="addOccupantPhone">Số điện thoại <span style="color: var(--danger-color, #dc2626);">*</span></label>
-                    <input type="tel" id="addOccupantPhone" name="phone" class="form-control" required placeholder="090xxxxxxx">
+
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" for="addOccupantFullName">Họ và tên <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                    <input type="text" id="addOccupantFullName" name="fullName" class="form-control" required placeholder="VD: Nguyễn Văn B">
                 </div>
-            </div>
 
-            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-                <div class="form-group" style="margin: 0;">
-                <label class="form-label" for="addOccupantEmail">Email đăng nhập <span style="color: var(--danger-color, #dc2626);">*</span></label>
-                    <input type="email" id="addOccupantEmail" name="email" class="form-control" required placeholder="tenant@gmail.com">
+                <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" for="addOccupantIdCard">Số CCCD / Định danh <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                        <input type="text" id="addOccupantIdCard" name="identityCardNumber" class="form-control" required placeholder="12 chữ số">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" for="addOccupantPhone">Số điện thoại <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                        <input type="tel" id="addOccupantPhone" name="phone" class="form-control" required placeholder="090xxxxxxx">
+                    </div>
                 </div>
-                <div class="form-group" style="margin: 0;">
-                    <label class="form-label" for="addOccupantCheckInDate">Ngày nhận phòng</label>
-                    <input type="date" id="addOccupantCheckInDate" name="checkInDate" th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}" class="form-control">
+
+                <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" for="addOccupantEmail">Email đăng nhập <span style="color: var(--text-secondary); font-weight: normal;">(bắt buộc nếu chưa có tài khoản)</span></label>
+                        <input type="email" id="addOccupantEmail" name="email" class="form-control" placeholder="tenant@gmail.com">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" for="addOccupantCheckInDate">Ngày nhận phòng</label>
+                        <input type="date" id="addOccupantCheckInDate" name="checkInDate" th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}" class="form-control">
+                    </div>
                 </div>
-            </div>
 
-            <div class="form-group" style="margin-bottom: 12px;">
-                <label class="form-label" for="addOccupantAddress">Địa chỉ thường trú</label>
-                <input type="text" id="addOccupantAddress" name="permanentAddress" class="form-control" placeholder="Xã/Phường, Huyện/Quận, Tỉnh/TP">
-            </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" for="addOccupantAddress">Địa chỉ thường trú</label>
+                    <input type="text" id="addOccupantAddress" name="permanentAddress" class="form-control" placeholder="Xã/Phường, Huyện/Quận, Tỉnh/TP">
+                </div>
 
-            <p style="margin: 0 0 14px; color: var(--text-secondary); font-size: 12px;">Hệ thống sẽ tạo hoặc liên kết tài khoản Người thuê (TENANT). Nếu tạo mới, mật khẩu tạm chỉ hiển thị một lần.</p>
+                <p style="margin: 0 0 14px; color: var(--text-secondary); font-size: 12px;">
+                    Người ở cùng luôn có tài khoản Người thuê (TENANT): chọn người đã có tài khoản, hoặc nhập email để hệ thống
+                    tạo hay liên kết tài khoản. Nếu tạo mới, mật khẩu tạm chỉ hiển thị một lần.
+                </p>
 
-            <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-color);">
-                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('addOccupantModal').close()">Hủy</button>
-                <button type="submit" class="btn btn-sm btn-primary">Thêm người thuê</button>
-            </div>
-        </form>
+                <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('addOccupantModal').close()">Hủy</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Thêm người thuê</button>
+                </div>
+            </form>
+        </details>
+
+        <details th:if="${remainingCapacity > 1}" style="border-top: 1px solid var(--border-color); padding-top: 12px;">
+            <summary style="cursor: pointer; font-size: 13px; font-weight: 600;">Thêm nhiều người cùng lúc: nhập từng dòng (có thể có người mới)</summary>
+            <form data-occupant-panel="batch" style="margin-top: 12px;"
+                  th:action="@{'/contracts/' + ${contract.getId()} + '/occupants/batch'}" method="post">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <p style="margin: 0 0 10px; font-size: 12px; color: var(--text-secondary);">
+                    Đang nhập <strong id="batchOccupantCount">1/2</strong> người (tối đa bằng số chỗ còn trống). Mỗi người phải có sẵn tài khoản
+                    (cần cấp tài khoản mới thì dùng "Thêm 1 người"). Cả lượt bị từ chối nếu có người trùng hoặc đang ở hợp đồng khác.
+                </p>
+                <div id="batchOccupantRows" th:attr="data-limit=${remainingCapacity}"></div>
+                <template id="batchOccupantRowTemplate">
+                    <div class="batch-occupant-row" style="padding: 10px; margin-bottom: 10px; border: 1px solid var(--border-color); border-radius: 6px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <strong class="batch-row-title" style="font-size: 13px;">Người 1</strong>
+                            <button type="button" class="btn btn-sm btn-secondary batch-remove-row">Bỏ người này</button>
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <div th:replace="~{fragments/tenant-picker :: field('tenantProfileIds', 'tenantUserIds')}"></div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <input name="fullNames" class="form-control batch-full-name" placeholder="Họ và tên *" required>
+                            <input name="identityCardNumbers" class="form-control batch-id-card" placeholder="CCCD *" required pattern="\d{9}|\d{12}">
+                            <input name="phones" class="form-control batch-phone" placeholder="Số điện thoại *" required pattern="0\d{9}">
+                            <input name="emails" type="email" class="form-control batch-email" placeholder="Email">
+                        </div>
+                        <input name="permanentAddresses" class="form-control batch-address" placeholder="Địa chỉ thường trú" style="margin-top: 8px;">
+                    </div>
+                </template>
+                <div style="display: flex; justify-content: space-between; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                    <button type="button" id="addBatchOccupantRow" class="btn btn-sm btn-secondary">+ Thêm người</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Thêm tất cả</button>
+                </div>
+            </form>
         </details>
     </dialog>
+
+    <div th:replace="~{fragments/tenant-picker :: data(${tenantChoices})}"></div>
+    <div th:replace="~{fragments/tenant-picker :: script}"></div>
+    <script>
+        (function () {
+            function byId(id) { return document.getElementById(id); }
+            var singlePicker = document.querySelector('[data-occupant-panel="single"] .tenant-picker');
+            if (singlePicker) {
+                wireTenantPicker(singlePicker, {
+                    fields: {
+                        fullName: byId('addOccupantFullName'),
+                        idCard: byId('addOccupantIdCard'),
+                        phone: byId('addOccupantPhone'),
+                        email: byId('addOccupantEmail'),
+                        address: byId('addOccupantAddress')
+                    }
+                });
+            }
+
+            // Thêm nhiều người theo dòng: không cho thêm dòng vượt số chỗ còn trống của phòng
+            var rowsBox = byId('batchOccupantRows');
+            var template = byId('batchOccupantRowTemplate');
+            var addButton = byId('addBatchOccupantRow');
+            if (!rowsBox || !template || !addButton) return;
+            var limit = Number(rowsBox.dataset.limit) || 0;
+            var counter = byId('batchOccupantCount');
+            function refresh() {
+                var rows = rowsBox.querySelectorAll('.batch-occupant-row');
+                rows.forEach(function (row, index) {
+                    row.querySelector('.batch-row-title').textContent = 'Người ' + (index + 1);
+                    row.querySelector('.batch-remove-row').disabled = rows.length === 1;
+                });
+                counter.textContent = rows.length + '/' + limit;
+                addButton.disabled = rows.length >= limit;
+                addButton.textContent = rows.length >= limit ? 'Đã đủ chỗ trống' : '+ Thêm người';
+            }
+            function addRow() {
+                var row = template.content.firstElementChild.cloneNode(true);
+                rowsBox.appendChild(row);
+                wireTenantPicker(row.querySelector('.tenant-picker'), {
+                    fields: {
+                        fullName: row.querySelector('.batch-full-name'),
+                        idCard: row.querySelector('.batch-id-card'),
+                        phone: row.querySelector('.batch-phone'),
+                        email: row.querySelector('.batch-email'),
+                        address: row.querySelector('.batch-address')
+                    }
+                });
+                row.querySelector('.batch-remove-row').addEventListener('click', function () {
+                    row.remove();
+                    refresh();
+                });
+                refresh();
+            }
+            addButton.addEventListener('click', function () {
+                if (rowsBox.querySelectorAll('.batch-occupant-row').length < limit) addRow();
+            });
+            addRow();
+        })();
+    </script>
 
     <!-- Dialog sửa hồ sơ người thuê (Chủ nhà hoặc Quản trị viên) -->
     <dialog th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"

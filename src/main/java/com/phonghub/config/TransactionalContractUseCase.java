@@ -105,6 +105,12 @@ public class TransactionalContractUseCase implements ContractUseCase {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public AddOccupantsResult addOccupants(AddOccupantsCommand command) {
+        return delegate.addOccupants(command);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public com.phonghub.domain.model.ContractOccupant checkOutOccupant(CheckOutOccupantCommand command) {
         return delegate.checkOutOccupant(command);
     }

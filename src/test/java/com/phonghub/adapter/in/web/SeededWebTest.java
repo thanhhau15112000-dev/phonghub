@@ -8,6 +8,12 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
+import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
+import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.User;
+import com.phonghub.domain.model.UserRole;
+import java.time.Instant;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +37,16 @@ abstract class SeededWebTest {
     @Autowired private InMemoryTenantRepository seedTenants;
     @Autowired private InMemoryContractRepository seedContracts;
     @Autowired private InMemoryMaintenanceTicketRepository seedTickets;
+
+    /** Người thuê của nhà trọ 1 đã có tài khoản TENANT đang hoạt động, chưa ở hợp đồng nào (#219). */
+    protected Tenant accountTenant(String name, String cccd, String phone) {
+        String suffix = cccd.substring(cccd.length() - 6);
+        User user = seedUsers.save(new User(UUID.randomUUID(), "tenant" + suffix, "tenant" + suffix + "@test.local",
+            name, phone, UserRole.TENANT, User.UserStatus.ACTIVE, false, Instant.now()));
+        Tenant tenant = seedTenants.save(Tenant.create(user.id(), name, cccd, phone, user.email(), null));
+        seedTenants.linkToProperty(tenant.id(), DataSeeder.PROP_1_ID, LocalDemoAuthenticationAdapter.OWNER_1_ID);
+        return tenant;
+    }
 
     @BeforeEach
     @AfterEach

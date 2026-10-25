@@ -157,7 +157,7 @@ class ContractLifecycleActionsIntegrationTest {
         demoActorPort.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_OWNER_1);
         ContractUseCase.AddOccupantResult result = contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
             DataSeeder.CONTRACT_1_ID, "Trần Thị Mới", "079300009999", "0909000111", "nguoimoi@phonghub.local",
-            null, LocalDate.now(), true));
+            null, LocalDate.now()));
 
         assertNotNull(result.temporaryPassword());
         assertTrue(result.temporaryPassword().length() >= 12);
@@ -174,7 +174,7 @@ class ContractLifecycleActionsIntegrationTest {
         int before = contract().getOccupants().size();
         assertThrows(DomainException.class, () -> contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
             DataSeeder.CONTRACT_1_ID, "Trần Thị Mới", "079300009999", "0909000111", "staff1@phonghub.local",
-            null, LocalDate.now(), true)));
+            null, LocalDate.now())));
         assertEquals(before, contract().getOccupants().size());
         assertFalse(tenantRepository.findByUserId(LocalDemoAuthenticationAdapter.STAFF_1_ID).isPresent());
     }
@@ -185,8 +185,7 @@ class ContractLifecycleActionsIntegrationTest {
         demoActorPort.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_OWNER_1);
         int before = contract().getOccupants().size();
         assertThrows(IllegalArgumentException.class, () -> contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
-            DataSeeder.CONTRACT_1_ID, "Lê Văn Khách", "079300007777", "0909000222", null, null, LocalDate.now(),
-            false)));
+            DataSeeder.CONTRACT_1_ID, "Lê Văn Khách", "079300007777", "0909000222", null, null, LocalDate.now())));
         assertEquals(before, contract().getOccupants().size());
         assertFalse(tenantRepository.findByIdentityCardNumber("079300007777").isPresent());
     }
@@ -196,8 +195,7 @@ class ContractLifecycleActionsIntegrationTest {
     void checkOutOccupantOnExpiredContract() {
         demoActorPort.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_OWNER_1);
         ContractUseCase.AddOccupantResult added = contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
-            DataSeeder.CONTRACT_1_ID, "Lê Văn Khách", "079300007777", "0909000222", "expired-checkout@example.test", null, LocalDate.now(),
-            false));
+            DataSeeder.CONTRACT_1_ID, "Lê Văn Khách", "079300007777", "0909000222", "expired-checkout@example.test", null, LocalDate.now()));
         expire();
 
         contractUseCase.checkOutOccupant(new ContractUseCase.CheckOutOccupantCommand(

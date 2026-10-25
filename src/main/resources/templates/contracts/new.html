@@ -39,7 +39,8 @@
                         <option value="">-- Chọn phòng --</option>
                         <option th:each="r : ${rooms}"
                                 th:value="${r.getId()}"
-                                th:text="${r.getRoomNumber() + ' (' + uiText.roomStatus(r.getStatus()) + ' - ' + #numbers.formatDecimal(r.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ)'}"
+                                th:disabled="${r.getStatus().name() == 'OCCUPIED' or r.getStatus().name() == 'MAINTENANCE'}"
+                                th:text="${r.getRoomNumber() + ' (' + uiText.roomStatus(r.getStatus()) + ' - ' + #numbers.formatDecimal(r.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ)' + ((r.getStatus().name() == 'OCCUPIED' or r.getStatus().name() == 'MAINTENANCE') ? ' — không nhận hợp đồng mới' : '')}"
                                 th:selected="${selectedRoomId != null and selectedRoomId.equals(r.getId())}">
                         </option>
                     </select>
@@ -55,12 +56,14 @@
                     <option value="">-- Chọn người thuê đã có tài khoản --</option>
                     <option th:each="tenant : ${tenantAccounts}"
                             th:value="${tenant.id()}"
+                            th:selected="${selectedTenantId != null and selectedTenantId.equals(tenant.id())}"
                             th:text="${tenant.fullName() + ' · ' + tenant.maskedIdentityCardNumber() + ' · ' + (tenant.phone() == null ? '' : '****' + #strings.substring(tenant.phone(), 6))}"
                             th:attr="data-search=${#strings.toLowerCase(tenant.fullName() + ' ' + tenant.maskedIdentityCardNumber() + ' ' + (tenant.phone() == null ? '' : '****' + #strings.substring(tenant.phone(), 6)))}">
                     </option>
                 </select>
                 <p style="color: var(--text-secondary); font-size: 12px; margin: 6px 0 0;">
                     Chỉ hiện người thuê có tài khoản đang hoạt động và có thể được gắn với nhà trọ này. CCCD và số điện thoại được che.
+                    <a th:if="${selectedPropertyId != null}" th:href="@{'/properties/' + ${selectedPropertyId} + '/tenants/new'}">Chưa có? Thêm người thuê kèm tài khoản</a>
                 </p>
             </div>
             <h2 style="margin-top: 16px; margin-bottom: 16px;">3. Tài chính và thời hạn hợp đồng</h2>

@@ -22,8 +22,11 @@ public interface TenantUseCase {
     /** Tạo hồ sơ và tài khoản đăng nhập người thuê trong một thao tác. */
     TenantAccountResult createTenantAccount(CreateTenantAccountCommand command);
 
-    /** Cấp tài khoản cho hồ sơ cũ chưa có tài khoản. */
+    /** Cấp tài khoản cho hồ sơ cũ chưa có tài khoản (tạo mới hoặc gắn tài khoản TENANT có sẵn cùng email). */
     TenantAccountResult issueTenantAccount(IssueTenantAccountCommand command);
+
+    /** Gắn hồ sơ người thuê với tài khoản TENANT đã tồn tại theo email, không tạo tài khoản mới. */
+    Tenant linkAccountByEmail(UUID tenantId, String email);
 
     /** Ẩn tenant khỏi danh sách của nhà trọ; bị chặn khi còn hợp đồng ACTIVE tại nhà trọ đó. */
     PropertyTenantView hideTenant(UUID propertyId, UUID tenantId);
@@ -43,24 +46,33 @@ public interface TenantUseCase {
 
     record AddTenantCommand(
         UUID propertyId,
+        UUID tenantProfileId,
+        UUID tenantUserId,
         String fullName,
         String identityCardNumber,
         String phone,
         String email,
         String permanentAddress
     ) {
+        public AddTenantCommand(UUID propertyId, String fullName, String identityCardNumber, String phone,
+                                String email, String permanentAddress) {
+            this(propertyId, null, null, fullName, identityCardNumber, phone, email, permanentAddress);
+        }
+
         public AddTenantCommand {
             if (propertyId == null) {
                 throw new IllegalArgumentException("Property ID cannot be null");
             }
-            if (fullName == null || fullName.isBlank()) {
-                throw new IllegalArgumentException("Họ và tên không được để trống");
-            }
-            if (identityCardNumber == null || !identityCardNumber.trim().matches("^(\\d{9}|\\d{12})$")) {
-                throw new IllegalArgumentException("Số CCCD phải gồm 9 hoặc 12 chữ số");
-            }
-            if (phone == null || !phone.trim().matches("^0\\d{9}$")) {
-                throw new IllegalArgumentException("Số điện thoại phải gồm đúng 10 chữ số và bắt đầu bằng số 0");
+            if (tenantProfileId == null) {
+                if (fullName == null || fullName.isBlank()) {
+                    throw new IllegalArgumentException("Họ và tên không được để trống");
+                }
+                if (identityCardNumber == null || !identityCardNumber.trim().matches("^(\\d{9}|\\d{12})$")) {
+                    throw new IllegalArgumentException("Số CCCD phải gồm 9 hoặc 12 chữ số");
+                }
+                if (phone == null || !phone.trim().matches("^0\\d{9}$")) {
+                    throw new IllegalArgumentException("Số điện thoại phải gồm đúng 10 chữ số và bắt đầu bằng số 0");
+                }
             }
             if (email != null && !email.isBlank()
                 && !email.trim().matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {

@@ -5,6 +5,8 @@ import com.phonghub.application.port.in.TenantUseCase;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.model.Property;
+import com.phonghub.domain.model.Tenant;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -65,6 +67,10 @@ public class PropertyTenantUiController {
             model.addAttribute("currentUser", currentUserPort.getCurrentUser());
             model.addAttribute("property", propertyUseCase.getProperty(propertyId));
             model.addAttribute("tenant", null);
+            java.util.Set<UUID> busyTenantIds = new java.util.HashSet<>();
+            List<Tenant> tenantProfiles = selectableTenantProfiles(propertyId, busyTenantIds);
+            model.addAttribute("tenantChoices",
+                TenantChoice.merge(tenantProfiles, busyTenantIds, List.of()));
             return "tenants/form";
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
@@ -76,13 +82,24 @@ public class PropertyTenantUiController {
     public String add(
         @PathVariable UUID propertyId,
         @RequestParam String fullName,
-        @RequestParam String identityCardNumber,
-        @RequestParam String phone,
-        @RequestParam String email,
+        @RequestParam(required = false) String identityCardNumber,
+        @RequestParam(required = false) String phone,
+        @RequestParam(required = false) String email,
         @RequestParam(required = false) String permanentAddress,
+        @RequestParam(required = false) UUID tenantProfileId,
+        @RequestParam(required = false) UUID tenantUserId,
         RedirectAttributes redirectAttributes
     ) {
         try {
+            if (tenantProfileId != null || tenantUserId != null) {
+                TenantUseCase.PropertyTenantView added = tenantUseCase.addTenant(new TenantUseCase.AddTenantCommand(
+                    propertyId, tenantProfileId, tenantUserId, fullName, identityCardNumber, phone, email,
+                    permanentAddress));
+                redirectAttributes.addFlashAttribute("successMessage", added.tenant().userId() == null
+                    ? "Đã thêm người thuê. Hồ sơ chưa có tài khoản, hãy dùng nút Cấp tài khoản."
+                    : "Đã thêm người thuê.");
+                return "redirect:/properties/" + propertyId + "/tenants";
+            }
             TenantUseCase.TenantAccountResult result = tenantUseCase.createTenantAccount(
                 new TenantUseCase.CreateTenantAccountCommand(propertyId, fullName, identityCardNumber, phone, email,
                     permanentAddress));
@@ -134,6 +151,48 @@ public class PropertyTenantUiController {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
             return "redirect:/properties/" + propertyId + "/tenants";
         }
+    }
+
+    @PostMapping("/{tenantId}/link-account")
+    public String linkAccount(
+        @PathVariable UUID propertyId,
+        @PathVariable UUID tenantId,
+        @RequestParam String email,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            tenantUseCase.getPropertyTenant(propertyId, tenantId);
+            tenantUseCase.linkAccountByEmail(tenantId, email);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã liên kết tài khoản người thuê theo email.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/properties/" + propertyId + "/tenants/" + tenantId + "/edit";
+    }
+
+    private List<Tenant> selectableTenantProfiles(UUID targetPropertyId, java.util.Set<UUID> busyTenantIds) {
+        java.util.Set<UUID> alreadyLinked = tenantUseCase.listTenants(targetPropertyId, null, true, 0, 50).items()
+            .stream().map(view -> view.tenant().id()).collect(java.util.stream.Collectors.toSet());
+        java.util.Map<UUID, Tenant> choices = new java.util.LinkedHashMap<>();
+        for (Property property : propertyUseCase.listAccessibleProperties()) {
+            if (property.id().equals(targetPropertyId)) continue;
+            try {
+                for (TenantUseCase.PropertyTenantView view
+                    : tenantUseCase.listTenants(property.id(), null, false, 0, 50).items()) {
+                    if (!alreadyLinked.contains(view.tenant().id())) {
+                        choices.putIfAbsent(view.tenant().id(), view.tenant());
+                        if (view.hasActiveContract()) {
+                            busyTenantIds.add(view.tenant().id());
+                        }
+                    }
+                }
+            } catch (DomainException ignored) {
+                // Only include profiles from properties this user can manage.
+            }
+        }
+        return choices.values().stream()
+            .sorted(java.util.Comparator.comparing(Tenant::fullName, String.CASE_INSENSITIVE_ORDER))
+            .toList();
     }
 
     @PostMapping("/{tenantId}/edit")

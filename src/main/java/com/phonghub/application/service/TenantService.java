@@ -9,6 +9,7 @@ import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.domain.exception.DuplicateIdentityCardException;
+import com.phonghub.domain.exception.ConflictException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.TenantHasActiveContractException;
 import com.phonghub.domain.exception.TenantNotFoundException;
@@ -37,7 +38,7 @@ public class TenantService implements TenantUseCase {
     private final ContractRepositoryPort contractRepository;
     private final TenantLockPolicy lockPolicy;
     private final UserRepositoryPort userRepository;
-    private final IdentityProviderPort identityProviderPort;
+    private final TenantAccountLinker accountLinker;
 
     public TenantService(
         TenantRepositoryPort tenantRepository,
@@ -66,7 +67,20 @@ public class TenantService implements TenantUseCase {
         ContractRepositoryPort contractRepository,
         TenantLockPolicy lockPolicy
     ) {
-        this(tenantRepository, currentUserPort, authorizationService, auditPort, contractRepository, lockPolicy, null, null);
+        this(tenantRepository, currentUserPort, authorizationService, auditPort, contractRepository, lockPolicy, null);
+    }
+
+    public TenantService(
+        TenantRepositoryPort tenantRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        ContractRepositoryPort contractRepository,
+        TenantLockPolicy lockPolicy,
+        UserRepositoryPort userRepository
+    ) {
+        this(tenantRepository, currentUserPort, authorizationService, auditPort, contractRepository, lockPolicy,
+            userRepository, null);
     }
 
     public TenantService(
@@ -82,11 +96,12 @@ public class TenantService implements TenantUseCase {
         this.lockPolicy = lockPolicy;
         this.contractRepository = contractRepository;
         this.tenantRepository = tenantRepository;
+        this.userRepository = userRepository;
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
         this.auditPort = auditPort != null ? auditPort : event -> {};
-        this.userRepository = userRepository;
-        this.identityProviderPort = identityProviderPort;
+        this.accountLinker = userRepository == null ? null
+            : new TenantAccountLinker(tenantRepository, userRepository, identityProviderPort, this.auditPort);
     }
 
     /** Chỉ ghi tên các trường thay đổi, không ghi giá trị cá nhân vào nhật ký audit. */
@@ -185,6 +200,19 @@ public class TenantService implements TenantUseCase {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         authorizationService.assertCanManageProperty(currentUser, command.propertyId());
 
+        if (command.tenantProfileId() != null) {
+            Tenant tenant = tenantRepository.findById(command.tenantProfileId())
+                .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy hồ sơ người thuê đã chọn."));
+            authorizationService.assertCanAccessTenant(currentUser, tenant.id());
+            if (command.tenantUserId() != null) {
+                tenant = linkTenantUser(tenant, command.tenantUserId());
+            }
+            tenantRepository.linkToProperty(tenant.id(), command.propertyId(), currentUser.id());
+            audit("TENANT_LINKED_TO_PROPERTY", currentUser, tenant, command.propertyId(), Map.of(
+                "propertyId", command.propertyId().toString(), "tenantId", tenant.id().toString()));
+            return getPropertyTenant(command.propertyId(), tenant.id());
+        }
+
         String idCard = command.identityCardNumber().trim();
         Optional<Tenant> existing = tenantRepository.findByIdentityCardNumber(idCard);
         if (existing.isPresent()) {
@@ -196,12 +224,19 @@ public class TenantService implements TenantUseCase {
                 : "Số CCCD đã được sử dụng bởi một người thuê khác.");
         }
 
+        UUID userId = command.tenantUserId();
+        User linkedUser = userId == null ? null : findTenantUser(userId);
+        if (linkedUser != null && tenantRepository.findByUserId(linkedUser.id()).isPresent()) {
+            throw new IllegalArgumentException("Tài khoản này đã được liên kết với hồ sơ người thuê khác.");
+        }
+
         Tenant tenant = tenantRepository.save(Tenant.create(
-            null,
+            linkedUser == null ? null : linkedUser.id(),
             command.fullName().trim(),
             idCard,
             command.phone().trim(),
-            command.email() == null || command.email().isBlank() ? null : command.email().trim(),
+            linkedUser != null ? linkedUser.email()
+                : command.email() == null || command.email().isBlank() ? null : command.email().trim(),
             command.permanentAddress() == null || command.permanentAddress().isBlank()
                 ? null : command.permanentAddress().trim()
         ));
@@ -209,6 +244,26 @@ public class TenantService implements TenantUseCase {
         audit("TENANT_CREATED", currentUser, tenant, command.propertyId(), Map.of(
             "propertyId", command.propertyId().toString(), "identityCardNumber", tenant.maskedIdentityCardNumber()));
         return new PropertyTenantView(tenant, false, false);
+    }
+
+    @Override
+    public Tenant linkAccountByEmail(UUID tenantId, String email) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+            .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy người thuê."));
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        authorizationService.assertCanUpdateTenant(currentUser, tenantId);
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Cần nhập email tài khoản người thuê.");
+        }
+        if (userRepository == null) {
+            throw new IllegalStateException("Chưa cấu hình truy cập tài khoản người dùng.");
+        }
+        String normalizedEmail = email.trim().toLowerCase();
+        User user = userRepository.findByEmail(normalizedEmail)
+            .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy tài khoản theo email này."));
+        Tenant saved = linkTenantUser(tenant, user.id());
+        audit("TENANT_ACCOUNT_LINKED", currentUser, saved, null, Map.of("userId", user.id().toString()));
+        return saved;
     }
 
     @Override
@@ -221,12 +276,13 @@ public class TenantService implements TenantUseCase {
         String email = command.email().trim().toLowerCase(java.util.Locale.ROOT);
         Tenant tenant = tenantRepository.findByIdentityCardNumber(idCard).orElse(null);
         if (tenant != null) {
+            // Không lộ hồ sơ của nhà trọ khác: chỉ báo trùng.
             Set<UUID> linkedProperties = tenantRepository.findLinkedPropertyIds(tenant.id());
             if (!linkedProperties.isEmpty() && !linkedProperties.contains(command.propertyId())) {
                 throw new DuplicateIdentityCardException("Số CCCD đã được sử dụng bởi một người thuê khác.");
             }
             if (tenant.userId() != null) {
-                throw new DuplicateIdentityCardException("CCCD này đã được liên kết với tài khoản người thuê. Hãy chọn tài khoản đó khi lập hợp đồng.");
+                throw new DuplicateIdentityCardException("CCCD này đã có tài khoản người thuê. Hãy chọn người thuê đó khi lập hợp đồng.");
             }
             tenant = new Tenant(tenant.id(), null, command.fullName().trim(), idCard, command.phone().trim(), email,
                 cleanAddress(command.permanentAddress()), tenant.createdAt());
@@ -234,10 +290,7 @@ public class TenantService implements TenantUseCase {
             tenant = Tenant.create(null, command.fullName().trim(), idCard, command.phone().trim(), email,
                 cleanAddress(command.permanentAddress()));
         }
-
-        AccountProvision provision = createOrLinkAccount(actor, tenant, email, command.propertyId());
-        return new TenantAccountResult(new PropertyTenantView(provision.tenant(), false, false),
-            provision.username(), provision.temporaryPassword(), provision.accountCreated());
+        return provisionAccount(actor, tenant, email, command.propertyId(), false, false);
     }
 
     @Override
@@ -247,77 +300,30 @@ public class TenantService implements TenantUseCase {
         requireAccountProvisioning();
         PropertyTenantView view = getPropertyTenant(command.propertyId(), command.tenantId());
         if (view.tenant().userId() != null) {
-            throw new com.phonghub.domain.exception.ConflictException("Hồ sơ này đã có tài khoản người thuê.");
+            throw new ConflictException("Hồ sơ này đã có tài khoản người thuê.");
         }
-        AccountProvision provision = createOrLinkAccount(actor, view.tenant(), command.email(), command.propertyId());
-        return new TenantAccountResult(new PropertyTenantView(provision.tenant(), view.hidden(), view.hasActiveContract()),
-            provision.username(), provision.temporaryPassword(), provision.accountCreated());
+        return provisionAccount(actor, view.tenant(), command.email(), command.propertyId(), view.hidden(),
+            view.hasActiveContract());
     }
 
-    private AccountProvision createOrLinkAccount(CurrentUser actor, Tenant tenant, String emailInput, UUID propertyId) {
-        String email = emailInput == null ? "" : emailInput.trim().toLowerCase(java.util.Locale.ROOT);
-        if (!email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
-            throw new IllegalArgumentException("Định dạng email không hợp lệ.");
-        }
-        Optional<User> existingByEmail = userRepository.findByEmail(email);
-        if (existingByEmail.isPresent()) {
-            User existingUser = existingByEmail.get();
-            if (existingUser.role() != UserRole.TENANT || existingUser.status() != User.UserStatus.ACTIVE) {
-                throw new com.phonghub.domain.exception.ConflictException("Email đã thuộc tài khoản khác.");
-            }
-            Optional<Tenant> existingLink = tenantRepository.findByUserId(existingUser.id());
-            if (existingLink.isPresent() && !existingLink.get().id().equals(tenant.id())) {
-                throw new com.phonghub.domain.exception.ConflictException("Email đã gắn với hồ sơ người thuê khác.");
-            }
-            Tenant linked = new Tenant(tenant.id(), existingUser.id(), tenant.fullName(), tenant.identityCardNumber(),
-                tenant.phone(), email, tenant.permanentAddress(), tenant.createdAt());
-            Tenant saved = tenantRepository.save(linked);
-            tenantRepository.linkToProperty(saved.id(), propertyId, actor.id());
-            return new AccountProvision(saved, existingUser.username(), null, false);
-        }
-
-        if (userRepository.findAll().stream().anyMatch(user -> tenant.phone().equals(user.phone()))) {
-            throw new com.phonghub.domain.exception.ConflictException("Số điện thoại đã thuộc một tài khoản khác.");
-        }
-
-        String username = nextUsername(email);
-        String temporaryPassword = AuthService.generateSecureTemporaryPassword(16);
-        UUID authUserId = identityProviderPort.adminCreateUser(email, temporaryPassword);
+    /** Một đường cấp tài khoản duy nhất (dùng chung {@link TenantAccountLinker}); lỗi sau đó thì xóa danh tính vừa tạo. */
+    private TenantAccountResult provisionAccount(CurrentUser actor, Tenant tenant, String email, UUID propertyId,
+                                                 boolean hidden, boolean hasActiveContract) {
+        TenantAccountLinker.Result result = accountLinker.linkOrCreate(actor, tenant, email, "TENANT_ACCOUNT_CREATED");
         try {
-            User user = userRepository.save(new User(authUserId, username, email, tenant.fullName(), tenant.phone(),
-                UserRole.TENANT, User.UserStatus.ACTIVE, true, Instant.now()));
-            Tenant linked = new Tenant(tenant.id(), user.id(), tenant.fullName(), tenant.identityCardNumber(),
-                tenant.phone(), email, tenant.permanentAddress(), tenant.createdAt());
-            Tenant saved = tenantRepository.save(linked);
-            tenantRepository.linkToProperty(saved.id(), propertyId, actor.id());
-            auditPort.recordEvent(AuditPort.AuditEvent.of("TENANT_ACCOUNT_CREATED", actor.id(), "USER",
-                user.id().toString(), Map.of("role", UserRole.TENANT.name(), "tenantId", saved.id().toString())));
-            return new AccountProvision(saved, user.username(), temporaryPassword, true);
+            tenantRepository.linkToProperty(result.tenant().id(), propertyId, actor.id());
+            audit("TENANT_ACCOUNT_LINKED", actor, result.tenant(), propertyId,
+                Map.of("userId", result.tenant().userId().toString()));
         } catch (RuntimeException ex) {
-            try {
-                identityProviderPort.adminDeleteUser(authUserId);
-            } catch (RuntimeException ignored) {
-                // Preserve the database failure; external identity cleanup is best-effort.
-            }
+            accountLinker.deleteCreatedIdentityUser(result, ex);
             throw ex;
         }
-    }
-
-    private String nextUsername(String email) {
-        String localPart = email.substring(0, email.indexOf('@')).toLowerCase(java.util.Locale.ROOT)
-            .replaceAll("[^a-z0-9._-]", "");
-        String base = localPart.length() < 3 ? "tenant" + localPart : localPart;
-        if (base.length() > 40) base = base.substring(0, 40);
-        String candidate = base;
-        int suffix = 1;
-        while (userRepository.findByUsername(candidate).isPresent()) {
-            candidate = base + suffix++;
-        }
-        return candidate;
+        return new TenantAccountResult(new PropertyTenantView(result.tenant(), hidden, hasActiveContract),
+            result.username(), result.temporaryPassword(), result.temporaryPassword() != null);
     }
 
     private void requireAccountProvisioning() {
-        if (userRepository == null || identityProviderPort == null) {
+        if (accountLinker == null) {
             throw new DomainException("Chức năng cấp tài khoản người thuê chưa được cấu hình.");
         }
     }
@@ -326,7 +332,34 @@ public class TenantService implements TenantUseCase {
         return address == null || address.isBlank() ? null : address.trim();
     }
 
-    private record AccountProvision(Tenant tenant, String username, String temporaryPassword, boolean accountCreated) {}
+    private User findTenantUser(UUID userId) {
+        if (userRepository == null) {
+            throw new IllegalStateException("Chưa cấu hình truy cập tài khoản người dùng.");
+        }
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy tài khoản người thuê đã chọn."));
+        if (user.role() != UserRole.TENANT || user.status() != User.UserStatus.ACTIVE) {
+            throw new IllegalArgumentException("Chỉ được liên kết tài khoản TENANT đang hoạt động.");
+        }
+        return user;
+    }
+
+    private Tenant linkTenantUser(Tenant tenant, UUID userId) {
+        User user = findTenantUser(userId);
+        if (tenant.userId() != null && !tenant.userId().equals(user.id())) {
+            throw new IllegalArgumentException("Hồ sơ này đã liên kết với tài khoản khác.");
+        }
+        Optional<Tenant> linkedProfile = tenantRepository.findByUserId(user.id());
+        if (linkedProfile.isPresent() && !linkedProfile.get().id().equals(tenant.id())) {
+            throw new IllegalArgumentException("Tài khoản này đã được liên kết với hồ sơ người thuê khác.");
+        }
+        if (user.id().equals(tenant.userId()) && user.email().equalsIgnoreCase(tenant.email())) {
+            return tenant;
+        }
+        Tenant linked = new Tenant(tenant.id(), user.id(), tenant.fullName(), tenant.identityCardNumber(),
+            tenant.phone(), user.email(), tenant.permanentAddress(), tenant.createdAt());
+        return tenantRepository.save(linked);
+    }
 
     @Override
     public PropertyTenantView hideTenant(UUID propertyId, UUID tenantId) {
