@@ -23,16 +23,6 @@
                 <li th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF')}"><a th:href="@{/payments}">Giao dịch</a></li>
                 <li th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}"><a th:href="@{/admin/users}">Tài khoản</a></li>
                 <li th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'OWNER')}"><a th:href="@{/audit}">Nhật ký</a></li>
-                <li th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}">
-                    <a th:href="@{/admin/notifications}">Thông báo
-                        <span th:if="${unreadNotificationCount > 0}" class="badge-count" style="background-color: #ef4444; color: #ffffff; margin-left: 4px;" th:text="${unreadNotificationCount}">1</span>
-                    </a>
-                </li>
-                <li th:if="${myNotifications != null}">
-                    <a th:href="@{/notifications}">Thông báo
-                        <span th:if="${myNotifications.unread() > 0}" class="badge-count" style="background-color: #ef4444; color: #ffffff; margin-left: 4px;" th:text="${myNotifications.unread()}">1</span>
-                    </a>
-                </li>
             </ul>
         </nav>
     </div>

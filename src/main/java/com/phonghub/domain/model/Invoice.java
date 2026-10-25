@@ -121,7 +121,8 @@ public class Invoice {
 
     /**
      * Phát hành kỳ thanh toán tiền thuê cho tháng {@code period} của hợp đồng đang hiệu lực.
-     * Hạn thanh toán = ngày thanh toán của hợp đồng, kẹp về ngày cuối tháng nếu tháng ngắn hơn.
+     * Hạn thanh toán = ngày thanh toán của hợp đồng, kẹp về ngày cuối tháng nếu tháng ngắn hơn, và không sớm hơn
+     * ngày bắt đầu hợp đồng.
      */
     public static Invoice issueMonthlyRent(Contract contract, YearMonth period, String paymentCode) {
         return issueMonthlyRent(contract, period, paymentCode, List.of());
@@ -130,6 +131,9 @@ public class Invoice {
     /** Khoản phí sửa chữa chưa trả được gộp vào hóa đơn tháng, kèm tên phiếu để ghi dòng chi tiết. */
     public record RolledFee(Invoice fee, String ticketTitle) {}
 
+    /** Số ngày tối thiểu người thuê có để thanh toán, tính từ ngày tạo hóa đơn tiền thuê (#208). */
+    public static final int MIN_DAYS_TO_PAY = 3;
+
     /**
      * Như {@link #issueMonthlyRent(Contract, YearMonth, String)} nhưng gộp thêm các khoản phí sửa chữa chưa
      * thanh toán của hợp đồng. Mỗi khoản là một dòng chi tiết; hóa đơn phí gốc được đánh dấu đã gộp (không còn
@@ -137,6 +141,18 @@ public class Invoice {
      */
     public static Invoice issueMonthlyRent(
         Contract contract, YearMonth period, String paymentCode, List<RolledFee> rolledFees
+    ) {
+        return issueMonthlyRent(contract, period, paymentCode, rolledFees, null);
+    }
+
+    /**
+     * Như {@link #issueMonthlyRent(Contract, YearMonth, String, List)}, phát hành vào ngày {@code issuedOn}: hạn
+     * thanh toán không sớm hơn {@code issuedOn} + {@link #MIN_DAYS_TO_PAY} ngày, để kỳ tạo sau ngày thanh toán
+     * (nhập hợp đồng của khách đã ở từ trước, job chạy bù) không bị quá hạn ngay khi tạo (#208).
+     * {@code issuedOn} null thì chỉ xét ngày thanh toán và ngày bắt đầu hợp đồng.
+     */
+    public static Invoice issueMonthlyRent(
+        Contract contract, YearMonth period, String paymentCode, List<RolledFee> rolledFees, LocalDate issuedOn
     ) {
         if (contract == null || period == null) {
             throw new IllegalArgumentException("Contract and period are required");
@@ -157,6 +173,14 @@ public class Invoice {
             throw new IllegalArgumentException("Payment code is required");
         }
         int dueDay = Math.min(contract.getPaymentDay(), period.lengthOfMonth());
+        LocalDate dueDate = period.atDay(dueDay);
+        // A first-month invoice must not be overdue before the rent obligation begins.
+        if (dueDate.isBefore(contract.getStartDate())) {
+            dueDate = contract.getStartDate();
+        }
+        if (issuedOn != null && dueDate.isBefore(issuedOn.plusDays(MIN_DAYS_TO_PAY))) {
+            dueDate = issuedOn.plusDays(MIN_DAYS_TO_PAY);
+        }
         Instant now = Instant.now();
         UUID invoiceId = UUID.randomUUID();
 
@@ -187,7 +211,7 @@ public class Invoice {
             contract.getRentAmount(),
             total,
             BigDecimal.ZERO,
-            period.atDay(dueDay),
+            dueDate,
             InvoiceStatus.ISSUED,
             paymentCode,
             InvoiceType.RENT,

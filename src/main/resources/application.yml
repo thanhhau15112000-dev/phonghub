@@ -38,6 +38,10 @@ server:
   address: 0.0.0.0
   error:
     include-message: always
+  tomcat:
+    # Tệp vượt giới hạn upload: Tomcat phải đọc hết phần còn lại của request mới trả được trang báo lỗi;
+    # mặc định chỉ đọc 2MB rồi cắt kết nối và trình duyệt hiện "Không thể truy cập trang web này" (#200).
+    max-swallow-size: 100MB
 
 management:
   endpoints:

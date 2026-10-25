@@ -157,7 +157,7 @@ class HandoverUiIntegrationTest extends SeededWebTest {
     }
 
     @Test
-    @DisplayName("Photos are served through a short-lived redirect and never as a direct storage key")
+    @DisplayName("Photos are served through the access-checked endpoint and never as a direct storage key")
     void photoRedirect() throws Exception {
         mockMvc.perform(post(PAGE).header("X-User-Id", OWNER_1).param("initialElectricMeter", "1")
             .param("initialWaterMeter", "1").param("roomCondition", "x"));
@@ -168,13 +168,14 @@ class HandoverUiIntegrationTest extends SeededWebTest {
         String marker = PAGE + "/photos/";
         String photoPath = html.substring(html.indexOf(marker), html.indexOf(marker) + marker.length() + 36);
 
+        // Kho in-memory của profile test không có URL cho trình duyệt nên ảnh được trả thẳng (#200)
         mockMvc.perform(get(photoPath).header("X-User-Id", OWNER_1))
-            .andExpect(status().isFound())
-            .andExpect(header().string("Location", containsString("memory://")))
+            .andExpect(status().isOk())
+            .andExpect(header().doesNotExist("Location"))
             .andExpect(header().string("Cache-Control", containsString("no-store")));
         mockMvc.perform(get(photoPath).header("X-User-Id", OWNER_2))
-            .andExpect(status().is3xxRedirection())
-            .andExpect(header().string("Location", not(containsString("memory://"))));
+            .andExpect(status().isForbidden())
+            .andExpect(header().doesNotExist("Location"));
         org.junit.jupiter.api.Assertions.assertFalse(html.contains("properties/" + DataSeeder.PROP_1_ID + "/handover/"));
     }
 }

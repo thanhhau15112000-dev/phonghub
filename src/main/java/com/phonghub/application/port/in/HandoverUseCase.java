@@ -54,6 +54,9 @@ public interface HandoverUseCase {
 
     URI photoSignedUrl(HandoverType type, UUID contractId, UUID photoId);
 
+    /** Nội dung ảnh, cùng kiểm tra quyền như {@link #photoSignedUrl}; dùng khi kho lưu trữ không có URL cho trình duyệt. */
+    PhotoFile photoFile(HandoverType type, UUID contractId, UUID photoId);
+
     PropertyHouseRules getHouseRules(UUID propertyId);
 
     PropertyHouseRules saveHouseRules(UUID propertyId, String content);
@@ -67,6 +70,8 @@ public interface HandoverUseCase {
     ) {}
 
     record ItemCommand(AssetStatus status, String conditionNote, BigDecimal deductionAmount) {}
+
+    record PhotoFile(String contentType, byte[] content) {}
 
     record HandoverDetails(Handover handover, List<HandoverPhoto> photos, List<HandoverItem> items) {
         /** Tổng khoản khấu trừ do nhân viên đề xuất trên từng tài sản. */

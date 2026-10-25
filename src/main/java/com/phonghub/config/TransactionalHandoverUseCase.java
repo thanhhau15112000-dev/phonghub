@@ -101,6 +101,12 @@ public class TransactionalHandoverUseCase implements HandoverUseCase {
 
     @Override
     @Transactional(readOnly = true)
+    public PhotoFile photoFile(HandoverType type, UUID contractId, UUID photoId) {
+        return delegate.photoFile(type, contractId, photoId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PropertyHouseRules getHouseRules(UUID propertyId) {
         return delegate.getHouseRules(propertyId);
     }

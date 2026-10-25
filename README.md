@@ -432,7 +432,9 @@ docker build -t phonghub:local .
 - Tạo riêng hai khóa 32 byte bằng `openssl rand -base64 32`, rồi đặt `TENANT_DATA_ENCRYPTION_KEY` và `TENANT_DATA_HMAC_KEY`.
 - Đặt `TENANT_DATA_KEY_ID` (ví dụ `v1`). Không đổi hoặc xóa khóa đang dùng trước khi re-encrypt dữ liệu sang key id mới.
 - Migration `V14` mã hóa CCCD cũ bằng AES-256-GCM, tạo HMAC để kiểm tra trùng, rồi xóa cột plaintext. Thiếu key sẽ làm migration dừng an toàn.
-- Tệp vượt giới hạn trả `400`. Ảnh JPEG/PNG được mã hóa lại và WebP bị bỏ EXIF/XMP để xóa dữ liệu vị trí; PDF được lưu nguyên, không xóa metadata.
+- Tệp vượt giới hạn: API trả `400`, form giao diện quay lại trang trước kèm thông báo. Ảnh JPEG/PNG được mã hóa lại và WebP bị bỏ EXIF/XMP để xóa dữ liệu vị trí; PDF được lưu nguyên, không xóa metadata.
+- Kho lưu trữ lỗi (bucket sai, khóa sai, mất mạng) khi tải ảnh biên bản bàn giao: API trả `503`, giao diện báo lỗi tiếng Việt; không tạo bản ghi ảnh, lỗi gốc chỉ ghi log.
+- Profile `docker` (và `test`) dùng kho tệp trong bộ nhớ thay cho Supabase: ảnh biên bản bàn giao được trả thẳng qua endpoint kiểm tra quyền thay vì signed URL. Tệp mất khi khởi động lại ứng dụng nhưng bản ghi vẫn còn trong database, nên mở ảnh tải trước lần khởi động lại sẽ báo không mở được ảnh. Ảnh ở các chức năng khác (phiếu bảo trì, chỉ số điện nước, giấy tờ) vẫn trả URL `memory://` và không xem được trên trình duyệt ở profile này.
 - Endpoint: `POST /api/properties/{propertyId}/files`, `GET .../files/signed-url`, `DELETE .../files` (chi tiết trong `docs/api-spec.yaml`).
 
 ## Tài sản trong phòng
@@ -497,6 +499,7 @@ docker build -t phonghub:local .
 
 ## Điện, nước và dịch vụ trên hóa đơn tháng
 
+- **Hạn thanh toán** của hóa đơn tiền thuê là ngày muộn nhất trong ba mốc: ngày thanh toán của hợp đồng trong tháng của kỳ (kẹp về ngày cuối tháng), ngày bắt đầu hợp đồng, và ngày tạo hóa đơn theo giờ Việt Nam cộng 3 ngày. Tạo tay và scheduler dùng cùng quy tắc, nên kỳ tạo sau ngày thanh toán (nhập hợp đồng của khách đã ở từ trước, job chạy bù) không bị quá hạn hay bị tính phí trễ ngay khi tạo (#208).
 - Migration V21 thêm `reading_id`, `rate_id` vào `invoice_items` để biết mỗi dòng được tính từ chỉ số và đơn giá nào. `invoices.utility_amount` giờ ghi tổng các dòng này, `other_amount` là phần còn lại (phí sửa chữa).
 - **Điện/nước** tính theo chỉ số cùng kỳ với hóa đơn (kỳ ghi chỉ số = tháng của ngày ghi): tiêu thụ x đơn giá, làm tròn đến đồng; mỗi đơn giá `PER_KWH` / `PER_M3` của nhà trọ là một dòng. Tiêu thụ bằng 0 hoặc đơn giá 0 thì không có dòng. Chỉ số gắn với hợp đồng khác của cùng phòng (khách trước) bị bỏ qua.
 - **Dịch vụ cố định** (`PER_ROOM_FLAT`, `PER_PERSON` x số người đang ở, tối thiểu 1) chỉ tính lúc phát hành hóa đơn, nên đơn giá thêm sau đó không làm đổi hóa đơn người thuê đã nhận.

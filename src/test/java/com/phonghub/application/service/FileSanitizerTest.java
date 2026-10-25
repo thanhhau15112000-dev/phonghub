@@ -171,6 +171,76 @@ class FileSanitizerTest {
         assertFalse(FileSanitizer.isVideo(null));
     }
 
+    @Test
+    @DisplayName("JPEG chụp dọc (EXIF Orientation) được xoay thật sang đúng chiều trước khi bỏ EXIF")
+    void jpegKeepsOrientationAfterExifIsRemoved() throws IOException {
+        // Ảnh gốc 40x20: nửa trái đỏ, nửa phải xanh
+        Picture rotatedRight = Picture.of(FileSanitizer.sanitize("image/jpeg", orientedJpeg(6, false), LIMIT));
+        assertEquals(20, rotatedRight.width());
+        assertEquals(40, rotatedRight.height());
+        assertTrue(rotatedRight.isRed(10, 3) && rotatedRight.isBlue(10, 36), "xoay 90° phải: nửa trái lên trên");
+
+        Picture bigEndian = Picture.of(FileSanitizer.sanitize("image/jpeg", orientedJpeg(6, true), LIMIT));
+        assertTrue(bigEndian.width() == 20 && bigEndian.isRed(10, 3), "EXIF kiểu Motorola (MM) cũng được đọc");
+
+        Picture rotatedLeft = Picture.of(FileSanitizer.sanitize("image/jpeg", orientedJpeg(8, false), LIMIT));
+        assertTrue(rotatedLeft.width() == 20 && rotatedLeft.isBlue(10, 3) && rotatedLeft.isRed(10, 36));
+
+        Picture upsideDown = Picture.of(FileSanitizer.sanitize("image/jpeg", orientedJpeg(3, false), LIMIT));
+        assertTrue(upsideDown.width() == 40 && upsideDown.isBlue(3, 10) && upsideDown.isRed(36, 10));
+
+        Picture mirrored = Picture.of(FileSanitizer.sanitize("image/jpeg", orientedJpeg(2, false), LIMIT));
+        assertTrue(mirrored.width() == 40 && mirrored.isBlue(3, 10) && mirrored.isRed(36, 10));
+
+        Picture upright = Picture.of(FileSanitizer.sanitize("image/jpeg", orientedJpeg(1, false), LIMIT));
+        assertTrue(upright.width() == 40 && upright.isRed(3, 10) && upright.isBlue(36, 10));
+    }
+
+    private record Picture(BufferedImage image) {
+        static Picture of(FileSanitizer.SanitizedFile file) throws IOException {
+            return new Picture(ImageIO.read(new ByteArrayInputStream(file.content())));
+        }
+
+        int width() { return image.getWidth(); }
+
+        int height() { return image.getHeight(); }
+
+        boolean isRed(int x, int y) {
+            int rgb = image.getRGB(x, y);
+            return ((rgb >> 16) & 0xff) > 180 && (rgb & 0xff) < 80;
+        }
+
+        boolean isBlue(int x, int y) {
+            int rgb = image.getRGB(x, y);
+            return (rgb & 0xff) > 180 && ((rgb >> 16) & 0xff) < 80;
+        }
+    }
+
+    /** JPEG 40x20 (trái đỏ, phải xanh) kèm segment EXIF chỉ có thẻ Orientation. */
+    private static byte[] orientedJpeg(int orientation, boolean bigEndian) throws IOException {
+        BufferedImage image = new BufferedImage(40, 20, BufferedImage.TYPE_INT_RGB);
+        for (int x = 0; x < 40; x++) {
+            for (int y = 0; y < 20; y++) {
+                image.setRGB(x, y, x < 20 ? 0xff0000 : 0x0000ff);
+            }
+        }
+        ByteArrayOutputStream plain = new ByteArrayOutputStream();
+        ImageIO.write(image, "jpg", plain);
+        ByteOrder order = bigEndian ? ByteOrder.BIG_ENDIAN : ByteOrder.LITTLE_ENDIAN;
+        ByteBuffer tiff = ByteBuffer.allocate(26).order(order);
+        tiff.put((byte) (bigEndian ? 'M' : 'I')).put((byte) (bigEndian ? 'M' : 'I')).putShort((short) 42).putInt(8);
+        tiff.putShort((short) 1).putShort((short) 0x0112).putShort((short) 3).putInt(1)
+            .putShort((short) orientation).putShort((short) 0).putInt(0);
+        byte[] payload = concat("Exif\0\0".getBytes(StandardCharsets.ISO_8859_1), tiff.array());
+        byte[] jpeg = plain.toByteArray();
+        ByteArrayOutputStream withExif = new ByteArrayOutputStream();
+        withExif.write(jpeg, 0, 2);
+        withExif.write(new byte[]{(byte) 0xff, (byte) 0xe1, 0, (byte) (payload.length + 2)});
+        withExif.write(payload);
+        withExif.write(jpeg, 2, jpeg.length - 2);
+        return withExif.toByteArray();
+    }
+
     private static byte[] image(String format) throws IOException {
         BufferedImage image = new BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB);
         image.setRGB(1, 1, 0xff0000);

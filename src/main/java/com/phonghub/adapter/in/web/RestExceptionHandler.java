@@ -83,6 +83,15 @@ public class RestExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(com.phonghub.domain.exception.FileStorageUnavailableException.class)
+    public ProblemDetail handleFileStorageUnavailable(com.phonghub.domain.exception.FileStorageUnavailableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        problem.setTitle("File Storage Unavailable");
+        problem.setType(URI.create("https://phonghub.local/errors/file-storage-unavailable"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
     @ExceptionHandler(AccountDisabledException.class)
     public ProblemDetail handleAccountDisabled(AccountDisabledException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
