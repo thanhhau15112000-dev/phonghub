@@ -5050,6 +5050,7 @@ components:
         dueDate:
           type: string
           format: date
+          description: Ngày muộn nhất trong (ngày thanh toán của kỳ, ngày bắt đầu hợp đồng, ngày tạo hóa đơn + 3 ngày).
         status:
           $ref: '#/components/schemas/InvoiceStatus'
         lineItems:

@@ -1,6 +1,7 @@
 package com.phonghub.config;
 
 import com.phonghub.application.port.in.MonthlyInvoiceUseCase;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
@@ -23,8 +24,8 @@ public class TransactionalMonthlyInvoiceUseCase implements MonthlyInvoiceUseCase
     /** Mỗi hợp đồng một transaction riêng: một hợp đồng lỗi không làm hỏng các hợp đồng khác. */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public boolean issueForContract(UUID contractId, YearMonth period) {
-        return delegate.issueForContract(contractId, period);
+    public boolean issueForContract(UUID contractId, YearMonth period, LocalDate today) {
+        return delegate.issueForContract(contractId, period, today);
     }
 
     @Override
