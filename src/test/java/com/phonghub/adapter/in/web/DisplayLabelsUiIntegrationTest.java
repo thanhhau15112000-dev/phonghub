@@ -49,6 +49,32 @@ class DisplayLabelsUiIntegrationTest extends SeededWebTest {
     }
 
     @Test
+    @DisplayName("Menu tài khoản có avatar, hồ sơ và đăng xuất; thông báo nằm ngoài menu")
+    void accountActionsAreGroupedInProfileMenu() throws Exception {
+        String html = page("/dashboard", OWNER_1);
+        int notification = html.indexOf("title=\"Thông báo của bạn\"");
+        int accountMenu = html.indexOf("id=\"accountMenu\"");
+        int profile = html.indexOf("Chi tiết hồ sơ", accountMenu);
+        int password = html.indexOf("Đổi mật khẩu", accountMenu);
+        int logout = html.indexOf("Đăng xuất", accountMenu);
+
+        assertTrue(notification >= 0, "Chuông thông báo cá nhân phải được giữ lại");
+        assertTrue(accountMenu > notification, "Chuông thông báo phải nằm ngoài menu hồ sơ");
+        assertTrue(html.contains("id=\"accountMenuButton\""));
+        assertTrue(html.contains("class=\"account-menu-avatar\""));
+        assertTrue(html.contains("class=\"account-menu-trigger-name\""));
+        assertTrue(html.contains("class=\"account-menu-name\""));
+        assertTrue(html.contains("class=\"account-menu-role\">Chủ trọ</span>"));
+        assertTrue(profile >= accountMenu, "Chi tiết hồ sơ phải là mục đầu tiên trong menu");
+        assertTrue(password > profile, "Đổi mật khẩu phải nằm sau chi tiết hồ sơ");
+        assertTrue(logout > password, "Đăng xuất phải nằm cuối menu");
+        assertFalse(html.contains("id=\"demoUserSwitcher\""), "Menu hồ sơ không được cho chuyển sang tài khoản khác");
+        assertFalse(html.contains("action=\"/switch-user\""));
+        assertTrue(html.contains("action=\"/session/logout\""));
+        assertTrue(html.contains("class=\"account-menu-logout-button\""));
+    }
+
+    @Test
     @DisplayName("Bảng người thuê và nhân sự dùng kiểu data-table chung")
     void tablesUseSharedStyle() throws Exception {
         for (String path : new String[] {

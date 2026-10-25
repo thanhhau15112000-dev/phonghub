@@ -30,12 +30,12 @@
     <div class="header-account">
         <!-- Chuông thông báo cá nhân cho chủ trọ, nhân viên, kỹ thuật viên, người thuê (#86) -->
         <div th:if="${myNotifications != null}" class="notif-bell-wrapper" style="position: relative;">
-            <button type="button" id="notifBellBtn" class="notif-bell-btn" aria-label="Xem thông báo" title="Thông báo của bạn" style="position: relative; background: none; border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--text-primary);">
+            <button type="button" id="notifBellBtn" class="notif-bell-btn" aria-label="Xem thông báo" title="Thông báo của bạn" style="position: relative; background: none; border: 0; border-radius: 999px; padding: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--text-primary);">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                     <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                 </svg>
-                <span th:if="${myNotifications.unread() > 0}" class="notif-badge" style="position: absolute; top: -6px; right: -6px; background-color: #ef4444; color: #ffffff; font-size: 10px; font-weight: 700; border-radius: 10px; padding: 1px 5px; min-width: 16px; text-align: center; border: 2px solid var(--bg-surface); line-height: 1.2;" th:text="${myNotifications.unread()}">1</span>
+                <span th:if="${myNotifications.unread() > 0}" class="notif-badge" style="position: absolute; top: -6px; right: -6px; background-color: #3b82f6; color: #ffffff; font-size: 10px; font-weight: 700; border-radius: 10px; padding: 1px 5px; min-width: 16px; text-align: center; border: 2px solid var(--bg-surface); line-height: 1.2;" th:text="${myNotifications.unread()}">1</span>
             </button>
 
             <div id="notifDropdown" class="notif-dropdown" style="display: none; position: absolute; right: 0; top: calc(100% + 8px); width: 340px; background-color: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.12); z-index: 1000; overflow: hidden;">
@@ -64,12 +64,12 @@
 
         <!-- Chuông thông báo dành riêng cho Quản trị viên (ADMIN) -->
         <div th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" class="notif-bell-wrapper" style="position: relative;">
-            <button type="button" id="notifBellBtn" class="notif-bell-btn" aria-label="Xem thông báo" title="Thông báo hệ thống" style="position: relative; background: none; border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--text-primary);">
+            <button type="button" id="notifBellBtn" class="notif-bell-btn" aria-label="Xem thông báo" title="Thông báo hệ thống" style="position: relative; background: none; border: 0; border-radius: 999px; padding: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--text-primary);">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                     <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                 </svg>
-                <span th:if="${unreadNotificationCount > 0}" class="notif-badge" style="position: absolute; top: -6px; right: -6px; background-color: #ef4444; color: #ffffff; font-size: 10px; font-weight: 700; border-radius: 10px; padding: 1px 5px; min-width: 16px; text-align: center; border: 2px solid var(--bg-surface); line-height: 1.2;" th:text="${unreadNotificationCount}">1</span>
+                <span th:if="${unreadNotificationCount > 0}" class="notif-badge" style="position: absolute; top: -6px; right: -6px; background-color: #3b82f6; color: #ffffff; font-size: 10px; font-weight: 700; border-radius: 10px; padding: 1px 5px; min-width: 16px; text-align: center; border: 2px solid var(--bg-surface); line-height: 1.2;" th:text="${unreadNotificationCount}">1</span>
             </button>
 
             <!-- Dropdown Popover hiển thị thông báo nhanh -->
@@ -106,33 +106,56 @@
             </div>
         </div>
 
-        <div class="actor-switcher-box" th:if="${demoEnabled}">
-            <span class="actor-tag" th:text="${currentUser != null ? uiText.role(currentUser.role()) : 'Chưa đăng nhập'}">Quản trị viên</span>
-            <form th:action="@{/switch-user}" method="get" style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;">
-                <select name="userId" class="form-control" aria-label="Chọn người dùng demo" style="width: auto; padding: 2px 6px; font-size: 12px;" onchange="this.form.submit()">
-                    <option th:each="u : ${demoUsers}"
-                            th:value="${u.key}"
-                            th:text="${uiText.role(u.value.role()) + ' — ' + u.value.fullName()}"
-                            th:selected="${currentUser != null and currentUser.id() == u.key}">
-                    </option>
-                </select>
-            </form>
-            <a th:if="${currentUser != null}" th:href="@{/account/profile}" class="btn btn-sm" style="margin-left: 8px; text-decoration: none;" title="Xem và chỉnh sửa hồ sơ">Hồ sơ</a>
-            <a th:if="${currentUser != null}" th:href="@{/account/password}" class="btn btn-sm" style="margin-left: 4px; text-decoration: none;" title="Đổi mật khẩu tài khoản">Đổi mật khẩu</a>
-            <form th:if="${currentUser != null}" th:action="@{/session/logout}" method="post" style="display: inline; margin-left: 4px;">
-                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                <button type="submit" class="btn btn-sm">Đăng xuất</button>
-            </form>
-        </div>
+        <div class="account-menu" th:if="${currentUser != null}">
+            <button type="button" id="accountMenuButton" class="account-menu-trigger"
+                    aria-label="Mở menu hồ sơ tài khoản" aria-controls="accountMenu" aria-expanded="false" title="Tài khoản">
+                <span class="account-menu-avatar" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="8" r="4"></circle>
+                        <path d="M5 21a7 7 0 0 1 14 0"></path>
+                    </svg>
+                </span>
+                <span class="account-menu-trigger-name" th:text="${currentUser.fullName()}">Tên tài khoản</span>
+            </button>
 
-        <div th:if="${!demoEnabled and currentUser != null}" style="display: flex; align-items: center; gap: 8px;">
-            <span class="actor-tag" th:text="${uiText.role(currentUser.role())}">Quản trị viên</span>
-            <a th:href="@{/account/profile}" class="btn btn-sm" style="text-decoration: none;" title="Xem và chỉnh sửa hồ sơ">Hồ sơ</a>
-            <a th:href="@{/account/password}" class="btn btn-sm" style="text-decoration: none;" title="Đổi mật khẩu tài khoản">Đổi mật khẩu</a>
-            <form th:action="@{/session/logout}" method="post" style="display: inline;">
-                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                <button type="submit" class="btn btn-sm">Đăng xuất</button>
-            </form>
+            <div id="accountMenu" class="account-menu-panel" aria-labelledby="accountMenuButton" hidden>
+                <div class="account-menu-summary">
+                    <span class="account-menu-name" th:text="${currentUser.fullName()}">Tên tài khoản</span>
+                    <span class="account-menu-role" th:text="${uiText.role(currentUser.role())}">Vai trò</span>
+                </div>
+
+                <nav class="account-menu-links" aria-label="Hồ sơ tài khoản">
+                    <a th:href="@{/account/profile}" class="account-menu-item">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="8" r="4"></circle>
+                            <path d="M5 21a7 7 0 0 1 14 0"></path>
+                        </svg>
+                        <span>Chi tiết hồ sơ</span>
+                    </a>
+                    <a th:href="@{/account/password}" class="account-menu-item">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                            <path d="M12 15v2"></path>
+                        </svg>
+                        <span>Đổi mật khẩu</span>
+                    </a>
+                </nav>
+
+                <div class="account-menu-logout">
+                    <form th:action="@{/session/logout}" method="post">
+                        <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                        <button type="submit" class="account-menu-logout-button">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M10 17l5-5-5-5"></path>
+                                <path d="M15 12H3"></path>
+                                <path d="M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6"></path>
+                            </svg>
+                            <span>Đăng xuất</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 </header>
@@ -175,6 +198,33 @@
                 document.addEventListener('click', function (e) {
                     if (!notifDropdown.contains(e.target) && e.target !== bellBtn && !bellBtn.contains(e.target)) {
                         notifDropdown.style.display = 'none';
+                    }
+                });
+            }
+
+            const accountMenuButton = document.getElementById('accountMenuButton');
+            const accountMenu = document.getElementById('accountMenu');
+
+            if (accountMenuButton && accountMenu) {
+                const setAccountMenuOpen = function (open) {
+                    accountMenu.hidden = !open;
+                    accountMenuButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+                };
+
+                accountMenuButton.addEventListener('click', function () {
+                    setAccountMenuOpen(accountMenu.hidden);
+                });
+
+                document.addEventListener('click', function (e) {
+                    if (!accountMenu.contains(e.target) && !accountMenuButton.contains(e.target)) {
+                        setAccountMenuOpen(false);
+                    }
+                });
+
+                document.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape' && !accountMenu.hidden) {
+                        setAccountMenuOpen(false);
+                        accountMenuButton.focus();
                     }
                 });
             }

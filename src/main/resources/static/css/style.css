@@ -106,6 +106,169 @@ a:focus, button:focus, input:focus, select:focus, textarea:focus {
   border-radius: 2px;
 }
 
+.account-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.account-menu-trigger {
+  min-width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 4px 14px 4px 4px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.account-menu-trigger:hover {
+  background: var(--bg-main);
+  border-color: #94a3b8;
+}
+
+.account-menu-trigger[aria-expanded="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(30, 64, 175, 0.12);
+}
+
+.account-menu-avatar {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-contrast);
+  background: var(--accent);
+  border-radius: 50%;
+}
+
+.account-menu-trigger-name {
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 1100;
+  width: min(320px, calc(100vw - 24px));
+  padding: 0;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.2);
+  overflow: hidden;
+}
+
+.account-menu-panel[hidden] {
+  display: none;
+}
+
+.account-menu-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.account-menu-name {
+  max-width: 100%;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.account-menu-role {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  color: #1e40af;
+  background: #eff6ff;
+  border-radius: 0;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.account-menu-links {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+}
+
+.account-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 10px;
+  color: var(--text-primary);
+  border-radius: 0;
+  font-weight: 500;
+}
+
+.account-menu-item svg {
+  flex: 0 0 20px;
+  color: var(--text-secondary);
+}
+
+.account-menu-item:hover {
+  color: var(--text-primary);
+  background: var(--bg-main);
+  text-decoration: none;
+}
+
+.account-menu-logout {
+  padding: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.account-menu-logout form {
+  margin: 0;
+}
+
+.account-menu-logout-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 10px;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid transparent;
+  border-radius: 0;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.account-menu-logout-button:hover {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.notif-bell-btn {
+  width: 40px;
+  height: 40px;
+}
+
 .container {
   max-width: 1200px;
   margin: 24px auto;
@@ -983,4 +1146,5 @@ dialog.modal-dialog::backdrop {
   .btn { white-space: normal; }
   .notif-dropdown { max-width: calc(100vw - 32px); }
   .notification-item { flex-direction: column; gap: 8px; }
+  .account-menu-trigger-name { max-width: min(38vw, 160px); }
 }
