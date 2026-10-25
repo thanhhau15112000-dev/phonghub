@@ -147,6 +147,17 @@ class HandoverPhotoIntegrationTest extends SeededWebTest {
     }
 
     @Test
+    @DisplayName("Form ảnh mang giới hạn dung lượng để trình duyệt báo ngay khi chọn ảnh quá lớn")
+    void uploadFormCarriesSizeLimit() throws Exception {
+        createDraft("handover");
+
+        mockMvc.perform(get(UI + "/handover").header("X-User-Id", OWNER_1))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("data-max-bytes=\"10485760\"")))
+            .andExpect(content().string(containsString("upload-too-large")));
+    }
+
+    @Test
     @DisplayName("Ảnh sai định dạng: giao diện báo lỗi rõ, không tạo bản ghi ảnh")
     void invalidImageIsRejectedWithMessage() throws Exception {
         createDraft("handover");

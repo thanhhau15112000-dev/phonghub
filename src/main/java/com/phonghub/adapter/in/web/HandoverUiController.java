@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -28,6 +29,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -65,6 +67,12 @@ public class HandoverUiController {
 
     private static HandoverType typeOf(String kind) {
         return "check-out".equals(kind) ? HandoverType.CHECK_OUT : HandoverType.CHECK_IN;
+    }
+
+    /** Giới hạn dung lượng ảnh, để form báo ngay khi chọn ảnh quá lớn thay vì tải cả tệp lên (#200). */
+    @ModelAttribute("maxUploadBytes")
+    public long maxUploadBytes(@Value("${phonghub.storage.max-file-size-bytes:10485760}") long maxUploadBytes) {
+        return maxUploadBytes;
     }
 
     @GetMapping
