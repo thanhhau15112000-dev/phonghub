@@ -80,8 +80,7 @@ class TenantPickerUiIntegrationTest extends SeededWebTest {
             .andExpect(status().is3xxRedirection());
         Contract contract = contracts.findAll().stream()
             .filter(c -> c.getRoomId().equals(DataSeeder.ROOM_104_ID)).findFirst().orElseThrow();
-        mockMvc.perform(post("/contracts/" + contract.getId() + "/activate").header("X-User-Id", OWNER_1))
-            .andExpect(status().is3xxRedirection());
+        activateWithApprovedCheckIn(contract.getId(), OWNER_1);
         Tenant waiting = accountTenant("Phạm Thị D", "079200008888", "0933444666");
 
         String html = page("/contracts/" + contract.getId());
