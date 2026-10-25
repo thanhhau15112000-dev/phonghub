@@ -81,6 +81,69 @@ class InvoiceUnitTest {
         assertFalse(invoice.isOverdue(startDate));
     }
 
+    private static Invoice issueOn(Contract contract, YearMonth period, LocalDate issuedOn) {
+        return Invoice.issueMonthlyRent(contract, period, "PHAAAA2222", List.of(), issuedOn);
+    }
+
+    @Test
+    @DisplayName("#208: a period issued after its payment day is due three days after issue, not already overdue")
+    void issuedAfterPaymentDayGetsThreeDays() {
+        // Hợp đồng nhập cho khách đã ở từ 01/10, ngày thanh toán 5, kỳ 10/2026 tạo ngày 25/10.
+        Contract contract = contract(ContractStatus.ACTIVE, 5, LocalDate.of(2026, 10, 1), LocalDate.of(2027, 9, 30));
+        LocalDate issuedOn = LocalDate.of(2026, 10, 25);
+
+        Invoice invoice = issueOn(contract, YearMonth.of(2026, 10), issuedOn);
+
+        assertEquals(LocalDate.of(2026, 10, 28), invoice.getDueDate());
+        assertFalse(invoice.isOverdue(issuedOn));
+        assertFalse(invoice.isOverdue(LocalDate.of(2026, 10, 28)), "due day itself is not overdue");
+        assertTrue(invoice.isOverdue(LocalDate.of(2026, 10, 29)));
+    }
+
+    @Test
+    @DisplayName("#208: a first period issued a few days after the start date is not overdue on issue")
+    void firstPeriodIssuedAfterStartDate() {
+        Contract contract = contract(ContractStatus.ACTIVE, 5, LocalDate.of(2026, 10, 25), LocalDate.of(2027, 10, 24));
+
+        Invoice invoice = issueOn(contract, YearMonth.of(2026, 10), LocalDate.of(2026, 10, 28));
+
+        assertEquals(LocalDate.of(2026, 10, 31), invoice.getDueDate());
+        assertFalse(invoice.isOverdue(LocalDate.of(2026, 10, 28)));
+    }
+
+    @Test
+    @DisplayName("#208: issuing on the start date leaves three days to pay instead of zero")
+    void issuedOnStartDateLeavesThreeDays() {
+        LocalDate startDate = LocalDate.of(2026, 10, 25);
+        Contract contract = contract(ContractStatus.ACTIVE, 5, startDate, LocalDate.of(2027, 10, 24));
+
+        Invoice invoice = issueOn(contract, YearMonth.of(2026, 10), startDate);
+
+        assertEquals(LocalDate.of(2026, 10, 28), invoice.getDueDate());
+    }
+
+    @Test
+    @DisplayName("#208: a payment day more than three days after issue is kept as the due date")
+    void laterPaymentDayIsKept() {
+        Contract contract = contract(ContractStatus.ACTIVE, 5, LocalDate.of(2026, 8, 1), LocalDate.of(2027, 7, 31));
+
+        // Job tạo kỳ 11/2026 vào ngày cuối tháng 10: hạn vẫn là ngày thanh toán 05/11.
+        Invoice invoice = issueOn(contract, YearMonth.of(2026, 11), LocalDate.of(2026, 10, 31));
+
+        assertEquals(LocalDate.of(2026, 11, 5), invoice.getDueDate());
+    }
+
+    @Test
+    @DisplayName("#208: the three-day floor can move the due date into the next month for a short month")
+    void floorCrossesShortMonthEnd() {
+        Contract contract = contract(ContractStatus.ACTIVE, 31, LocalDate.of(2026, 2, 20), LocalDate.of(2027, 2, 19));
+
+        Invoice invoice = issueOn(contract, YearMonth.of(2026, 2), LocalDate.of(2026, 2, 27));
+
+        assertEquals(LocalDate.of(2026, 3, 2), invoice.getDueDate());
+        assertFalse(invoice.isOverdue(LocalDate.of(2026, 2, 28)));
+    }
+
     @Test
     @DisplayName("Only ACTIVE contracts within their term can be invoiced")
     void issueRequiresActiveContractWithinTerm() {

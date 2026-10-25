@@ -497,6 +497,7 @@ docker build -t phonghub:local .
 
 ## Điện, nước và dịch vụ trên hóa đơn tháng
 
+- **Hạn thanh toán** của hóa đơn tiền thuê là ngày muộn nhất trong ba mốc: ngày thanh toán của hợp đồng trong tháng của kỳ (kẹp về ngày cuối tháng), ngày bắt đầu hợp đồng, và ngày tạo hóa đơn theo giờ Việt Nam cộng 3 ngày. Tạo tay và scheduler dùng cùng quy tắc, nên kỳ tạo sau ngày thanh toán (nhập hợp đồng của khách đã ở từ trước, job chạy bù) không bị quá hạn hay bị tính phí trễ ngay khi tạo (#208).
 - Migration V21 thêm `reading_id`, `rate_id` vào `invoice_items` để biết mỗi dòng được tính từ chỉ số và đơn giá nào. `invoices.utility_amount` giờ ghi tổng các dòng này, `other_amount` là phần còn lại (phí sửa chữa).
 - **Điện/nước** tính theo chỉ số cùng kỳ với hóa đơn (kỳ ghi chỉ số = tháng của ngày ghi): tiêu thụ x đơn giá, làm tròn đến đồng; mỗi đơn giá `PER_KWH` / `PER_M3` của nhà trọ là một dòng. Tiêu thụ bằng 0 hoặc đơn giá 0 thì không có dòng. Chỉ số gắn với hợp đồng khác của cùng phòng (khách trước) bị bỏ qua.
 - **Dịch vụ cố định** (`PER_ROOM_FLAT`, `PER_PERSON` x số người đang ở, tối thiểu 1) chỉ tính lúc phát hành hóa đơn, nên đơn giá thêm sau đó không làm đổi hóa đơn người thuê đã nhận.
