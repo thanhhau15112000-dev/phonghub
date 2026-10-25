@@ -28,6 +28,9 @@ public class InMemoryContractRepository implements ContractRepositoryPort {
             c.getPaymentDay(),
             c.getStatus(),
             c.getOccupants() != null ? new ArrayList<>(c.getOccupants()) : new ArrayList<>(),
+            c.getActivatedAt(),
+            c.getDepositAppliedAmount(),
+            c.getSettlementCreditAmount(),
             c.getCreatedAt(),
             c.getUpdatedAt()
         );

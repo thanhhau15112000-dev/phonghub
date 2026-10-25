@@ -9,6 +9,10 @@ import java.util.UUID;
 public interface ContractRepositoryPort {
     Contract save(Contract contract);
     Optional<Contract> findById(UUID id);
+    /** Khóa hợp đồng trong transaction khi cấp hóa đơn hoặc cập nhật số dư cọc. */
+    default Optional<Contract> findByIdForUpdate(UUID id) {
+        return findById(id);
+    }
     List<Contract> findByPropertyId(UUID propertyId);
     List<Contract> findByRoomId(UUID roomId);
 

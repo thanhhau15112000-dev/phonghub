@@ -33,12 +33,14 @@ class MonthlyInvoiceIssuer {
     boolean exists(Contract contract, YearMonth period) {
         return invoiceRepository
             .findActiveRentByContractIdAndPeriod(contract.getId(), period.getYear(), period.getMonthValue())
-            .isPresent();
+            .isPresent() || invoiceRepository.findByContractId(contract.getId()).stream()
+                .anyMatch(invoice -> invoice.getType() == com.phonghub.domain.model.InvoiceType.CANCELLATION
+                    && invoice.getYear() == period.getYear() && invoice.getMonth() == period.getMonthValue()
+                    && invoice.getStatus() != com.phonghub.domain.model.InvoiceStatus.VOIDED);
     }
 
     /**
-     * Người gọi đã kiểm tra quyền và kiểm tra hóa đơn tháng chưa tồn tại. {@code issuedOn} là ngày tạo theo giờ Việt
-     * Nam, dùng để hạn thanh toán không rơi vào trước hoặc ngay ngày tạo.
+     * Người gọi đã kiểm tra quyền và chu kỳ chưa tồn tại. {@code issuedOn} là ngày tạo theo giờ Việt Nam.
      */
     Invoice issue(Contract contract, YearMonth period, LocalDate issuedOn) {
         List<Invoice> rollable = invoiceRepository.findByContractId(contract.getId()).stream()

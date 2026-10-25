@@ -372,12 +372,26 @@ public class PhongHubConfiguration {
         IdentityProviderPort identityProviderPort,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
-        AuditPort auditPort
+        AuditPort auditPort,
+        MonthlyInvoiceUseCase monthlyInvoiceUseCase,
+        com.phonghub.application.service.EarlyTerminationBillingService earlyTerminationBillingService
     ) {
         ContractService service = new ContractService(
-            contractRepo, roomRepo, propertyRepo, tenantRepo, userRepo, identityProviderPort, currentUserPort, authorizationService, auditPort
+            contractRepo, roomRepo, propertyRepo, tenantRepo, userRepo, identityProviderPort, currentUserPort,
+            authorizationService, auditPort, monthlyInvoiceUseCase, earlyTerminationBillingService
         );
         return new TransactionalContractUseCase(service);
+    }
+
+    @Bean
+    public com.phonghub.application.service.EarlyTerminationBillingService earlyTerminationBillingService(
+        InvoiceRepositoryPort invoiceRepository,
+        MeterReadingRepositoryPort readingRepository,
+        ServiceRateRepositoryPort rateRepository,
+        AuditPort auditPort
+    ) {
+        return new com.phonghub.application.service.EarlyTerminationBillingService(
+            invoiceRepository, readingRepository, rateRepository, auditPort);
     }
 
     @Bean

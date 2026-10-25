@@ -22,6 +22,8 @@ public interface CheckOutSettlementUseCase {
 
     record Settlement(
         BigDecimal deposit,
+        BigDecimal depositApplied,
+        BigDecimal settlementCredit,
         BigDecimal deduction,
         /** true khi khoản khấu trừ đã được chủ trọ chốt lúc duyệt; false là tổng đề xuất trên từng tài sản. */
         boolean deductionFinal,
@@ -35,7 +37,8 @@ public interface CheckOutSettlementUseCase {
 
         /** Dương: số tiền hoàn lại người thuê; âm: người thuê phải trả thêm. */
         public BigDecimal balance() {
-            return deposit.subtract(deduction).subtract(outstanding).subtract(utilityTotal());
+            return deposit.subtract(depositApplied).add(settlementCredit)
+                .subtract(deduction).subtract(outstanding).subtract(utilityTotal());
         }
     }
 }

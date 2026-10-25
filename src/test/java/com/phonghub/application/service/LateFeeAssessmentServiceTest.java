@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
 /** #80: scheduler tính phạt idempotent theo cấu hình từng nhà trọ. */
 class LateFeeAssessmentServiceTest {
 
-    private static final LocalDate DUE = LocalDate.of(2026, 3, 5);
+    private static final LocalDate DUE = LocalDate.of(2026, 3, 8);
 
     private final UUID propertyId = UUID.randomUUID();
     private InMemoryInvoiceRepository invoices;
@@ -48,7 +48,7 @@ class LateFeeAssessmentServiceTest {
 
         contract = new Contract(
             UUID.randomUUID(), propertyId, UUID.randomUUID(), UUID.randomUUID(),
-            new BigDecimal("3000000"), new BigDecimal("3500000"), LocalDate.of(2026, 1, 15), LocalDate.of(2027, 1, 15), 5,
+            new BigDecimal("3000000"), new BigDecimal("3500000"), LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1), 5,
             ContractStatus.ACTIVE, List.of(), Instant.now(), Instant.now());
         contracts.save(contract);
         invoice = invoices.save(Invoice.issueMonthlyRent(contract, YearMonth.of(2026, 3), "PHLATE0002"));
@@ -65,19 +65,22 @@ class LateFeeAssessmentServiceTest {
     }
 
     @Test
-    @DisplayName("quá hạn và hết ân hạn thì thêm phạt; chạy lại nhiều lần không cộng dồn")
-    void idempotentAcrossRuns() {
+    @DisplayName("phạt tăng theo ngày quá hạn sau ân hạn; chạy lại cùng ngày không cộng dồn")
+    void dailyFeeIsIdempotentForSameDay() {
         policy(true, 2);
         LocalDate today = DUE.plusDays(3);
 
         assertTrue(service.assessInvoice(invoice.getId(), today));
         assertFalse(service.assessInvoice(invoice.getId(), today));
-        assertFalse(service.assessInvoice(invoice.getId(), today.plusDays(10)), "phạt một lần, không tăng theo ngày");
+        assertTrue(service.assessInvoice(invoice.getId(), today.plusDays(10)), "later days update the daily total");
 
-        assertEquals(0, new BigDecimal("3570000").compareTo(total()));
-        assertEquals(1, events.size());
-        assertEquals("LATE_FEE_APPLIED", events.getFirst().action());
-        assertEquals(propertyId.toString(), events.getFirst().details().get("propertyId"));
+        assertEquals(0, new BigDecimal("4270000").compareTo(total()));
+        assertEquals(2, events.size());
+        assertEquals("LATE_FEE_APPLIED", events.getLast().action());
+        assertEquals(propertyId.toString(), events.getLast().details().get("propertyId"));
+        assertEquals(11L, events.getLast().details().get("penaltyDays"));
+        assertEquals("Phạt trả trễ (11 ngày)",
+            invoices.findById(invoice.getId()).orElseThrow().lateFeeItem().orElseThrow().name());
     }
 
     @Test
@@ -97,7 +100,7 @@ class LateFeeAssessmentServiceTest {
     }
 
     @Test
-    @DisplayName("#208: kỳ tạo sau ngày thanh toán không bị phạt ngay, chỉ phạt khi qua hạn mới (ngày tạo + 3)")
+    @DisplayName("A backfilled cycle is not fined until its due date passes")
     void invoiceIssuedAfterPaymentDayIsNotFinedOnIssue() {
         policy(true, 0);
         LocalDate issuedOn = LocalDate.of(2026, 10, 25);

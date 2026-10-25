@@ -55,10 +55,10 @@ class LateFeeUnitTest {
     @Test
     @DisplayName("phạt cố định và trần tối đa")
     void fixedFeeAndCap() {
-        assertEquals(0, money("100000").compareTo(policy(true, FeeType.FIXED, "100000", 0, null).feeFor(money("3500000"), 5)));
+        assertEquals(0, money("500000").compareTo(policy(true, FeeType.FIXED, "100000", 0, null).feeFor(money("3500000"), 5)));
         assertEquals(0, money("50000").compareTo(policy(true, FeeType.FIXED, "100000", 0, "50000").feeFor(money("3500000"), 5)));
         assertEquals(0, money("150000").compareTo(policy(true, FeeType.PERCENT, "10", 0, "150000").feeFor(money("3500000"), 5)));
-        assertEquals(0, money("350000").compareTo(policy(true, FeeType.PERCENT, "10", 0, "999999").feeFor(money("3500000"), 5)));
+        assertEquals(0, money("1750000").compareTo(policy(true, FeeType.PERCENT, "10", 0, "9999999").feeFor(money("3500000"), 5)));
     }
 
     @Test

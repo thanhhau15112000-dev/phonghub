@@ -243,6 +243,14 @@
                         <td>Tiền cọc</td>
                         <td class="col-number" th:text="${#numbers.formatDecimal(settlement.deposit(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     </tr>
+                    <tr th:if="${settlement.depositApplied().signum() > 0}">
+                        <td>Đã dùng tiền cọc thanh toán hóa đơn</td>
+                        <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(settlement.depositApplied(), 0, 'POINT', 0, 'COMMA') + ' đ'}">− 0 đ</td>
+                    </tr>
+                    <tr th:if="${settlement.settlementCredit().signum() > 0}">
+                        <td>Tiền hoàn/đối trừ cho người thuê</td>
+                        <td class="col-number" th:text="${'+ ' + #numbers.formatDecimal(settlement.settlementCredit(), 0, 'POINT', 0, 'COMMA') + ' đ'}">+ 0 đ</td>
+                    </tr>
                     <tr>
                         <td th:text="${settlement.deductionFinal() ? 'Khấu trừ tài sản (chủ trọ đã chốt)' : 'Khấu trừ tài sản (đề xuất)'}">Khấu trừ tài sản</td>
                         <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(settlement.deduction(), 0, 'POINT', 0, 'COMMA') + ' đ'}">− 0 đ</td>

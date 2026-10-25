@@ -11,8 +11,9 @@
         <div>
             <h1>Phạt trả trễ</h1>
             <p style="color: var(--text-secondary); font-size: 13px;">
-                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Khi hóa đơn tiền thuê quá hạn hơn số ngày ân hạn,
-                hệ thống thêm một dòng phạt riêng vào hóa đơn. Mỗi hóa đơn chỉ bị phạt một lần; hệ thống chạy lại không cộng dồn.
+                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Sau số ngày ân hạn, mức phạt áp dụng mỗi ngày;
+                tổng tiền tăng theo số ngày quá hạn và dừng ở mức trần nếu đã cấu hình. Hệ thống cập nhật một dòng phạt kèm số ngày,
+                nên chạy lại trong cùng ngày không cộng trùng.
             </p>
         </div>
         <div>
@@ -32,12 +33,12 @@
                 <div class="form-group" style="min-width: 200px;">
                     <label class="form-label" for="feeType">Cách tính</label>
                     <select id="feeType" name="feeType" class="form-control">
-                        <option value="PERCENT" th:selected="${policy.feeType().name() == 'PERCENT'}">Phần trăm tiền hóa đơn (%)</option>
-                        <option value="FIXED" th:selected="${policy.feeType().name() == 'FIXED'}">Số tiền cố định (đ)</option>
+                        <option value="PERCENT" th:selected="${policy.feeType().name() == 'PERCENT'}">Phần trăm tiền hóa đơn mỗi ngày (%)</option>
+                        <option value="FIXED" th:selected="${policy.feeType().name() == 'FIXED'}">Số tiền cố định mỗi ngày (đ)</option>
                     </select>
                 </div>
                 <div class="form-group" style="min-width: 200px;">
-                    <label class="form-label" for="feeValue">Mức phạt</label>
+                    <label class="form-label" for="feeValue">Mức phạt mỗi ngày</label>
                     <input id="feeValue" type="number" name="feeValue" step="0.01" min="0" class="form-control"
                            th:value="${policy.feeValue()}">
                 </div>

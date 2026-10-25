@@ -94,11 +94,11 @@
                     <label class="form-label">Tiền đặt cọc (VND) *</label>
                     <input type="number" name="depositAmount" class="form-control" value="3500000" min="0" required>
                 </div>
-                <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Ngày thanh toán trong tháng</label>
-                    <input type="number" name="paymentDay" class="form-control" value="5" min="1" max="31" required>
-                </div>
+                <input type="hidden" name="paymentDay" value="5">
             </div>
+            <p style="color: var(--text-secondary); font-size: 12px; margin-top: -4px;">
+                Hạn thanh toán được tính 7 ngày sau ngày bắt đầu của từng chu kỳ.
+            </p>
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label">Ngày bắt đầu *</label>

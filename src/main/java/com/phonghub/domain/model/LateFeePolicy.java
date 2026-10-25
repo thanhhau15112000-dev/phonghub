@@ -7,9 +7,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Chính sách phạt trả trễ của một nhà trọ (#80). Phạt là một khoản duy nhất cho mỗi hóa đơn tiền thuê, bắt đầu
- * tính khi quá hạn hơn {@code graceDays} ngày: theo phần trăm tiền hóa đơn hoặc số tiền cố định, không vượt
- * {@code capAmount} nếu có đặt trần.
+ * Chính sách phạt trả trễ của một nhà trọ. Mức cấu hình được tính cho mỗi ngày sau {@code graceDays}; tổng phạt
+ * không vượt {@code capAmount} nếu có đặt trần.
  */
 public record LateFeePolicy(
     UUID propertyId,
@@ -68,12 +67,22 @@ public record LateFeePolicy(
      * hoặc chưa quá ngày ân hạn. Làm tròn đến đồng.
      */
     public BigDecimal feeFor(BigDecimal principal, long daysOverdue) {
-        if (!enabled || principal == null || principal.signum() <= 0 || daysOverdue <= graceDays) {
+        return feeForDays(principal, daysOverdue);
+    }
+
+    public long penaltyDays(long daysOverdue) {
+        return Math.max(0, daysOverdue - graceDays);
+    }
+
+    public BigDecimal feeForDays(BigDecimal principal, long daysOverdue) {
+        long days = penaltyDays(daysOverdue);
+        if (!enabled || principal == null || principal.signum() <= 0 || days == 0) {
             return BigDecimal.ZERO;
         }
-        BigDecimal fee = feeType == FeeType.PERCENT
+        BigDecimal dailyFee = feeType == FeeType.PERCENT
             ? principal.multiply(feeValue).divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
             : feeValue.setScale(0, RoundingMode.HALF_UP);
+        BigDecimal fee = dailyFee.multiply(BigDecimal.valueOf(days));
         if (capAmount != null && fee.compareTo(capAmount) > 0) {
             fee = capAmount.setScale(0, RoundingMode.HALF_UP);
         }

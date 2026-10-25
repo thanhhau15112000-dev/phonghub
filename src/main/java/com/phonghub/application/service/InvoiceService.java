@@ -141,13 +141,20 @@ public class InvoiceService implements InvoiceUseCase {
         assertCanViewFinance();
         Contract contract = contractUseCase.getContract(contractId);
         authorizationService.assertCanManageContracts(currentUserPort.getCurrentUser(), contract.getPropertyId());
+        LocalDate today = LocalDate.ofInstant(clock.instant(), BILLING_ZONE);
+        com.phonghub.domain.model.BillingCycle cycle = contract.billingCycle(period).orElseThrow(() ->
+            new DomainException(String.format("Kỳ thanh toán %02d/%d không thuộc thời hạn hợp đồng.",
+                period.getMonthValue(), period.getYear())));
+        if (cycle.startDate().isAfter(today)) {
+            throw new DomainException("Chỉ có thể tạo hóa đơn cho chu kỳ đã bắt đầu khi hợp đồng còn hiệu lực.");
+        }
 
         if (issuer.exists(contract, period)) {
             throw new DomainException(String.format(
                 "Kỳ thanh toán %02d/%d đã tồn tại cho hợp đồng này.", period.getMonthValue(), period.getYear()
             ));
         }
-        return issuer.issue(contract, period, LocalDate.ofInstant(clock.instant(), BILLING_ZONE));
+        return issuer.issue(contract, period, today);
     }
 
     @Override

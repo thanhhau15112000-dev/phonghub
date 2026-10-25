@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-/** #80: chính sách phạt lưu được, phạt không cộng dồn khi chạy lại, hóa đơn quá hạn được tìm đúng. */
+/** #80/#225: chính sách phạt lưu được, tiền phạt tăng theo ngày trong mức trần, hóa đơn quá hạn được tìm đúng. */
 @Testcontainers(disabledWithoutDocker = true)
 class LateFeePostgresTest {
 
@@ -58,7 +58,7 @@ class LateFeePostgresTest {
     }
 
     @Test
-    @DisplayName("policy round-trip, DB constraints, and an idempotent assessment on a real overdue invoice")
+    @DisplayName("policy round-trip, DB constraints, and a capped daily assessment on a real overdue invoice")
     void policyAndAssessment() throws Exception {
         PGSimpleDataSource ds = migrated();
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
@@ -99,13 +99,15 @@ class LateFeePostgresTest {
         BigDecimal principal = created.getTotalAmount();
         assertTrue(service.assessInvoice(created.getId(), today));
         assertFalse(service.assessInvoice(created.getId(), today));
-        assertFalse(service.assessInvoice(created.getId(), today.plusDays(20)));
+        assertTrue(service.assessInvoice(created.getId(), today.plusDays(20)),
+            "same cap amount still updates the displayed number of penalty days");
 
         Invoice reloaded = invoices.findById(created.getId()).orElseThrow();
         BigDecimal expectedFee = policies.findByPropertyId(propertyId).orElseThrow().feeFor(principal, 10);
         assertEquals(1, reloaded.getItems().stream().filter(InvoiceItem::isLateFee).count());
         assertEquals(0, principal.add(expectedFee).compareTo(reloaded.getTotalAmount()));
         assertEquals(0, principal.compareTo(reloaded.principalAmount()));
+        assertEquals("Phạt trả trễ (28 ngày)", reloaded.lateFeeItem().orElseThrow().name());
         assertTrue(invoices.findByIdForUpdate(created.getId()).isPresent());
     }
 }

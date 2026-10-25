@@ -1,6 +1,7 @@
 package com.phonghub.application.service;
 
 import com.phonghub.application.port.in.ContractUseCase;
+import com.phonghub.application.port.in.MonthlyInvoiceUseCase;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
@@ -50,6 +51,8 @@ public class ContractService implements ContractUseCase {
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
     private final AuditPort auditPort;
+    private final MonthlyInvoiceUseCase monthlyInvoiceUseCase;
+    private final EarlyTerminationBillingService earlyTerminationBillingService;
 
     public ContractService(
         ContractRepositoryPort contractRepository,
@@ -62,6 +65,23 @@ public class ContractService implements ContractUseCase {
         AuthorizationService authorizationService,
         AuditPort auditPort
     ) {
+        this(contractRepository, roomRepository, propertyRepository, tenantRepository, userRepository,
+            identityProviderPort, currentUserPort, authorizationService, auditPort, null, null);
+    }
+
+    public ContractService(
+        ContractRepositoryPort contractRepository,
+        RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
+        TenantRepositoryPort tenantRepository,
+        UserRepositoryPort userRepository,
+        IdentityProviderPort identityProviderPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        MonthlyInvoiceUseCase monthlyInvoiceUseCase,
+        EarlyTerminationBillingService earlyTerminationBillingService
+    ) {
         this.contractRepository = contractRepository;
         this.roomRepository = roomRepository;
         this.propertyRepository = propertyRepository;
@@ -71,6 +91,8 @@ public class ContractService implements ContractUseCase {
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
         this.auditPort = auditPort;
+        this.monthlyInvoiceUseCase = monthlyInvoiceUseCase;
+        this.earlyTerminationBillingService = earlyTerminationBillingService;
     }
 
     public ContractService(
@@ -228,6 +250,14 @@ public class ContractService implements ContractUseCase {
 
         roomRepository.save(room);
         Contract saved = contractRepository.save(contract);
+        if (monthlyInvoiceUseCase != null) {
+            LocalDate activationDate = saved.billingAnchorDate();
+            boolean issued = monthlyInvoiceUseCase.issueForContract(saved.getId(),
+                java.time.YearMonth.from(activationDate), activationDate);
+            if (!issued) {
+                throw new DomainException("Không tạo được hóa đơn tiền thuê kỳ đầu khi kích hoạt hợp đồng.");
+            }
+        }
         audit("CONTRACT_ACTIVATED", currentUser, saved, Map.of(
             "oldStatus", ContractStatus.DRAFT.name(), "newStatus", saved.getStatus().name()));
         return saved;
@@ -249,9 +279,8 @@ public class ContractService implements ContractUseCase {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Contract contract = contractRepository.findById(contractId)
             .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
-        // Bỏ qua biên bản check-out (vốn chỉ chủ trọ/admin duyệt) nên cũng chỉ chủ trọ/admin được làm
         Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
-        authorizationService.assertOwnerOrAdmin(currentUser, contract.getPropertyId());
+        authorizationService.assertCanManageContracts(currentUser, contract.getPropertyId());
         assertResiding(contract);
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("Cần nhập lý do chấm dứt hợp đồng.");
@@ -260,7 +289,14 @@ public class ContractService implements ContractUseCase {
         if (trimmed.length() > 500) {
             throw new IllegalArgumentException("Lý do chấm dứt tối đa 500 ký tự.");
         }
-        return terminate(currentUser, contract, room, requiresMaintenance, Map.of("reason", trimmed, "early", true));
+        Contract locked = contractRepository.findByIdForUpdate(contractId)
+            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
+        assertResiding(locked);
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+        if (earlyTerminationBillingService != null) {
+            earlyTerminationBillingService.billEarlyTermination(locked, currentUser, today);
+        }
+        return terminate(currentUser, locked, room, requiresMaintenance, Map.of("reason", trimmed, "early", true));
     }
 
     private static void assertResiding(Contract contract) {

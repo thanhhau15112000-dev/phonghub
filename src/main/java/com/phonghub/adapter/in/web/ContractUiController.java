@@ -227,6 +227,7 @@ public class ContractUiController {
 
             model.addAttribute("currentUser", currentUser);
             model.addAttribute("contract", contract);
+            model.addAttribute("billingCycles", contract.billingCycles());
             model.addAttribute("property", property);
             model.addAttribute("room", room);
             model.addAttribute("primaryTenant", primaryTenant);
@@ -290,7 +291,7 @@ public class ContractUiController {
 
     private void addPaymentAttributes(Model model, CurrentUser currentUser, Contract contract, Property property) {
         List<Invoice> invoices = invoiceUseCase.listInvoicesForContract(contract.getId());
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
         // Kỳ cũ nhất còn nợ được ưu tiên hiển thị hướng dẫn thanh toán.
         Invoice payableInvoice = invoices.stream()
             .filter(Invoice::isPayable)
@@ -311,7 +312,7 @@ public class ContractUiController {
         model.addAttribute("canVoidInvoice", currentUser != null && (
             currentUser.role() == UserRole.STAFF
                 || (currentUser.role() == UserRole.OWNER && currentUser.id().equals(property.ownerId()))));
-        model.addAttribute("defaultInvoicePeriod", YearMonth.now().toString());
+        model.addAttribute("defaultInvoicePeriod", YearMonth.from(today).toString());
         model.addAttribute("bankConfigured", sepayProperties.hasBankAccount());
         model.addAttribute("bankCode", sepayProperties.getBankCode());
         model.addAttribute("bankAccountNumber", sepayProperties.getBankAccountNumber());
