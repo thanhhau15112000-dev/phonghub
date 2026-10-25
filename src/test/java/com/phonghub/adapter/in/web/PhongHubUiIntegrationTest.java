@@ -95,7 +95,9 @@ class PhongHubUiIntegrationTest {
             .andExpect(content().string(containsString("PhongHub")))
             .andExpect(content().string(containsString("Trạng thái duyệt")))
             .andExpect(content().string(not(containsString("PhongHub Ops"))))
-            .andExpect(content().string(containsString("aria-label=\"Chọn người dùng demo\"")))
+            .andExpect(content().string(containsString("id=\"accountMenuButton\"")))
+            .andExpect(content().string(not(containsString("aria-label=\"Chọn người dùng demo\""))))
+            .andExpect(content().string(not(containsString("action=\"/switch-user\""))))
             .andExpect(content().string(not(containsString("Người dùng hiện tại"))))
             .andExpect(content().string(not(containsString("style=\"font-weight: 500;\""))));
     }
