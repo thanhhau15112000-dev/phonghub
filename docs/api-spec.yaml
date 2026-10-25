@@ -1951,6 +1951,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/StorageUnavailable'
 
   /api/contracts/{contractId}/handover/photos/{photoId}:
     parameters:
@@ -2300,6 +2302,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/StorageUnavailable'
 
   /api/contracts/{contractId}/check-out/send:
     parameters:
@@ -4132,6 +4136,12 @@ components:
         example: -createdAt
 
   responses:
+    StorageUnavailable:
+      description: Kho lưu trữ tệp không nhận được tệp (bucket, khóa hoặc mạng); không tạo bản ghi, có thể thử lại
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     Unauthorized:
       description: Chưa đăng nhập hoặc token không hợp lệ / hết hạn
       content:

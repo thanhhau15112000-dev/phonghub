@@ -1,5 +1,8 @@
 package com.phonghub.application.service;
 
+import java.awt.Graphics2D;
+import java.awt.geom.AffineTransform;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -99,27 +102,109 @@ public final class FileSanitizer {
 
     private static byte[] clean(FileKind kind, byte[] content) {
         return switch (kind) {
-            case JPEG -> reencodeImage(content, "jpg");
-            case PNG -> reencodeImage(content, "png");
+            case JPEG -> reencodeImage(content, "jpg", jpegOrientation(content));
+            case PNG -> reencodeImage(content, "png", 1);
             case WEBP -> stripWebpMetadata(content);
             case PDF -> Arrays.copyOf(content, content.length);
         };
     }
 
-    private static byte[] reencodeImage(byte[] content, String format) {
+    private static byte[] reencodeImage(byte[] content, String format, int orientation) {
         try {
             var image = ImageIO.read(new ByteArrayInputStream(content));
             if (image == null) {
-                throw new IllegalArgumentException("Image payload is corrupt");
+                throw new IllegalArgumentException("Không đọc được ảnh: tệp bị hỏng hoặc dùng định dạng màu không hỗ trợ.");
             }
+            // EXIF bị bỏ khi mã hóa lại, nên chiều chụp (ảnh dọc của điện thoại) phải được xoay vào điểm ảnh
+            image = applyOrientation(image, orientation);
             ByteArrayOutputStream output = new ByteArrayOutputStream();
             if (!ImageIO.write(image, format, output)) {
                 throw new IllegalArgumentException("Không xử lý được định dạng ảnh này.");
             }
             return output.toByteArray();
         } catch (IOException ex) {
-            throw new IllegalArgumentException("Image payload is corrupt", ex);
+            throw new IllegalArgumentException("Không đọc được ảnh: tệp bị hỏng hoặc dùng định dạng màu không hỗ trợ.", ex);
         }
+    }
+
+    /**
+     * Thẻ Orientation (0x0112) trong segment EXIF (APP1) của JPEG, 1 đến 8 theo chuẩn EXIF.
+     * Không có hoặc không đọc được thì coi như ảnh đã đúng chiều (1).
+     */
+    private static int jpegOrientation(byte[] content) {
+        try {
+            int offset = 2;
+            while (offset + 4 <= content.length && (content[offset] & 0xff) == 0xff) {
+                int marker = content[offset + 1] & 0xff;
+                if (marker == 0xda || marker == 0xd9) {
+                    break; // dữ liệu ảnh bắt đầu, sau đây không còn metadata
+                }
+                int length = ((content[offset + 2] & 0xff) << 8) | (content[offset + 3] & 0xff);
+                int segmentEnd = offset + 2 + length;
+                if (length < 2 || segmentEnd > content.length) {
+                    break;
+                }
+                if (marker == 0xe1 && length >= 8
+                    && new String(content, offset + 4, 6, StandardCharsets.ISO_8859_1).equals("Exif\0\0")) {
+                    int orientation = tiffOrientation(content, offset + 10, segmentEnd);
+                    if (orientation > 0) {
+                        return orientation;
+                    }
+                }
+                offset = segmentEnd;
+            }
+        } catch (RuntimeException ignored) {
+            // EXIF hỏng không làm hỏng việc tải ảnh
+        }
+        return 1;
+    }
+
+    private static int tiffOrientation(byte[] content, int tiff, int end) {
+        if (tiff + 8 > end) {
+            return 0;
+        }
+        ByteOrder order = content[tiff] == 'M' ? ByteOrder.BIG_ENDIAN : ByteOrder.LITTLE_ENDIAN;
+        ByteBuffer buffer = ByteBuffer.wrap(content, 0, end).order(order);
+        int ifd = tiff + buffer.getInt(tiff + 4);
+        if (ifd < tiff || ifd + 2 > end) {
+            return 0;
+        }
+        int entries = buffer.getShort(ifd) & 0xffff;
+        for (int i = 0; i < entries && ifd + 2 + (i + 1) * 12 <= end; i++) {
+            int entry = ifd + 2 + i * 12;
+            if ((buffer.getShort(entry) & 0xffff) == 0x0112) {
+                int value = buffer.getShort(entry + 8) & 0xffff;
+                return value >= 1 && value <= 8 ? value : 0;
+            }
+        }
+        return 0;
+    }
+
+    /** Xoay/lật điểm ảnh theo giá trị Orientation của EXIF để ảnh hiển thị đúng chiều khi không còn EXIF. */
+    private static BufferedImage applyOrientation(BufferedImage image, int orientation) {
+        if (orientation <= 1 || orientation > 8) {
+            return image;
+        }
+        int w = image.getWidth();
+        int h = image.getHeight();
+        boolean swap = orientation >= 5;
+        AffineTransform transform = switch (orientation) {
+            case 2 -> new AffineTransform(-1, 0, 0, 1, w, 0);   // lật ngang
+            case 3 -> new AffineTransform(-1, 0, 0, -1, w, h);  // xoay 180°
+            case 4 -> new AffineTransform(1, 0, 0, -1, 0, h);   // lật dọc
+            case 5 -> new AffineTransform(0, 1, 1, 0, 0, 0);    // chuyển vị
+            case 6 -> new AffineTransform(0, 1, -1, 0, h, 0);   // xoay 90° phải
+            case 7 -> new AffineTransform(0, -1, -1, 0, h, w);  // chuyển vị ngược
+            default -> new AffineTransform(0, -1, 1, 0, 0, w);  // 8: xoay 90° trái
+        };
+        BufferedImage oriented = new BufferedImage(swap ? h : w, swap ? w : h, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = oriented.createGraphics();
+        try {
+            graphics.drawImage(image, transform, null);
+        } finally {
+            graphics.dispose();
+        }
+        return oriented;
     }
 
     private static byte[] stripWebpMetadata(byte[] content) {
@@ -131,7 +216,7 @@ public final class FileSanitizer {
                 int size = ByteBuffer.wrap(content, offset + 4, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
                 int paddedSize = size + (size & 1);
                 if (size < 0 || offset + 8L + paddedSize > content.length) {
-                    throw new IllegalArgumentException("WebP payload is corrupt");
+                    throw new IllegalArgumentException("Không đọc được ảnh WebP: tệp bị hỏng.");
                 }
                 if (!type.equals("EXIF") && !type.equals("XMP ")) {
                     byte[] chunk = Arrays.copyOfRange(content, offset, offset + 8 + paddedSize);

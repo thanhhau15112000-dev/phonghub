@@ -165,10 +165,27 @@
                 </div>
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label">Tệp ảnh (jpeg, png, webp)</label>
-                    <input type="file" name="file" class="form-control" accept="image/jpeg,image/png,image/webp" required>
+                    <input type="file" name="file" class="form-control" accept="image/jpeg,image/png,image/webp" required
+                           th:attr="data-max-bytes=${maxUploadBytes}">
+                    <div class="upload-too-large" hidden style="font-size: 12px; color: #b91c1c; margin-top: 4px;"></div>
                 </div>
                 <button type="submit" class="btn btn-sm btn-primary">Thêm ảnh</button>
             </form>
+            <script>
+                // Báo ngay khi chọn ảnh quá dung lượng, khỏi tải cả tệp lên rồi mới bị từ chối (#200)
+                document.querySelectorAll('input[type=file][data-max-bytes]').forEach(function (input) {
+                    var notice = input.parentElement.querySelector('.upload-too-large');
+                    var maxBytes = Number(input.dataset.maxBytes);
+                    input.addEventListener('change', function () {
+                        var file = input.files && input.files[0];
+                        var tooLarge = !!file && file.size > maxBytes;
+                        notice.textContent = tooLarge ? 'Ảnh vượt quá dung lượng cho phép (tối đa '
+                            + Math.max(1, Math.floor(maxBytes / 1048576)) + ' MB). Hãy chọn ảnh nhỏ hơn.' : '';
+                        notice.hidden = !tooLarge;
+                        input.setCustomValidity(notice.textContent);
+                    });
+                });
+            </script>
             <p style="font-size: 11px; color: var(--text-secondary);">Cần ít nhất một ảnh phòng, một ảnh đồng hồ điện và một ảnh đồng hồ nước trước khi gửi.</p>
         </div>
 

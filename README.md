@@ -432,7 +432,9 @@ docker build -t phonghub:local .
 - Tạo riêng hai khóa 32 byte bằng `openssl rand -base64 32`, rồi đặt `TENANT_DATA_ENCRYPTION_KEY` và `TENANT_DATA_HMAC_KEY`.
 - Đặt `TENANT_DATA_KEY_ID` (ví dụ `v1`). Không đổi hoặc xóa khóa đang dùng trước khi re-encrypt dữ liệu sang key id mới.
 - Migration `V14` mã hóa CCCD cũ bằng AES-256-GCM, tạo HMAC để kiểm tra trùng, rồi xóa cột plaintext. Thiếu key sẽ làm migration dừng an toàn.
-- Tệp vượt giới hạn trả `400`. Ảnh JPEG/PNG được mã hóa lại và WebP bị bỏ EXIF/XMP để xóa dữ liệu vị trí; PDF được lưu nguyên, không xóa metadata.
+- Tệp vượt giới hạn: API trả `400`, form giao diện quay lại trang trước kèm thông báo. Ảnh JPEG/PNG được mã hóa lại và WebP bị bỏ EXIF/XMP để xóa dữ liệu vị trí; PDF được lưu nguyên, không xóa metadata.
+- Kho lưu trữ lỗi (bucket sai, khóa sai, mất mạng) khi tải ảnh biên bản bàn giao: API trả `503`, giao diện báo lỗi tiếng Việt; không tạo bản ghi ảnh, lỗi gốc chỉ ghi log.
+- Profile `docker` (và `test`) dùng kho tệp trong bộ nhớ thay cho Supabase: ảnh biên bản bàn giao được trả thẳng qua endpoint kiểm tra quyền thay vì signed URL. Tệp mất khi khởi động lại ứng dụng nhưng bản ghi vẫn còn trong database, nên mở ảnh tải trước lần khởi động lại sẽ báo không mở được ảnh. Ảnh ở các chức năng khác (phiếu bảo trì, chỉ số điện nước, giấy tờ) vẫn trả URL `memory://` và không xem được trên trình duyệt ở profile này.
 - Endpoint: `POST /api/properties/{propertyId}/files`, `GET .../files/signed-url`, `DELETE .../files` (chi tiết trong `docs/api-spec.yaml`).
 
 ## Tài sản trong phòng
