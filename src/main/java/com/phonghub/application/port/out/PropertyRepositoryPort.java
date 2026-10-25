@@ -9,6 +9,8 @@ import java.util.UUID;
 public interface PropertyRepositoryPort {
     Property save(Property property);
     Optional<Property> findById(UUID id);
+    /** Locks the property row for the current transaction when the adapter supports it. */
+    default void lockById(UUID id) { }
     List<Property> findAll();
     List<Property> findAllById(Collection<UUID> ids);
     List<Property> findByOwnerId(UUID ownerId);

@@ -3,6 +3,7 @@ package com.phonghub.adapter.in.web;
 import com.phonghub.application.port.in.CheckOutSettlementUseCase;
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.HandoverUseCase;
+import com.phonghub.application.port.in.RoomSetupUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
@@ -48,6 +49,7 @@ public class HandoverUiController {
     private final TenantRepositoryPort tenantRepository;
     private final CurrentUserPort currentUserPort;
     private final CheckOutSettlementUseCase settlementUseCase;
+    private final RoomSetupUseCase roomSetupUseCase;
 
     public HandoverUiController(
         HandoverUseCase handoverUseCase,
@@ -55,7 +57,8 @@ public class HandoverUiController {
         PropertyUseCase propertyUseCase,
         TenantRepositoryPort tenantRepository,
         CurrentUserPort currentUserPort,
-        CheckOutSettlementUseCase settlementUseCase
+        CheckOutSettlementUseCase settlementUseCase,
+        RoomSetupUseCase roomSetupUseCase
     ) {
         this.handoverUseCase = handoverUseCase;
         this.contractUseCase = contractUseCase;
@@ -63,6 +66,7 @@ public class HandoverUiController {
         this.tenantRepository = tenantRepository;
         this.currentUserPort = currentUserPort;
         this.settlementUseCase = settlementUseCase;
+        this.roomSetupUseCase = roomSetupUseCase;
     }
 
     private static HandoverType typeOf(String kind) {
@@ -109,6 +113,8 @@ public class HandoverUiController {
             model.addAttribute("contract", contract);
             model.addAttribute("property", property);
             model.addAttribute("details", details);
+            model.addAttribute("conditionPrefill", canManage && type == HandoverType.CHECK_IN && details == null
+                ? roomSetupUseCase.latestCondition(contract.getRoomId()) : null);
             model.addAttribute("canManage", canManage);
             model.addAttribute("ownerOrAdmin", ownerOrAdmin);
             model.addAttribute("primaryTenant", primaryTenant);

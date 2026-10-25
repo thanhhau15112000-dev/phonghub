@@ -43,10 +43,22 @@ public interface RoomAssetUseCase {
         int quantity,
         String note,
         String imageUrl,
-        BigDecimal estimatedValue
-    ) {}
+        BigDecimal estimatedValue,
+        com.phonghub.domain.model.AssetStatus status
+    ) {
+        public CreateAssetCommand(UUID roomId, String assetCode, String name, String serialNumber, int quantity,
+                                 String note, String imageUrl, BigDecimal estimatedValue) {
+            this(roomId, assetCode, name, serialNumber, quantity, note, imageUrl, estimatedValue,
+                com.phonghub.domain.model.AssetStatus.GOOD);
+        }
+    }
 
-    record BatchItem(String name, int quantity, BigDecimal estimatedValue) {}
+    record BatchItem(String name, int quantity, BigDecimal estimatedValue,
+                     com.phonghub.domain.model.AssetStatus status, String note) {
+        public BatchItem(String name, int quantity, BigDecimal estimatedValue) {
+            this(name, quantity, estimatedValue, com.phonghub.domain.model.AssetStatus.GOOD, null);
+        }
+    }
 
     record CreateBatchCommand(UUID roomId, List<UUID> alsoRoomIds, List<BatchItem> items) {
         public static final int MAX_ITEMS = 30;

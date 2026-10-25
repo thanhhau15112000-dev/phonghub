@@ -30,10 +30,11 @@
             <label style="font-size: 13px;"><input type="checkbox" name="canManageContracts" value="true"> Quản lý hợp đồng</label>
             <label style="font-size: 13px;"><input type="checkbox" name="canCollectPayment" value="true"> Thu tiền</label>
             <label style="font-size: 13px;"><input type="checkbox" name="canViewDocuments" value="true"> Xem giấy tờ người thuê</label>
+            <label style="font-size: 13px;"><input type="checkbox" name="canManageRoomsAndAssets" value="true"> Quản lý phòng và tài sản</label>
             <button type="submit" class="btn btn-primary">Phân công</button>
         </form>
         <p style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
-            Các quyền hợp đồng, thu tiền và xem giấy tờ chỉ áp dụng cho nhân viên và mặc định tắt: nhân viên mới chỉ làm được các việc đó sau khi chủ trọ cấp quyền. Kỹ thuật viên không có các quyền này.
+            Các quyền hợp đồng, thu tiền, xem giấy tờ và quản lý phòng/tài sản chỉ áp dụng cho nhân viên và mặc định tắt. Kỹ thuật viên không có các quyền này.
         </p>
     </div>
 
@@ -56,6 +57,7 @@
                             <label style="font-size: 12px;"><input type="checkbox" name="canManageContracts" value="true" th:checked="${m.assignment().canManageContracts()}"> Hợp đồng</label>
                             <label style="font-size: 12px;"><input type="checkbox" name="canCollectPayment" value="true" th:checked="${m.assignment().canCollectPayment()}"> Thu tiền</label>
                             <label style="font-size: 12px;"><input type="checkbox" name="canViewDocuments" value="true" th:checked="${m.assignment().canViewDocuments()}"> Giấy tờ</label>
+                            <label style="font-size: 12px;"><input type="checkbox" name="canManageRoomsAndAssets" value="true" th:checked="${m.assignment().canManageRoomsAndAssets()}"> Phòng và tài sản</label>
                             <button type="submit" class="btn btn-sm btn-secondary">Lưu</button>
                         </form>
                         <span th:if="${m.user().role().name() != 'STAFF'}" style="color: var(--text-secondary); font-size: 12px;">Chỉ phiếu bảo trì được giao</span>

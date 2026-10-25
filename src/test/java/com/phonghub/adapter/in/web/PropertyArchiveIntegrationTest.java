@@ -109,7 +109,8 @@ class PropertyArchiveIntegrationTest extends SeededWebTest {
 
         mockMvc.perform(post("/api/properties/" + FREE + "/rooms").header("X-User-Id", OWNER_1)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"roomNumber\":\"X1\",\"floor\":1,\"basePrice\":3000000,\"maxOccupants\":2}"))
+                .content("{\"roomNumber\":\"X1\",\"floor\":1,\"basePrice\":3000000,\"maxOccupants\":2,"
+                    + "\"electricMeter\":0,\"waterMeter\":0,\"conditionNote\":\"Hiện trạng ban đầu\",\"noAssets\":true}"))
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.detail", containsString("đã bị ẩn")));
 

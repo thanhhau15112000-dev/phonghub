@@ -31,6 +31,7 @@ public class PostgresStaffPropertyAssignmentRepository implements StaffPropertyA
         rs.getBoolean("can_collect_payment"),
         rs.getBoolean("can_manage_contracts"),
         rs.getBoolean("can_view_documents"),
+        rs.getBoolean("can_manage_rooms_and_assets"),
         toInstant(rs.getTimestamp("assigned_at"))
     );
 
@@ -41,12 +42,13 @@ public class PostgresStaffPropertyAssignmentRepository implements StaffPropertyA
     @Override
     public StaffPropertyAssignment save(StaffPropertyAssignment assignment) {
         String sql = """
-            INSERT INTO staff_property_assignments (id, staff_user_id, property_id, can_collect_payment, can_manage_contracts, can_view_documents, assigned_at)
-            VALUES (:id, :staffUserId, :propertyId, :canCollectPayment, :canManageContracts, :canViewDocuments, :assignedAt)
+            INSERT INTO staff_property_assignments (id, staff_user_id, property_id, can_collect_payment, can_manage_contracts, can_view_documents, can_manage_rooms_and_assets, assigned_at)
+            VALUES (:id, :staffUserId, :propertyId, :canCollectPayment, :canManageContracts, :canViewDocuments, :canManageRoomsAndAssets, :assignedAt)
             ON CONFLICT (staff_user_id, property_id) DO UPDATE SET
                 can_collect_payment = EXCLUDED.can_collect_payment,
                 can_manage_contracts = EXCLUDED.can_manage_contracts,
-                can_view_documents = EXCLUDED.can_view_documents
+                can_view_documents = EXCLUDED.can_view_documents,
+                can_manage_rooms_and_assets = EXCLUDED.can_manage_rooms_and_assets
             """;
 
         MapSqlParameterSource params = new MapSqlParameterSource()
@@ -56,6 +58,7 @@ public class PostgresStaffPropertyAssignmentRepository implements StaffPropertyA
             .addValue("canCollectPayment", assignment.canCollectPayment())
             .addValue("canManageContracts", assignment.canManageContracts())
             .addValue("canViewDocuments", assignment.canViewDocuments())
+            .addValue("canManageRoomsAndAssets", assignment.canManageRoomsAndAssets())
             .addValue("assignedAt", Timestamp.from(assignment.assignedAt()));
 
         jdbcTemplate.update(sql, params);

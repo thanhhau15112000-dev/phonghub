@@ -80,11 +80,11 @@ public class RoomAssetService implements RoomAssetUseCase {
     public RoomAsset create(CreateAssetCommand command) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Room room = findRoom(command.roomId());
-        authorizationService.assertCanManageProperty(user, room.getPropertyId());
+        authorizationService.assertCanManageRoomsAndAssets(user, room.getPropertyId());
 
         String code = resolveAssetCode(command.assetCode());
         RoomAsset asset = newAsset(room.getId(), code, command.name(), command.serialNumber(),
-            command.quantity(), command.note(), command.imageUrl(), command.estimatedValue(), user);
+            command.quantity(), command.note(), command.imageUrl(), command.estimatedValue(), command.status(), user);
         RoomAsset saved = assetRepository.save(asset);
         audit("ROOM_ASSET_CREATED", user, saved, Map.of("assetCode", saved.assetCode(), "name", saved.name()));
         return saved;
@@ -94,7 +94,7 @@ public class RoomAssetService implements RoomAssetUseCase {
     public List<RoomAsset> createFromTemplate(UUID roomId, String template) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Room room = findRoom(roomId);
-        authorizationService.assertCanManageProperty(user, room.getPropertyId());
+        authorizationService.assertCanManageRoomsAndAssets(user, room.getPropertyId());
 
         List<TemplateItem> items = TEMPLATES.get(template == null ? "" : template.trim().toUpperCase(Locale.ROOT));
         if (items == null) {
@@ -103,7 +103,7 @@ public class RoomAssetService implements RoomAssetUseCase {
         List<RoomAsset> assets = new ArrayList<>();
         for (TemplateItem item : items) {
             assets.add(newAsset(room.getId(), generateAssetCode(), item.name(), null, item.quantity(),
-                null, null, null, user));
+                null, null, null, AssetStatus.GOOD, user));
         }
         List<RoomAsset> saved = assets.stream().map(assetRepository::save).toList();
         audit("ROOM_ASSET_TEMPLATE_APPLIED", user, saved.getFirst(),
@@ -115,7 +115,7 @@ public class RoomAssetService implements RoomAssetUseCase {
     public List<RoomAsset> createBatch(CreateBatchCommand command) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Room primary = findRoom(command.roomId());
-        authorizationService.assertCanManageProperty(user, primary.getPropertyId());
+        authorizationService.assertCanManageRoomsAndAssets(user, primary.getPropertyId());
 
         java.util.LinkedHashSet<UUID> roomIds = new java.util.LinkedHashSet<>();
         roomIds.add(primary.getId());
@@ -138,8 +138,8 @@ public class RoomAssetService implements RoomAssetUseCase {
                 do {
                     code = generateAssetCode();
                 } while (!codes.add(code));
-                assets.add(newAsset(room.getId(), code, item.name(), null, item.quantity(), null, null,
-                    item.estimatedValue(), user));
+                assets.add(newAsset(room.getId(), code, item.name(), null, item.quantity(), item.note(), null,
+                    item.estimatedValue(), item.status(), user));
             }
         }
         List<RoomAsset> saved = assets.stream().map(assetRepository::save).toList();
@@ -156,7 +156,7 @@ public class RoomAssetService implements RoomAssetUseCase {
     public RoomAsset update(UpdateAssetCommand command) {
         CurrentUser user = currentUserPort.getCurrentUser();
         RoomAsset asset = findActiveAsset(command.assetId());
-        authorizationService.assertCanManageProperty(user, propertyOf(asset));
+        authorizationService.assertCanManageRoomsAndAssets(user, propertyOf(asset));
 
         RoomAsset updated = asset.update(command.name(), command.serialNumber(), command.quantity(),
             command.note(), command.imageUrl(), command.estimatedValue(), user.id());
@@ -169,7 +169,7 @@ public class RoomAssetService implements RoomAssetUseCase {
     public void delete(UUID assetId) {
         CurrentUser user = currentUserPort.getCurrentUser();
         RoomAsset asset = findActiveAsset(assetId);
-        authorizationService.assertCanManageProperty(user, propertyOf(asset));
+        authorizationService.assertCanManageRoomsAndAssets(user, propertyOf(asset));
 
         RoomAsset deleted = assetRepository.save(asset.softDelete(user.id()));
         audit("ROOM_ASSET_DELETED", user, deleted, Map.of("assetCode", deleted.assetCode()));
@@ -195,7 +195,7 @@ public class RoomAssetService implements RoomAssetUseCase {
     public RoomAssetEvent recordEvent(RecordEventCommand command) {
         CurrentUser user = currentUserPort.getCurrentUser();
         RoomAsset asset = findActiveAsset(command.assetId());
-        authorizationService.assertCanManageProperty(user, propertyOf(asset));
+        authorizationService.assertCanManageRoomsAndAssets(user, propertyOf(asset));
         assertTicketBelongsToAssetRoom(command.maintenanceTicketId(), asset);
 
         RoomAssetEvent event = new RoomAssetEvent(UUID.randomUUID(), asset.id(), command.type(),
@@ -276,10 +276,11 @@ public class RoomAssetService implements RoomAssetUseCase {
 
     private RoomAsset newAsset(
         UUID roomId, String code, String name, String serial, int quantity,
-        String note, String imageUrl, java.math.BigDecimal value, CurrentUser user
+        String note, String imageUrl, java.math.BigDecimal value, AssetStatus status, CurrentUser user
     ) {
         Instant now = Instant.now();
-        return new RoomAsset(UUID.randomUUID(), roomId, code, name, serial, quantity, AssetStatus.GOOD,
+        return new RoomAsset(UUID.randomUUID(), roomId, code, name, serial, quantity,
+            status == null ? AssetStatus.GOOD : status,
             note, imageUrl, value, null, now, user.id(), now, user.id());
     }
 

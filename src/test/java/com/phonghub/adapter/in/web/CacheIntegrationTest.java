@@ -85,7 +85,8 @@ class CacheIntegrationTest extends SeededWebTest {
         int before = JsonPath.<java.util.List<?>>read(mockMvc.perform(get(ROOMS).header("X-User-Id", OWNER_1))
             .andReturn().getResponse().getContentAsString(), "$").size();
         mockMvc.perform(post(ROOMS).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"roomNumber\":\"P999\",\"floor\":9,\"areaSqm\":20,\"basePrice\":3000000,\"maxOccupants\":2}"))
+                .content("{\"roomNumber\":\"P999\",\"floor\":9,\"areaSqm\":20,\"basePrice\":3000000,\"maxOccupants\":2,"
+                    + "\"electricMeter\":0,\"waterMeter\":0,\"conditionNote\":\"Hiện trạng ban đầu\",\"noAssets\":true}"))
             .andExpect(status().isCreated());
         mockMvc.perform(get(ROOMS).header("X-User-Id", OWNER_1))
             .andExpect(jsonPath("$.length()").value(before + 1));
