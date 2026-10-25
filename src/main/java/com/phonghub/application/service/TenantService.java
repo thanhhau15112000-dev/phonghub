@@ -5,13 +5,18 @@ import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.application.port.out.UserRepositoryPort;
+import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateIdentityCardException;
 import com.phonghub.domain.exception.TenantHasActiveContractException;
 import com.phonghub.domain.exception.TenantNotFoundException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
 import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.User;
+import com.phonghub.domain.model.UserRole;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -31,6 +36,8 @@ public class TenantService implements TenantUseCase {
     private final AuditPort auditPort;
     private final ContractRepositoryPort contractRepository;
     private final TenantLockPolicy lockPolicy;
+    private final UserRepositoryPort userRepository;
+    private final TenantAccountLinker accountLinker;
 
     public TenantService(
         TenantRepositoryPort tenantRepository,
@@ -59,12 +66,41 @@ public class TenantService implements TenantUseCase {
         ContractRepositoryPort contractRepository,
         TenantLockPolicy lockPolicy
     ) {
+        this(tenantRepository, currentUserPort, authorizationService, auditPort, contractRepository, lockPolicy, null);
+    }
+
+    public TenantService(
+        TenantRepositoryPort tenantRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        ContractRepositoryPort contractRepository,
+        TenantLockPolicy lockPolicy,
+        UserRepositoryPort userRepository
+    ) {
+        this(tenantRepository, currentUserPort, authorizationService, auditPort, contractRepository, lockPolicy,
+            userRepository, null);
+    }
+
+    public TenantService(
+        TenantRepositoryPort tenantRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        ContractRepositoryPort contractRepository,
+        TenantLockPolicy lockPolicy,
+        UserRepositoryPort userRepository,
+        IdentityProviderPort identityProviderPort
+    ) {
         this.lockPolicy = lockPolicy;
         this.contractRepository = contractRepository;
         this.tenantRepository = tenantRepository;
+        this.userRepository = userRepository;
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
         this.auditPort = auditPort != null ? auditPort : event -> {};
+        this.accountLinker = userRepository == null ? null
+            : new TenantAccountLinker(tenantRepository, userRepository, identityProviderPort, this.auditPort);
     }
 
     /** Chỉ ghi tên các trường thay đổi, không ghi giá trị cá nhân vào nhật ký audit. */
@@ -163,6 +199,19 @@ public class TenantService implements TenantUseCase {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         authorizationService.assertCanManageProperty(currentUser, command.propertyId());
 
+        if (command.tenantProfileId() != null) {
+            Tenant tenant = tenantRepository.findById(command.tenantProfileId())
+                .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy hồ sơ người thuê đã chọn."));
+            authorizationService.assertCanAccessTenant(currentUser, tenant.id());
+            if (command.tenantUserId() != null) {
+                tenant = linkTenantUser(tenant, command.tenantUserId());
+            }
+            tenantRepository.linkToProperty(tenant.id(), command.propertyId(), currentUser.id());
+            audit("TENANT_LINKED_TO_PROPERTY", currentUser, tenant, command.propertyId(), Map.of(
+                "propertyId", command.propertyId().toString(), "tenantId", tenant.id().toString()));
+            return getPropertyTenant(command.propertyId(), tenant.id());
+        }
+
         String idCard = command.identityCardNumber().trim();
         Optional<Tenant> existing = tenantRepository.findByIdentityCardNumber(idCard);
         if (existing.isPresent()) {
@@ -174,12 +223,19 @@ public class TenantService implements TenantUseCase {
                 : "Số CCCD đã được sử dụng bởi một người thuê khác.");
         }
 
+        UUID userId = command.tenantUserId();
+        User linkedUser = userId == null ? null : findTenantUser(userId);
+        if (linkedUser != null && tenantRepository.findByUserId(linkedUser.id()).isPresent()) {
+            throw new IllegalArgumentException("Tài khoản này đã được liên kết với hồ sơ người thuê khác.");
+        }
+
         Tenant tenant = tenantRepository.save(Tenant.create(
-            null,
+            linkedUser == null ? null : linkedUser.id(),
             command.fullName().trim(),
             idCard,
             command.phone().trim(),
-            command.email() == null || command.email().isBlank() ? null : command.email().trim(),
+            linkedUser != null ? linkedUser.email()
+                : command.email() == null || command.email().isBlank() ? null : command.email().trim(),
             command.permanentAddress() == null || command.permanentAddress().isBlank()
                 ? null : command.permanentAddress().trim()
         ));
@@ -187,6 +243,78 @@ public class TenantService implements TenantUseCase {
         audit("TENANT_CREATED", currentUser, tenant, command.propertyId(), Map.of(
             "propertyId", command.propertyId().toString(), "identityCardNumber", tenant.maskedIdentityCardNumber()));
         return new PropertyTenantView(tenant, false, false);
+    }
+
+    @Override
+    public Tenant linkAccountByEmail(UUID tenantId, String email) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+            .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy người thuê."));
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        authorizationService.assertCanUpdateTenant(currentUser, tenantId);
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Cần nhập email tài khoản người thuê.");
+        }
+        if (userRepository == null) {
+            throw new IllegalStateException("Chưa cấu hình truy cập tài khoản người dùng.");
+        }
+        String normalizedEmail = email.trim().toLowerCase();
+        User user = userRepository.findByEmail(normalizedEmail)
+            .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy tài khoản theo email này."));
+        Tenant saved = linkTenantUser(tenant, user.id());
+        audit("TENANT_ACCOUNT_LINKED", currentUser, saved, null, Map.of("userId", user.id().toString()));
+        return saved;
+    }
+
+    @Override
+    public AccountProvisioning provisionAccount(UUID tenantId, String email) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+            .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy người thuê."));
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        authorizationService.assertCanUpdateTenant(currentUser, tenantId);
+        if (tenant.userId() != null) {
+            throw new IllegalArgumentException("Hồ sơ này đã có tài khoản đăng nhập.");
+        }
+        if (accountLinker == null) {
+            throw new DomainException("Chưa cấu hình tạo tài khoản người thuê.");
+        }
+        TenantAccountLinker.Result result = accountLinker.linkOrCreate(currentUser, tenant, email, "TENANT_ACCOUNT_CREATED");
+        try {
+            audit("TENANT_ACCOUNT_LINKED", currentUser, result.tenant(), null,
+                Map.of("userId", result.tenant().userId().toString()));
+        } catch (RuntimeException ex) {
+            accountLinker.deleteCreatedIdentityUser(result, ex);
+            throw ex;
+        }
+        return new AccountProvisioning(result.tenant(), result.username(), result.temporaryPassword());
+    }
+
+    private User findTenantUser(UUID userId) {
+        if (userRepository == null) {
+            throw new IllegalStateException("Chưa cấu hình truy cập tài khoản người dùng.");
+        }
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy tài khoản người thuê đã chọn."));
+        if (user.role() != UserRole.TENANT || user.status() != User.UserStatus.ACTIVE) {
+            throw new IllegalArgumentException("Chỉ được liên kết tài khoản TENANT đang hoạt động.");
+        }
+        return user;
+    }
+
+    private Tenant linkTenantUser(Tenant tenant, UUID userId) {
+        User user = findTenantUser(userId);
+        if (tenant.userId() != null && !tenant.userId().equals(user.id())) {
+            throw new IllegalArgumentException("Hồ sơ này đã liên kết với tài khoản khác.");
+        }
+        Optional<Tenant> linkedProfile = tenantRepository.findByUserId(user.id());
+        if (linkedProfile.isPresent() && !linkedProfile.get().id().equals(tenant.id())) {
+            throw new IllegalArgumentException("Tài khoản này đã được liên kết với hồ sơ người thuê khác.");
+        }
+        if (user.id().equals(tenant.userId()) && user.email().equalsIgnoreCase(tenant.email())) {
+            return tenant;
+        }
+        Tenant linked = new Tenant(tenant.id(), user.id(), tenant.fullName(), tenant.identityCardNumber(),
+            tenant.phone(), user.email(), tenant.permanentAddress(), tenant.createdAt());
+        return tenantRepository.save(linked);
     }
 
     @Override

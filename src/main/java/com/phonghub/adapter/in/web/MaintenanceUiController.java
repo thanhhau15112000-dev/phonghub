@@ -2,6 +2,7 @@ package com.phonghub.adapter.in.web;
 
 import com.phonghub.application.port.in.InvoiceUseCase;
 import com.phonghub.application.port.in.MaintenanceAttachmentUseCase;
+import com.phonghub.application.port.in.MaintenanceSubmissionUseCase;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
@@ -53,6 +54,7 @@ public class MaintenanceUiController {
     private final StaffPropertyAssignmentPort assignmentPort;
     private final MaintenanceAttachmentUseCase attachmentUseCase;
     private final MaintenanceAssignmentTimeoutPolicy timeoutPolicy;
+    private final MaintenanceSubmissionUseCase submissionUseCase;
 
     public MaintenanceUiController(
         MaintenanceUseCase maintenanceUseCase,
@@ -63,10 +65,12 @@ public class MaintenanceUiController {
         UserRepositoryPort userRepository,
         StaffPropertyAssignmentPort assignmentPort,
         MaintenanceAttachmentUseCase attachmentUseCase,
-        MaintenanceAssignmentTimeoutPolicy timeoutPolicy
+        MaintenanceAssignmentTimeoutPolicy timeoutPolicy,
+        MaintenanceSubmissionUseCase submissionUseCase
     ) {
         this.timeoutPolicy = timeoutPolicy;
         this.attachmentUseCase = attachmentUseCase;
+        this.submissionUseCase = submissionUseCase;
         this.assignmentPort = assignmentPort;
         this.invoiceUseCase = invoiceUseCase;
         this.userRepository = userRepository;
@@ -194,6 +198,7 @@ public class MaintenanceUiController {
         @RequestParam(name = "setRoomMaintenance", defaultValue = "false") boolean setRoomMaintenance,
         @RequestParam(required = false) MaintenanceCause cause,
         @RequestParam(required = false) String causeDetail,
+        @RequestParam(name = "files", required = false) List<MultipartFile> files,
         RedirectAttributes redirectAttributes
     ) {
         if (cause == null && currentUserPort.getCurrentUser().role() == UserRole.TENANT) {
@@ -204,12 +209,13 @@ public class MaintenanceUiController {
             ? "[" + causeDetail.trim() + "] " + description
             : description;
         try {
-            MaintenanceTicket ticket = maintenanceUseCase.createTicket(new MaintenanceUseCase.CreateMaintenanceTicketCommand(
-                roomId, title, fullDescription, priority, setRoomMaintenance, cause
-            ));
+            MaintenanceTicket ticket = submissionUseCase.createTicketWithAttachments(
+                new MaintenanceUseCase.CreateMaintenanceTicketCommand(
+                    roomId, title, fullDescription, priority, setRoomMaintenance, cause),
+                toAttachmentFiles(files));
             redirectAttributes.addFlashAttribute("successMessage", "Đã tạo yêu cầu bảo trì '" + ticket.getTitle() + "'.");
             return "redirect:/maintenance/" + ticket.getId();
-        } catch (DomainException | IllegalArgumentException ex) {
+        } catch (DomainException | IllegalArgumentException | java.io.IOException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
                 ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
                 : ex.getMessage());
@@ -303,11 +309,17 @@ public class MaintenanceUiController {
     @PostMapping("/{id}/attachments")
     public String uploadAttachment(
         @PathVariable UUID id,
-        @RequestParam("file") MultipartFile file,
+        @RequestParam(name = "file", required = false) MultipartFile file,
+        @RequestParam(name = "files", required = false) List<MultipartFile> files,
         RedirectAttributes redirectAttributes
     ) {
         try {
-            attachmentUseCase.upload(id, file.getContentType(), file.getBytes());
+            List<MultipartFile> uploads = files == null ? new ArrayList<>() : new ArrayList<>(files);
+            if (file != null && !file.isEmpty()) uploads.add(file);
+            if (uploads.stream().noneMatch(upload -> upload != null && !upload.isEmpty())) {
+                throw new IllegalArgumentException("Cần chọn ít nhất một tệp để tải lên.");
+            }
+            attachmentUseCase.uploadAll(id, toAttachmentFiles(uploads));
             redirectAttributes.addFlashAttribute("successMessage", "Đã đính kèm tệp.");
         } catch (DomainException | IllegalArgumentException | java.io.IOException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
@@ -315,6 +327,18 @@ public class MaintenanceUiController {
                 : ex.getMessage());
         }
         return "redirect:/maintenance/" + id;
+    }
+
+    private static List<MaintenanceAttachmentUseCase.AttachmentFile> toAttachmentFiles(List<MultipartFile> files)
+        throws java.io.IOException {
+        List<MaintenanceAttachmentUseCase.AttachmentFile> result = new ArrayList<>();
+        if (files == null) return result;
+        for (MultipartFile file : files) {
+            if (file != null && !file.isEmpty()) {
+                result.add(new MaintenanceAttachmentUseCase.AttachmentFile(file.getContentType(), file.getBytes()));
+            }
+        }
+        return result;
     }
 
     @GetMapping("/{id}/attachments/{attachmentId}")
