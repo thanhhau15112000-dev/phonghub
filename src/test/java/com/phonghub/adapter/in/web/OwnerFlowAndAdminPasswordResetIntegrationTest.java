@@ -87,6 +87,15 @@ class OwnerFlowAndAdminPasswordResetIntegrationTest {
         );
     }
 
+    private UUID createTenantWithProfile(String fullName, String identityCardNumber, String phone, String email) {
+        UUID userId = UUID.randomUUID();
+        String suffix = identityCardNumber.substring(identityCardNumber.length() - 4);
+        User user = userRepository.save(new User(userId, "tenant-" + suffix, email, fullName, phone,
+            UserRole.TENANT, User.UserStatus.ACTIVE, true, Instant.now()));
+        Tenant tenant = tenantRepository.save(Tenant.create(user.id(), fullName, identityCardNumber, phone, email, null));
+        return tenant.id();
+    }
+
     @Test
     @DisplayName("Owner can access new contract form, but Tenant is blocked with redirect")
     void testOwnerCanAccessNewContractFormAndTenantIsBlocked() throws Exception {
@@ -119,6 +128,9 @@ class OwnerFlowAndAdminPasswordResetIntegrationTest {
             true,
             Instant.now()
         ));
+        Tenant availableTenantProfile = tenantRepository.save(Tenant.create(
+            availableTenant.id(), availableTenant.fullName(), "079000000991", availableTenant.phone(),
+            availableTenant.email(), null));
 
         User tenantLinkedElsewhere = userRepository.save(new User(
             UUID.randomUUID(),
@@ -147,7 +159,8 @@ class OwnerFlowAndAdminPasswordResetIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Available Tenant Account")))
-            .andExpect(content().string(containsString("available.tenant@example.test")))
+            .andExpect(content().string(containsString("****0991")))
+            .andExpect(content().string(not(containsString("available.tenant@example.test"))))
             .andExpect(content().string(not(containsString("Tenant Linked Elsewhere"))))
             .andExpect(content().string(not(containsString("linked.elsewhere@example.test"))));
 
@@ -155,11 +168,7 @@ class OwnerFlowAndAdminPasswordResetIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
                 .param("propertyId", DataSeeder.PROP_1_ID.toString())
                 .param("roomId", DataSeeder.ROOM_104_ID.toString())
-                .param("primaryTenantUserId", availableTenant.id().toString())
-                .param("primaryTenantFullName", availableTenant.fullName())
-                .param("primaryTenantIdCard", "079000000991")
-                .param("primaryTenantPhone", availableTenant.phone())
-                .param("primaryTenantEmail", availableTenant.email())
+                .param("primaryTenantId", availableTenantProfile.id().toString())
                 .param("depositAmount", "4000000")
                 .param("rentAmount", "4000000")
                 .param("startDate", LocalDate.now().toString())
@@ -217,10 +226,8 @@ class OwnerFlowAndAdminPasswordResetIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
                 .param("propertyId", DataSeeder.PROP_1_ID.toString())
                 .param("roomId", DataSeeder.ROOM_104_ID.toString())
-                .param("primaryTenantFullName", "Lê Văn Test")
-                .param("primaryTenantIdCard", "079201009999")
-                .param("primaryTenantPhone", "0909999888")
-                .param("primaryTenantEmail", "levantest@example.com")
+                .param("primaryTenantId", createTenantWithProfile("Lê Văn Test", "079201009999", "0909999888",
+                    "levantest@example.com").toString())
                 .param("depositAmount", "4000000")
                 .param("rentAmount", "4000000")
                 .param("startDate", LocalDate.now().toString())

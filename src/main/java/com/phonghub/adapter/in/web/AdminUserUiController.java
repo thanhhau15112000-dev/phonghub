@@ -144,6 +144,7 @@ public class AdminUserUiController {
 
         model.addAttribute("currentUser", currentUser);
         model.addAttribute("users", pagedUsers);
+        model.addAttribute("tenantAccountsMissingProfiles", authUseCase.listTenantAccountsMissingProfiles());
         model.addAttribute("totalCount", matchedUsers.size());
         model.addAttribute("filteredCount", totalItems);
         model.addAttribute("selectedRole", selectedRole);
@@ -157,6 +158,26 @@ public class AdminUserUiController {
         return "admin/users";
     }
 
+    @PostMapping("/{userId}/tenant-profile")
+    public String attachTenantProfile(
+        @PathVariable UUID userId,
+        @RequestParam String identityCardNumber,
+        @RequestParam String phone,
+        RedirectAttributes redirectAttributes
+    ) {
+        if (!isAdmin(currentUserPort.getCurrentUser())) {
+            redirectAttributes.addFlashAttribute("tableErrorMessage", "Chỉ quản trị viên mới có thể bổ sung hồ sơ người thuê.");
+            return "redirect:/";
+        }
+        try {
+            authUseCase.adminAttachTenantProfile(userId, identityCardNumber, phone);
+            redirectAttributes.addFlashAttribute("tableSuccessMessage", "Đã gắn hồ sơ CCCD với tài khoản người thuê.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("tableErrorMessage", userFacingMessage(ex));
+        }
+        return "redirect:/admin/users";
+    }
+
     @PostMapping
     public String createUser(
         @RequestParam String username,
@@ -164,6 +185,7 @@ public class AdminUserUiController {
         @RequestParam String fullName,
         @RequestParam(required = false) String phone,
         @RequestParam UserRole role,
+        @RequestParam(required = false) String identityCardNumber,
         RedirectAttributes redirectAttributes
     ) {
         if (!isAdmin(currentUserPort.getCurrentUser())) {
@@ -177,7 +199,7 @@ public class AdminUserUiController {
 
         try {
             AuthUseCase.AdminCreateUserResult created = authUseCase.adminCreateUser(
-                new AuthUseCase.CreateUserCommand(username, email, fullName, phone, role)
+                new AuthUseCase.CreateUserCommand(username, email, fullName, phone, role, identityCardNumber)
             );
             redirectAttributes.addFlashAttribute("createdUser", created);
             return "redirect:/admin/users";

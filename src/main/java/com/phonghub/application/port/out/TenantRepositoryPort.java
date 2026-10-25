@@ -19,6 +19,9 @@ public interface TenantRepositoryPort {
     Optional<Tenant> findByIdentityCardNumber(String idCard);
     List<Tenant> findAll();
 
+    /** Account-backed profiles without any direct property assignment, used for admin-created unassigned tenants. */
+    List<Tenant> findAccountProfilesWithoutPropertyLinks();
+
     /** Gắn tenant với nhà trọ (idempotent); không thay đổi trạng thái ẩn nếu đã có. */
     void linkToProperty(UUID tenantId, UUID propertyId, UUID actorId);
 

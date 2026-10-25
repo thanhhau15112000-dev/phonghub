@@ -12,7 +12,7 @@ public record Tenant(
     String email,
     String permanentAddress,
     Instant createdAt
-) {
+) implements java.io.Serializable {
     public Tenant {
         if (id == null) {
             throw new IllegalArgumentException("Tenant id cannot be null");

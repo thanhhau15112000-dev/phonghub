@@ -146,7 +146,7 @@
 
             <div class="flex-between" style="margin-top: 20px; margin-bottom: 8px;">
                 <h3 style="font-size: 14px; font-weight: 600; margin: 0;">Người ở cùng phòng</h3>
-                <button th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                <button th:if="${canManageOccupants}"
                         type="button"
                         id="addOccupantBtn"
                         class="btn btn-sm btn-primary"
@@ -326,8 +326,8 @@
         </table>
     </div>
 
-    <!-- Dialog thêm người ở vào phòng (Chủ nhà hoặc Quản trị viên) -->
-    <dialog th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+    <!-- Dialog thêm người ở vào phòng (chủ trọ, quản trị viên hoặc nhân viên có quyền quản lý hợp đồng) -->
+    <dialog th:if="${canManageOccupants}"
             id="addOccupantModal"
             class="modal-dialog"
             style="max-width: 760px;">
@@ -352,7 +352,7 @@
         <section style="margin-bottom: 16px;">
             <h4 style="margin: 0 0 4px; font-size: 14px;">Thêm nhanh từ hồ sơ trong nhà trọ</h4>
             <p style="margin: 0 0 10px; color: var(--text-secondary); font-size: 12px;">
-                Tìm và chọn nhiều người thuê chưa có hợp đồng cư trú, rồi xác nhận một lần.
+                Tìm và chọn nhiều người thuê đã có tài khoản, chưa có hợp đồng cư trú, rồi xác nhận một lần.
             </p>
             <div th:if="${remainingOccupantSlots <= 0}" class="empty-state" style="padding: 12px;">
                 Phòng đã đủ sức chứa. Trả phòng cho một người trước khi thêm người khác.
@@ -363,7 +363,7 @@
                   id="bulkOccupantForm">
                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                 <div class="form-group" style="margin-bottom: 10px;">
-                    <label class="form-label" for="occupantSearch">Tìm theo tên, số điện thoại hoặc email</label>
+                    <label class="form-label" for="occupantSearch">Tìm theo tên, CCCD hoặc số điện thoại</label>
                     <input type="search" id="occupantSearch" class="form-control" placeholder="Bắt đầu nhập để lọc danh sách">
                 </div>
                 <div style="display: flex; justify-content: flex-end; margin: -2px 0 8px;">
@@ -377,14 +377,13 @@
                      style="max-height: 230px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px;">
                     <label th:each="tenant : ${availableOccupants}"
                            class="bulk-occupant-option"
-                           th:attr="data-search=${tenant.fullName() + ' ' + tenant.phone() + ' ' + (tenant.email() != null ? tenant.email() : '')}"
+                           th:attr="data-search=${tenant.fullName() + ' ' + tenant.maskedIdentityCardNumber() + ' ' + (tenant.phone() == null ? '' : '****' + #strings.substring(tenant.phone(), 6))}"
                            style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--border-color); cursor: pointer;">
                         <input type="checkbox" name="tenantIds" th:value="${tenant.id()}" style="margin-top: 3px;">
                         <span style="min-width: 0;">
                             <strong th:text="${tenant.fullName()}">Nguyễn Văn A</strong>
                             <span style="display: block; color: var(--text-secondary); font-size: 12px;">
-                                <span th:text="${tenant.phone()}">0900000000</span>
-                                <span th:if="${tenant.email() != null}" th:text="${' · ' + tenant.email()}"> · tenant@example.com</span>
+                                <span th:text="${tenant.phone() == null ? '—' : '****' + #strings.substring(tenant.phone(), 6)}">****0000</span>
                                 <span th:text="${' · CCCD ' + tenant.maskedIdentityCardNumber()}"> · CCCD ****1234</span>
                             </span>
                         </span>
@@ -423,8 +422,8 @@
 
             <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
                 <div class="form-group" style="margin: 0;">
-                    <label class="form-label" for="addOccupantEmail">Email</label>
-                    <input type="email" id="addOccupantEmail" name="email" class="form-control" placeholder="tenant@gmail.com">
+                <label class="form-label" for="addOccupantEmail">Email đăng nhập <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                    <input type="email" id="addOccupantEmail" name="email" class="form-control" required placeholder="tenant@gmail.com">
                 </div>
                 <div class="form-group" style="margin: 0;">
                     <label class="form-label" for="addOccupantCheckInDate">Ngày nhận phòng</label>
@@ -437,15 +436,7 @@
                 <input type="text" id="addOccupantAddress" name="permanentAddress" class="form-control" placeholder="Xã/Phường, Huyện/Quận, Tỉnh/TP">
             </div>
 
-            <div class="form-group" style="margin-bottom: 16px; padding: 10px 12px; background: var(--bg-hover, #f8fafc); border-radius: 6px; border: 1px solid var(--border-color);">
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; cursor: pointer; margin: 0;">
-                    <input type="checkbox" id="addOccupantCreateAccount" name="createAccount" value="true">
-                    <span>Cấp tài khoản đăng nhập cho người thuê</span>
-                </label>
-                <p style="color: var(--text-secondary); font-size: 11px; margin: 4px 0 0 24px;">
-                    Hệ thống sẽ tạo tài khoản vai trò Người thuê (TENANT) và liên kết hồ sơ khi nhập email hợp lệ.
-                </p>
-            </div>
+            <p style="margin: 0 0 14px; color: var(--text-secondary); font-size: 12px;">Hệ thống sẽ tạo hoặc liên kết tài khoản Người thuê (TENANT). Nếu tạo mới, mật khẩu tạm chỉ hiển thị một lần.</p>
 
             <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-color);">
                 <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('addOccupantModal').close()">Hủy</button>

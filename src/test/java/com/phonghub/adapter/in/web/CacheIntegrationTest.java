@@ -53,6 +53,16 @@ class CacheIntegrationTest extends SeededWebTest {
         return JsonPath.read(body, "$.occupancy.occupied");
     }
 
+    private String createAvailableTenant() throws Exception {
+        String suffix = String.format("%08d", java.util.concurrent.ThreadLocalRandom.current().nextInt(100_000_000));
+        String body = "{\"fullName\":\"Lê Mới\",\"identityCardNumber\":\"0792" + suffix
+            + "\",\"phone\":\"0901112223\",\"email\":\"cache-" + suffix + "@example.test\"}";
+        String response = mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_1_ID + "/tenants")
+                .header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        return JsonPath.read(response, "$.id");
+    }
+
     @Test
     @DisplayName("Hai chủ trọ không dùng chung cache; người không có quyền vẫn 403 sau khi người khác đã cache")
     void ownersNeverShareEntries() throws Exception {
@@ -94,6 +104,7 @@ class CacheIntegrationTest extends SeededWebTest {
     @Test
     @DisplayName("Kích hoạt hợp đồng (ghi trong transaction ở service khác) làm mới danh sách phòng và dashboard owner")
     void committedTransactionEvicts() throws Exception {
+        String tenantId = createAvailableTenant();
         assertEquals("AVAILABLE", roomStatus(OWNER_1, "P104"));
         int occupiedBefore = occupied(OWNER_1);
         assertEquals("AVAILABLE", roomStatus(OWNER_1, "P104"), "đọc lại từ cache");
@@ -103,11 +114,10 @@ class CacheIntegrationTest extends SeededWebTest {
         String created = mockMvc.perform(post("/api/contracts").header("X-User-Id", OWNER_1)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                    {"propertyId": "%s", "roomId": "%s", "primaryTenantFullName": "Lê Mới",
-                     "primaryTenantIdCard": "079201009999", "primaryTenantPhone": "0901112223",
+                    {"propertyId": "%s", "roomId": "%s", "primaryTenantId": "%s",
                      "depositAmount": 1000000, "rentAmount": 4000000, "startDate": "%s", "endDate": "%s",
                      "paymentDay": 5}
-                    """.formatted(DataSeeder.PROP_1_ID, DataSeeder.ROOM_104_ID, LocalDate.now(),
+                    """.formatted(DataSeeder.PROP_1_ID, DataSeeder.ROOM_104_ID, tenantId, LocalDate.now(),
                     LocalDate.now().plusMonths(6))))
             .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         mockMvc.perform(post("/api/contracts/" + JsonPath.read(created, "$.id") + "/activate")

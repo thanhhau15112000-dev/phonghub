@@ -38,8 +38,9 @@
                        th:value="${tenant != null} ? ${tenant.phone()}" placeholder="0901234567">
             </div>
             <div class="form-group">
-                <label class="form-label" for="email">Email</label>
-                <input type="email" id="email" name="email" class="form-control" th:value="${tenant != null} ? ${tenant.email()}">
+                <label class="form-label" for="email">Email <span th:if="${tenant == null}">*</span></label>
+                <input type="email" id="email" name="email" class="form-control" th:required="${tenant == null}"
+                       th:value="${tenant != null} ? ${tenant.email()}" placeholder="Email dùng để đăng nhập">
             </div>
             <div class="form-group">
                 <label class="form-label" for="permanentAddress">Địa chỉ thường trú</label>

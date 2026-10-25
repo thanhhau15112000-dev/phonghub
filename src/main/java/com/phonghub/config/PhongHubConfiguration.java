@@ -467,9 +467,11 @@ public class PhongHubConfiguration {
         IdentityProviderPort identityProviderPort,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
-        AuditPort auditPort
+        AuditPort auditPort,
+        TenantRepositoryPort tenantRepo
     ) {
-        return new AuthService(userRepo, identityProviderPort, currentUserPort, authorizationService, auditPort);
+        return new TransactionalAuthUseCase(
+            new AuthService(userRepo, identityProviderPort, currentUserPort, authorizationService, auditPort, tenantRepo));
     }
 
     @Bean
@@ -479,10 +481,12 @@ public class PhongHubConfiguration {
         AuthorizationService authorizationService,
         AuditPort auditPort,
         ContractRepositoryPort contractRepo,
-        com.phonghub.application.service.TenantLockPolicy tenantLockPolicy
+        com.phonghub.application.service.TenantLockPolicy tenantLockPolicy,
+        UserRepositoryPort userRepo,
+        IdentityProviderPort identityProviderPort
     ) {
         TenantService service = new TenantService(tenantRepo, currentUserPort, authorizationService, auditPort,
-            contractRepo, tenantLockPolicy);
+            contractRepo, tenantLockPolicy, userRepo, identityProviderPort);
         return new TransactionalTenantUseCase(service);
     }
 

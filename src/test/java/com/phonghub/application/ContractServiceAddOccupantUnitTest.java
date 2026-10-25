@@ -72,6 +72,7 @@ class ContractServiceAddOccupantUnitTest {
 
         authService = new AuthorizationService(assignmentRepo, propertyRepo, tenantRepo, contractRepo);
         identityProvider = Mockito.mock(IdentityProviderPort.class);
+        when(identityProvider.adminCreateUser(anyString(), anyString())).thenAnswer(call -> UUID.randomUUID());
 
         contractService = new ContractService(
             contractRepo,
@@ -125,11 +126,7 @@ class ContractServiceAddOccupantUnitTest {
         activeContract = contractService.createContract(new ContractUseCase.CreateContractCommand(
             property.id(),
             room.getId(),
-            primaryTenant.fullName(),
-            primaryTenant.identityCardNumber(),
-            primaryTenant.phone(),
-            primaryTenant.email(),
-            primaryTenant.userId(),
+            primaryTenant.id(),
             new BigDecimal("3500000"),
             new BigDecimal("3500000"),
             LocalDate.now(),
@@ -141,29 +138,30 @@ class ContractServiceAddOccupantUnitTest {
     }
 
     @Test
-    @DisplayName("Selected tenant account links to an existing profile matched by identity card")
+    @DisplayName("Contract selects an existing account-backed tenant profile")
     void selectedTenantAccountLinksToExistingProfile() {
         Tenant unlinked = tenantRepo.save(Tenant.create(
             null, "Lê Thị D", "079200004444", "0911222444", "d@example.com", null));
         User account = tenantAccount("tenant-d", "d@example.com", "Lê Thị D");
+        Tenant linked = tenantRepo.save(new Tenant(unlinked.id(), account.id(), unlinked.fullName(),
+            unlinked.identityCardNumber(), unlinked.phone(), unlinked.email(), unlinked.permanentAddress(),
+            unlinked.createdAt()));
 
-        Contract contract = contractService.createContract(createContractCommand(
-            "079200004444", account.id()));
+        Contract contract = contractService.createContract(createContractCommand(linked.id()));
 
-        assertEquals(unlinked.id(), contract.getPrimaryTenantId());
-        assertEquals(account.id(), tenantRepo.findById(unlinked.id()).orElseThrow().userId());
+        assertEquals(linked.id(), contract.getPrimaryTenantId());
+        assertEquals(account.id(), tenantRepo.findById(linked.id()).orElseThrow().userId());
     }
 
     @Test
-    @DisplayName("Selected tenant account is saved on a newly created tenant profile")
-    void selectedTenantAccountLinksToNewProfile() {
+    @DisplayName("Contract creation rejects an account without a tenant profile")
+    void selectedTenantAccountRequiresTenantProfile() {
         User account = tenantAccount("tenant-new", "new-tenant@example.com", "Đỗ Thị P");
 
-        Contract contract = contractService.createContract(createContractCommand("079200010008", account.id()));
-
-        Tenant created = tenantRepo.findByIdentityCardNumber("079200010008").orElseThrow();
-        assertEquals(account.id(), created.userId());
-        assertEquals(created.id(), contract.getPrimaryTenantId());
+        assertThrows(DomainException.class, () -> contractService.createContract(
+            createContractCommand(tenantRepo.save(Tenant.create(null, "Đỗ Thị P", "079200010008", "0900000008",
+                "new-tenant@example.com", null)).id())));
+        assertTrue(tenantRepo.findByUserId(account.id()).isEmpty());
     }
 
     @Test
@@ -173,9 +171,10 @@ class ContractServiceAddOccupantUnitTest {
             UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now());
         userRepo.save(admin);
 
-        assertThrows(IllegalArgumentException.class,
-            () -> contractService.createContract(createContractCommand("079200005555", admin.id())));
-        assertTrue(tenantRepo.findByIdentityCardNumber("079200005555").isEmpty());
+        Tenant profile = tenantRepo.save(Tenant.create(admin.id(), "Admin User", "079200005555", "0900000005",
+            "admin-user@example.com", null));
+        assertThrows(DomainException.class,
+            () -> contractService.createContract(createContractCommand(profile.id())));
     }
 
     @Test
@@ -185,22 +184,21 @@ class ContractServiceAddOccupantUnitTest {
         Tenant linked = tenantRepo.save(Tenant.create(
             account.id(), "Ngô Thị E", "079200006666", "0911222666", "e@example.com", null));
 
+        Tenant profile = tenantRepo.save(Tenant.create(null, "Khác", "079200007777", "0900000007", null, null));
         assertThrows(DomainException.class,
-            () -> contractService.createContract(createContractCommand("079200007777", account.id())));
-        assertTrue(tenantRepo.findByIdentityCardNumber("079200007777").isEmpty());
+            () -> contractService.createContract(createContractCommand(profile.id())));
         assertEquals(linked.id(), tenantRepo.findByUserId(account.id()).orElseThrow().id());
     }
 
     @Test
-    @DisplayName("Contract creation rejects linking an existing identity profile to a different account")
-    void createContractRejectsDifferentAccountForExistingIdentityProfile() {
+    @DisplayName("Selecting a tenant profile keeps its existing account link")
+    void contractUsesExistingAccountBackedProfile() {
         User existingAccount = tenantAccount("tenant-existing", "existing@example.com", "Lý Thị Q");
-        User selectedAccount = tenantAccount("tenant-selected", "selected@example.com", "Lý Thị Q");
         Tenant linked = tenantRepo.save(Tenant.create(
             existingAccount.id(), "Lý Thị Q", "079200010009", "0911222999", "existing@example.com", null));
 
-        assertThrows(DomainException.class,
-            () -> contractService.createContract(createContractCommand("079200010009", selectedAccount.id())));
+        Contract contract = contractService.createContract(createContractCommand(linked.id()));
+        assertEquals(linked.id(), contract.getPrimaryTenantId());
         assertEquals(existingAccount.id(), tenantRepo.findById(linked.id()).orElseThrow().userId());
     }
 
@@ -303,7 +301,8 @@ class ContractServiceAddOccupantUnitTest {
     }
 
     private Tenant linkedAvailableTenant(String idCard, String fullName) {
-        Tenant tenant = tenantRepo.save(Tenant.create(null, fullName, idCard, "0900000000", null, null));
+        User user = tenantAccount("tenant-" + idCard.substring(idCard.length() - 4), idCard + "@test.local", fullName);
+        Tenant tenant = tenantRepo.save(Tenant.create(user.id(), fullName, idCard, "0900000000", user.email(), null));
         tenantRepo.linkToProperty(tenant.id(), property.id(), LocalDemoAuthenticationAdapter.OWNER_1_ID);
         return tenant;
     }
@@ -314,11 +313,11 @@ class ContractServiceAddOccupantUnitTest {
         return userRepo.save(user);
     }
 
-    private ContractUseCase.CreateContractCommand createContractCommand(String idCard, UUID userId) {
+    private ContractUseCase.CreateContractCommand createContractCommand(UUID tenantId) {
         Room anotherRoom = roomRepo.save(Room.create(property.id(), "P102", 1, new BigDecimal("25.0"),
             new BigDecimal("3500000"), 2));
         return new ContractUseCase.CreateContractCommand(
-            property.id(), anotherRoom.getId(), "Tenant Test", idCard, "0901234000", null, userId,
+            property.id(), anotherRoom.getId(), tenantId,
             new BigDecimal("3500000"), new BigDecimal("3500000"), LocalDate.now(), LocalDate.now().plusMonths(6), 5);
     }
 
@@ -363,7 +362,7 @@ class ContractServiceAddOccupantUnitTest {
             "Lê Văn C",
             "079200003333",
             "0911222333",
-            null,
+            "c@example.com",
             null,
             LocalDate.now(),
             false
@@ -385,7 +384,7 @@ class ContractServiceAddOccupantUnitTest {
             "Trần Thị B",
             "079200002222",
             "0909888999",
-            null,
+            "b@example.com",
             null,
             LocalDate.now(),
             false
@@ -431,7 +430,7 @@ class ContractServiceAddOccupantUnitTest {
             "Trần Thị B",
             "079200002222",
             "0909888999",
-            null,
+            "b@example.com",
             null,
             LocalDate.now(),
             false
@@ -447,11 +446,7 @@ class ContractServiceAddOccupantUnitTest {
         Contract draftContract = contractService.createContract(new ContractUseCase.CreateContractCommand(
             property.id(),
             room2.getId(),
-            "Tenant Draft",
-            "079200009999",
-            "0900000000",
-            null,
-            null,
+            linkedAvailableTenant("079200009999", "Tenant Draft").id(),
             new BigDecimal("3500000"),
             new BigDecimal("3500000"),
             LocalDate.now(),
@@ -483,7 +478,7 @@ class ContractServiceAddOccupantUnitTest {
             "Trần Thị B",
             "079200002222",
             "0909888999",
-            null,
+            "b@example.com",
             null,
             LocalDate.now(),
             false
@@ -495,7 +490,7 @@ class ContractServiceAddOccupantUnitTest {
             "Lê Văn C",
             "079200003333",
             "0911222333",
-            null,
+            "c@example.com",
             null,
             LocalDate.now(),
             false

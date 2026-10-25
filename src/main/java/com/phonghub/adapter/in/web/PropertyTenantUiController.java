@@ -78,19 +78,43 @@ public class PropertyTenantUiController {
         @RequestParam String fullName,
         @RequestParam String identityCardNumber,
         @RequestParam String phone,
-        @RequestParam(required = false) String email,
+        @RequestParam String email,
         @RequestParam(required = false) String permanentAddress,
         RedirectAttributes redirectAttributes
     ) {
         try {
-            tenantUseCase.addTenant(new TenantUseCase.AddTenantCommand(
-                propertyId, fullName, identityCardNumber, phone, email, permanentAddress));
-            redirectAttributes.addFlashAttribute("successMessage", "Đã thêm người thuê.");
+            TenantUseCase.TenantAccountResult result = tenantUseCase.createTenantAccount(
+                new TenantUseCase.CreateTenantAccountCommand(propertyId, fullName, identityCardNumber, phone, email,
+                    permanentAddress));
+            redirectAttributes.addFlashAttribute("tenantAccountResult", result);
+            redirectAttributes.addFlashAttribute("successMessage", result.accountCreated()
+                ? "Đã tạo hồ sơ và tài khoản người thuê. Mật khẩu tạm chỉ hiển thị lần này."
+                : "Đã liên kết hồ sơ với tài khoản người thuê hiện có.");
             return "redirect:/properties/" + propertyId + "/tenants";
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
             return "redirect:/properties/" + propertyId + "/tenants/new";
         }
+    }
+
+    @PostMapping("/{tenantId}/issue-account")
+    public String issueAccount(
+        @PathVariable UUID propertyId,
+        @PathVariable UUID tenantId,
+        @RequestParam String email,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            TenantUseCase.TenantAccountResult result = tenantUseCase.issueTenantAccount(
+                new TenantUseCase.IssueTenantAccountCommand(propertyId, tenantId, email));
+            redirectAttributes.addFlashAttribute("tenantAccountResult", result);
+            redirectAttributes.addFlashAttribute("successMessage", result.accountCreated()
+                ? "Đã cấp tài khoản người thuê. Mật khẩu tạm chỉ hiển thị lần này."
+                : "Đã liên kết tài khoản người thuê hiện có.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/properties/" + propertyId + "/tenants";
     }
 
     @GetMapping("/{tenantId}/edit")

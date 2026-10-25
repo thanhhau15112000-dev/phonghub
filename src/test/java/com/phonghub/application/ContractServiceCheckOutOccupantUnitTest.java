@@ -49,6 +49,7 @@ class ContractServiceCheckOutOccupantUnitTest {
     private LocalDemoAuthenticationAdapter authAdapter;
     private AuthorizationService authService;
     private AuditPort auditPort;
+    private IdentityProviderPort identityProvider;
     private ContractService contractService;
 
     private Property property;
@@ -72,6 +73,9 @@ class ContractServiceCheckOutOccupantUnitTest {
         authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_OWNER_1);
 
         authService = new AuthorizationService(assignmentRepo, propertyRepo, tenantRepo, contractRepo);
+        identityProvider = Mockito.mock(IdentityProviderPort.class);
+        Mockito.when(identityProvider.adminCreateUser(Mockito.anyString(), Mockito.anyString()))
+            .thenAnswer(call -> UUID.randomUUID());
         
         recordedEvents = new ArrayList<>();
         auditPort = event -> recordedEvents.add(event);
@@ -82,7 +86,7 @@ class ContractServiceCheckOutOccupantUnitTest {
             propertyRepo,
             tenantRepo,
             userRepo,
-            null,
+            identityProvider,
             authAdapter,
             authService,
             auditPort
@@ -125,11 +129,7 @@ class ContractServiceCheckOutOccupantUnitTest {
         activeContract = contractService.createContract(new ContractUseCase.CreateContractCommand(
             property.id(),
             room.getId(),
-            primaryTenant.fullName(),
-            primaryTenant.identityCardNumber(),
-            primaryTenant.phone(),
-            primaryTenant.email(),
-            primaryTenant.userId(),
+            primaryTenant.id(),
             new BigDecimal("3500000"),
             new BigDecimal("3500000"),
             LocalDate.now().minusDays(10),
@@ -158,6 +158,7 @@ class ContractServiceCheckOutOccupantUnitTest {
             LocalDate.now().minusDays(5),
             false
         )).occupant();
+        coTenant = tenantRepo.findById(coTenant.id()).orElseThrow();
         activeContract = contractRepo.findById(activeContract.getId()).orElseThrow();
     }
 

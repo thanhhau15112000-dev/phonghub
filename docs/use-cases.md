@@ -600,20 +600,23 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Kênh | Web `/admin/users`; API `POST /api/admin/users` |
 
 **Luồng chính**
-1. Quản trị viên nhập tên đăng nhập, email, họ tên, số điện thoại (không bắt buộc) và chọn vai trò.
-2. Hệ thống kiểm tra dữ liệu (BR1–BR3).
+1. Quản trị viên nhập tên đăng nhập, email, họ tên, số điện thoại và chọn vai trò; vai trò `TENANT` bắt buộc có CCCD.
+2. Hệ thống kiểm tra dữ liệu (BR1–BR4).
 3. Hệ thống tạo danh tính ở dịch vụ xác thực với mật khẩu tạm 16 ký tự.
-4. Hệ thống lưu tài khoản và ghi nhật ký `ADMIN_CREATE_USER`.
+4. Hệ thống lưu tài khoản; nếu là `TENANT`, tạo hồ sơ CCCD hoặc gắn tài khoản vào hồ sơ chưa có tài khoản.
+5. Hệ thống ghi nhật ký `ADMIN_CREATE_USER` và hiện mật khẩu tạm một lần.
 5. Hệ thống hiện tên đăng nhập và mật khẩu tạm.
 
 **Ngoại lệ**
 - E1. Tên đăng nhập, email hoặc số điện thoại đã được dùng: báo trùng.
 - E2. Lưu cơ sở dữ liệu thất bại: hệ thống xóa danh tính vừa tạo ở dịch vụ xác thực (bù trừ) để không để lại tài khoản mồ côi, rồi báo lỗi.
+- E3. CCCD thiếu/sai định dạng hoặc đã gắn với tài khoản khác: từ chối; không tạo danh tính mới.
 
 **Quy tắc nghiệp vụ**
 - BR1. Tên đăng nhập 3–50 ký tự, chỉ gồm chữ thường, số, `.`, `_`, `-`.
 - BR2. Vai trò được tạo từ giao diện: `OWNER`, `STAFF`, `TECHNICIAN`, `TENANT`. Không tạo `ADMIN`.
-- BR3. Tài khoản `TENANT` tạo ở đây chưa gắn với hồ sơ người thuê. Hồ sơ được tạo hoặc gắn khi chọn tài khoản này lúc lập hợp đồng (UC-31).
+- BR3. Tài khoản `TENANT` bắt buộc có CCCD và số điện thoại hợp lệ; hồ sơ được tạo hoặc gắn ngay trong cùng transaction với tài khoản.
+- BR4. Trang quản trị liệt kê tài khoản `TENANT` cũ chưa có hồ sơ để quản trị viên bổ sung SĐT và CCCD; CCCD trùng hồ sơ chưa có tài khoản thì gắn vào hồ sơ đó.
 
 #### UC-07. Cập nhật, khóa, xóa tài khoản
 
@@ -956,23 +959,25 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Mục | Nội dung |
 |---|---|
 | Tác nhân chính | Chủ trọ, Nhân viên, Quản trị viên |
-| Mô tả | Tạo hồ sơ người thuê (họ tên, CCCD, số điện thoại, email, địa chỉ thường trú) và gắn vào nhà trọ. |
+| Mô tả | Tạo hồ sơ người thuê (họ tên, CCCD, số điện thoại, email, địa chỉ thường trú), tài khoản đăng nhập và gắn hồ sơ vào nhà trọ. |
 | Tiền điều kiện | Nhà trọ của mình. |
-| Hậu điều kiện | Hồ sơ được tạo; CCCD, số điện thoại, email, địa chỉ được mã hóa khi lưu; nhật ký `TENANT_CREATED` chỉ ghi CCCD đã che. |
+| Hậu điều kiện | Hồ sơ `TENANT` có tài khoản hoạt động được tạo hoặc liên kết, hồ sơ gắn vào nhà trọ; mật khẩu tạm chỉ hiện một lần; dữ liệu cá nhân được mã hóa khi lưu. |
 | Kênh | Web `/properties/{id}/tenants/new`; API `POST /api/properties/{id}/tenants` |
 
 **Luồng chính**
-1. Tác nhân nhập thông tin người thuê.
-2. Hệ thống kiểm tra định dạng (BR1) và tìm CCCD đã có hay chưa (qua chỉ mục HMAC).
-3. Hệ thống lưu hồ sơ và gắn với nhà trọ.
+1. Tác nhân nhập họ tên, CCCD, số điện thoại, email và địa chỉ thường trú.
+2. Hệ thống kiểm tra định dạng (BR1), CCCD qua chỉ mục HMAC, email và trạng thái tài khoản.
+3. Nếu CCCD thuộc hồ sơ chưa có tài khoản, hệ thống gắn tài khoản vào hồ sơ đó; nếu chưa có thì tạo hồ sơ và tài khoản `TENANT`.
+4. Hệ thống gắn hồ sơ vào nhà trọ, ghi nhật ký và trả mật khẩu tạm một lần nếu vừa tạo tài khoản.
 
 **Ngoại lệ**
-- E1. CCCD đã có trong nhà trọ này (kể cả đang bị ẩn): báo trùng.
-- E2. CCCD đã thuộc hồ sơ ở nhà trọ khác: báo trùng, không cho biết hồ sơ đó ở đâu.
+- E1. CCCD đã gắn với tài khoản khác: báo trùng, không lộ tên hay nhà trọ.
+- E2. Email đã thuộc tài khoản không phải `TENANT`, tài khoản không hoạt động hoặc đã gắn hồ sơ khác: từ chối.
+- E3. Lưu hồ sơ thất bại sau khi tạo danh tính: xóa danh tính vừa tạo để không để lại tài khoản mồ côi.
 
 **Quy tắc nghiệp vụ**
 - BR1. CCCD 9 hoặc 12 chữ số; số điện thoại 10 chữ số bắt đầu bằng 0.
-- BR2. Màn hình này chỉ tạo hồ sơ, không tạo tài khoản đăng nhập. Tài khoản cấp ở UC-06 (quản trị viên) hoặc UC-35 (người ở cùng).
+- BR2. Nhân viên được phân công có thể dùng màn hình này như chủ trọ. Tạo người thuê luôn tạo hoặc gắn tài khoản; hồ sơ cũ chưa có tài khoản có thể được cấp qua nút "Cấp tài khoản".
 
 #### UC-25. Tìm kiếm, ẩn, khôi phục người thuê
 
@@ -1107,34 +1112,29 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Mục | Nội dung |
 |---|---|
 | Tác nhân chính | Chủ trọ, Nhân viên có quyền quản lý hợp đồng, Quản trị viên |
-| Mô tả | Lập hợp đồng cho một phòng: người thuê chính, tiền thuê, tiền cọc, ngày bắt đầu/kết thúc, ngày thanh toán hằng tháng. |
+| Mô tả | Lập hợp đồng nháp cho một phòng bằng cách chọn hồ sơ người thuê chính đã gắn tài khoản, rồi nhập điều khoản thuê. |
 | Tiền điều kiện | Nhà trọ `VERIFIED`, chưa bị ẩn; phòng chưa bị ẩn, không có hợp đồng đang hiệu lực, không ở trạng thái `MAINTENANCE`. |
 | Hậu điều kiện | Hợp đồng `DRAFT` được tạo; người thuê chính được gắn vào nhà trọ; có nhật ký `CONTRACT_CREATED`. |
 | Kênh | Web `/contracts/new`; API `POST /api/contracts` |
 
 **Luồng chính**
-1. Tác nhân chọn nhà trọ và phòng.
-2. Tác nhân chọn tài khoản người thuê đã tạo (không bắt buộc); hệ thống điền sẵn họ tên, số điện thoại, email.
-3. Tác nhân nhập hoặc kiểm tra họ tên, CCCD, số điện thoại, email của người thuê chính.
-4. Tác nhân nhập tiền thuê, tiền cọc, ngày thanh toán (1–31), ngày bắt đầu, ngày kết thúc.
-5. Hệ thống kiểm tra tiền điều kiện và tìm hồ sơ người thuê theo CCCD.
-6. Hệ thống tạo hồ sơ mới nếu chưa có; nếu đã chọn tài khoản thì gắn tài khoản vào hồ sơ.
-7. Hệ thống lưu hợp đồng `DRAFT` và chuyển tới trang hợp đồng.
+1. Tác nhân chọn nhà trọ, phòng và người thuê chính theo tên hoặc một phần CCCD.
+2. Hệ thống chỉ gợi ý tài khoản `TENANT` hoạt động đủ điều kiện; thông tin trong gợi ý được che và không có email.
+3. Tác nhân nhập tiền thuê, tiền cọc, ngày thanh toán (1–31), ngày bắt đầu và ngày kết thúc.
+4. Hệ thống xác nhận tài khoản còn hoạt động, gắn hồ sơ vào nhà trọ nếu cần, rồi lưu hợp đồng `DRAFT`.
 
 **Luồng thay thế**
-- 5a. CCCD đã có hồ sơ: hệ thống dùng hồ sơ đó (giữ thông tin cũ của hồ sơ).
+- 1a. CCCD đủ 9/12 số: hệ thống tra chính xác qua chỉ mục HMAC; tìm một phần CCCD chỉ áp dụng trong tập hồ sơ của nhà trọ.
 
 **Ngoại lệ**
 - E1. Nhà trọ chưa duyệt hoặc đã ẩn; phòng đã ẩn, đang bảo trì, hoặc đã có hợp đồng hiệu lực: từ chối, nêu lý do.
-- E2. Tài khoản đã chọn không phải `TENANT` đang hoạt động: từ chối.
-- E3. Tài khoản đã gắn với hồ sơ người thuê khác, hoặc hồ sơ CCCD đã gắn với tài khoản khác: từ chối.
+- E2. Người thuê chính không có tài khoản `TENANT` đang hoạt động: từ chối.
+- E3. Người thuê đang cư trú theo hợp đồng khác, hồ sơ bị ẩn ở nhà trọ này, hoặc CCCD đã gắn tài khoản khác: từ chối.
 
 **Quy tắc nghiệp vụ**
-- BR1. Danh sách tài khoản ở bước 2:
-  - chủ trọ thấy tài khoản người thuê chưa gắn hồ sơ nào, và tài khoản của người thuê đã thuộc nhà trọ này;
-  - quản trị viên thấy mọi tài khoản người thuê;
-  - tài khoản đang ở theo hợp đồng khác bị loại.
+- BR1. Danh sách ở bước 2 chỉ gồm hồ sơ có tài khoản `TENANT` đang hoạt động: người thuê gắn với nhà trọ này, người từng có hợp đồng tại đây nhưng chưa check-in nơi khác, và hồ sơ chưa có nhà trọ/lịch sử do admin tạo.
 - BR2. Một tài khoản chỉ gắn với một hồ sơ người thuê (`tenants.user_id` là duy nhất).
+- BR3. Người thuê chính phải còn tài khoản `TENANT` hoạt động cả khi tạo và khi kích hoạt hợp đồng.
 
 #### UC-32. Sửa hoặc hủy hợp đồng nháp
 
@@ -1200,23 +1200,23 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 
 | Mục | Nội dung |
 |---|---|
-| Tác nhân chính | Chủ trọ, Quản trị viên |
+| Tác nhân chính | Chủ trọ, Nhân viên có quyền quản lý hợp đồng, Quản trị viên |
 | Tác nhân phụ | Dịch vụ xác thực |
-| Mô tả | Thêm người ở cùng vào hợp đồng đang hiệu lực (người mới, có thể cấp tài khoản; hoặc chọn nhiều hồ sơ có sẵn một lần), và check-out từng người. |
+| Mô tả | Thêm người ở cùng vào hợp đồng đang hiệu lực (người mới luôn có tài khoản; hoặc chọn nhiều hồ sơ có sẵn một lần), và check-out từng người. |
 | Tiền điều kiện | Hợp đồng `ACTIVE` của nhà trọ `VERIFIED` của mình; phòng còn chỗ. |
 | Hậu điều kiện | Người ở cùng được thêm với ngày vào ở; hoặc người đó được ghi ngày rời đi. |
 | Kênh | Web `/contracts/{id}/occupants`, `/occupants/bulk`, `/occupants/{tenantId}/check-out`; API `/api/contracts/{id}/occupants…` |
 
 **Luồng chính (thêm người mới)**
-1. Tác nhân nhập họ tên, CCCD, số điện thoại, email, địa chỉ, ngày vào ở; chọn "Cấp tài khoản đăng nhập" nếu cần.
+1. Tác nhân nhập họ tên, CCCD, số điện thoại, email, địa chỉ và ngày vào ở.
 2. Hệ thống kiểm tra sức chứa phòng và người này không đang ở hợp đồng khác.
-3. Hệ thống tạo hồ sơ (hoặc dùng hồ sơ có sẵn theo CCCD) và thêm vào hợp đồng.
-4. Nếu chọn cấp tài khoản, hệ thống tạo tài khoản `TENANT` theo email và hiện mật khẩu tạm một lần.
+3. Hệ thống tạo hồ sơ hoặc dùng hồ sơ chưa có tài khoản theo CCCD, tạo/gắn tài khoản `TENANT`, rồi thêm vào hợp đồng.
+4. Nếu vừa tạo tài khoản, hệ thống hiện mật khẩu tạm một lần.
 
 **Luồng thay thế**
 - 1a. Thêm nhiều người có sẵn: tác nhân tích chọn nhiều hồ sơ đang thuộc nhà trọ và chưa ở đâu. Hệ thống kiểm tra tất cả rồi lưu một lần; một người lỗi thì không lưu ai.
 - 1b. Check-out một người ở cùng: tác nhân chọn người và ngày rời đi.
-- 4a. Email đã thuộc một tài khoản người thuê chưa gắn hồ sơ: hệ thống gắn tài khoản đó thay vì tạo mới.
+- 4a. Email đã thuộc tài khoản người thuê hoạt động chưa gắn hồ sơ: hệ thống gắn tài khoản đó thay vì tạo mới.
 
 **Ngoại lệ**
 - E1. Vượt sức chứa phòng: báo số chỗ còn lại.

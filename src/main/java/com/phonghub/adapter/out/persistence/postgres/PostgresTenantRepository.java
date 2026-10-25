@@ -184,6 +184,16 @@ public class PostgresTenantRepository implements TenantRepositoryPort {
         return jdbcTemplate.query("SELECT * FROM tenants WHERE id IN (:ids)", Map.of("ids", ids), this::mapTenant);
     }
 
+    @Override
+    public List<Tenant> findAccountProfilesWithoutPropertyLinks() {
+        return jdbcTemplate.query("""
+            SELECT t.* FROM tenants t
+            WHERE t.user_id IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM tenant_properties tp WHERE tp.tenant_id = t.id)
+            ORDER BY t.created_at DESC
+            """, this::mapTenant);
+    }
+
     private static Instant toNullableInstant(Timestamp ts) {
         return ts == null ? null : ts.toInstant();
     }

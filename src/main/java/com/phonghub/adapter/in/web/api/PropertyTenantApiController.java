@@ -54,11 +54,19 @@ public class PropertyTenantApiController {
         @PathVariable UUID propertyId,
         @Valid @RequestBody AddTenantRequest request
     ) {
-        PropertyTenantView created = tenantUseCase.addTenant(new TenantUseCase.AddTenantCommand(propertyId,
+        TenantUseCase.TenantAccountResult created = tenantUseCase.createTenantAccount(
+            new TenantUseCase.CreateTenantAccountCommand(propertyId,
             request.fullName(), request.identityCardNumber(), request.phone(), request.email(),
             request.permanentAddress()));
-        return ResponseEntity.created(URI.create("/api/properties/" + propertyId + "/tenants/" + created.tenant().id()))
-            .body(TenantDetail.from(created));
+        return ResponseEntity.created(URI.create("/api/properties/" + propertyId + "/tenants/" + created.tenant().tenant().id()))
+            .body(TenantDetail.fromAccountResult(created));
+    }
+
+    @PostMapping("/{tenantId}/issue-account")
+    public TenantDetail issueAccount(@PathVariable UUID propertyId, @PathVariable UUID tenantId,
+                                     @Valid @RequestBody IssueTenantAccountRequest request) {
+        return TenantDetail.fromAccountResult(tenantUseCase.issueTenantAccount(
+            new TenantUseCase.IssueTenantAccountCommand(propertyId, tenantId, request.email())));
     }
 
     @PostMapping("/{tenantId}/hide")
@@ -75,9 +83,11 @@ public class PropertyTenantApiController {
         @NotBlank(message = "Họ và tên không được để trống") String fullName,
         @NotBlank(message = "Số CCCD không được để trống") String identityCardNumber,
         @NotBlank(message = "Số điện thoại không được để trống") String phone,
-        String email,
+        @NotBlank(message = "Email là bắt buộc để tạo tài khoản") String email,
         String permanentAddress
     ) {}
+
+    public record IssueTenantAccountRequest(@NotBlank(message = "Email là bắt buộc") String email) {}
 
     public record TenantItem(UUID id, String fullName, String phone, String maskedIdentityCardNumber,
                              boolean hidden, boolean hasActiveContract, Instant createdAt) {
@@ -90,11 +100,20 @@ public class PropertyTenantApiController {
 
     public record TenantDetail(UUID id, UUID userId, String fullName, String maskedIdentityCardNumber, String phone,
                                String email, String permanentAddress, boolean hidden, boolean hasActiveContract,
-                               Instant createdAt) {
+                               Instant createdAt, String username, String temporaryPassword, boolean accountCreated) {
         static TenantDetail from(PropertyTenantView view) {
             return new TenantDetail(view.tenant().id(), view.tenant().userId(), view.tenant().fullName(),
                 view.tenant().maskedIdentityCardNumber(), view.tenant().phone(), view.tenant().email(),
-                view.tenant().permanentAddress(), view.hidden(), view.hasActiveContract(), view.tenant().createdAt());
+                view.tenant().permanentAddress(), view.hidden(), view.hasActiveContract(), view.tenant().createdAt(),
+                null, null, false);
+        }
+
+        static TenantDetail fromAccountResult(TenantUseCase.TenantAccountResult result) {
+            PropertyTenantView view = result.tenant();
+            return new TenantDetail(view.tenant().id(), view.tenant().userId(), view.tenant().fullName(),
+                view.tenant().maskedIdentityCardNumber(), view.tenant().phone(), view.tenant().email(),
+                view.tenant().permanentAddress(), view.hidden(), view.hasActiveContract(), view.tenant().createdAt(),
+                result.username(), result.temporaryPassword(), result.accountCreated());
         }
     }
 

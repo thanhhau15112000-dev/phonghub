@@ -213,6 +213,21 @@ staging hoặc production.
 > các row dữ liệu. Muốn môi trường deploy dùng dữ liệu thật, backend phải trỏ
 > tới database Supabase của môi trường đó bằng secret do môi trường quản lý.
 
+## Tài khoản người thuê và hợp đồng
+
+- `POST /api/admin/users` khi tạo role `TENANT` yêu cầu `identityCardNumber` và
+  số điện thoại; hệ thống tạo hoặc gắn hồ sơ người thuê cùng tài khoản.
+- `POST /api/properties/{propertyId}/tenants` tạo hoặc gắn hồ sơ với tài khoản
+  `TENANT`; yêu cầu họ tên, CCCD, số điện thoại và email. Mật khẩu tạm chỉ trả
+  về ở lần tạo tài khoản đầu tiên.
+- `POST /api/contracts` nhận `primaryTenantId` của hồ sơ đã có tài khoản
+  `TENANT` đang hoạt động. API không còn nhận thông tin CCCD/họ tên người thuê
+  tự nhập trong body hợp đồng.
+- Lập hợp đồng chỉ gợi ý hồ sơ đủ điều kiện trong nhà trọ; tìm một phần CCCD
+  giới hạn ở phạm vi nhà trọ, còn tra cứu CCCD đầy đủ dùng chỉ mục HMAC.
+- Tài khoản người thuê cũ chưa có hồ sơ được quản trị viên bổ sung CCCD và
+  số điện thoại tại `/admin/users`.
+
 ## Database migration và fixture
 
 Migration dùng chung:

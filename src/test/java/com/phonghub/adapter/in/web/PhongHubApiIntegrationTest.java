@@ -91,6 +91,17 @@ class PhongHubApiIntegrationTest {
         );
     }
 
+    private UUID createAvailableTenant() throws Exception {
+        String suffix = String.format("%08d", java.util.concurrent.ThreadLocalRandom.current().nextInt(100_000_000));
+        String request = "{\"fullName\":\"Pham Van C\",\"identityCardNumber\":\"0792" + suffix
+            + "\",\"phone\":\"0909112233\",\"email\":\"tenant-" + suffix + "@example.test\"}";
+        String response = mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_1_ID + "/tenants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON).content(request))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        return UUID.fromString(objectMapper.readTree(response).get("id").asText());
+    }
+
     @Test
     @DisplayName("ADMIN lists all properties")
     void testAdminListsAllProperties() throws Exception {
@@ -219,14 +230,11 @@ class PhongHubApiIntegrationTest {
     @Test
     @DisplayName("Create and activate contract on available room changes room to OCCUPIED")
     void testContractCreationAndActivation() throws Exception {
+        UUID tenantId = createAvailableTenant();
         ContractApiController.CreateContractRequest req = new ContractApiController.CreateContractRequest(
             DataSeeder.PROP_1_ID,
             DataSeeder.ROOM_104_ID, // Available room
-            "Pham Van C",
-            "079201003333",
-            "0909112233",
-            "c@local",
-            null,
+            tenantId,
             new BigDecimal("4000000"),
             new BigDecimal("4000000"),
             LocalDate.now(),
@@ -264,11 +272,7 @@ class PhongHubApiIntegrationTest {
         ContractApiController.CreateContractRequest req = new ContractApiController.CreateContractRequest(
             DataSeeder.PROP_1_ID,
             DataSeeder.ROOM_101_ID,
-            "Le Van D",
-            "079201004444",
-            "0909444555",
-            "d@local",
-            null,
+            DataSeeder.TENANT_RECORD_ID,
             new BigDecimal("3500000"),
             new BigDecimal("3500000"),
             LocalDate.now(),
@@ -802,8 +806,8 @@ class PhongHubApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("STAFF adding occupant to contract returns 403 Forbidden")
-    void testStaffAddsOccupantForbidden() throws Exception {
+    @DisplayName("Assigned STAFF with contract permission can add occupant and provision account")
+    void testAssignedStaffAddsOccupantSuccessfully() throws Exception {
         ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
             "Trần Thị Lan",
             "079200008888",
@@ -818,8 +822,23 @@ class PhongHubApiIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.isPrimary", is(false)))
+            .andExpect(jsonPath("$.temporaryPassword", notNullValue()));
+    }
+
+    @Test
+    @DisplayName("STAFF assigned to another property cannot add an occupant")
+    void testStaffWithoutContractPermissionCannotAddOccupant() throws Exception {
+        ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
+            "Trần Thị Lan", "079200008889", "0908888998", "lan2@phonghub.local", "Bình Phước",
+            LocalDate.now(), false);
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_2_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
             .andExpect(jsonPath("$.status", is(403)));
     }
 

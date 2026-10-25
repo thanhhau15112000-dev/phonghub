@@ -4,7 +4,6 @@ import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -181,14 +180,15 @@ class ContractLifecycleActionsIntegrationTest {
     }
 
     @Test
-    @DisplayName("Không chọn tạo tài khoản: không có tên đăng nhập hay mật khẩu tạm")
-    void occupantWithoutAccount() {
+    @DisplayName("Người ở cùng không có email để cấp tài khoản thì không được thêm")
+    void occupantWithoutAccountIsRejected() {
         demoActorPort.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_OWNER_1);
-        ContractUseCase.AddOccupantResult result = contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
+        int before = contract().getOccupants().size();
+        assertThrows(IllegalArgumentException.class, () -> contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
             DataSeeder.CONTRACT_1_ID, "Lê Văn Khách", "079300007777", "0909000222", null, null, LocalDate.now(),
-            false));
-        assertNull(result.accountUsername());
-        assertNull(result.temporaryPassword());
+            false)));
+        assertEquals(before, contract().getOccupants().size());
+        assertFalse(tenantRepository.findByIdentityCardNumber("079300007777").isPresent());
     }
 
     @Test
@@ -196,7 +196,7 @@ class ContractLifecycleActionsIntegrationTest {
     void checkOutOccupantOnExpiredContract() {
         demoActorPort.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_OWNER_1);
         ContractUseCase.AddOccupantResult added = contractUseCase.addOccupant(new ContractUseCase.AddOccupantCommand(
-            DataSeeder.CONTRACT_1_ID, "Lê Văn Khách", "079300007777", "0909000222", null, null, LocalDate.now(),
+            DataSeeder.CONTRACT_1_ID, "Lê Văn Khách", "079300007777", "0909000222", "expired-checkout@example.test", null, LocalDate.now(),
             false));
         expire();
 

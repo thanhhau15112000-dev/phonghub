@@ -60,6 +60,8 @@ public interface ContractUseCase {
     }
     Contract getContract(UUID contractId);
     List<Contract> listContractsForProperty(UUID propertyId);
+    /** Active tenant accounts that may be selected for a contract in this property. */
+    List<Tenant> listAvailablePrimaryTenants(UUID propertyId, String query);
     Optional<Contract> getActiveContractForTenant(UUID tenantUserId);
     List<Contract> listContractsForTenant(UUID tenantUserId);
     AddOccupantResult addOccupant(AddOccupantCommand command);
@@ -149,11 +151,7 @@ public interface ContractUseCase {
     record CreateContractCommand(
         UUID propertyId,
         UUID roomId,
-        String primaryTenantFullName,
-        String primaryTenantIdCard,
-        String primaryTenantPhone,
-        String primaryTenantEmail,
-        UUID primaryTenantUserId, // optional if user account already exists
+        UUID primaryTenantId,
         BigDecimal depositAmount,
         BigDecimal rentAmount,
         LocalDate startDate,
@@ -167,14 +165,8 @@ public interface ContractUseCase {
             if (roomId == null) {
                 throw new IllegalArgumentException("Room id cannot be null");
             }
-            if (primaryTenantFullName == null || primaryTenantFullName.isBlank()) {
-                throw new IllegalArgumentException("Họ tên người thuê chính không được để trống.");
-            }
-            if (primaryTenantIdCard == null || primaryTenantIdCard.isBlank()) {
-                throw new IllegalArgumentException("Số CCCD người thuê chính không được để trống.");
-            }
-            if (primaryTenantPhone == null || primaryTenantPhone.isBlank()) {
-                throw new IllegalArgumentException("Số điện thoại người thuê chính không được để trống.");
+            if (primaryTenantId == null) {
+                throw new IllegalArgumentException("Cần chọn hồ sơ người thuê đã có tài khoản.");
             }
             if (depositAmount == null || depositAmount.compareTo(BigDecimal.ZERO) < 0) {
                 throw new IllegalArgumentException("Tiền cọc không được âm.");

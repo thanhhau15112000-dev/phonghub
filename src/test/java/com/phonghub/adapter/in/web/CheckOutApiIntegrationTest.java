@@ -282,11 +282,10 @@ class CheckOutApiIntegrationTest extends SeededWebTest {
             .andExpect(status().isOk());
         mockMvc.perform(post("/api/contracts").header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                    {"propertyId": "%s", "roomId": "%s", "primaryTenantFullName": "Lê Mới",
-                     "primaryTenantIdCard": "079201009999", "primaryTenantPhone": "0901112223",
+                    {"propertyId": "%s", "roomId": "%s", "primaryTenantId": "%s",
                      "depositAmount": 1000000, "rentAmount": 3000000, "startDate": "%s", "endDate": "%s",
                      "paymentDay": 5}
-                    """.formatted(DataSeeder.PROP_1_ID, DataSeeder.ROOM_101_ID, LocalDate.now(),
+                    """.formatted(DataSeeder.PROP_1_ID, DataSeeder.ROOM_101_ID, DataSeeder.TENANT_RECORD_ID, LocalDate.now(),
                     LocalDate.now().plusMonths(6))))
             .andExpect(status().isConflict());
 

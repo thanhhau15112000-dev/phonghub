@@ -502,13 +502,13 @@ class PhongHubUiIntegrationTest {
     }
 
     @Test
-    @DisplayName("STAFF does not see add occupant button or modal on contract detail page")
-    void testStaffDoesNotSeeAddOccupantButtonOrModal() throws Exception {
+    @DisplayName("Assigned STAFF with contract permission sees the add occupant flow")
+    void testAssignedStaffSeesAddOccupantButtonAndModal() throws Exception {
         mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(not(containsString("id=\"addOccupantBtn\""))))
-            .andExpect(content().string(not(containsString("id=\"addOccupantModal\""))));
+            .andExpect(content().string(containsString("id=\"addOccupantBtn\"")))
+            .andExpect(content().string(containsString("id=\"addOccupantModal\"")));
     }
 
     @Test

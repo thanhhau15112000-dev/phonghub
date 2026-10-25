@@ -40,6 +40,18 @@ public class TransactionalTenantUseCase implements TenantUseCase {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public TenantAccountResult createTenantAccount(CreateTenantAccountCommand command) {
+        return delegate.createTenantAccount(command);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TenantAccountResult issueTenantAccount(IssueTenantAccountCommand command) {
+        return delegate.issueTenantAccount(command);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public PropertyTenantView hideTenant(UUID propertyId, UUID tenantId) {
         return delegate.hideTenant(propertyId, tenantId);
     }

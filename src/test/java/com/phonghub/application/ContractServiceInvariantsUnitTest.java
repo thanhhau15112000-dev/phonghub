@@ -7,6 +7,7 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.service.AuthorizationService;
@@ -24,6 +25,9 @@ import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
+import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.User;
+import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -40,6 +44,7 @@ class ContractServiceInvariantsUnitTest {
     private InMemoryRoomRepository roomRepo;
     private InMemoryContractRepository contractRepo;
     private InMemoryTenantRepository tenantRepo;
+    private InMemoryUserRepository userRepo;
     private InMemoryMaintenanceTicketRepository ticketRepo;
     private InMemoryStaffPropertyAssignmentRepository assignmentRepo;
     private LocalDemoAuthenticationAdapter authAdapter;
@@ -58,6 +63,7 @@ class ContractServiceInvariantsUnitTest {
         roomRepo = new InMemoryRoomRepository();
         contractRepo = new InMemoryContractRepository();
         tenantRepo = new InMemoryTenantRepository();
+        userRepo = new InMemoryUserRepository();
         ticketRepo = new InMemoryMaintenanceTicketRepository();
         assignmentRepo = new InMemoryStaffPropertyAssignmentRepository();
 
@@ -66,7 +72,8 @@ class ContractServiceInvariantsUnitTest {
 
         authService = new AuthorizationService(assignmentRepo, propertyRepo, tenantRepo, contractRepo);
 
-        contractService = new ContractService(contractRepo, roomRepo, propertyRepo, tenantRepo, authAdapter, authService);
+        contractService = new ContractService(contractRepo, roomRepo, propertyRepo, tenantRepo, userRepo, null,
+            authAdapter, authService);
         maintenanceService = new MaintenanceService(ticketRepo, roomRepo, tenantRepo, authAdapter, authService);
         roomService = new RoomService(roomRepo, propertyRepo, ticketRepo, contractRepo, tenantRepo, authAdapter, authService);
 
@@ -79,11 +86,7 @@ class ContractServiceInvariantsUnitTest {
     void testActivatingContractOccupiesRoom() {
         assertEquals(RoomStatus.AVAILABLE, room.getStatus());
 
-        Contract contract = contractService.createContract(new ContractUseCase.CreateContractCommand(
-            property.id(), room.getId(), "Tenant Name", "ID123", "0900", "t@example.com", null,
-            new BigDecimal("3000000"), new BigDecimal("3000000"),
-            LocalDate.now(), LocalDate.now().plusMonths(6), 5
-        ));
+        Contract contract = draft(room, "ID123");
 
         assertEquals(ContractStatus.DRAFT, contract.getStatus());
         assertEquals(RoomStatus.AVAILABLE, roomRepo.findById(room.getId()).get().getStatus());
@@ -98,33 +101,63 @@ class ContractServiceInvariantsUnitTest {
     }
 
     @Test
+    void activationRejectsTenantWhoseAccountWasDeactivatedAfterDraftCreation() {
+        Contract contract = draft(room, "ID123");
+        Tenant tenant = tenantRepo.findById(contract.getPrimaryTenantId()).orElseThrow();
+        User account = userRepo.findById(tenant.userId()).orElseThrow();
+        userRepo.save(new User(account.id(), account.username(), account.email(), account.fullName(), account.phone(),
+            UserRole.TENANT, User.UserStatus.SUSPENDED, account.mustChangePassword(), account.createdAt()));
+
+        assertThrows(DomainException.class, () -> contractService.activateContract(contract.getId()));
+        assertEquals(ContractStatus.DRAFT, contractRepo.findById(contract.getId()).orElseThrow().getStatus());
+        assertEquals(RoomStatus.AVAILABLE, roomRepo.findById(room.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void primaryTenantSearchUsesCccdSuffixInsidePropertyAndNotPhoneDigits() {
+        Contract contract = draft(room, "123456789");
+        Tenant tenant = tenantRepo.findById(contract.getPrimaryTenantId()).orElseThrow();
+
+        assertTrue(contractService.listAvailablePrimaryTenants(property.id(), "6789").stream()
+            .anyMatch(candidate -> candidate.id().equals(tenant.id())));
+        assertTrue(contractService.listAvailablePrimaryTenants(property.id(), "0901234567").stream()
+            .noneMatch(candidate -> candidate.id().equals(tenant.id())));
+    }
+
+    @Test
+    void adminCreatedUnassignedTenantIsAvailableByNameOrExactCccdButNotSuffix() {
+        UUID tenantUserId = UUID.randomUUID();
+        User tenantUser = userRepo.save(new User(tenantUserId, "globaltenant", "global@test.local", "Global Tenant",
+            "0911111222", UserRole.TENANT, User.UserStatus.ACTIVE, true, Instant.now()));
+        Tenant globalTenant = tenantRepo.save(Tenant.create(tenantUser.id(), "Global Tenant", "123456789",
+            tenantUser.phone(), tenantUser.email(), null));
+
+        assertTrue(contractService.listAvailablePrimaryTenants(property.id(), null).stream()
+            .anyMatch(candidate -> candidate.id().equals(globalTenant.id())));
+        assertTrue(contractService.listAvailablePrimaryTenants(property.id(), "Global").stream()
+            .anyMatch(candidate -> candidate.id().equals(globalTenant.id())));
+        assertTrue(contractService.listAvailablePrimaryTenants(property.id(), "6789").stream()
+            .noneMatch(candidate -> candidate.id().equals(globalTenant.id())));
+        assertTrue(contractService.listAvailablePrimaryTenants(property.id(), "123456789").stream()
+            .anyMatch(candidate -> candidate.id().equals(globalTenant.id())));
+    }
+
+    @Test
     @DisplayName("Reject duplicate active contract: cannot create or activate second contract for occupied room")
     void testCannotHaveTwoActiveContractsForOneRoom() {
-        Contract contract1 = contractService.createContract(new ContractUseCase.CreateContractCommand(
-            property.id(), room.getId(), "Tenant 1", "ID1", "0901", "t1@example.com", null,
-            new BigDecimal("3000000"), new BigDecimal("3000000"),
-            LocalDate.now(), LocalDate.now().plusMonths(6), 5
-        ));
+        Contract contract1 = draft(room, "ID1");
         contractService.activateContract(contract1.getId());
 
         // Creating another contract for this room must fail
         assertThrows(DuplicateActiveContractException.class, () ->
-            contractService.createContract(new ContractUseCase.CreateContractCommand(
-                property.id(), room.getId(), "Tenant 2", "ID2", "0902", "t2@example.com", null,
-                new BigDecimal("3000000"), new BigDecimal("3000000"),
-                LocalDate.now(), LocalDate.now().plusMonths(6), 5
-            ))
+            draft(room, "ID2")
         );
     }
 
     @Test
     @DisplayName("Ending contract changes room to AVAILABLE when no maintenance required")
     void testEndingContractWithoutMaintenance() {
-        Contract contract = contractService.createContract(new ContractUseCase.CreateContractCommand(
-            property.id(), room.getId(), "Tenant 1", "ID1", "0901", "t1@example.com", null,
-            new BigDecimal("3000000"), new BigDecimal("3000000"),
-            LocalDate.now(), LocalDate.now().plusMonths(6), 5
-        ));
+        Contract contract = draft(room, "ID1");
         contractService.activateContract(contract.getId());
 
         contractService.terminateContract(contract.getId(), false);
@@ -134,8 +167,16 @@ class ContractServiceInvariantsUnitTest {
     }
 
     private Contract draft(Room targetRoom, String idCard) {
+        Tenant tenant = tenantRepo.findByIdentityCardNumber(idCard).orElseGet(() -> {
+            String suffix = Integer.toString(userRepo.findAll().size() + 1);
+            UUID userId = UUID.randomUUID();
+            userRepo.save(new User(userId, "tenant" + suffix, "tenant" + suffix + "@test.local",
+                "Tenant " + idCard, "0901234567", UserRole.TENANT, User.UserStatus.ACTIVE, false, Instant.now()));
+            return tenantRepo.save(Tenant.create(userId, "Tenant " + idCard, idCard, "0901234567",
+                "tenant" + suffix + "@test.local", null));
+        });
         return contractService.createContract(new ContractUseCase.CreateContractCommand(
-            property.id(), targetRoom.getId(), "Tenant " + idCard, idCard, "0900", null, null,
+            property.id(), targetRoom.getId(), tenant.id(),
             new BigDecimal("3000000"), new BigDecimal("3000000"),
             LocalDate.now(), LocalDate.now().plusMonths(6), 5
         ));
@@ -199,11 +240,7 @@ class ContractServiceInvariantsUnitTest {
     @Test
     @DisplayName("Ending contract changes room to MAINTENANCE when maintenance is explicitly required")
     void testEndingContractWithMaintenance() {
-        Contract contract = contractService.createContract(new ContractUseCase.CreateContractCommand(
-            property.id(), room.getId(), "Tenant 1", "ID1", "0901", "t1@example.com", null,
-            new BigDecimal("3000000"), new BigDecimal("3000000"),
-            LocalDate.now(), LocalDate.now().plusMonths(6), 5
-        ));
+        Contract contract = draft(room, "ID1");
         contractService.activateContract(contract.getId());
 
         contractService.terminateContract(contract.getId(), true);
@@ -248,10 +285,8 @@ class ContractServiceInvariantsUnitTest {
 
         DomainException ex = assertThrows(DomainException.class, () ->
             contractService.createContract(new ContractUseCase.CreateContractCommand(
-                pendingProp.id(), pendingRoom.getId(), "Tenant Name", "ID999", "0900", "t@example.com", null,
-                new BigDecimal("3000000"), new BigDecimal("3000000"),
-                LocalDate.now(), LocalDate.now().plusMonths(6), 5
-            ))
+                pendingProp.id(), pendingRoom.getId(), UUID.randomUUID(), new BigDecimal("3000000"),
+                new BigDecimal("3000000"), LocalDate.now(), LocalDate.now().plusMonths(6), 5))
         );
         assertTrue(ex.getMessage().contains("chưa được duyệt"));
     }

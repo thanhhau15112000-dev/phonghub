@@ -148,7 +148,8 @@ public class ContractUiController {
         model.addAttribute("rooms", rooms);
         model.addAttribute("selectedPropertyId", propertyId);
         model.addAttribute("selectedRoomId", roomId);
-        model.addAttribute("tenantAccounts", tenantAccountsForProperty(propertyId, currentUser));
+        model.addAttribute("tenantAccounts", propertyId == null
+            ? List.of() : contractUseCase.listAvailablePrimaryTenants(propertyId, null));
         model.addAttribute("defaultStartDate", LocalDate.now());
         model.addAttribute("defaultEndDate", LocalDate.now().plusYears(1));
 
@@ -159,11 +160,7 @@ public class ContractUiController {
     public String createContract(
         @RequestParam UUID propertyId,
         @RequestParam UUID roomId,
-        @RequestParam String primaryTenantFullName,
-        @RequestParam String primaryTenantIdCard,
-        @RequestParam String primaryTenantPhone,
-        @RequestParam(required = false) String primaryTenantEmail,
-        @RequestParam(required = false) UUID primaryTenantUserId,
+        @RequestParam UUID primaryTenantId,
         @RequestParam BigDecimal depositAmount,
         @RequestParam BigDecimal rentAmount,
         @RequestParam LocalDate startDate,
@@ -175,11 +172,7 @@ public class ContractUiController {
             Contract contract = contractUseCase.createContract(new ContractUseCase.CreateContractCommand(
                 propertyId,
                 roomId,
-                primaryTenantFullName,
-                primaryTenantIdCard,
-                primaryTenantPhone,
-                primaryTenantEmail,
-                primaryTenantUserId,
+                primaryTenantId,
                 depositAmount,
                 rentAmount,
                 startDate,
@@ -212,16 +205,15 @@ public class ContractUiController {
 
             List<Tenant> availableOccupants = List.of();
             int remainingOccupantSlots = 0;
-            boolean canManageOccupants = currentUser != null && contract.isActive()
-                && (currentUser.role() == UserRole.ADMIN
-                    || (currentUser.role() == UserRole.OWNER && currentUser.id().equals(property.ownerId())));
-            if (canManageOccupants) {
+            boolean canManageOccupants = false;
+            if (currentUser != null && contract.isActive()) {
                 try {
                     availableOccupants = contractUseCase.listAvailableOccupants(contract.getId());
                     long residingCount = countResidingOccupants(contract, LocalDate.now());
                     remainingOccupantSlots = Math.max(0, room.getMaxOccupants() - (int) residingCount);
+                    canManageOccupants = true;
                 } catch (DomainException ex) {
-                    // Hide the quick picker when the contract or property is no longer eligible.
+                    // Hide occupant controls unless the use case confirms the user's contract permission.
                 }
             }
 
@@ -233,6 +225,7 @@ public class ContractUiController {
             model.addAttribute("occupantTenants", occupantTenants);
             model.addAttribute("availableOccupants", availableOccupants);
             model.addAttribute("remainingOccupantSlots", remainingOccupantSlots);
+            model.addAttribute("canManageOccupants", canManageOccupants);
             // Hóa đơn và thanh toán là số liệu tiền của nhà trọ: quản trị viên, kỹ thuật viên và nhân viên không có
             // quyền thu tiền/quản lý hợp đồng không xem (#163); trang hợp đồng vẫn hiện, chỉ ẩn phần thanh toán.
             if (currentUser.role() != UserRole.ADMIN && currentUser.role() != UserRole.TECHNICIAN) {
@@ -321,42 +314,6 @@ public class ContractUiController {
             : null);
     }
 
-    private List<User> tenantAccountsForProperty(UUID propertyId, CurrentUser currentUser) {
-        if (propertyId == null || userRepository == null || currentUser == null) {
-            return List.of();
-        }
-
-        List<User> accounts;
-        if (currentUser.role() == UserRole.ADMIN) {
-            accounts = userRepository.findByRole(UserRole.TENANT);
-        } else {
-            Set<UUID> linkedTenantIds = tenantRepository.findLinks(propertyId).stream()
-                .filter(link -> link.hiddenAt() == null)
-                .map(TenantRepositoryPort.PropertyLink::tenantId)
-                .collect(java.util.stream.Collectors.toSet());
-            List<Tenant> tenants = tenantRepository.findAll();
-            Set<UUID> linkedUserIds = tenants.stream()
-                .filter(tenant -> linkedTenantIds.contains(tenant.id()))
-                .map(Tenant::userId)
-                .filter(java.util.Objects::nonNull)
-                .collect(java.util.stream.Collectors.toSet());
-            Set<UUID> alreadyLinkedUserIds = tenants.stream()
-                .map(Tenant::userId)
-                .filter(java.util.Objects::nonNull)
-                .collect(java.util.stream.Collectors.toSet());
-            accounts = userRepository.findByRole(UserRole.TENANT).stream()
-                .filter(user -> !alreadyLinkedUserIds.contains(user.id()) || linkedUserIds.contains(user.id()))
-                .toList();
-        }
-
-        return accounts.stream()
-            .filter(user -> user.role() == UserRole.TENANT && user.status() == User.UserStatus.ACTIVE)
-            .filter(user -> contractUseCase.getActiveContractForTenant(user.id()).isEmpty())
-            .distinct()
-            .sorted(Comparator.comparing(User::fullName, String.CASE_INSENSITIVE_ORDER))
-            .toList();
-    }
-
     private long countResidingOccupants(Contract contract, LocalDate today) {
         long count = contract.getOccupants().stream()
             .filter(occupant -> occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(today))
@@ -376,7 +333,7 @@ public class ContractUiController {
         @RequestParam(required = false) String email,
         @RequestParam(required = false) String permanentAddress,
         @RequestParam(required = false) LocalDate checkInDate,
-        @RequestParam(defaultValue = "false") boolean createAccount,
+        @RequestParam(defaultValue = "true") boolean createAccount,
         RedirectAttributes redirectAttributes
     ) {
         try {
@@ -388,7 +345,7 @@ public class ContractUiController {
                 email,
                 permanentAddress,
                 checkInDate != null ? checkInDate : LocalDate.now(),
-                createAccount
+                true
             ));
             String message = "Thêm người thuê vào phòng thành công.";
             if (result.temporaryPassword() != null) {

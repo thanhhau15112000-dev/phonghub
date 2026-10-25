@@ -37,6 +37,7 @@ import com.phonghub.domain.model.PaymentCode;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -224,17 +225,18 @@ class ConcurrencyAndRollbackPostgresTest {
         PostgresRoomRepository rooms = new PostgresRoomRepository(jdbc);
         PostgresContractRepository contracts = new PostgresContractRepository(jdbc);
         PostgresTenantRepository tenants = new PostgresTenantRepository(jdbc, protector);
+        PostgresUserRepository users = new PostgresUserRepository(jdbc, protector);
         Room room = rooms.save(new Room(UUID.randomUUID(), contract.getPropertyId(), "CC-" + System.nanoTime() % 100000, 9,
             null, new BigDecimal("3000000"), 2, RoomStatus.AVAILABLE, Instant.now(), Instant.now()));
-        Tenant a = tenants.save(Tenant.create(null, "Người Thuê A", "079201007771", "0907770001", null, null));
-        Tenant b = tenants.save(Tenant.create(null, "Người Thuê B", "079201007772", "0907770002", null, null));
+        Tenant a = activeTenant(tenants, users, "A", "079201007771", "0907770001");
+        Tenant b = activeTenant(tenants, users, "B", "079201007772", "0907770002");
         Contract first = contracts.save(draft(room, a));
         Contract second = contracts.save(draft(room, b));
 
         CurrentUserPort currentUser = mock(CurrentUserPort.class);
         when(currentUser.getCurrentUser()).thenReturn(new CurrentUser(UUID.randomUUID(), "admin@x", "Admin", UserRole.ADMIN));
         ContractService service = new ContractService(contracts, rooms, new PostgresPropertyRepository(jdbc), tenants,
-            null, null, currentUser, mock(AuthorizationService.class), event -> { });
+            users, null, currentUser, mock(AuthorizationService.class), event -> { });
 
         List<Object> results = runConcurrently(List.of(
             () -> tx.execute(s -> service.activateContract(first.getId())),
@@ -256,6 +258,16 @@ class ConcurrencyAndRollbackPostgresTest {
     private Contract draft(Room room, Tenant tenant) {
         return Contract.create(room.getPropertyId(), room.getId(), tenant.id(), new BigDecimal("1000000"),
             new BigDecimal("3000000"), LocalDate.now(), LocalDate.now().plusMonths(6), 5);
+    }
+
+    private Tenant activeTenant(PostgresTenantRepository tenants, PostgresUserRepository users,
+                                String suffix, String cccd, String phone) {
+        UUID userId = UUID.randomUUID();
+        String username = "activation_" + suffix.toLowerCase() + "_" + userId.toString().substring(0, 8);
+        String email = username + "@example.test";
+        users.save(new User(userId, username, email, "Người Thuê " + suffix, phone, UserRole.TENANT,
+            User.UserStatus.ACTIVE, false, Instant.now()));
+        return tenants.save(Tenant.create(userId, "Người Thuê " + suffix, cccd, phone, email, null));
     }
 
     /**
