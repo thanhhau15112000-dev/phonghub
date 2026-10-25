@@ -334,6 +334,20 @@ public class Contract {
         return this.status == ContractStatus.ACTIVE || this.status == ContractStatus.EXPIRED;
     }
 
+    /**
+     * Số người đang ở theo hợp đồng này, là nguồn duy nhất để tính chỗ còn trống của phòng. Người ở chưa check-out thì
+     * tính; hợp đồng cũ chưa có dòng người ở cho người thuê chính thì tính thêm người thuê chính.
+     */
+    public long residingOccupantCount(LocalDate today) {
+        long count = occupants.stream()
+            .filter(occupant -> occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(today))
+            .count();
+        boolean primaryCounted = occupants.stream()
+            .anyMatch(occupant -> occupant.isPrimary() && occupant.tenantId().equals(primaryTenantId)
+                && (occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(today)));
+        return isResiding() && !primaryCounted ? count + 1 : count;
+    }
+
     /** Chưa kết thúc: nháp hoặc người thuê còn ở. Hồ sơ tenant chưa bị khóa/ẩn khi còn hợp đồng như vậy. */
     public boolean isOpen() {
         return this.status == ContractStatus.DRAFT || isResiding();

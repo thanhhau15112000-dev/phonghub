@@ -284,6 +284,15 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.MaintenanceSubmissionUseCase maintenanceSubmissionUseCase(
+        MaintenanceUseCase maintenanceUseCase,
+        com.phonghub.application.port.in.MaintenanceAttachmentUseCase attachmentUseCase
+    ) {
+        return new TransactionalMaintenanceSubmissionUseCase(
+            new com.phonghub.application.service.MaintenanceSubmissionService(maintenanceUseCase, attachmentUseCase));
+    }
+
+    @Bean
     public com.phonghub.application.port.in.MeterSubmissionUseCase meterSubmissionUseCase(
         com.phonghub.application.port.out.MeterSubmissionRepositoryPort submissionRepo,
         RoomRepositoryPort roomRepo,
@@ -479,10 +488,12 @@ public class PhongHubConfiguration {
         AuthorizationService authorizationService,
         AuditPort auditPort,
         ContractRepositoryPort contractRepo,
-        com.phonghub.application.service.TenantLockPolicy tenantLockPolicy
+        com.phonghub.application.service.TenantLockPolicy tenantLockPolicy,
+        UserRepositoryPort userRepo,
+        IdentityProviderPort identityProviderPort
     ) {
         TenantService service = new TenantService(tenantRepo, currentUserPort, authorizationService, auditPort,
-            contractRepo, tenantLockPolicy);
+            contractRepo, tenantLockPolicy, userRepo, identityProviderPort);
         return new TransactionalTenantUseCase(service);
     }
 

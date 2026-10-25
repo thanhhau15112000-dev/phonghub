@@ -2,19 +2,26 @@ package com.phonghub.adapter.in.web;
 
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
+import com.phonghub.application.port.in.TenantUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.ContractRepositoryPort;
+import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomPage;
 import com.phonghub.domain.model.RoomSearchCriteria;
 import com.phonghub.domain.model.RoomStatus;
+import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.UserRole;
 import com.phonghub.domain.model.PropertyApprovalStatus;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.time.LocalDate;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -32,15 +39,24 @@ public class PropertyUiController {
     private final PropertyUseCase propertyUseCase;
     private final RoomUseCase roomUseCase;
     private final CurrentUserPort currentUserPort;
+    private final ContractRepositoryPort contractRepository;
+    private final TenantRepositoryPort tenantRepository;
+    private final TenantUseCase tenantUseCase;
 
     public PropertyUiController(
         PropertyUseCase propertyUseCase,
         RoomUseCase roomUseCase,
-        CurrentUserPort currentUserPort
+        CurrentUserPort currentUserPort,
+        ContractRepositoryPort contractRepository,
+        TenantRepositoryPort tenantRepository,
+        TenantUseCase tenantUseCase
     ) {
         this.propertyUseCase = propertyUseCase;
         this.roomUseCase = roomUseCase;
         this.currentUserPort = currentUserPort;
+        this.contractRepository = contractRepository;
+        this.tenantRepository = tenantRepository;
+        this.tenantUseCase = tenantUseCase;
     }
 
     @GetMapping
@@ -185,6 +201,36 @@ public class PropertyUiController {
             model.addAttribute("property", property);
             model.addAttribute("rooms", roomPage.items());
             model.addAttribute("roomPage", roomPage);
+            Map<UUID, Long> roomOccupantCounts = new java.util.HashMap<>();
+            Map<UUID, Integer> roomAvailableSlots = new java.util.HashMap<>();
+            Map<UUID, List<String>> roomOccupantNames = new java.util.HashMap<>();
+            for (Room room : roomPage.items()) {
+                List<String> occupantNames = new java.util.ArrayList<>();
+                long count = contractRepository.findActiveByRoomId(room.getId())
+                    .map(Contract::getOccupants).orElse(List.of()).stream()
+                    .filter(occupant -> occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(LocalDate.now()))
+                    .peek(occupant -> tenantRepository.findById(occupant.tenantId())
+                        .map(com.phonghub.domain.model.Tenant::fullName).ifPresent(occupantNames::add))
+                    .count();
+                roomOccupantCounts.put(room.getId(), count);
+                roomAvailableSlots.put(room.getId(), Math.max(0, room.getMaxOccupants() - (int) count));
+                roomOccupantNames.put(room.getId(), List.copyOf(occupantNames));
+            }
+            model.addAttribute("roomOccupantCounts", roomOccupantCounts);
+            model.addAttribute("roomAvailableSlots", roomAvailableSlots);
+            model.addAttribute("roomOccupantNames", roomOccupantNames);
+            List<Tenant> tenantsWithoutRoom = List.of();
+            if (currentUser.role() != UserRole.TENANT && currentUser.role() != UserRole.TECHNICIAN) {
+                try {
+                    tenantsWithoutRoom = tenantUseCase.listTenants(id, null, false, 0, 50).items().stream()
+                        .filter(view -> !view.hasActiveContract())
+                        .map(TenantUseCase.PropertyTenantView::tenant)
+                        .toList();
+                } catch (DomainException ignored) {
+                    // Người không quản lý nhà trọ này thì không xem danh sách người thuê
+                }
+            }
+            model.addAttribute("tenantsWithoutRoom", tenantsWithoutRoom);
             model.addAttribute("roomStatuses", RoomStatus.values());
             model.addAttribute("filterStatus", status);
             model.addAttribute("filterMinPrice", minPrice);
