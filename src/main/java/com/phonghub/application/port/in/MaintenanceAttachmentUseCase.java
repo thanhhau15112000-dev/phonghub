@@ -10,9 +10,15 @@ public interface MaintenanceAttachmentUseCase {
 
     MaintenanceAttachment upload(UUID ticketId, String contentType, byte[] content);
 
+    /** Tải nhiều tệp trong một lượt: kiểm tra hết trước khi lưu, lỗi một tệp thì không lưu tệp nào. */
+    List<MaintenanceAttachment> uploadAll(UUID ticketId, List<AttachmentFile> files);
+
     List<MaintenanceAttachment> list(UUID ticketId);
 
     URI signedUrl(UUID ticketId, UUID attachmentId);
 
     void delete(UUID ticketId, UUID attachmentId);
+
+    /** Tệp tải lên kèm loại nội dung trình duyệt khai báo; nội dung thật được kiểm tra lại bằng magic bytes. */
+    record AttachmentFile(String contentType, byte[] content) {}
 }

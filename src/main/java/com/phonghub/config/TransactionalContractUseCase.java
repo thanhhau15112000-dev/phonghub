@@ -25,6 +25,12 @@ public class TransactionalContractUseCase implements ContractUseCase {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public CreateContractResult createContractWithDetails(CreateContractCommand command) {
+        return delegate.createContractWithDetails(command);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public Contract activateContract(UUID contractId) {
         return delegate.activateContract(contractId);
     }
@@ -95,6 +101,12 @@ public class TransactionalContractUseCase implements ContractUseCase {
     @Transactional(rollbackFor = Exception.class)
     public List<ContractOccupant> addExistingOccupants(AddExistingOccupantsCommand command) {
         return delegate.addExistingOccupants(command);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public AddOccupantsResult addOccupants(AddOccupantsCommand command) {
+        return delegate.addOccupants(command);
     }
 
     @Override

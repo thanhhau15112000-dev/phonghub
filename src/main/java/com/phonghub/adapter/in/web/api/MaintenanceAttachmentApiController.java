@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -34,13 +35,28 @@ public class MaintenanceAttachmentApiController {
     }
 
     @PostMapping
-    public ResponseEntity<AttachmentResponse> upload(
+    public ResponseEntity<?> upload(
         @PathVariable UUID ticketId,
-        @RequestParam("file") MultipartFile file
+        @RequestParam(name = "file", required = false) MultipartFile file,
+        @RequestParam(name = "files", required = false) List<MultipartFile> files
     ) throws IOException {
-        MaintenanceAttachment saved = useCase.upload(ticketId, file.getContentType(), file.getBytes());
-        return ResponseEntity.created(URI.create("/api/maintenance/" + ticketId + "/attachments/" + saved.id()))
-            .body(AttachmentResponse.from(saved));
+        List<MultipartFile> uploads = files == null ? new ArrayList<>() : new ArrayList<>(files);
+        if (file != null && !file.isEmpty()) uploads.add(file);
+        if (uploads.stream().noneMatch(upload -> upload != null && !upload.isEmpty())) {
+            throw new IllegalArgumentException("Cần chọn ít nhất một tệp để tải lên.");
+        }
+        List<AttachmentResponse> saved = new ArrayList<>();
+        for (MultipartFile upload : uploads) {
+            if (upload != null && !upload.isEmpty()) {
+                saved.add(AttachmentResponse.from(useCase.upload(ticketId, upload.getContentType(), upload.getBytes())));
+            }
+        }
+        Object body = file != null && files == null && saved.size() == 1 ? saved.getFirst() : List.copyOf(saved);
+        URI location = file != null && files == null && saved.size() == 1
+            ? URI.create("/api/maintenance/" + ticketId + "/attachments/" + saved.getFirst().id())
+            : URI.create("/api/maintenance/" + ticketId + "/attachments");
+        return ResponseEntity.created(location)
+            .body(body);
     }
 
     @GetMapping("/{attachmentId}")

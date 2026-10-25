@@ -309,6 +309,7 @@
                     <th>Diện tích</th>
                     <th>Giá cơ bản</th>
                     <th>Sức chứa</th>
+                    <th>Người ở / chỗ trống</th>
                     <th>Trạng thái</th>
                     <th class="col-actions">Thao tác</th>
                 </tr>
@@ -322,6 +323,15 @@
                     <td th:text="${r.getAreaSqm() != null ? r.getAreaSqm() + ' m²' : '—'}">25 m²</td>
                     <td style="font-weight: 500;" th:text="${#numbers.formatDecimal(r.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     <td th:text="${r.getMaxOccupants()} + ' người'">2 người</td>
+                    <td>
+                        <strong th:text="${roomOccupantCounts.get(r.getId()) + '/' + r.getMaxOccupants()}">0/2</strong>
+                        <small style="display: block; color: var(--text-secondary);"
+                               th:text="${roomOccupantNames.get(r.getId()).isEmpty() ? 'Chưa có người ở' : #strings.listJoin(roomOccupantNames.get(r.getId()), ', ')}">Chưa có người ở</small>
+                        <small th:if="${r.getStatus().name() == 'MAINTENANCE'}" style="display: block; color: var(--danger-color, #b91c1c);">Đang bảo trì, tạm không nhận người</small>
+                        <small th:if="${r.getStatus().name() == 'RESERVED'}" style="display: block; color: var(--text-secondary);">Đã giữ chỗ, chờ ký hợp đồng</small>
+                        <small th:unless="${r.getStatus().name() == 'MAINTENANCE' or r.getStatus().name() == 'RESERVED'}" style="display: block; color: var(--text-secondary);"
+                               th:text="${roomAvailableSlots.get(r.getId()) == 0 ? 'Đã đủ người' : 'Còn ' + roomAvailableSlots.get(r.getId()) + ' chỗ trống'}">Còn 2 chỗ trống</small>
+                    </td>
                     <td>
                         <span th:class="'badge badge-' + ${r.getStatus()}" th:text="${uiText.roomStatus(r.getStatus())}">Trống</span>
                     </td>
@@ -356,6 +366,25 @@
                   th:text="'Trang ' + ${roomPage.page() + 1} + '/' + ${roomPage.totalPages()} + ' · ' + ${roomPage.totalElements()} + ' phòng'">Trang 1/2</span>
             <a th:if="${roomPage.hasNext()}" class="btn btn-sm" style="text-decoration: none;"
                th:href="@{'/properties/' + ${property.id()}(status=${filterStatus}, minPrice=${filterMinPrice}, maxPrice=${filterMaxPrice}, floor=${filterFloor}, page=${roomPage.page() + 1})}">Trang sau &rarr;</a>
+        </div>
+
+        <!-- Người thuê đã gắn nhà trọ nhưng chưa có hợp đồng phòng (#198) -->
+        <div th:if="${!tenantsWithoutRoom.isEmpty()}" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+            <h3 style="font-size: 15px; margin: 0 0 8px;" th:text="'Người thuê chưa có phòng (' + ${tenantsWithoutRoom.size()} + ')'">Người thuê chưa có phòng</h3>
+            <ul style="list-style: none; margin: 0; padding: 0;">
+                <li th:each="t : ${tenantsWithoutRoom}"
+                    style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
+                    <span>
+                        <strong th:text="${t.fullName()}">Nguyễn Văn A</strong>
+                        <small style="color: var(--text-secondary);"
+                               th:text="${' · ' + t.maskedIdentityCardNumber() + (t.userId() != null ? ' · có tài khoản app' : ' · chưa có tài khoản app')}"> · ****1111</small>
+                    </span>
+                    <a th:if="${property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED'
+                                and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                       th:href="@{/contracts/new(propertyId=${property.id()}, tenantProfileId=${t.id()})}"
+                       class="btn btn-sm btn-primary">Tạo hợp đồng</a>
+                </li>
+            </ul>
         </div>
 
         <!-- Phòng đã ngừng sử dụng (#89): không tính vào danh sách trên, chủ trọ / quản trị viên khôi phục tại đây -->

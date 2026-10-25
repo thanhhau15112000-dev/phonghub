@@ -101,6 +101,8 @@ class ContractServiceAddOccupantUnitTest {
         room = roomRepo.save(Room.create(property.id(), "P101", 1, new BigDecimal("25.0"), new BigDecimal("3500000"), 2));
 
         // Setup primary tenant
+        userRepo.save(new User(LocalDemoAuthenticationAdapter.TENANT_1_ID, "primary@phonghub.local", "Nguyễn Văn A",
+            "0901234567", UserRole.TENANT, User.UserStatus.ACTIVE, Instant.now()));
         primaryTenant = tenantRepo.save(Tenant.create(
             LocalDemoAuthenticationAdapter.TENANT_1_ID,
             "Nguyễn Văn A",
@@ -579,5 +581,98 @@ class ContractServiceAddOccupantUnitTest {
         User savedUser = userRepo.findById(savedTenant.userId()).orElseThrow();
         assertEquals("vothid@example.com", savedUser.email());
         assertEquals(UserRole.TENANT, savedUser.role());
+    }
+
+    // ---- Thêm người ở: một hàm đếm chỗ, kiểm tra hết trước khi ghi, lỗi nêu tên người, tự gắn nhà trọ ----
+
+    private ContractUseCase.AddOccupantCommand newPersonRow(String idCard, String fullName) {
+        return new ContractUseCase.AddOccupantCommand(activeContract.getId(), fullName, idCard, "0900000001",
+            null, null, LocalDate.now(), false);
+    }
+
+    private ContractUseCase.AddOccupantCommand profileRow(UUID tenantId) {
+        return new ContractUseCase.AddOccupantCommand(activeContract.getId(), null, null, null, null, null,
+            LocalDate.now(), false, tenantId, null);
+    }
+
+    @Test
+    @DisplayName("Batch add counts the primary tenant too when a legacy contract has no occupant rows")
+    void batchAddCountsPrimaryTenantForLegacyContract() {
+        Contract legacy = new Contract(
+            activeContract.getId(), activeContract.getPropertyId(), activeContract.getRoomId(),
+            activeContract.getPrimaryTenantId(), activeContract.getDepositAmount(), activeContract.getRentAmount(),
+            activeContract.getStartDate(), activeContract.getEndDate(), activeContract.getPaymentDay(),
+            ContractStatus.ACTIVE, List.of(), activeContract.getCreatedAt(), activeContract.getUpdatedAt());
+        contractRepo.save(legacy);
+
+        // Phòng chứa 2 người, người thuê chính đã chiếm 1 chỗ: thêm 2 người phải bị từ chối
+        assertThrows(InvalidRoomCapacityException.class, () -> contractService.addOccupants(
+            new ContractUseCase.AddOccupantsCommand(activeContract.getId(),
+                List.of(newPersonRow("079200020001", "Hoàng Văn P"), newPersonRow("079200020002", "Mai Thị Q")))));
+
+        assertTrue(tenantRepo.findByIdentityCardNumber("079200020001").isEmpty());
+        assertTrue(contractRepo.findById(activeContract.getId()).orElseThrow().getOccupants().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Batch add validates every row before writing: one invalid row leaves no new profile behind")
+    void batchAddWritesNothingWhenALaterRowIsInvalid() {
+        room.updateInfo("P101", 1, new BigDecimal("25.0"), new BigDecimal("3500000"), 3);
+        roomRepo.save(room);
+        Tenant residing = linkedAvailableTenant("079200020003", "Nguyễn Thị M");
+        Room anotherRoom = roomRepo.save(Room.create(property.id(), "P102", 1, new BigDecimal("25.0"),
+            new BigDecimal("3500000"), 2));
+        Contract otherContract = Contract.create(property.id(), anotherRoom.getId(), residing.id(),
+            new BigDecimal("3500000"), new BigDecimal("3500000"), LocalDate.now(), LocalDate.now().plusMonths(6), 5);
+        otherContract.activate();
+        contractRepo.save(otherContract);
+
+        // Dòng 1 là người mới (sẽ tạo hồ sơ), dòng 2 đang ở hợp đồng khác: không dòng nào được ghi
+        DuplicateActiveContractException error = assertThrows(DuplicateActiveContractException.class,
+            () -> contractService.addOccupants(new ContractUseCase.AddOccupantsCommand(activeContract.getId(),
+                List.of(newPersonRow("079200020004", "Người Mới Một"), profileRow(residing.id())))));
+
+        assertTrue(error.getMessage().contains("Nguyễn Thị M"), "lỗi nêu tên người vi phạm");
+        assertTrue(tenantRepo.findByIdentityCardNumber("079200020004").isEmpty(), "dòng 1 không được tạo hồ sơ");
+        assertEquals(1, contractRepo.findById(activeContract.getId()).orElseThrow().getOccupants().size());
+    }
+
+    @Test
+    @DisplayName("Bulk add of existing profiles names the person who is already in the contract")
+    void bulkAddErrorNamesThePerson() {
+        DomainException error = assertThrows(DomainException.class, () -> contractService.addExistingOccupants(
+            new ContractUseCase.AddExistingOccupantsCommand(
+                activeContract.getId(), List.of(primaryTenant.id()), LocalDate.now())));
+
+        assertTrue(error.getMessage().contains(primaryTenant.fullName()));
+    }
+
+    @Test
+    @DisplayName("A profile picked from another property is linked to this property when it is added")
+    void profileFromAnotherPropertyIsLinkedToThisProperty() {
+        Property other = propertyRepo.save(new Property(UUID.randomUUID(), "Nhà Trọ Khác", "9 Đường B", "", 5,
+            LocalDemoAuthenticationAdapter.OWNER_1_ID, PropertyApprovalStatus.VERIFIED, null, Instant.now()));
+        Tenant stranger = tenantRepo.save(Tenant.create(null, "Đặng Văn T", "079200020005", "0900000005", null, null));
+        tenantRepo.linkToProperty(stranger.id(), other.id(), LocalDemoAuthenticationAdapter.OWNER_1_ID);
+        assertFalse(tenantRepo.findLinkedPropertyIds(stranger.id()).contains(property.id()));
+
+        contractService.addOccupants(new ContractUseCase.AddOccupantsCommand(
+            activeContract.getId(), List.of(profileRow(stranger.id()))));
+
+        assertTrue(tenantRepo.findLinkedPropertyIds(stranger.id()).contains(property.id()));
+        assertTrue(contractRepo.findById(activeContract.getId()).orElseThrow().getOccupants().stream()
+            .anyMatch(occupant -> occupant.tenantId().equals(stranger.id())));
+    }
+
+    @Test
+    @DisplayName("Bulk add uses the check-in date given for the whole batch")
+    void bulkAddUsesTheGivenCheckInDate() {
+        Tenant tenant = linkedAvailableTenant("079200020006", "Lương Thị U");
+        LocalDate checkIn = LocalDate.now().plusDays(1);
+
+        List<ContractOccupant> added = contractService.addExistingOccupants(
+            new ContractUseCase.AddExistingOccupantsCommand(activeContract.getId(), List.of(tenant.id()), checkIn));
+
+        assertEquals(checkIn, added.get(0).checkInDate());
     }
 }
