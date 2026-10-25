@@ -9,6 +9,7 @@ import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.config.SepayProperties;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
@@ -19,6 +20,7 @@ import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -28,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -47,6 +50,7 @@ public class ContractUiController {
     private final RoomUseCase roomUseCase;
     private final RoomRepositoryPort roomRepository;
     private final TenantRepositoryPort tenantRepository;
+    private final UserRepositoryPort userRepository;
     private final CurrentUserPort currentUserPort;
     private final TenantUseCase tenantUseCase;
     private final InvoiceUseCase invoiceUseCase;
@@ -58,6 +62,7 @@ public class ContractUiController {
         RoomUseCase roomUseCase,
         RoomRepositoryPort roomRepository,
         TenantRepositoryPort tenantRepository,
+        UserRepositoryPort userRepository,
         CurrentUserPort currentUserPort,
         TenantUseCase tenantUseCase,
         InvoiceUseCase invoiceUseCase,
@@ -68,6 +73,7 @@ public class ContractUiController {
         this.roomUseCase = roomUseCase;
         this.roomRepository = roomRepository;
         this.tenantRepository = tenantRepository;
+        this.userRepository = userRepository;
         this.currentUserPort = currentUserPort;
         this.tenantUseCase = tenantUseCase;
         this.invoiceUseCase = invoiceUseCase;
@@ -142,6 +148,7 @@ public class ContractUiController {
         model.addAttribute("rooms", rooms);
         model.addAttribute("selectedPropertyId", propertyId);
         model.addAttribute("selectedRoomId", roomId);
+        model.addAttribute("tenantAccounts", tenantAccountsForProperty(propertyId, currentUser));
         model.addAttribute("defaultStartDate", LocalDate.now());
         model.addAttribute("defaultEndDate", LocalDate.now().plusYears(1));
 
@@ -156,6 +163,7 @@ public class ContractUiController {
         @RequestParam String primaryTenantIdCard,
         @RequestParam String primaryTenantPhone,
         @RequestParam(required = false) String primaryTenantEmail,
+        @RequestParam(required = false) UUID primaryTenantUserId,
         @RequestParam BigDecimal depositAmount,
         @RequestParam BigDecimal rentAmount,
         @RequestParam LocalDate startDate,
@@ -171,7 +179,7 @@ public class ContractUiController {
                 primaryTenantIdCard,
                 primaryTenantPhone,
                 primaryTenantEmail,
-                null,
+                primaryTenantUserId,
                 depositAmount,
                 rentAmount,
                 startDate,
@@ -202,12 +210,29 @@ public class ContractUiController {
                 }
             }
 
+            List<Tenant> availableOccupants = List.of();
+            int remainingOccupantSlots = 0;
+            boolean canManageOccupants = currentUser != null && contract.isActive()
+                && (currentUser.role() == UserRole.ADMIN
+                    || (currentUser.role() == UserRole.OWNER && currentUser.id().equals(property.ownerId())));
+            if (canManageOccupants) {
+                try {
+                    availableOccupants = contractUseCase.listAvailableOccupants(contract.getId());
+                    long residingCount = countResidingOccupants(contract, LocalDate.now());
+                    remainingOccupantSlots = Math.max(0, room.getMaxOccupants() - (int) residingCount);
+                } catch (DomainException ex) {
+                    // Hide the quick picker when the contract or property is no longer eligible.
+                }
+            }
+
             model.addAttribute("currentUser", currentUser);
             model.addAttribute("contract", contract);
             model.addAttribute("property", property);
             model.addAttribute("room", room);
             model.addAttribute("primaryTenant", primaryTenant);
             model.addAttribute("occupantTenants", occupantTenants);
+            model.addAttribute("availableOccupants", availableOccupants);
+            model.addAttribute("remainingOccupantSlots", remainingOccupantSlots);
             // Hóa đơn và thanh toán là số liệu tiền của nhà trọ: quản trị viên, kỹ thuật viên và nhân viên không có
             // quyền thu tiền/quản lý hợp đồng không xem (#163); trang hợp đồng vẫn hiện, chỉ ẩn phần thanh toán.
             if (currentUser.role() != UserRole.ADMIN && currentUser.role() != UserRole.TECHNICIAN) {
@@ -296,6 +321,45 @@ public class ContractUiController {
             : null);
     }
 
+    private List<User> tenantAccountsForProperty(UUID propertyId, CurrentUser currentUser) {
+        if (propertyId == null || userRepository == null || currentUser == null) {
+            return List.of();
+        }
+
+        List<User> accounts;
+        if (currentUser.role() == UserRole.ADMIN) {
+            accounts = userRepository.findByRole(UserRole.TENANT);
+        } else {
+            Set<UUID> linkedTenantIds = tenantRepository.findLinks(propertyId).stream()
+                .filter(link -> link.hiddenAt() == null)
+                .map(TenantRepositoryPort.PropertyLink::tenantId)
+                .collect(java.util.stream.Collectors.toSet());
+            accounts = tenantRepository.findAllByIds(linkedTenantIds).stream()
+                .map(Tenant::userId)
+                .filter(java.util.Objects::nonNull)
+                .map(userId -> userRepository.findById(userId).orElse(null))
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        }
+
+        return accounts.stream()
+            .filter(user -> user.role() == UserRole.TENANT && user.status() == User.UserStatus.ACTIVE)
+            .filter(user -> contractUseCase.getActiveContractForTenant(user.id()).isEmpty())
+            .distinct()
+            .sorted(Comparator.comparing(User::fullName, String.CASE_INSENSITIVE_ORDER))
+            .toList();
+    }
+
+    private long countResidingOccupants(Contract contract, LocalDate today) {
+        long count = contract.getOccupants().stream()
+            .filter(occupant -> occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(today))
+            .count();
+        boolean primaryCounted = contract.getOccupants().stream()
+            .anyMatch(occupant -> occupant.isPrimary() && occupant.tenantId().equals(contract.getPrimaryTenantId())
+                && (occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(today)));
+        return contract.isResiding() && !primaryCounted ? count + 1 : count;
+    }
+
     @PostMapping("/{id}/occupants")
     public String addOccupant(
         @PathVariable UUID id,
@@ -328,6 +392,24 @@ public class ContractUiController {
                 message += " Đã liên kết với tài khoản có sẵn: " + result.accountUsername() + ".";
             }
             redirectAttributes.addFlashAttribute("successMessage", message);
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
+    }
+
+    @PostMapping("/{id}/occupants/bulk")
+    public String addExistingOccupants(
+        @PathVariable UUID id,
+        @RequestParam(required = false) List<UUID> tenantIds,
+        @RequestParam(required = false) LocalDate checkInDate,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            List<com.phonghub.domain.model.ContractOccupant> added = contractUseCase.addExistingOccupants(
+                new ContractUseCase.AddExistingOccupantsCommand(id, tenantIds, checkInDate));
+            redirectAttributes.addFlashAttribute("successMessage", String.format(
+                "Đã thêm %d người thuê vào phòng trong một lần xác nhận.", added.size()));
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }

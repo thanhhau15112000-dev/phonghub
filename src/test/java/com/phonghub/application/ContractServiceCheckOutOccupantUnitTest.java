@@ -23,6 +23,7 @@ import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -108,6 +109,17 @@ class ContractServiceCheckOutOccupantUnitTest {
             "0901234567",
             "primary@phonghub.local",
             "TP.HCM"
+        ));
+        userRepo.save(new User(
+            LocalDemoAuthenticationAdapter.TENANT_1_ID,
+            "primary-tenant",
+            "primary@phonghub.local",
+            "Nguyễn Văn A",
+            "0901234567",
+            UserRole.TENANT,
+            User.UserStatus.ACTIVE,
+            false,
+            Instant.now()
         ));
 
         activeContract = contractService.createContract(new ContractUseCase.CreateContractCommand(
