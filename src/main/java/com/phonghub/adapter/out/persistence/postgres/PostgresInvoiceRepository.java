@@ -230,6 +230,14 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
     }
 
     @Override
+    public List<Invoice> findPayableByContractIdForUpdate(UUID contractId) {
+        String sql = "SELECT " + COLUMNS + " FROM invoices WHERE contract_id = :contractId"
+            + " AND status IN ('ISSUED', 'PARTIALLY_PAID', 'OVERDUE') AND consolidated_into_invoice_id IS NULL"
+            + " ORDER BY id FOR UPDATE";
+        return hydrate(jdbcTemplate.query(sql, Map.of("contractId", contractId), this::mapRow));
+    }
+
+    @Override
     public List<UUID> findOverdueRentInvoiceIds(java.time.LocalDate today) {
         return jdbcTemplate.query("""
             SELECT id FROM invoices

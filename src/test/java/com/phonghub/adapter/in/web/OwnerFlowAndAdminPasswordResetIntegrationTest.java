@@ -188,11 +188,13 @@ class OwnerFlowAndAdminPasswordResetIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("+ Tạo hợp đồng")));
 
-        // Owner 1 sees "Chấm dứt hợp đồng" on their active contract
+        // Owner 1 sees the early-checkout action on their active contract.
         mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Chấm dứt hợp đồng")));
+            .andExpect(content().string(containsString("Kết thúc sớm…")))
+            .andExpect(content().string(containsString("name=\"reason\"")))
+            .andExpect(content().string(containsString("Mở biên bản check-out")));
 
         // Owner 1 sees status change form and "+ Tạo hợp đồng" button on their room
         mockMvc.perform(get("/rooms/" + DataSeeder.ROOM_104_ID)

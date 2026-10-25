@@ -17,8 +17,12 @@ import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverItemRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverPhotoRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoicePaymentRecordRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryMeterReadingRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyHouseRulesRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomAssetRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryServiceRateRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantDocumentRepository;
 import com.phonghub.application.port.out.AuditPort;
 import java.nio.charset.StandardCharsets;
@@ -56,6 +60,10 @@ class HandoverReportApiIntegrationTest extends SeededWebTest {
     @Autowired private InMemoryPropertyHouseRulesRepository rules;
     @Autowired private InMemoryTenantDocumentRepository documents;
     @Autowired private InMemoryRoomAssetRepository roomAssets;
+    @Autowired private InMemoryInvoiceRepository invoices;
+    @Autowired private InMemoryInvoicePaymentRecordRepository paymentRecords;
+    @Autowired private InMemoryMeterReadingRepository meterReadings;
+    @Autowired private InMemoryServiceRateRepository serviceRates;
 
     @BeforeEach
     void reset() {
@@ -65,6 +73,10 @@ class HandoverReportApiIntegrationTest extends SeededWebTest {
         rules.clear();
         documents.clear();
         roomAssets.clear();
+        invoices.clear();
+        paymentRecords.clear();
+        meterReadings.clear();
+        serviceRates.clear();
         ((InMemoryAuditAdapter) auditPort).clear();
     }
 

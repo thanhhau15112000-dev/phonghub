@@ -147,6 +147,9 @@ public final class UiText {
         if (invoice.getType() == InvoiceType.MAINTENANCE) {
             return "Phí sửa chữa";
         }
+        if (invoice.getType() == InvoiceType.CHECK_OUT) {
+            return "Hóa đơn chốt điện/nước";
+        }
         boolean hasFees = invoice.getItems().stream().anyMatch(item -> item.sourceInvoiceId() != null);
         return String.format("Tiền thuê %02d/%d", invoice.getMonth(), invoice.getYear())
             + (hasFees ? " và phí sửa chữa" : "");

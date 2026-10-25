@@ -370,6 +370,15 @@ public class AuthorizationService {
         }
     }
 
+    public boolean canManageContracts(CurrentUser user, UUID propertyId) {
+        try {
+            assertCanManageContracts(user, propertyId);
+            return true;
+        } catch (UnauthorizedPropertyAccessException ex) {
+            return false;
+        }
+    }
+
     /** Quản lý phòng/tài sản: owner/admin hoặc staff được owner cấp quyền riêng. */
     public void assertCanManageRoomsAndAssets(CurrentUser user, UUID propertyId) {
         assertCanManageProperty(user, propertyId);

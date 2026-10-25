@@ -372,6 +372,23 @@ public class Invoice {
         );
     }
 
+    /** Hóa đơn chốt điện/nước từ chỉ số cuối đã người thuê xác nhận trong biên bản check-out. */
+    public static Invoice issueCheckOutUtilities(
+        Contract contract, YearMonth period, String paymentCode, LocalDate dueDate, List<InvoiceItem> charges
+    ) {
+        if (contract == null || period == null || dueDate == null || charges == null || charges.isEmpty()) {
+            throw new IllegalArgumentException("Contract, period, due date and utility charges are required");
+        }
+        BigDecimal total = charges.stream().map(InvoiceItem::totalAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (total.signum() <= 0) {
+            throw new IllegalArgumentException("Checkout utility invoice must be greater than zero");
+        }
+        Instant now = Instant.now();
+        return new Invoice(UUID.randomUUID(), contract.getId(), contract.getRoomId(), contract.getPrimaryTenantId(),
+            period.getMonthValue(), period.getYear(), BigDecimal.ZERO, total, BigDecimal.ZERO, dueDate,
+            InvoiceStatus.ISSUED, paymentCode, InvoiceType.CHECK_OUT, null, null, charges, null, now, now);
+    }
+
     /** Hủy hóa đơn chưa có tiền nào được ghi nhận. */
     public void voidInvoice() {
         if (!isPayable() && status != InvoiceStatus.DRAFT) {

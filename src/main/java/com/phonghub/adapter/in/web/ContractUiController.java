@@ -12,6 +12,7 @@ import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
+import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.config.SepayProperties;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
@@ -61,6 +62,7 @@ public class ContractUiController {
     private final InvoiceUseCase invoiceUseCase;
     private final SepayProperties sepayProperties;
     private final HandoverUseCase handoverUseCase;
+    private final AuthorizationService authorizationService;
 
     public ContractUiController(
         ContractUseCase contractUseCase,
@@ -74,7 +76,8 @@ public class ContractUiController {
         TenantUseCase tenantUseCase,
         InvoiceUseCase invoiceUseCase,
         SepayProperties sepayProperties,
-        HandoverUseCase handoverUseCase
+        HandoverUseCase handoverUseCase,
+        AuthorizationService authorizationService
     ) {
         this.contractUseCase = contractUseCase;
         this.propertyUseCase = propertyUseCase;
@@ -88,6 +91,7 @@ public class ContractUiController {
         this.invoiceUseCase = invoiceUseCase;
         this.sepayProperties = sepayProperties;
         this.handoverUseCase = handoverUseCase;
+        this.authorizationService = authorizationService;
     }
 
     @GetMapping
@@ -230,6 +234,12 @@ public class ContractUiController {
             } catch (UnauthorizedPropertyAccessException ignored) {
                 // Người ở cùng có thể xem hợp đồng nhưng không xem bước xác nhận của người thuê chính.
             }
+            com.phonghub.application.port.in.HandoverUseCase.HandoverDetails checkOut = null;
+            try {
+                checkOut = handoverUseCase.get(com.phonghub.domain.model.HandoverType.CHECK_OUT, id);
+            } catch (com.phonghub.domain.exception.HandoverNotFoundException | UnauthorizedPropertyAccessException ignored) {
+                // Chưa có check-out hoặc người xem không có quyền truy cập biên bản.
+            }
 
             java.util.Map<UUID, Tenant> occupantTenants = new java.util.HashMap<>();
             if (contract.getOccupants() != null) {
@@ -256,6 +266,8 @@ public class ContractUiController {
             model.addAttribute("currentUser", currentUser);
             model.addAttribute("contract", contract);
             model.addAttribute("checkIn", checkIn);
+            model.addAttribute("checkOut", checkOut);
+            model.addAttribute("canManageContracts", authorizationService.canManageContracts(currentUser, contract.getPropertyId()));
             model.addAttribute("property", property);
             model.addAttribute("room", room);
             model.addAttribute("primaryTenant", primaryTenant);
@@ -332,6 +344,8 @@ public class ContractUiController {
         );
 
         model.addAttribute("invoices", invoices);
+        model.addAttribute("openInvoiceCount", invoices.stream().filter(Invoice::isPayable)
+            .filter(invoice -> invoice.remainingAmount().signum() > 0).count());
         model.addAttribute("invoiceWarnings", invoiceUseCase.utilityWarnings(contract.getId()));
         model.addAttribute("today", today);
         model.addAttribute("payableInvoice", payableInvoice);
@@ -523,18 +537,14 @@ public class ContractUiController {
         RedirectAttributes redirectAttributes
     ) {
         try {
-            Contract terminated = contractUseCase.terminateEarly(id, requiresMaintenance, reason);
-            // Lấy trạng thái thật: phòng đang sửa dở vẫn giữ Bảo trì dù không chọn "cần kiểm tra bảo trì"
-            RoomStatus roomStatus = roomRepository.findById(terminated.getRoomId()).map(Room::getStatus)
-                .orElse(requiresMaintenance ? RoomStatus.MAINTENANCE : RoomStatus.AVAILABLE);
-            redirectAttributes.addFlashAttribute(
-                "successMessage",
-                "Đã chấm dứt hợp đồng. Phòng hiện ở trạng thái " + UiText.INSTANCE.roomStatus(roomStatus) + "."
-            );
+            handoverUseCase.prepareEarlyTerminationCheckout(id, reason);
+            redirectAttributes.addFlashAttribute("successMessage",
+                "Đã tạo biên bản check-out kết thúc sớm. Hoàn thiện tài sản và chỉ số, rồi gửi người thuê xác nhận.");
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+            return "redirect:/contracts/" + id;
         }
-        return "redirect:/contracts/" + id;
+        return "redirect:/contracts/" + id + "/check-out";
     }
 
     @PostMapping("/{contractId}/tenants/{tenantId}/edit")

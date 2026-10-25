@@ -247,12 +247,17 @@ public class PhongHubConfiguration {
         StorageProperties storageProperties,
         NotificationDispatcher notificationDispatcher,
         RoomConditionRepositoryPort roomConditionRepository,
-        com.phonghub.application.port.in.RoomAssetUseCase roomAssetUseCase
+        com.phonghub.application.port.in.RoomAssetUseCase roomAssetUseCase,
+        InvoiceRepositoryPort invoiceRepository,
+        com.phonghub.application.port.out.InvoicePaymentRecordRepositoryPort invoicePaymentRecordRepository,
+        MeterReadingRepositoryPort meterReadingRepository,
+        ServiceRateRepositoryPort serviceRateRepository
     ) {
         HandoverService service = new HandoverService(
             handoverRepo, photoRepo, itemRepo, rulesRepo, contractRepo, assetRepo, tenantRepo, documentRepo,
             contractUseCase, fileStoragePort, currentUserPort, authorizationService, auditPort, storageProperties.getMaxFileSizeBytes(),
-            notificationDispatcher, roomConditionRepository, roomAssetUseCase
+            notificationDispatcher, roomConditionRepository, roomAssetUseCase, invoiceRepository,
+            invoicePaymentRecordRepository, meterReadingRepository, serviceRateRepository
         );
         return new TransactionalHandoverUseCase(service);
     }
@@ -651,11 +656,12 @@ public class PhongHubConfiguration {
         TenantRepositoryPort tenantRepository,
         StaffPropertyAssignmentPort assignmentRepository,
         CurrentUserPort currentUserPort,
-        AuthorizationService authorizationService
+        AuthorizationService authorizationService,
+        com.phonghub.application.port.out.InvoicePaymentRecordRepositoryPort paymentRecordRepository
     ) {
         return new com.phonghub.application.service.PaymentReconciliationService(paymentRepository, invoiceRepository,
             contractRepository, propertyRepository, roomRepository, tenantRepository, assignmentRepository,
-            currentUserPort, authorizationService);
+            currentUserPort, authorizationService, paymentRecordRepository);
     }
 
     @Bean
@@ -720,10 +726,11 @@ public class PhongHubConfiguration {
         HandoverRepositoryPort handoverRepo,
         HandoverItemRepositoryPort itemRepo,
         MeterReadingRepositoryPort meterReadingRepository,
-        ServiceRateRepositoryPort serviceRateRepository
+        ServiceRateRepositoryPort serviceRateRepository,
+        com.phonghub.application.port.out.InvoicePaymentRecordRepositoryPort paymentRecordRepository
     ) {
         return new com.phonghub.application.service.CheckOutSettlementService(contractUseCase, invoiceUseCase,
-            handoverRepo, itemRepo, meterReadingRepository, serviceRateRepository);
+            handoverRepo, itemRepo, meterReadingRepository, serviceRateRepository, paymentRecordRepository);
     }
 
     @Bean

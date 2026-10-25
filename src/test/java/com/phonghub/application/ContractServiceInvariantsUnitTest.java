@@ -18,6 +18,7 @@ import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.exception.InvalidContractStateException;
+import com.phonghub.domain.exception.ConflictException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
 import com.phonghub.domain.model.Handover;
@@ -88,6 +89,14 @@ class ContractServiceInvariantsUnitTest {
         return contractService.activateContract(contractId);
     }
 
+    private void approveCheckOut(UUID contractId) {
+        UUID actor = authAdapter.getCurrentUser().id();
+        Handover approved = Handover.draft(contractId, HandoverType.CHECK_OUT, BigDecimal.ZERO, BigDecimal.ZERO,
+            "Phòng đã kiểm tra", null, actor).send("terms-hash", null, null, actor)
+            .tenantConfirm(actor).approve(actor);
+        handoverRepo.save(approved);
+    }
+
     @Test
     @DisplayName("Activating a contract changes the room status to OCCUPIED")
     void testActivatingContractOccupiesRoom() {
@@ -149,6 +158,7 @@ class ContractServiceInvariantsUnitTest {
             LocalDate.now(), LocalDate.now().plusMonths(6), 5
         ));
         activateWithApprovedCheckIn(contract.getId());
+        approveCheckOut(contract.getId());
 
         contractService.terminateContract(contract.getId(), false);
 
@@ -200,6 +210,7 @@ class ContractServiceInvariantsUnitTest {
         Contract first = draft(room, "ID1");
         Contract second = draft(anotherRoom(), "ID1");
         activateWithApprovedCheckIn(first.getId());
+        approveCheckOut(first.getId());
         contractService.terminateContract(first.getId(), false);
 
         Contract activated = activateWithApprovedCheckIn(second.getId());
@@ -228,11 +239,22 @@ class ContractServiceInvariantsUnitTest {
             LocalDate.now(), LocalDate.now().plusMonths(6), 5
         ));
         activateWithApprovedCheckIn(contract.getId());
+        approveCheckOut(contract.getId());
 
         contractService.terminateContract(contract.getId(), true);
 
         assertEquals(ContractStatus.TERMINATED, contractRepo.findById(contract.getId()).get().getStatus());
         assertEquals(RoomStatus.MAINTENANCE, roomRepo.findById(room.getId()).get().getStatus());
+    }
+
+    @Test
+    void activeContractCannotTerminateWithoutApprovedTenantConfirmedCheckOut() {
+        Contract contract = draft(room, "ID1");
+        activateWithApprovedCheckIn(contract.getId());
+        assertThrows(ConflictException.class, () -> contractService.terminateEarly(contract.getId(), false, "Lý do"));
+        assertThrows(ConflictException.class, () -> contractService.terminateContract(contract.getId(), false));
+        assertEquals(ContractStatus.ACTIVE, contractRepo.findById(contract.getId()).orElseThrow().getStatus());
+        assertEquals(RoomStatus.OCCUPIED, roomRepo.findById(room.getId()).orElseThrow().getStatus());
     }
 
     @Test

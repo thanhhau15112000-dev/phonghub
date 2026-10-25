@@ -17,6 +17,7 @@ import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
@@ -28,11 +29,14 @@ import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
+import com.phonghub.domain.model.Handover;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -53,6 +57,7 @@ class ContractLifecycleActionsIntegrationTest {
 
     private static final String OWNER_1 = LocalDemoAuthenticationAdapter.OWNER_1_ID.toString();
     private static final String STAFF_1 = LocalDemoAuthenticationAdapter.STAFF_1_ID.toString();
+    private static final String STAFF_2 = LocalDemoAuthenticationAdapter.STAFF_2_ID.toString();
     private static final String TENANT_1 = LocalDemoAuthenticationAdapter.TENANT_1_ID.toString();
     private static final String C1 = "/contracts/" + DataSeeder.CONTRACT_1_ID;
 
@@ -67,6 +72,7 @@ class ContractLifecycleActionsIntegrationTest {
     @Autowired private InMemoryTenantRepository tenantRepository;
     @Autowired private InMemoryContractRepository contractRepository;
     @Autowired private InMemoryMaintenanceTicketRepository ticketRepository;
+    @Autowired private InMemoryHandoverRepository handoverRepository;
 
     @BeforeEach
     void resetData() {
@@ -77,11 +83,17 @@ class ContractLifecycleActionsIntegrationTest {
         tenantRepository.clear();
         contractRepository.clear();
         ticketRepository.clear();
+        handoverRepository.clear();
         audit.clear();
         DataSeeder.seedAll(
             userRepository, propertyRepository, assignmentRepository, roomRepository,
             tenantRepository, contractRepository, ticketRepository
         );
+        UUID contractId = DataSeeder.CONTRACT_1_ID;
+        UUID ownerId = LocalDemoAuthenticationAdapter.OWNER_1_ID;
+        handoverRepository.save(Handover.draft(contractId, HandoverType.CHECK_IN, BigDecimal.ZERO, BigDecimal.ZERO,
+            "Phòng đã kiểm tra", null, ownerId).send("terms-hash", null, null, ownerId)
+            .tenantConfirm(LocalDemoAuthenticationAdapter.TENANT_1_ID).approve(ownerId));
     }
 
     private Contract contract() {
@@ -95,31 +107,32 @@ class ContractLifecycleActionsIntegrationTest {
     }
 
     @Test
-    @DisplayName("Chấm dứt ngay: nhân viên bị từ chối, thiếu lý do bị từ chối; chủ trọ có lý do thì kết thúc và ghi nhật ký")
+    @DisplayName("Kết thúc sớm mở check-out và lưu lý do; không kết thúc hợp đồng trực tiếp")
     void earlyTerminationRequiresOwnerAndReason() throws Exception {
         mockMvc.perform(post(C1 + "/terminate").header("X-User-Id", STAFF_1).param("reason", "Thử"))
-            .andExpect(flash().attributeExists("errorMessage"));
+            .andExpect(flash().attributeExists("successMessage"));
         mockMvc.perform(post(C1 + "/terminate").header("X-User-Id", OWNER_1).param("reason", "  "))
-            .andExpect(flash().attribute("errorMessage", containsString("lý do")));
+            .andExpect(flash().attribute("errorMessage", containsString("Lý do")));
         assertEquals(ContractStatus.ACTIVE, contract().getStatus());
 
         mockMvc.perform(post(C1 + "/terminate").header("X-User-Id", OWNER_1).param("reason", "Người thuê bỏ đi"))
             .andExpect(flash().attributeExists("successMessage"));
-        assertEquals(ContractStatus.TERMINATED, contract().getStatus());
-        assertEquals(RoomStatus.AVAILABLE, roomRepository.findById(DataSeeder.ROOM_101_ID).orElseThrow().getStatus());
-        AuditPort.AuditEvent event = audit.getRecordedEvents().stream()
-            .filter(e -> e.action().equals("CONTRACT_TERMINATED")).findFirst().orElseThrow();
-        assertEquals("Người thuê bỏ đi", event.details().get("reason"));
-        assertEquals("ACTIVE", event.details().get("oldStatus"));
+        assertEquals(ContractStatus.ACTIVE, contract().getStatus());
+        assertEquals(RoomStatus.OCCUPIED, roomRepository.findById(DataSeeder.ROOM_101_ID).orElseThrow().getStatus());
+        Handover checkout = handoverRepository.find(DataSeeder.CONTRACT_1_ID, HandoverType.CHECK_OUT).orElseThrow();
+        assertTrue(checkout.earlyTermination());
+        assertEquals("Người thuê bỏ đi", checkout.terminationReason());
     }
 
     @Test
-    @DisplayName("API chấm dứt: nhân viên 403, thiếu lý do 400")
+    @DisplayName("API không cho kết thúc trực tiếp; người không có quyền vẫn nhận 403")
     void apiEarlyTermination() throws Exception {
-        mockMvc.perform(post("/api" + C1 + "/terminate").header("X-User-Id", STAFF_1).param("reason", "Thử"))
+        mockMvc.perform(post("/api" + C1 + "/terminate").header("X-User-Id", STAFF_2).param("reason", "Thử"))
             .andExpect(status().isForbidden());
         mockMvc.perform(post("/api" + C1 + "/terminate").header("X-User-Id", OWNER_1))
             .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api" + C1 + "/terminate").header("X-User-Id", OWNER_1).param("reason", "Kết thúc sớm"))
+            .andExpect(status().isConflict());
         assertEquals(ContractStatus.ACTIVE, contract().getStatus());
     }
 

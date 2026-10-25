@@ -4,9 +4,13 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverItemRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverPhotoRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresInvoicePaymentRecordRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresMeterReadingRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyHouseRulesRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresServiceRateRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantDocumentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantRepository;
 import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
@@ -25,16 +29,25 @@ import com.phonghub.domain.model.HandoverItem;
 import com.phonghub.domain.model.HandoverPhotoKind;
 import com.phonghub.domain.model.HandoverStatus;
 import com.phonghub.domain.model.HandoverType;
+import com.phonghub.domain.model.Invoice;
+import com.phonghub.domain.model.InvoiceStatus;
+import com.phonghub.domain.model.InvoiceType;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,7 +60,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
@@ -66,6 +82,17 @@ class CheckOutPostgresTest {
         ResultSet rs = st.executeQuery(sql);
         rs.next();
         return rs.getString(1);
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            if (!latch.await(10, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Timed out waiting for test synchronization");
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while synchronizing checkout test", ex);
+        }
     }
 
     @Test
@@ -95,6 +122,23 @@ class CheckOutPostgresTest {
         PostgresHandoverItemRepository items = new PostgresHandoverItemRepository(jdbc);
         PostgresContractRepository contractRepo = new PostgresContractRepository(jdbc);
         PostgresRoomRepository roomRepo = new PostgresRoomRepository(jdbc);
+        PostgresInvoicePaymentRecordRepository paymentRecords = new PostgresInvoicePaymentRecordRepository(jdbc);
+        AtomicReference<CountDownLatch> approvalLockSignal = new AtomicReference<>();
+        PostgresInvoiceRepository invoiceRepo = new PostgresInvoiceRepository(jdbc) {
+            @Override
+            public List<Invoice> findPayableByContractIdForUpdate(UUID id) {
+                CountDownLatch signal = approvalLockSignal.get();
+                if (signal != null) signal.countDown();
+                return super.findPayableByContractIdForUpdate(id);
+            }
+        };
+        Contract activeContract = contractRepo.findById(contractId).orElseThrow();
+        YearMonth period = YearMonth.now();
+        Invoice debt = new Invoice(UUID.randomUUID(), contractId, roomId, activeContract.getPrimaryTenantId(),
+            period.getMonthValue(), period.getYear(), new BigDecimal("100000"), new BigDecimal("100000"),
+            BigDecimal.ZERO, LocalDate.now().plusDays(5), InvoiceStatus.ISSUED,
+            invoiceRepo.newUniquePaymentCode(), InvoiceType.RENT, null, null, Instant.now(), Instant.now());
+        invoiceRepo.save(debt);
 
         // an approved check-in with one asset, then a check-out draft that reports it as damaged
         Handover checkIn = handovers.save(Handover.draft(contractId, HandoverType.CHECK_IN, BigDecimal.TEN,
@@ -127,7 +171,10 @@ class CheckOutPostgresTest {
         HandoverService service = new HandoverService(handovers, new PostgresHandoverPhotoRepository(jdbc), items,
             new PostgresPropertyHouseRulesRepository(jdbc), contractRepo, new PostgresRoomAssetRepository(jdbc),
             new PostgresTenantRepository(jdbc, protector), new PostgresTenantDocumentRepository(jdbc), contracts,
-            new InMemoryFileStorageAdapter(), currentUser, mock(AuthorizationService.class), audit, 1024 * 1024);
+            new InMemoryFileStorageAdapter(), currentUser, mock(AuthorizationService.class), audit, 1024 * 1024,
+            null, null, null, invoiceRepo,
+            paymentRecords, new PostgresMeterReadingRepository(jdbc),
+            new PostgresServiceRateRepository(jdbc));
         TransactionTemplate tx = new TransactionTemplate(new DataSourceTransactionManager(ds));
 
         tx.execute(status -> service.create(HandoverType.CHECK_OUT, new HandoverUseCase.HandoverCommand(contractId,
@@ -144,24 +191,74 @@ class CheckOutPostgresTest {
         tx.execute(status -> service.send(HandoverType.CHECK_OUT, contractId));
         handovers.save(handovers.find(contractId, HandoverType.CHECK_OUT).orElseThrow().tenantConfirm(userId));
 
-        // 1) the audit store fails after the contract was already terminated: everything is rolled back
+        // 1) audit failure rolls back both the proposed contract termination and deposit offset
         assertThrows(IllegalStateException.class,
-            () -> tx.execute(status -> service.approve(HandoverType.CHECK_OUT, contractId, null)));
+            () -> tx.execute(status -> service.approve(HandoverType.CHECK_OUT, contractId, null, List.of(debt.getId()))));
         assertUntouched(ds, contractId, roomId, handovers);
+        assertEquals(InvoiceStatus.ISSUED, invoiceRepo.findById(debt.getId()).orElseThrow().getStatus());
+        assertEquals(0, paymentRecords.findByInvoiceId(debt.getId()).size());
 
         // 2) terminating the contract fails: the handover stays pending
         failAudit.set(false);
         failTerminate.set(true);
         assertThrows(IllegalStateException.class,
-            () -> tx.execute(status -> service.approve(HandoverType.CHECK_OUT, contractId, null)));
+            () -> tx.execute(status -> service.approve(HandoverType.CHECK_OUT, contractId, null, List.of(debt.getId()))));
         assertUntouched(ds, contractId, roomId, handovers);
+        assertEquals(InvoiceStatus.ISSUED, invoiceRepo.findById(debt.getId()).orElseThrow().getStatus());
+        assertEquals(0, paymentRecords.findByInvoiceId(debt.getId()).size());
 
-        // 3) success: handover approved, contract terminated and the room goes to maintenance (damaged item)
+        // 3) an invoice payment racing approval commits first; the row lock makes approval see it as PAID
         failTerminate.set(false);
-        Handover approved = tx.execute(status ->
-            service.approve(HandoverType.CHECK_OUT, contractId, new BigDecimal("150000")));
+        CountDownLatch invoiceLocked = new CountDownLatch(1);
+        CountDownLatch releasePayment = new CountDownLatch(1);
+        AtomicReference<Throwable> paymentFailure = new AtomicReference<>();
+        Thread payer = new Thread(() -> {
+            try {
+                tx.executeWithoutResult(status -> {
+                    Invoice locked = invoiceRepo.findByIdForUpdate(debt.getId()).orElseThrow();
+                    invoiceLocked.countDown();
+                    await(releasePayment);
+                    locked.applyPayment(locked.remainingAmount(), Instant.now());
+                    invoiceRepo.save(locked);
+                });
+            } catch (Throwable ex) {
+                paymentFailure.set(ex);
+            }
+        }, "checkout-test-payer");
+        payer.start();
+        assertTrue(invoiceLocked.await(5, TimeUnit.SECONDS), "payment transaction should lock the invoice first");
+
+        CountDownLatch approvalReachedInvoices = new CountDownLatch(1);
+        approvalLockSignal.set(approvalReachedInvoices);
+        AtomicReference<Handover> approvalResult = new AtomicReference<>();
+        AtomicReference<Throwable> approvalFailure = new AtomicReference<>();
+        Thread approver = new Thread(() -> {
+            try {
+                approvalResult.set(tx.execute(status -> service.approve(HandoverType.CHECK_OUT, contractId,
+                    new BigDecimal("150000"), List.of())));
+            } catch (Throwable ex) {
+                approvalFailure.set(ex);
+            }
+        }, "checkout-test-approver");
+        approver.start();
+        assertTrue(approvalReachedInvoices.await(5, TimeUnit.SECONDS), "approval should reach its locked invoice query");
+        Thread.sleep(200);
+        releasePayment.countDown();
+        payer.join(10000);
+        approver.join(10000);
+        approvalLockSignal.set(null);
+        assertTrue(!payer.isAlive(), "payment transaction should finish");
+        assertTrue(!approver.isAlive(), "approval transaction should finish");
+        assertNull(paymentFailure.get());
+        assertNull(approvalFailure.get());
+
+        Handover approved = approvalResult.get();
+        assertNotNull(approved);
         assertEquals(HandoverStatus.APPROVED, approved.status());
         assertEquals(0, new BigDecimal("150000").compareTo(approved.finalDeduction()));
+        assertEquals(InvoiceStatus.PAID, invoiceRepo.findById(debt.getId()).orElseThrow().getStatus());
+        assertEquals(0, paymentRecords.findByInvoiceId(debt.getId()).size(),
+            "a bank payment must not be duplicated as a deposit offset");
         try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
             assertEquals("TERMINATED", text(st, "SELECT status FROM contracts WHERE id = '" + contractId + "'"));
             assertEquals("MAINTENANCE", text(st, "SELECT status FROM rooms WHERE id = '" + roomId + "'"));

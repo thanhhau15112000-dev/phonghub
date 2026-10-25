@@ -1,7 +1,9 @@
 package com.phonghub.application.port.in;
 
 import com.phonghub.domain.model.MeterType;
+import com.phonghub.domain.model.InvoiceType;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,6 +22,9 @@ public interface CheckOutSettlementUseCase {
     record UtilityEstimate(MeterType meterType, BigDecimal fromValue, BigDecimal toValue, BigDecimal consumption,
                            BigDecimal unitPrice, BigDecimal amount) {}
 
+    record OutstandingInvoice(UUID id, InvoiceType type, int month, int year, BigDecimal remainingAmount,
+                              LocalDate dueDate) {}
+
     record Settlement(
         BigDecimal deposit,
         BigDecimal deduction,
@@ -27,15 +32,26 @@ public interface CheckOutSettlementUseCase {
         boolean deductionFinal,
         BigDecimal outstanding,
         int unpaidInvoices,
-        List<UtilityEstimate> utilities
+        List<UtilityEstimate> utilities,
+        BigDecimal depositOffset,
+        List<OutstandingInvoice> openInvoices
     ) {
+        public Settlement(BigDecimal deposit, BigDecimal deduction, boolean deductionFinal, BigDecimal outstanding,
+                          int unpaidInvoices, List<UtilityEstimate> utilities) {
+            this(deposit, deduction, deductionFinal, outstanding, unpaidInvoices, utilities, BigDecimal.ZERO, List.of());
+        }
+
         public BigDecimal utilityTotal() {
             return utilities.stream().map(UtilityEstimate::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
         }
 
         /** Dương: số tiền hoàn lại người thuê; âm: người thuê phải trả thêm. */
         public BigDecimal balance() {
-            return deposit.subtract(deduction).subtract(outstanding).subtract(utilityTotal());
+            return deposit.subtract(deduction).subtract(depositOffset).subtract(outstanding).subtract(utilityTotal());
+        }
+
+        public BigDecimal usableDeposit() {
+            return deposit.subtract(deduction).subtract(depositOffset).max(BigDecimal.ZERO);
         }
     }
 }

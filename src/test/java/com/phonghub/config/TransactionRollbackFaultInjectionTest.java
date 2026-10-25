@@ -385,6 +385,13 @@ class TransactionRollbackFaultInjectionTest {
         Room room = new Room(roomId, propertyId, "201", 2, new BigDecimal("30.0"), new BigDecimal("5000000"), 2, RoomStatus.OCCUPIED, Instant.now(), Instant.now());
         realRoomRepo.save(room);
 
+        Handover approvedCheckOut = Handover.draft(contractId, HandoverType.CHECK_OUT, BigDecimal.ZERO,
+            BigDecimal.ZERO, "Tình trạng đã ghi nhận", null, tenantId)
+            .send("terms", null, null, tenantId)
+            .tenantConfirm(tenantId)
+            .approve(admin.id());
+        realHandoverRepo.save(approvedCheckOut);
+
         // Inject fault on 2nd write: contractRepository.save fails
         failContractSave = true;
 

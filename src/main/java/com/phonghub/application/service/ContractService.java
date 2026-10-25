@@ -25,6 +25,7 @@ import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
 import com.phonghub.domain.model.ContractStatus;
 import com.phonghub.domain.model.HandoverStatus;
+import com.phonghub.domain.model.Handover;
 import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyApprovalStatus;
@@ -302,7 +303,14 @@ public class ContractService implements ContractUseCase {
             .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
 
         Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
+        authorizationService.assertCanManageContracts(currentUser, contract.getPropertyId());
         assertResiding(contract);
+        Handover checkOut = handoverRepository == null ? null
+            : handoverRepository.find(contractId, HandoverType.CHECK_OUT).orElse(null);
+        if (checkOut == null || checkOut.status() != HandoverStatus.APPROVED || !checkOut.confirmedByTenant()) {
+            throw new com.phonghub.domain.exception.ConflictException(
+                "Hợp đồng chỉ được kết thúc sau khi biên bản check-out đã được người thuê xác nhận và duyệt.");
+        }
         return terminate(currentUser, contract, room, requiresMaintenance, Map.of());
     }
 
@@ -311,9 +319,8 @@ public class ContractService implements ContractUseCase {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Contract contract = contractRepository.findById(contractId)
             .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
-        // Bỏ qua biên bản check-out (vốn chỉ chủ trọ/admin duyệt) nên cũng chỉ chủ trọ/admin được làm
         Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
-        authorizationService.assertOwnerOrAdmin(currentUser, contract.getPropertyId());
+        authorizationService.assertCanManageContracts(currentUser, contract.getPropertyId());
         assertResiding(contract);
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("Cần nhập lý do chấm dứt hợp đồng.");
@@ -322,7 +329,8 @@ public class ContractService implements ContractUseCase {
         if (trimmed.length() > 500) {
             throw new IllegalArgumentException("Lý do chấm dứt tối đa 500 ký tự.");
         }
-        return terminate(currentUser, contract, room, requiresMaintenance, Map.of("reason", trimmed, "early", true));
+        throw new com.phonghub.domain.exception.ConflictException(
+            "Hợp đồng không thể chấm dứt trực tiếp. Hãy hoàn tất biên bản check-out với lý do: " + trimmed);
     }
 
     private static void assertResiding(Contract contract) {

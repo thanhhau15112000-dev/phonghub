@@ -63,6 +63,7 @@ public interface PaymentReconciliationUseCase {
         Long sepayId,
         Instant receivedAt,
         String gateway,
+        String transactionType,
         String referenceCode,
         BigDecimal amount,
         BigDecimal appliedAmount,

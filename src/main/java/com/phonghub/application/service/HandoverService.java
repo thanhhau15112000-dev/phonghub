@@ -11,8 +11,12 @@ import com.phonghub.application.port.out.FileStoragePort;
 import com.phonghub.application.port.out.HandoverItemRepositoryPort;
 import com.phonghub.application.port.out.HandoverPhotoRepositoryPort;
 import com.phonghub.application.port.out.HandoverRepositoryPort;
+import com.phonghub.application.port.out.InvoicePaymentRecordRepositoryPort;
+import com.phonghub.application.port.out.InvoiceRepositoryPort;
+import com.phonghub.application.port.out.MeterReadingRepositoryPort;
 import com.phonghub.application.port.out.PropertyHouseRulesRepositoryPort;
 import com.phonghub.application.port.out.RoomConditionRepositoryPort;
+import com.phonghub.application.port.out.ServiceRateRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetRepositoryPort;
 import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
@@ -20,6 +24,7 @@ import com.phonghub.domain.exception.ContractNotFoundException;
 import com.phonghub.domain.exception.FileStorageUnavailableException;
 import com.phonghub.domain.exception.HandoverAlreadyExistsException;
 import com.phonghub.domain.exception.HandoverNotFoundException;
+import com.phonghub.domain.exception.ConflictException;
 import com.phonghub.domain.exception.InvalidHandoverStateException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.AssetStatus;
@@ -32,6 +37,14 @@ import com.phonghub.domain.model.HandoverPhoto;
 import com.phonghub.domain.model.HandoverPhotoKind;
 import com.phonghub.domain.model.HandoverStatus;
 import com.phonghub.domain.model.HandoverType;
+import com.phonghub.domain.model.Invoice;
+import com.phonghub.domain.model.InvoiceItem;
+import com.phonghub.domain.model.InvoicePaymentRecord;
+import com.phonghub.domain.model.InvoiceType;
+import com.phonghub.domain.model.MeterReading;
+import com.phonghub.domain.model.MeterType;
+import com.phonghub.domain.model.ChargeType;
+import com.phonghub.domain.model.ServiceRate;
 import com.phonghub.domain.model.PropertyHouseRules;
 import com.phonghub.domain.model.RoomAsset;
 import com.phonghub.domain.model.RoomConditionItem;
@@ -78,6 +91,10 @@ public class HandoverService implements HandoverUseCase {
     private final NotificationDispatcher notifications;
     private final RoomConditionRepositoryPort roomConditionRepository;
     private final RoomAssetUseCase roomAssetUseCase;
+    private final InvoiceRepositoryPort invoiceRepository;
+    private final InvoicePaymentRecordRepositoryPort invoicePaymentRecordRepository;
+    private final MeterReadingRepositoryPort meterReadingRepository;
+    private final ServiceRateRepositoryPort serviceRateRepository;
 
     public HandoverService(
         HandoverRepositoryPort handoverRepository,
@@ -166,9 +183,30 @@ public class HandoverService implements HandoverUseCase {
         RoomConditionRepositoryPort roomConditionRepository,
         RoomAssetUseCase roomAssetUseCase
     ) {
+        this(handoverRepository, photoRepository, itemRepository, rulesRepository, contractRepository, assetRepository,
+            tenantRepository, documentRepository, contractUseCase, storagePort, currentUserPort, authorizationService,
+            auditPort, maxFileSizeBytes, notifications, roomConditionRepository, roomAssetUseCase, null, null, null, null);
+    }
+
+    public HandoverService(
+        HandoverRepositoryPort handoverRepository, HandoverPhotoRepositoryPort photoRepository,
+        HandoverItemRepositoryPort itemRepository, PropertyHouseRulesRepositoryPort rulesRepository,
+        ContractRepositoryPort contractRepository, RoomAssetRepositoryPort assetRepository,
+        TenantRepositoryPort tenantRepository, TenantDocumentRepositoryPort documentRepository,
+        ContractUseCase contractUseCase, FileStoragePort storagePort, CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService, AuditPort auditPort, long maxFileSizeBytes,
+        NotificationDispatcher notifications, RoomConditionRepositoryPort roomConditionRepository,
+        RoomAssetUseCase roomAssetUseCase, InvoiceRepositoryPort invoiceRepository,
+        InvoicePaymentRecordRepositoryPort invoicePaymentRecordRepository,
+        MeterReadingRepositoryPort meterReadingRepository, ServiceRateRepositoryPort serviceRateRepository
+    ) {
         this.notifications = notifications;
         this.roomConditionRepository = roomConditionRepository;
         this.roomAssetUseCase = roomAssetUseCase;
+        this.invoiceRepository = invoiceRepository;
+        this.invoicePaymentRecordRepository = invoicePaymentRecordRepository;
+        this.meterReadingRepository = meterReadingRepository;
+        this.serviceRateRepository = serviceRateRepository;
         this.handoverRepository = handoverRepository;
         this.photoRepository = photoRepository;
         this.itemRepository = itemRepository;
@@ -232,6 +270,48 @@ public class HandoverService implements HandoverUseCase {
     }
 
     @Override
+    public Handover prepareEarlyTerminationCheckout(UUID contractId, String reason) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        Contract contract = findContract(contractId);
+        authorizationService.assertCanManageContracts(user, contract.getPropertyId());
+        if (!contract.isResiding()) {
+            throw new InvalidHandoverStateException("Chỉ có thể mở check-out sớm cho hợp đồng đang ở.");
+        }
+        if (reason == null || reason.isBlank() || reason.trim().length() > 500) {
+            throw new IllegalArgumentException("Lý do kết thúc sớm phải có và tối đa 500 ký tự.");
+        }
+        Handover existing = handoverRepository.find(contractId, HandoverType.CHECK_OUT).orElse(null);
+        if (existing != null) {
+            if (existing.status() != HandoverStatus.DRAFT) {
+                throw new ConflictException("Biên bản check-out đã được gửi; không thể đổi lý do kết thúc sớm.");
+            }
+            Handover updated = handoverRepository.save(existing.asEarlyTermination(reason, user.id()));
+            audit(HandoverType.CHECK_OUT, "EARLY_TERMINATION_REQUESTED", user, updated,
+                Map.of("reason", reason.trim()));
+            return updated;
+        }
+
+        Handover checkIn = handoverRepository.find(contractId, HandoverType.CHECK_IN)
+            .filter(h -> h.status() == HandoverStatus.APPROVED)
+            .orElseThrow(() -> new InvalidHandoverStateException("Cần có biên bản check-in đã được duyệt trước khi check-out."));
+        BigDecimal electric = latestMeter(contract, MeterType.ELECTRIC, checkIn.initialElectricMeter());
+        BigDecimal water = latestMeter(contract, MeterType.WATER, checkIn.initialWaterMeter());
+        HandoverCommand command = new HandoverCommand(contractId, electric, water,
+            "Chờ kiểm tra hiện trạng phòng khi trả.", null, true, reason.trim());
+        Handover created = create(HandoverType.CHECK_OUT, command);
+        audit(HandoverType.CHECK_OUT, "EARLY_TERMINATION_REQUESTED", user, created,
+            Map.of("reason", reason.trim()));
+        return created;
+    }
+
+    private BigDecimal latestMeter(Contract contract, MeterType type, BigDecimal fallback) {
+        if (meterReadingRepository == null) return fallback;
+        return meterReadingRepository.findLatest(contract.getRoomId(), type)
+            .filter(reading -> reading.contractId() == null || contract.getId().equals(reading.contractId()))
+            .map(MeterReading::currentValue).orElse(fallback);
+    }
+
+    @Override
     public Handover create(HandoverType type, HandoverCommand command) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(command.contractId());
@@ -254,9 +334,12 @@ public class HandoverService implements HandoverUseCase {
         if (handoverRepository.find(contract.getId(), type).isPresent()) {
             throw new HandoverAlreadyExistsException();
         }
-        Handover saved = handoverRepository.save(Handover.draft(contract.getId(), type,
-            command.initialElectricMeter(), command.initialWaterMeter(), command.roomCondition(),
-            command.keysProvided(), user.id()));
+        Handover draft = Handover.draft(contract.getId(), type, command.initialElectricMeter(),
+            command.initialWaterMeter(), command.roomCondition(), command.keysProvided(), user.id());
+        if (command.earlyTermination()) {
+            draft = draft.asEarlyTermination(command.terminationReason(), user.id());
+        }
+        Handover saved = handoverRepository.save(draft);
         if (type == HandoverType.CHECK_IN) {
             itemRepository.replaceAll(saved.id(), checkInSnapshotItems(saved.id(), contract.getRoomId()), user.id());
         } else {
@@ -472,15 +555,62 @@ public class HandoverService implements HandoverUseCase {
             throw new IllegalArgumentException("Vui lòng tải ảnh CCCD trước khi xác nhận biên bản");
         }
         Handover saved = handoverRepository.save(handover.tenantConfirm(user.id()));
+        if (type == HandoverType.CHECK_OUT) {
+            Handover checkIn = handoverRepository.find(contractId, HandoverType.CHECK_IN)
+                .filter(found -> found.status() == HandoverStatus.APPROVED)
+                .orElseThrow(() -> new InvalidHandoverStateException(
+                    "Cần có biên bản check-in đã được duyệt trước khi xác nhận check-out."));
+            issueFinalUtilityInvoice(contract, checkIn, saved, user.id());
+        }
         audit(type, "TENANT_CONFIRMED", user, saved, Map.of());
         if (notifications != null) {
-            // Người nhận khớp quyền duyệt ở approve(): check-out chỉ chủ trọ, check-in cả staff quản lý hợp đồng.
-            notifications.notifyManagers(contract.getPropertyId(), type == HandoverType.CHECK_IN,
+            // Cả chủ trọ và staff quản lý hợp đồng đều có thể duyệt check-out.
+            notifications.notifyManagers(contract.getPropertyId(), true,
                 "Biên bản " + label(type) + " chờ duyệt",
                 "Người thuê đã xác nhận biên bản " + label(type) + ". Vui lòng kiểm tra và duyệt.",
                 link(type, contractId));
         }
         return saved;
+    }
+
+    private void issueFinalUtilityInvoice(Contract contract, Handover checkIn, Handover checkOut, UUID actorId) {
+        if (invoiceRepository == null || meterReadingRepository == null || serviceRateRepository == null) return;
+        List<InvoiceItem> charges = new java.util.ArrayList<>();
+        List<ServiceRate> rates = serviceRateRepository.findByPropertyId(contract.getPropertyId());
+        finalMeterCharges(contract, checkIn, checkOut, MeterType.ELECTRIC, ChargeType.PER_KWH, rates,
+            "kWh", charges);
+        finalMeterCharges(contract, checkIn, checkOut, MeterType.WATER, ChargeType.PER_M3, rates,
+            "m³", charges);
+        if (charges.isEmpty()) return;
+
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+        Invoice invoice = Invoice.issueCheckOutUtilities(contract, java.time.YearMonth.from(today),
+            invoiceRepository.newUniquePaymentCode(), today.plusDays(Invoice.MIN_DAYS_TO_PAY), charges);
+        invoiceRepository.save(invoice);
+        auditPort.recordEvent(AuditPort.AuditEvent.of("CHECKOUT_UTILITY_INVOICE_ISSUED", actorId, "INVOICE",
+            invoice.getId().toString(), contract.getPropertyId(), Map.of(
+                "contractId", contract.getId().toString(), "handoverId", checkOut.id().toString(),
+                "totalAmount", invoice.getTotalAmount().toPlainString())));
+    }
+
+    private void finalMeterCharges(
+        Contract contract, Handover checkIn, Handover checkOut, MeterType meterType, ChargeType chargeType,
+        List<ServiceRate> rates, String unit, List<InvoiceItem> out
+    ) {
+        BigDecimal finalValue = meterType == MeterType.ELECTRIC
+            ? checkOut.initialElectricMeter() : checkOut.initialWaterMeter();
+        BigDecimal fallback = meterType == MeterType.ELECTRIC
+            ? checkIn.initialElectricMeter() : checkIn.initialWaterMeter();
+        BigDecimal fromValue = latestMeter(contract, meterType, fallback);
+        if (finalValue.compareTo(fromValue) < 0 || finalValue.compareTo(fromValue) == 0) return;
+        BigDecimal quantity = finalValue.subtract(fromValue);
+        for (ServiceRate rate : rates) {
+            if (rate.chargeType() == chargeType && rate.pricePerUnit().signum() > 0) {
+                out.add(InvoiceItem.charge(rate.serviceName() + " chốt check-out ("
+                    + quantity.stripTrailingZeros().toPlainString() + " " + unit + ")",
+                    quantity, rate.pricePerUnit(), null, rate.id()));
+            }
+        }
     }
 
     private static String label(HandoverType type) {
@@ -493,14 +623,12 @@ public class HandoverService implements HandoverUseCase {
     }
 
     @Override
-    public Handover approve(HandoverType type, UUID contractId, BigDecimal finalDeduction) {
+    public Handover approve(
+        HandoverType type, UUID contractId, BigDecimal finalDeduction, List<UUID> depositOffsetInvoiceIds
+    ) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Contract contract = findContract(contractId);
-        if (type == HandoverType.CHECK_OUT) {
-            authorizationService.assertOwnerOrAdmin(user, contract.getPropertyId());
-        } else {
-            authorizationService.assertCanManageContracts(user, contract.getPropertyId());
-        }
+        authorizationService.assertCanManageContracts(user, contract.getPropertyId());
         Handover handover = handoverRepository.findForUpdate(contractId, type)
             .orElseThrow(() -> new HandoverNotFoundException("Chưa có biên bản cho hợp đồng " + contractId));
 
@@ -514,19 +642,83 @@ public class HandoverService implements HandoverUseCase {
             return saved;
         }
 
+        if (!handover.confirmedByTenant()) {
+            throw new ConflictException("Người thuê cần xác nhận biên bản check-out trước khi duyệt.");
+        }
         List<HandoverItem> items = itemRepository.findByHandoverId(handover.id());
         BigDecimal proposed = items.stream().map(HandoverItem::deductionAmount)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal deduction = finalDeduction == null ? proposed : finalDeduction;
+        BigDecimal offsetAmount = applyDepositOffsets(contract, handover, deduction, depositOffsetInvoiceIds, user);
         Handover saved = handoverRepository.save(handover.approve(user.id(), deduction));
         boolean needsRepair = items.stream().anyMatch(HandoverItem::needsRepair);
         // Cùng một transaction: nếu kết thúc hợp đồng thất bại thì biên bản vẫn ở trạng thái chờ duyệt.
         contractUseCase.terminateContract(contractId, needsRepair);
-        audit(type, "APPROVED", user, saved, Map.of(
-            "finalDeduction", deduction.toPlainString(),
-            "proposedDeduction", proposed.toPlainString(),
-            "roomNeedsRepair", needsRepair));
+        Map<String, Object> auditDetails = new HashMap<>();
+        auditDetails.put("finalDeduction", deduction.toPlainString());
+        auditDetails.put("proposedDeduction", proposed.toPlainString());
+        auditDetails.put("depositOffset", offsetAmount.toPlainString());
+        auditDetails.put("roomNeedsRepair", needsRepair);
+        if (saved.earlyTermination()) {
+            auditDetails.put("early", true);
+            auditDetails.put("reason", saved.terminationReason());
+        }
+        audit(type, "APPROVED", user, saved, auditDetails);
         return saved;
+    }
+
+    private BigDecimal applyDepositOffsets(
+        Contract contract, Handover handover, BigDecimal deduction, List<UUID> requestedIds, CurrentUser user
+    ) {
+        if (invoiceRepository == null || invoicePaymentRecordRepository == null) {
+            throw new IllegalStateException("Checkout invoice settlement repositories are not configured.");
+        }
+        List<Invoice> outstanding = invoiceRepository.findPayableByContractIdForUpdate(contract.getId()).stream()
+            .filter(invoice -> invoice.remainingAmount().signum() > 0).toList();
+        java.util.Set<UUID> selectedIds = requestedIds == null ? java.util.Set.of()
+            : requestedIds.stream().filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+        java.util.Map<UUID, Invoice> byId = outstanding.stream()
+            .collect(java.util.stream.Collectors.toMap(Invoice::getId, java.util.function.Function.identity()));
+        if (!byId.keySet().containsAll(selectedIds)) {
+            throw new ConflictException("Một hoặc nhiều hóa đơn đã được thanh toán, bị hủy hoặc không thuộc hợp đồng này. Vui lòng tải lại trang.");
+        }
+
+        List<Invoice> unselected = outstanding.stream().filter(invoice -> !selectedIds.contains(invoice.getId())).toList();
+        if (!unselected.isEmpty()) {
+            throw new ConflictException("Còn " + unselected.size()
+                + " hóa đơn chưa thanh toán. Hãy thanh toán hoặc chọn cấn trừ đủ từng khoản vào tiền cọc trước khi duyệt: "
+                + debtSummary(unselected));
+        }
+
+        BigDecimal remainingAfterDeduction = contract.getDepositAmount().subtract(deduction);
+        if (remainingAfterDeduction.signum() < 0) {
+            throw new ConflictException("Khoản khấu trừ tài sản không được vượt quá tiền cọc.");
+        }
+        BigDecimal usableDeposit = remainingAfterDeduction;
+        BigDecimal offsetTotal = outstanding.stream().map(Invoice::remainingAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (offsetTotal.compareTo(usableDeposit) > 0) {
+            BigDecimal shortfall = offsetTotal.subtract(usableDeposit);
+            throw new ConflictException("Tiền cọc còn lại sau khấu trừ tài sản không đủ trả công nợ; còn thiếu "
+                + shortfall.toPlainString() + " đ. Hãy thanh toán phần thiếu trước khi duyệt.");
+        }
+
+        java.time.Instant paidAt = java.time.Instant.now();
+        for (Invoice invoice : outstanding) {
+            BigDecimal amount = invoice.remainingAmount();
+            invoice.applyPayment(amount, paidAt);
+            invoiceRepository.save(invoice);
+            invoicePaymentRecordRepository.save(new InvoicePaymentRecord(UUID.randomUUID(), contract.getId(),
+                invoice.getId(), amount, InvoicePaymentRecord.Type.DEPOSIT_OFFSET, paidAt, user.id(),
+                "Cấn trừ tiền cọc khi check-out " + handover.id()));
+        }
+        return offsetTotal;
+    }
+
+    private static String debtSummary(List<Invoice> invoices) {
+        return invoices.stream().map(invoice -> String.format("%02d/%d còn %s đ (hạn %s)", invoice.getMonth(),
+            invoice.getYear(), invoice.remainingAmount().toPlainString(), invoice.getDueDate()))
+            .collect(java.util.stream.Collectors.joining("; "));
     }
 
     @Override

@@ -483,11 +483,12 @@ docker build -t phonghub:local .
 
 ## Biên bản check-out
 
-- Migration `V19` thêm `handovers.final_deduction` và `handover_items.deduction_amount`; check-out dùng chung bảng và luồng trạng thái với check-in (`type = CHECK_OUT`), nên một hợp đồng có tối đa một check-in và một check-out.
-- Chỉ lập check-out cho hợp đồng `ACTIVE` đã có biên bản check-in được duyệt. Danh sách tài sản khởi tạo từ bản chụp check-in; nhân viên cập nhật tình trạng lúc trả (`GOOD`, `DAMAGED`, `LOST`) và khoản khấu trừ đề xuất cho từng tài sản (tài sản còn tốt không được đề xuất khấu trừ). Chỉ số điện nước nhập là chỉ số cuối kỳ; cần đủ ảnh phòng và ảnh hai đồng hồ trước khi gửi.
-- **Duyệt check-out chỉ dành cho owner hoặc admin** (owner chốt khoản khấu trừ, mặc định bằng tổng đề xuất). Trong một transaction: biên bản `APPROVED`, hợp đồng `TERMINATED`, phòng về `AVAILABLE` hoặc `MAINTENANCE` nếu có tài sản hỏng hoặc mất. Nếu bất kỳ bước nào lỗi (kể cả ghi audit) thì hoàn tác toàn bộ; đã có test trên PostgreSQL thật.
-- API `/api/contracts/{id}/check-out...` và trang `/contracts/{id}/check-out`. Nút kết thúc hợp đồng trực tiếp (`/terminate`) vẫn còn cho các trường hợp không có biên bản.
-- Chưa làm: tính tiền cọc và quyết toán (ngoài phạm vi issue); so sánh check-in/check-out và xuất PDF thuộc #72.
+- Migration `V19` thêm `handovers.final_deduction` và `handover_items.deduction_amount`; migration `V52` lưu lý do kết thúc sớm và giao dịch cấn trừ từ cọc. Check-out dùng chung bảng/trạng thái với check-in (`type = CHECK_OUT`), mỗi hợp đồng tối đa có một biên bản mỗi loại.
+- Chỉ lập check-out cho hợp đồng đang ở (`ACTIVE` hoặc `EXPIRED`) đã có biên bản check-in được duyệt. Danh sách tài sản khởi tạo từ bản chụp check-in; nhân viên cập nhật tình trạng (`GOOD`, `DAMAGED`, `LOST`) và khoản khấu trừ đề xuất. Chỉ số nhập là số cuối; cần ảnh phòng và hai đồng hồ trước khi gửi.
+- Chấm dứt sớm mở biên bản check-out và lưu lý do; hợp đồng còn hiệu lực đến khi người thuê xác nhận và người quản lý duyệt. API chấm dứt trực tiếp trả `409` nếu chưa có check-out được xác nhận và duyệt. Hợp đồng nháp vẫn có thể hủy như trước.
+- Khi người thuê xác nhận, hệ thống phát hành hóa đơn chốt điện/nước theo chỉ số check-out so với lần ghi gần nhất của chính hợp đồng, nếu có tiêu thụ và đơn giá. Duyệt check-out cần xử lý hết hóa đơn còn nợ: thanh toán hoặc chọn cấn trừ từ cọc sau khi trừ khoản khấu trừ tài sản. Cọc không đủ thì từ chối và báo phần còn thiếu.
+- Owner, admin hoặc staff có quyền quản lý hợp đồng được duyệt. Trong cùng transaction, giao dịch cấn trừ được ghi vào lịch sử thanh toán, hóa đơn được cập nhật, biên bản `APPROVED`, hợp đồng `TERMINATED`, phòng về `AVAILABLE` hoặc `MAINTENANCE`. Lỗi ở bất kỳ bước nào sẽ hoàn tác toàn bộ.
+- API `/api/contracts/{id}/check-out...` và trang `/contracts/{id}/check-out`; số dư quyết toán hiển thị tiền cọc − khấu trừ − cấn trừ − công nợ còn lại − hóa đơn chốt chưa thanh toán. So sánh check-in/check-out và xuất PDF thuộc #72.
 
 ## Sửa thông tin nhà trọ
 

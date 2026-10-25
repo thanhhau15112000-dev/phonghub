@@ -5,6 +5,7 @@ import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.InvoiceUseCase;
 import com.phonghub.application.port.out.HandoverItemRepositoryPort;
 import com.phonghub.application.port.out.HandoverRepositoryPort;
+import com.phonghub.application.port.out.InvoicePaymentRecordRepositoryPort;
 import com.phonghub.application.port.out.MeterReadingRepositoryPort;
 import com.phonghub.application.port.out.ServiceRateRepositoryPort;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
@@ -36,6 +37,7 @@ public class CheckOutSettlementService implements CheckOutSettlementUseCase {
     private final HandoverItemRepositoryPort itemRepository;
     private final MeterReadingRepositoryPort readingRepository;
     private final ServiceRateRepositoryPort rateRepository;
+    private final InvoicePaymentRecordRepositoryPort paymentRecordRepository;
 
     public CheckOutSettlementService(
         ContractUseCase contractUseCase,
@@ -45,12 +47,25 @@ public class CheckOutSettlementService implements CheckOutSettlementUseCase {
         MeterReadingRepositoryPort readingRepository,
         ServiceRateRepositoryPort rateRepository
     ) {
+        this(contractUseCase, invoiceUseCase, handoverRepository, itemRepository, readingRepository, rateRepository, null);
+    }
+
+    public CheckOutSettlementService(
+        ContractUseCase contractUseCase,
+        InvoiceUseCase invoiceUseCase,
+        HandoverRepositoryPort handoverRepository,
+        HandoverItemRepositoryPort itemRepository,
+        MeterReadingRepositoryPort readingRepository,
+        ServiceRateRepositoryPort rateRepository,
+        InvoicePaymentRecordRepositoryPort paymentRecordRepository
+    ) {
         this.contractUseCase = contractUseCase;
         this.invoiceUseCase = invoiceUseCase;
         this.handoverRepository = handoverRepository;
         this.itemRepository = itemRepository;
         this.readingRepository = readingRepository;
         this.rateRepository = rateRepository;
+        this.paymentRecordRepository = paymentRecordRepository;
     }
 
     @Override
@@ -73,22 +88,34 @@ public class CheckOutSettlementService implements CheckOutSettlementUseCase {
         BigDecimal deduction = deductionFinal ? handover.finalDeduction()
             : itemRepository.findByHandoverId(handover.id()).stream().map(HandoverItem::deductionAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        List<Invoice> unpaid = invoices.stream().filter(Invoice::isPayable).toList();
+        List<Invoice> unpaid = invoices.stream().filter(Invoice::isPayable)
+            .filter(invoice -> invoice.remainingAmount().signum() > 0).toList();
         BigDecimal outstanding = unpaid.stream().map(Invoice::remainingAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
 
         List<UtilityEstimate> utilities = new ArrayList<>();
-        List<ServiceRate> rates = rateRepository.findByPropertyId(contract.getPropertyId());
-        estimate(contract, MeterType.ELECTRIC, handover.initialElectricMeter(), ChargeType.PER_KWH, rates)
-            .ifPresent(utilities::add);
-        estimate(contract, MeterType.WATER, handover.initialWaterMeter(), ChargeType.PER_M3, rates)
-            .ifPresent(utilities::add);
+        if (invoices.stream().noneMatch(invoice -> invoice.getType() == com.phonghub.domain.model.InvoiceType.CHECK_OUT
+            && invoice.getStatus() != com.phonghub.domain.model.InvoiceStatus.VOIDED)) {
+            List<ServiceRate> rates = rateRepository.findByPropertyId(contract.getPropertyId());
+            estimate(contract, MeterType.ELECTRIC, handover.initialElectricMeter(), ChargeType.PER_KWH, rates)
+                .ifPresent(utilities::add);
+            estimate(contract, MeterType.WATER, handover.initialWaterMeter(), ChargeType.PER_M3, rates)
+                .ifPresent(utilities::add);
+        }
+
+        BigDecimal depositOffset = paymentRecordRepository == null ? BigDecimal.ZERO
+            : paymentRecordRepository.findByContractIds(List.of(contractId)).stream()
+                .map(record -> record.amount()).reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<OutstandingInvoice> openInvoices = unpaid.stream()
+            .map(invoice -> new OutstandingInvoice(invoice.getId(), invoice.getType(), invoice.getMonth(),
+                invoice.getYear(), invoice.remainingAmount(), invoice.getDueDate()))
+            .toList();
 
         return Optional.of(new Settlement(contract.getDepositAmount(), deduction, deductionFinal, outstanding,
-            unpaid.size(), List.copyOf(utilities)));
+            unpaid.size(), List.copyOf(utilities), depositOffset, openInvoices));
     }
 
     /**
-     * Tiêu thụ từ lần ghi chỉ số gần nhất của phòng (chưa có thì từ chỉ số check-in) tới chỉ số trong biên bản check-out,
+     * Tiêu thụ từ lần ghi chỉ số gần nhất của hợp đồng (chưa có thì từ chỉ số check-in) tới chỉ số trong biên bản check-out,
      * nhân tổng đơn giá cùng loại (như cách hóa đơn tháng cộng từng đơn giá). Chỉ số lùi (thay đồng hồ) thì bỏ qua.
      */
     private Optional<UtilityEstimate> estimate(
@@ -98,6 +125,7 @@ public class CheckOutSettlementService implements CheckOutSettlementUseCase {
             return Optional.empty();
         }
         BigDecimal fromValue = readingRepository.findLatest(contract.getRoomId(), type)
+            .filter(reading -> reading.contractId() == null || contract.getId().equals(reading.contractId()))
             .map(MeterReading::currentValue)
             .or(() -> handoverRepository.find(contract.getId(), HandoverType.CHECK_IN)
                 .map(checkIn -> type == MeterType.ELECTRIC ? checkIn.initialElectricMeter() : checkIn.initialWaterMeter()))

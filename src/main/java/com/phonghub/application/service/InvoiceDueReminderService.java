@@ -70,9 +70,11 @@ public class InvoiceDueReminderService implements InvoiceDueReminderUseCase {
     }
 
     private static String label(Invoice invoice) {
-        return invoice.getType() == InvoiceType.MAINTENANCE
-            ? "Phí sửa chữa"
-            : String.format("Hóa đơn kỳ %02d/%d", invoice.getMonth(), invoice.getYear());
+        return switch (invoice.getType()) {
+            case MAINTENANCE -> "Phí sửa chữa";
+            case CHECK_OUT -> "Hóa đơn chốt điện/nước";
+            case RENT -> String.format("Hóa đơn kỳ %02d/%d", invoice.getMonth(), invoice.getYear());
+        };
     }
 
     private String describe(Contract contract) {

@@ -8,13 +8,26 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverItemRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverPhotoRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoicePaymentRecordRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryMeterReadingRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyHouseRulesRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomAssetRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryServiceRateRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantDocumentRepository;
 import com.phonghub.application.port.in.ContractLifecycleUseCase;
 import com.phonghub.application.port.out.AuditPort;
+import com.phonghub.domain.model.ChargeType;
+import com.phonghub.domain.model.InvoicePaymentRecord;
+import com.phonghub.domain.model.InvoiceStatus;
+import com.phonghub.domain.model.InvoiceType;
+import com.phonghub.domain.model.MeterReading;
+import com.phonghub.domain.model.MeterType;
+import com.phonghub.domain.model.ServiceRate;
 import java.time.LocalDate;
+import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +51,7 @@ class CheckOutApiIntegrationTest extends SeededWebTest {
     private static final String OWNER_1 = LocalDemoAuthenticationAdapter.OWNER_1_ID.toString();
     private static final String OWNER_2 = LocalDemoAuthenticationAdapter.OWNER_2_ID.toString();
     private static final String STAFF_1 = LocalDemoAuthenticationAdapter.STAFF_1_ID.toString();
+    private static final String STAFF_2 = LocalDemoAuthenticationAdapter.STAFF_2_ID.toString();
     private static final String TECH_1 = LocalDemoAuthenticationAdapter.TECH_1_ID.toString();
     private static final String TENANT_1 = LocalDemoAuthenticationAdapter.TENANT_1_ID.toString();
     private static final String CONTRACT = "/api/contracts/" + DataSeeder.CONTRACT_1_ID;
@@ -55,6 +69,10 @@ class CheckOutApiIntegrationTest extends SeededWebTest {
     @Autowired private InMemoryTenantDocumentRepository documents;
     @Autowired private InMemoryRoomAssetRepository roomAssets;
     @Autowired private InMemoryContractRepository contracts;
+    @Autowired private InMemoryInvoiceRepository invoices;
+    @Autowired private InMemoryInvoicePaymentRecordRepository paymentRecords;
+    @Autowired private InMemoryMeterReadingRepository meterReadings;
+    @Autowired private InMemoryServiceRateRepository serviceRates;
     @Autowired private ContractLifecycleUseCase contractLifecycle;
 
     @BeforeEach
@@ -65,6 +83,10 @@ class CheckOutApiIntegrationTest extends SeededWebTest {
         rules.clear();
         documents.clear();
         roomAssets.clear();
+        invoices.clear();
+        paymentRecords.clear();
+        meterReadings.clear();
+        serviceRates.clear();
         ((InMemoryAuditAdapter) auditPort).clear();
     }
 
@@ -171,7 +193,7 @@ class CheckOutApiIntegrationTest extends SeededWebTest {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"GOOD\"}"))
             .andExpect(status().isConflict());
 
-        mockMvc.perform(post(CONTRACT + "/check-out/approve").header("X-User-Id", STAFF_1))
+        mockMvc.perform(post(CONTRACT + "/check-out/approve").header("X-User-Id", STAFF_2))
             .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/contracts/" + DataSeeder.CONTRACT_1_ID).header("X-User-Id", OWNER_1))
             .andExpect(jsonPath("$.status").value("ACTIVE"));
@@ -191,6 +213,70 @@ class CheckOutApiIntegrationTest extends SeededWebTest {
             .andExpect(status().isConflict());
         assertEquals(1, count("CHECKOUT_APPROVED"));
         assertEquals(1, count("CHECKOUT_CREATED"));
+    }
+
+    @Test
+    @DisplayName("Staff with contract-management permission can approve a confirmed check-out")
+    void assignedStaffCanApproveCheckOut() throws Exception {
+        approvedCheckIn();
+        createCheckOut();
+        sendAndConfirm();
+
+        mockMvc.perform(post(CONTRACT + "/check-out/approve").header("X-User-Id", STAFF_1))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("APPROVED"));
+        mockMvc.perform(get("/api/contracts/" + DataSeeder.CONTRACT_1_ID).header("X-User-Id", OWNER_1))
+            .andExpect(jsonPath("$.status").value("TERMINATED"));
+    }
+
+    @Test
+    @DisplayName("Tenant confirmation issues final utility invoice; unpaid invoice blocks approval unless offset from deposit")
+    void finalUtilitiesMustBeSettledBeforeApproval() throws Exception {
+        approvedCheckIn();
+        Instant now = Instant.now();
+        serviceRates.save(new ServiceRate(UUID.randomUUID(), DataSeeder.PROP_1_ID, "Điện", ChargeType.PER_KWH,
+            new java.math.BigDecimal("3500"), now, LocalDemoAuthenticationAdapter.OWNER_1_ID, now,
+            LocalDemoAuthenticationAdapter.OWNER_1_ID));
+        serviceRates.save(new ServiceRate(UUID.randomUUID(), DataSeeder.PROP_1_ID, "Nước", ChargeType.PER_M3,
+            new java.math.BigDecimal("1000"), now, LocalDemoAuthenticationAdapter.OWNER_1_ID, now,
+            LocalDemoAuthenticationAdapter.OWNER_1_ID));
+        meterReadings.save(MeterReading.record(DataSeeder.ROOM_101_ID, UUID.randomUUID(), MeterType.ELECTRIC,
+            LocalDate.now().minusDays(2), new java.math.BigDecimal("1000"), new java.math.BigDecimal("2000"), null,
+            LocalDemoAuthenticationAdapter.OWNER_1_ID));
+
+        mockMvc.perform(post(CONTRACT + "/check-out").header("X-User-Id", OWNER_1)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"initialElectricMeter\":1510,\"initialWaterMeter\":45,"
+                    + "\"roomCondition\":\"Phòng trả lại\",\"keysProvided\":\"2 chìa khóa\"}"))
+            .andExpect(status().isCreated());
+        addPhotos(CONTRACT + "/check-out");
+        mockMvc.perform(post(CONTRACT + "/check-out/send").header("X-User-Id", OWNER_1))
+            .andExpect(status().isOk());
+        mockMvc.perform(post(CONTRACT + "/check-out/confirm").header("X-User-Id", TENANT_1))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PENDING_APPROVAL"));
+
+        var utilityInvoice = invoices.findByContractId(DataSeeder.CONTRACT_1_ID).stream()
+            .filter(invoice -> invoice.getType() == InvoiceType.CHECK_OUT).findFirst().orElseThrow();
+        org.junit.jupiter.api.Assertions.assertEquals(0, new java.math.BigDecimal("40000")
+            .compareTo(utilityInvoice.getTotalAmount()));
+        org.junit.jupiter.api.Assertions.assertEquals(InvoiceStatus.ISSUED, utilityInvoice.getStatus());
+        org.junit.jupiter.api.Assertions.assertFalse(utilityInvoice.getDueDate().isBefore(
+            LocalDate.now().plusDays(com.phonghub.domain.model.Invoice.MIN_DAYS_TO_PAY)));
+
+        mockMvc.perform(post(CONTRACT + "/check-out/approve").header("X-User-Id", OWNER_1))
+            .andExpect(status().isConflict());
+        mockMvc.perform(get("/api/contracts/" + DataSeeder.CONTRACT_1_ID).header("X-User-Id", OWNER_1))
+            .andExpect(jsonPath("$.status").value("ACTIVE"));
+
+        mockMvc.perform(post(CONTRACT + "/check-out/approve").header("X-User-Id", OWNER_1)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"depositOffsetInvoiceIds\":[\"" + utilityInvoice.getId() + "\"]}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("APPROVED"));
+
+        org.junit.jupiter.api.Assertions.assertEquals(InvoiceStatus.PAID, utilityInvoice.getStatus());
+        List<InvoicePaymentRecord> offsets = paymentRecords.findByInvoiceId(utilityInvoice.getId());
+        org.junit.jupiter.api.Assertions.assertEquals(1, offsets.size());
+        org.junit.jupiter.api.Assertions.assertEquals(InvoicePaymentRecord.Type.DEPOSIT_OFFSET, offsets.getFirst().type());
     }
 
     @Test

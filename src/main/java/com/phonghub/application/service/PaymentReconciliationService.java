@@ -5,6 +5,7 @@ import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
+import com.phonghub.application.port.out.InvoicePaymentRecordRepositoryPort;
 import com.phonghub.application.port.out.PaymentRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
@@ -15,6 +16,7 @@ import com.phonghub.domain.exception.ReceiptNotAvailableException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
+import com.phonghub.domain.model.InvoicePaymentRecord;
 import com.phonghub.domain.model.PaymentTransaction;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.Room;
@@ -41,6 +43,7 @@ public class PaymentReconciliationService implements PaymentReconciliationUseCas
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final PaymentRepositoryPort paymentRepository;
+    private final InvoicePaymentRecordRepositoryPort paymentRecordRepository;
     private final InvoiceRepositoryPort invoiceRepository;
     private final ContractRepositoryPort contractRepository;
     private final PropertyRepositoryPort propertyRepository;
@@ -61,7 +64,24 @@ public class PaymentReconciliationService implements PaymentReconciliationUseCas
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService
     ) {
+        this(paymentRepository, invoiceRepository, contractRepository, propertyRepository, roomRepository,
+            tenantRepository, assignmentPort, currentUserPort, authorizationService, null);
+    }
+
+    public PaymentReconciliationService(
+        PaymentRepositoryPort paymentRepository,
+        InvoiceRepositoryPort invoiceRepository,
+        ContractRepositoryPort contractRepository,
+        PropertyRepositoryPort propertyRepository,
+        RoomRepositoryPort roomRepository,
+        TenantRepositoryPort tenantRepository,
+        StaffPropertyAssignmentPort assignmentPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        InvoicePaymentRecordRepositoryPort paymentRecordRepository
+    ) {
         this.paymentRepository = paymentRepository;
+        this.paymentRecordRepository = paymentRecordRepository;
         this.invoiceRepository = invoiceRepository;
         this.contractRepository = contractRepository;
         this.propertyRepository = propertyRepository;
@@ -92,6 +112,8 @@ public class PaymentReconciliationService implements PaymentReconciliationUseCas
                 .collect(Collectors.toMap(Contract::getId, Function.identity(), (a, b) -> a));
             transactions = paymentRepository.findByContractIds(contracts.keySet());
         }
+        List<InvoicePaymentRecord> offsetRecords = paymentRecordRepository == null ? List.of()
+            : paymentRecordRepository.findByContractIds(contracts.keySet());
 
         List<PaymentTransaction> inRange = transactions.stream()
             .filter(tx -> withinDates(tx.createdAt(), filter.from(), filter.to()))
@@ -101,18 +123,28 @@ public class PaymentReconciliationService implements PaymentReconciliationUseCas
             counts.put(status, 0L);
         }
         inRange.forEach(tx -> counts.merge(ReconciliationStatus.of(tx), 1L, Long::sum));
+        List<InvoicePaymentRecord> offsetsInRange = offsetRecords.stream()
+            .filter(record -> withinDates(record.paidAt(), filter.from(), filter.to())).toList();
+        counts.merge(ReconciliationStatus.MATCHED, (long) offsetsInRange.size(), Long::sum);
 
         List<PaymentTransaction> selected = inRange.stream()
             .filter(tx -> filter.status() == null || ReconciliationStatus.of(tx) == filter.status())
             .sorted(Comparator.comparing(PaymentTransaction::createdAt).reversed())
             .toList();
+        List<InvoicePaymentRecord> selectedOffsets = offsetsInRange.stream()
+            .filter(record -> filter.status() == null || filter.status() == ReconciliationStatus.MATCHED)
+            .sorted(Comparator.comparing(InvoicePaymentRecord::paidAt).reversed()).toList();
 
-        Map<UUID, Room> rooms = roomRepository.findAllById(selected.stream()
-                .map(tx -> contracts.get(tx.contractId())).filter(Objects::nonNull).map(Contract::getRoomId)
+        List<UUID> selectedContractIds = java.util.stream.Stream.concat(
+                selected.stream().map(PaymentTransaction::contractId),
+                selectedOffsets.stream().map(InvoicePaymentRecord::contractId))
+            .filter(Objects::nonNull).distinct().toList();
+        Map<UUID, Room> rooms = roomRepository.findAllById(selectedContractIds.stream()
+                .map(contracts::get).filter(Objects::nonNull).map(Contract::getRoomId)
                 .distinct().toList())
             .stream().collect(Collectors.toMap(Room::getId, Function.identity()));
-        Map<UUID, Property> properties = propertyRepository.findAllById(selected.stream()
-                .map(tx -> contracts.get(tx.contractId())).filter(Objects::nonNull).map(Contract::getPropertyId)
+        Map<UUID, Property> properties = propertyRepository.findAllById(selectedContractIds.stream()
+                .map(contracts::get).filter(Objects::nonNull).map(Contract::getPropertyId)
                 .distinct().toList())
             .stream().collect(Collectors.toMap(Property::id, Function.identity()));
 
@@ -121,12 +153,23 @@ public class PaymentReconciliationService implements PaymentReconciliationUseCas
             Contract contract = tx.contractId() == null ? null : contracts.get(tx.contractId());
             Property property = contract == null ? null : properties.get(contract.getPropertyId());
             Room room = contract == null ? null : rooms.get(contract.getRoomId());
-            rows.add(new ReconciliationRow(tx.id(), tx.sepayId(), tx.createdAt(), tx.gateway(), tx.referenceCode(),
+            rows.add(new ReconciliationRow(tx.id(), tx.sepayId(), tx.createdAt(), tx.gateway(), "GATEWAY", tx.referenceCode(),
                 hideMoney ? null : tx.transferAmount(), hideMoney ? null : tx.appliedAmount(),
                 hideMoney ? null : tx.excessAmount(), ReconciliationStatus.of(tx),
                 tx.reviewReason(), tx.contractId(), tx.invoiceId(), property == null ? null : property.id(),
                 property == null ? null : property.name(), room == null ? null : room.getRoomNumber()));
         }
+        for (InvoicePaymentRecord record : selectedOffsets) {
+            Contract contract = contracts.get(record.contractId());
+            Property property = contract == null ? null : properties.get(contract.getPropertyId());
+            Room room = contract == null ? null : rooms.get(contract.getRoomId());
+            rows.add(new ReconciliationRow(record.id(), null, record.paidAt(), "Cấn trừ tiền cọc",
+                record.type().name(), "Cấn trừ tiền cọc", hideMoney ? null : record.amount(),
+                hideMoney ? null : record.amount(), hideMoney ? null : BigDecimal.ZERO, ReconciliationStatus.MATCHED,
+                null, record.contractId(), record.invoiceId(), property == null ? null : property.id(),
+                property == null ? null : property.name(), room == null ? null : room.getRoomNumber()));
+        }
+        rows.sort(Comparator.comparing(ReconciliationRow::receivedAt).reversed());
         if (hideMoney) {
             return new ReconciliationReport(rows, counts, null, null, null);
         }
@@ -159,7 +202,13 @@ public class PaymentReconciliationService implements PaymentReconciliationUseCas
         List<ReceiptPayment> payments = paymentRepository.findByInvoiceId(invoiceId).stream()
             .filter(tx -> tx.appliedAmount() != null && tx.appliedAmount().signum() > 0)
             .map(tx -> new ReceiptPayment(tx.createdAt(), tx.gateway(), tx.referenceCode(), tx.appliedAmount()))
-            .toList();
+            .collect(Collectors.toCollection(ArrayList::new));
+        if (paymentRecordRepository != null) {
+            paymentRecordRepository.findByInvoiceId(invoiceId).stream()
+                .map(record -> new ReceiptPayment(record.paidAt(), "Cấn trừ tiền cọc", record.id().toString(), record.amount()))
+                .forEach(payments::add);
+        }
+        payments.sort(Comparator.comparing(ReceiptPayment::receivedAt));
         Instant paidAt = invoice.getPaidAt() != null ? invoice.getPaidAt()
             : payments.stream().map(ReceiptPayment::receivedAt).max(Comparator.naturalOrder()).orElse(null);
 
