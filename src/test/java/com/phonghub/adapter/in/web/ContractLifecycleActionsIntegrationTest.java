@@ -42,7 +42,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * Chấm dứt ngay (chủ trọ/admin, bắt buộc lý do), gia hạn hợp đồng, tạo tài khoản cho người ở cùng và hợp đồng đã hết
+ * Chấm dứt ngay (chủ trọ hoặc nhân viên có quyền quản lý, bắt buộc lý do), gia hạn hợp đồng, tạo tài khoản cho người ở cùng và hợp đồng đã hết
  * hạn nhưng chưa trả phòng.
  */
 @SpringBootTest
@@ -94,10 +94,8 @@ class ContractLifecycleActionsIntegrationTest {
     }
 
     @Test
-    @DisplayName("Chấm dứt ngay: nhân viên bị từ chối, thiếu lý do bị từ chối; chủ trọ có lý do thì kết thúc và ghi nhật ký")
+    @DisplayName("Chấm dứt ngay: thiếu lý do bị từ chối; chủ trọ có lý do thì kết thúc và ghi nhật ký")
     void earlyTerminationRequiresOwnerAndReason() throws Exception {
-        mockMvc.perform(post(C1 + "/terminate").header("X-User-Id", STAFF_1).param("reason", "Thử"))
-            .andExpect(flash().attributeExists("errorMessage"));
         mockMvc.perform(post(C1 + "/terminate").header("X-User-Id", OWNER_1).param("reason", "  "))
             .andExpect(flash().attribute("errorMessage", containsString("lý do")));
         assertEquals(ContractStatus.ACTIVE, contract().getStatus());
@@ -113,13 +111,16 @@ class ContractLifecycleActionsIntegrationTest {
     }
 
     @Test
-    @DisplayName("API chấm dứt: nhân viên 403, thiếu lý do 400")
+    @DisplayName("API chấm dứt: nhân viên được cấp quyền thành công; nhân viên ngoài phạm vi 403; thiếu lý do 400")
     void apiEarlyTermination() throws Exception {
-        mockMvc.perform(post("/api" + C1 + "/terminate").header("X-User-Id", STAFF_1).param("reason", "Thử"))
-            .andExpect(status().isForbidden());
         mockMvc.perform(post("/api" + C1 + "/terminate").header("X-User-Id", OWNER_1))
             .andExpect(status().isBadRequest());
-        assertEquals(ContractStatus.ACTIVE, contract().getStatus());
+        mockMvc.perform(post("/api" + C1 + "/terminate")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_2_ID).param("reason", "Thử"))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api" + C1 + "/terminate").header("X-User-Id", STAFF_1).param("reason", "Thử"))
+            .andExpect(status().isOk());
+        assertEquals(ContractStatus.TERMINATED, contract().getStatus());
     }
 
     @Test

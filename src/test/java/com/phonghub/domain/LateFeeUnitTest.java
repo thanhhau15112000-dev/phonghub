@@ -47,40 +47,40 @@ class LateFeeUnitTest {
     @Test
     @DisplayName("phạt theo phần trăm tính trên tiền hóa đơn và làm tròn đến đồng")
     void percentFee() {
-        LateFeePolicy p = policy(true, FeeType.PERCENT, "2", 0, null);
-        assertEquals(0, money("70000").compareTo(p.feeFor(money("3500000"), 1)));
-        assertEquals(0, money("67").compareTo(policy(true, FeeType.PERCENT, "2", 0, null).feeFor(money("3333"), 1)));
+        LateFeePolicy p = policy(true, FeeType.PERCENT, "2", 7, null);
+        assertEquals(0, money("70000").compareTo(p.feeFor(money("3500000"), 8)));
+        assertEquals(0, money("67").compareTo(policy(true, FeeType.PERCENT, "2", 7, null).feeFor(money("3333"), 8)));
     }
 
     @Test
     @DisplayName("phạt cố định và trần tối đa")
     void fixedFeeAndCap() {
-        assertEquals(0, money("100000").compareTo(policy(true, FeeType.FIXED, "100000", 0, null).feeFor(money("3500000"), 5)));
-        assertEquals(0, money("50000").compareTo(policy(true, FeeType.FIXED, "100000", 0, "50000").feeFor(money("3500000"), 5)));
-        assertEquals(0, money("150000").compareTo(policy(true, FeeType.PERCENT, "10", 0, "150000").feeFor(money("3500000"), 5)));
-        assertEquals(0, money("350000").compareTo(policy(true, FeeType.PERCENT, "10", 0, "999999").feeFor(money("3500000"), 5)));
+        assertEquals(0, money("500000").compareTo(policy(true, FeeType.FIXED, "100000", 7, null).feeFor(money("3500000"), 12)));
+        assertEquals(0, money("50000").compareTo(policy(true, FeeType.FIXED, "100000", 7, "50000").feeFor(money("3500000"), 12)));
+        assertEquals(0, money("150000").compareTo(policy(true, FeeType.PERCENT, "10", 7, "150000").feeFor(money("3500000"), 12)));
+        assertEquals(0, money("1750000").compareTo(policy(true, FeeType.PERCENT, "10", 7, "9999999").feeFor(money("3500000"), 12)));
     }
 
     @Test
     @DisplayName("không phạt khi tắt, chưa quá ngày ân hạn hoặc không có gốc")
     void noFeeCases() {
-        assertEquals(0, policy(false, FeeType.PERCENT, "2", 0, null).feeFor(money("3500000"), 30).signum());
-        LateFeePolicy grace = policy(true, FeeType.PERCENT, "2", 3, null);
-        assertEquals(0, grace.feeFor(money("3500000"), 3).signum(), "đúng ngày ân hạn cuối vẫn chưa phạt");
-        assertEquals(0, money("70000").compareTo(grace.feeFor(money("3500000"), 4)));
+        assertEquals(0, policy(false, FeeType.PERCENT, "2", 7, null).feeFor(money("3500000"), 30).signum());
+        LateFeePolicy grace = policy(true, FeeType.PERCENT, "2", 7, null);
+        assertEquals(0, grace.feeFor(money("3500000"), 7).signum(), "đúng ngày ân hạn cuối vẫn chưa phạt");
+        assertEquals(0, money("70000").compareTo(grace.feeFor(money("3500000"), 8)));
         assertEquals(0, grace.feeFor(BigDecimal.ZERO, 10).signum());
     }
 
     @Test
     @DisplayName("cấu hình sai bị từ chối")
     void validation() {
-        assertThrows(DomainException.class, () -> policy(true, FeeType.PERCENT, "101", 0, null));
-        assertThrows(DomainException.class, () -> policy(true, FeeType.FIXED, "-1", 0, null));
-        assertThrows(DomainException.class, () -> policy(true, FeeType.FIXED, "1000", -1, null));
+        assertThrows(DomainException.class, () -> policy(true, FeeType.PERCENT, "101", 7, null));
+        assertThrows(DomainException.class, () -> policy(true, FeeType.FIXED, "-1", 7, null));
+        assertThrows(DomainException.class, () -> policy(true, FeeType.FIXED, "1000", 6, null), "không được giảm ân hạn dưới 7 ngày");
         assertThrows(DomainException.class, () -> policy(true, FeeType.FIXED, "1000", 366, null));
-        assertThrows(DomainException.class, () -> policy(true, FeeType.FIXED, "1000", 0, "-5"));
-        assertThrows(DomainException.class, () -> policy(true, FeeType.PERCENT, "0", 0, null), "bật mà mức phạt 0");
-        assertEquals(0, policy(false, FeeType.PERCENT, "0", 0, null).feeValue().signum(), "tắt thì cho phép mức 0");
+        assertThrows(DomainException.class, () -> policy(true, FeeType.FIXED, "1000", 7, "-5"));
+        assertThrows(DomainException.class, () -> policy(true, FeeType.PERCENT, "0", 7, null), "bật mà mức phạt 0");
+        assertEquals(0, policy(false, FeeType.PERCENT, "0", 7, null).feeValue().signum(), "tắt thì cho phép mức 0");
     }
 
     @Test

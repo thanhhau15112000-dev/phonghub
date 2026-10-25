@@ -46,7 +46,7 @@ public class LateFeePolicyUiController {
         @RequestParam(defaultValue = "false") boolean enabled,
         @RequestParam(defaultValue = "PERCENT") String feeType,
         @RequestParam(required = false) BigDecimal feeValue,
-        @RequestParam(defaultValue = "0") int graceDays,
+        @RequestParam(defaultValue = "7") int graceDays,
         @RequestParam(required = false) BigDecimal capAmount,
         RedirectAttributes redirectAttributes
     ) {

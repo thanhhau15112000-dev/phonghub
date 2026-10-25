@@ -147,9 +147,22 @@ public final class UiText {
         if (invoice.getType() == InvoiceType.MAINTENANCE) {
             return "Phí sửa chữa";
         }
+        if (invoice.getType() == InvoiceType.CANCELLATION) {
+            return invoice.getCycleNumber() > 0
+                ? cycleInvoiceLabel("Phí hủy hợp đồng", invoice)
+                : "Phí hủy hợp đồng";
+        }
+        if (invoice.getCycleNumber() > 0) {
+            return cycleInvoiceLabel("Tiền thuê", invoice);
+        }
         boolean hasFees = invoice.getItems().stream().anyMatch(item -> item.sourceInvoiceId() != null);
         return String.format("Tiền thuê %02d/%d", invoice.getMonth(), invoice.getYear())
             + (hasFees ? " và phí sửa chữa" : "");
+    }
+
+    private String cycleInvoiceLabel(String prefix, Invoice invoice) {
+        return String.format("%s kỳ %d (%s – %s)", prefix, invoice.getCycleNumber(),
+            date(invoice.getCycleStartDate()), date(invoice.getCycleEndDate()));
     }
 
     public String maintenanceCause(MaintenanceCause cause) {

@@ -58,6 +58,10 @@
                         <td style="font-weight: 600;">Tổng cộng</td>
                         <td style="text-align: right; font-weight: 600;" th:text="${#numbers.formatDecimal(invoice.getTotalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     </tr>
+                    <tr th:if="${invoice.getSettlementCreditAmount().signum() > 0}">
+                        <td>Tiền hoàn/đối trừ từ chu kỳ đã thu</td>
+                        <td style="text-align: right;" th:text="${#numbers.formatDecimal(invoice.getSettlementCreditAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
@@ -74,6 +78,10 @@
                         <tr th:if="${invoice.getPaidAmount().signum() > 0}">
                             <td style="color: var(--text-secondary);">Đã thanh toán:</td>
                             <td th:text="${#numbers.formatDecimal(invoice.getPaidAmount(), 0, 'POINT', 0, 'COMMA') + ' / ' + #numbers.formatDecimal(invoice.getTotalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 / 250,000 đ</td>
+                        </tr>
+                        <tr th:if="${invoice.getDepositPaidAmount().signum() > 0}">
+                            <td style="color: var(--text-secondary);">Đã trừ từ tiền cọc:</td>
+                            <td th:text="${#numbers.formatDecimal(invoice.getDepositPaidAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</td>
                         </tr>
                         <tr>
                             <td style="color: var(--text-secondary);">Hạn thanh toán:</td>

@@ -59,14 +59,15 @@ public class LateFeeAssessmentService implements LateFeeAssessmentUseCase {
         }
 
         long daysOverdue = ChronoUnit.DAYS.between(invoice.getDueDate(), today);
-        BigDecimal fee = policy.get().feeFor(invoice.principalAmount(), daysOverdue);
-        if (!invoice.applyLateFee(fee)) {
+        long penaltyDays = policy.get().penaltyDays(daysOverdue);
+        BigDecimal fee = policy.get().feeForDays(invoice.principalAmount(), daysOverdue);
+        if (!invoice.applyLateFee(fee, penaltyDays)) {
             return false;
         }
         invoiceRepository.save(invoice);
         auditPort.recordEvent(AuditPort.AuditEvent.of("LATE_FEE_APPLIED", null, "INVOICE", invoice.getId().toString(),
             Map.of("propertyId", propertyId.toString(), "amount", fee.toPlainString(), "daysOverdue", daysOverdue,
-                "feeType", policy.get().feeType().name())));
+                "penaltyDays", penaltyDays, "feeType", policy.get().feeType().name())));
         return true;
     }
 }

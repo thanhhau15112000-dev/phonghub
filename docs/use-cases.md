@@ -1169,7 +1169,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Tác nhân chính | Như UC-31 |
 | Mô tả | Bắt đầu check-in cho hợp đồng nháp; chỉ đưa hợp đồng vào hiệu lực sau khi biên bản được người thuê chính xác nhận và người quản lý duyệt. |
 | Tiền điều kiện | Hợp đồng `DRAFT`. |
-| Hậu điều kiện | Hệ thống tạo hoặc mở biên bản check-in `DRAFT`; hợp đồng vẫn `DRAFT`, phòng vẫn `AVAILABLE`. Khi UC-41 duyệt check-in, hợp đồng thành `ACTIVE`, phòng `OCCUPIED` và có nhật ký `CONTRACT_ACTIVATED`. |
+| Hậu điều kiện | Hệ thống tạo hoặc mở biên bản check-in `DRAFT`; hợp đồng vẫn `DRAFT`, phòng vẫn `AVAILABLE`. Khi UC-41 duyệt check-in, hợp đồng thành `ACTIVE`, phòng `OCCUPIED` và có nhật ký `CONTRACT_ACTIVATED`; ghi ngày giờ kích hoạt và phát hành hóa đơn chu kỳ đầu (UC-47). |
 | Kênh | Web `/contracts/{id}/activate`; API `POST /api/contracts/{id}/activate` |
 
 **Luồng chính**
@@ -1177,7 +1177,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 2. Hệ thống điền chỉ số, ghi chú và tài sản từ mốc hiện trạng phòng hoặc check-out đã duyệt gần nhất; nếu không có mốc thì yêu cầu người quản lý nhập hiện trạng thực tế.
 3. Người quản lý hoàn thiện biên bản và gửi người thuê; người thuê chính xác nhận sau khi có ảnh CCCD.
 4. Người quản lý duyệt. Hệ thống kiểm tra phòng chưa có hợp đồng hiệu lực khác, khóa hồ sơ người thuê chính và người ở cùng theo thứ tự cố định, kiểm tra không ai đang ở theo hợp đồng khác.
-5. Trong một transaction, hệ thống duyệt biên bản, chuyển hợp đồng sang `ACTIVE`, phòng sang `OCCUPIED`.
+5. Trong một transaction, hệ thống duyệt biên bản, chuyển hợp đồng sang `ACTIVE`, phòng sang `OCCUPIED`, lưu thời điểm kích hoạt và phát hành ngay hóa đơn tiền thuê chu kỳ đầu.
 
 **Ngoại lệ**
 - E1. Hợp đồng không ở `DRAFT`: từ chối.
@@ -1255,23 +1255,25 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 
 | Mục | Nội dung |
 |---|---|
-| Tác nhân chính | Chủ trọ, Quản trị viên |
-| Mô tả | Kết thúc hợp đồng ngay, không qua biên bản check-out. |
+| Tác nhân chính | Chủ trọ, Nhân viên có quyền quản lý hợp đồng, Quản trị viên |
+| Mô tả | Kết thúc hợp đồng ngay theo yêu cầu chấm dứt sớm do chủ trọ hoặc nhân viên có quyền xử lý, không qua biên bản check-out. |
 | Tiền điều kiện | Hợp đồng đang ở. |
-| Hậu điều kiện | Hợp đồng `TERMINATED`; phòng `AVAILABLE`, hoặc `MAINTENANCE` nếu chọn cần sửa; nhật ký ghi lý do. |
+| Hậu điều kiện | Hợp đồng `TERMINATED`; phòng `AVAILABLE`, hoặc `MAINTENANCE` nếu chọn cần sửa; hóa đơn kỳ hiện tại được điều chỉnh thành 50% tiền thuê cộng tiền điện nước chưa lập hóa đơn; tiền cọc được trừ vào khoản còn nợ; các hóa đơn thuê tương lai bị hủy và tiền đã thu thành khoản hoàn/đối trừ; nhật ký ghi lý do. |
 | Kênh | Web `/contracts/{id}/terminate`; API `POST /api/contracts/{id}/terminate` |
 
 **Luồng chính**
-1. Tác nhân chọn "Chấm dứt", nhập lý do, chọn phòng có cần bảo trì không.
-2. Hệ thống chấm dứt hợp đồng và cập nhật trạng thái phòng.
+1. Tác nhân xử lý yêu cầu của người thuê, chọn "Chấm dứt", nhập lý do, chọn phòng có cần bảo trì không.
+2. Nếu ngày chấm dứt trước ngày kết thúc hợp đồng, hệ thống thay tiền thuê chu kỳ hiện tại bằng 50% tiền thuê chu kỳ đó, cộng điện nước chưa lập hóa đơn theo chỉ số cuối đã ghi; nếu tiền thuê đã trả vượt khoản mới, phần chênh lệch thành khoản hoàn/đối trừ.
+3. Hệ thống hủy các hóa đơn thuê có chu kỳ bắt đầu sau chu kỳ hiện tại, trừ tiền cọc vào hóa đơn chấm dứt đến mức còn khả dụng, rồi chấm dứt hợp đồng và cập nhật trạng thái phòng. Nếu cọc không đủ, phần còn lại vẫn phải trả.
 
 **Ngoại lệ**
 - E1. Không nhập lý do, hoặc lý do dài quá 500 ký tự: báo lỗi.
 - E2. Hợp đồng không còn ở: từ chối.
 
 **Quy tắc nghiệp vụ**
-- BR1. Người thuê không tự chấm dứt hợp đồng.
+- BR1. Người thuê không tự chấm dứt hợp đồng; chủ trọ hoặc nhân viên có quyền quản lý hợp đồng xử lý yêu cầu của người thuê.
 - BR2. Cách kết thúc thông thường là check-out (UC-42): duyệt check-out tự kết thúc hợp đồng và có quyết toán tiền cọc. Chấm dứt sớm thì không lập được biên bản check-out sau đó.
+- BR3. Chấm dứt vào hoặc sau ngày kết thúc hợp đồng không chịu khoản 50% tiền thuê chấm dứt sớm.
 
 #### UC-38. Tự động hết hạn và nhắc hết hạn hợp đồng
 
@@ -1478,28 +1480,25 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Mục | Nội dung |
 |---|---|
 | Tác nhân chính | Chủ trọ, Nhân viên có quyền quản lý hợp đồng |
-| Mô tả | Phát hành hóa đơn tiền thuê cho một tháng của hợp đồng, gộp phí sửa chữa chưa trả và tiền điện nước đã có chỉ số. |
-| Tiền điều kiện | Hợp đồng đang ở; tháng nằm trong thời hạn hợp đồng; tháng đó chưa có hóa đơn. |
-| Hậu điều kiện | Hóa đơn `ISSUED` với mã chuyển khoản riêng (`PH…`) và hạn thanh toán theo BR1. Phí sửa chữa đã gộp không còn thanh toán riêng. |
+| Mô tả | Phát hành hóa đơn tiền thuê cho chu kỳ bắt đầu trong tháng được chọn, gộp phí sửa chữa chưa trả và tiền điện nước đã có chỉ số. |
+| Tiền điều kiện | Hợp đồng đang ở; chu kỳ đã bắt đầu và ngày bắt đầu chu kỳ không sau ngày kết thúc hợp đồng; chu kỳ đó chưa có hóa đơn. |
+| Hậu điều kiện | Hóa đơn `ISSUED` với mã chuyển khoản riêng (`PH…`), ngày bắt đầu/kết thúc chu kỳ và hạn thanh toán theo BR1. Phí sửa chữa đã gộp không còn thanh toán riêng. |
 | Kênh | Web `/contracts/{id}/invoices` |
 
 **Luồng chính**
-1. Tác nhân chọn tháng và "Tạo kỳ thanh toán".
+1. Tác nhân chọn tháng chứa ngày bắt đầu chu kỳ và "Tạo kỳ thanh toán".
 2. Hệ thống kiểm tra tiền điều kiện.
 3. Hệ thống tạo dòng tiền thuê, các dòng phí sửa chữa chưa trả, các dòng điện, nước, dịch vụ của kỳ.
-4. Hệ thống tính hạn thanh toán (BR1) và sinh mã chuyển khoản.
+4. Hệ thống ghi chu kỳ, tính hạn thanh toán (BR1) và sinh mã chuyển khoản.
 5. Hệ thống lưu hóa đơn và hiện mã chuyển khoản.
 
 **Ngoại lệ**
-- E1. Tháng đã có hóa đơn: báo "Kỳ thanh toán … đã tồn tại".
-- E2. Tháng ngoài thời hạn hợp đồng, hoặc hợp đồng không còn ở: từ chối.
+- E1. Chu kỳ đã có hóa đơn: báo "Kỳ thanh toán … đã tồn tại".
+- E2. Chu kỳ chưa bắt đầu, bắt đầu sau ngày kết thúc hợp đồng, hoặc hợp đồng không còn ở: từ chối.
 
 **Quy tắc nghiệp vụ**
-- BR1. **Hạn thanh toán** là ngày muộn nhất trong ba mốc:
-  - ngày thanh toán của hợp đồng trong tháng đó (tháng ngắn hơn thì lấy ngày cuối tháng);
-  - ngày bắt đầu hợp đồng;
-  - ngày tạo hóa đơn (giờ Việt Nam) cộng 3 ngày.
-- BR2. Tháng đầu tiên của hợp đồng do người quản lý tạo tay; tác vụ tự động (UC-48) không tạo tháng này.
+- BR1. **Hạn thanh toán** là ngày muộn nhất trong hai mốc: ngày bắt đầu chu kỳ cộng 7 ngày; ngày tạo hóa đơn (giờ Việt Nam) cộng 3 ngày.
+- BR2. Chu kỳ đầu được phát hành tự động khi kích hoạt hợp đồng; chu kỳ tiếp theo được phát hành tự động khi đến ngày bắt đầu chu kỳ. Hợp đồng cũ chưa có thời điểm kích hoạt dùng ngày bắt đầu hợp đồng làm mốc.
 - BR3. Thiếu chỉ số điện nước không chặn phát hành; hóa đơn được bổ sung khi có chỉ số, nếu chưa ai trả.
 
 #### UC-48. Tự động phát hành hóa đơn tháng
@@ -1509,11 +1508,11 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Tác nhân chính | Bộ hẹn giờ hệ thống |
 | Mô tả | Tạo hóa đơn tháng còn thiếu cho các hợp đồng đang ở và bổ sung tiền điện nước ghi muộn. |
 | Kích hoạt | Mỗi giờ (phút 05) và lúc khởi động. |
-| Hậu điều kiện | Mỗi hợp đồng có đúng một hóa đơn cho tháng hiện tại; ngày cuối tháng có thêm hóa đơn tháng sau. Chạy lặp lại không tạo trùng. |
+| Hậu điều kiện | Mỗi hợp đồng đang ở có tối đa một hóa đơn cho từng chu kỳ đã bắt đầu; chạy lặp lại không tạo trùng. |
 
 **Luồng chính**
-1. Hệ thống xác định các tháng cần có hóa đơn: tháng hiện tại; ngày cuối tháng thì thêm tháng sau.
-2. Với từng hợp đồng đang ở còn thiếu hóa đơn (trừ tháng đầu tiên), hệ thống phát hành như UC-47 bước 3–5, với ngày tạo là ngày chạy.
+1. Hệ thống tìm hóa đơn còn thiếu cho chu kỳ bắt đầu trong tháng hiện tại và phát hành chu kỳ đã đến ngày bắt đầu.
+2. Với từng hợp đồng đang ở còn thiếu chu kỳ, hệ thống phát hành như UC-47 bước 3–5, với ngày tạo là ngày chạy.
 3. Hệ thống thêm dòng điện nước cho hóa đơn tháng này và tháng trước nếu chỉ số được ghi sau lúc phát hành và hóa đơn chưa có ai trả.
 
 **Ngoại lệ**
@@ -1595,9 +1594,9 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Mục | Nội dung |
 |---|---|
 | Tác nhân chính | Bộ hẹn giờ hệ thống |
-| Mô tả | Cộng phạt vào hóa đơn tiền thuê quá hạn theo chính sách của nhà trọ (UC-15). |
+| Mô tả | Cộng phạt theo ngày vào hóa đơn tiền thuê quá hạn theo chính sách hiện tại của nhà trọ (UC-15). |
 | Kích hoạt | Mỗi giờ (phút 25) và lúc khởi động. |
-| Hậu điều kiện | Hóa đơn quá hạn quá số ngày ân hạn có một dòng "Phạt trả trễ"; chạy lại không cộng dồn. |
+| Hậu điều kiện | Hóa đơn quá hạn quá số ngày ân hạn có một dòng "Phạt trả trễ" kèm số ngày bị phạt; số tiền tăng theo ngày đến mức trần; chạy lại cùng ngày không cộng trùng. |
 
 **Luồng chính**
 1. Hệ thống lấy các hóa đơn tiền thuê đã quá hạn.
@@ -1605,7 +1604,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 3. Nếu số ngày quá hạn lớn hơn số ngày ân hạn, hệ thống tính phạt (BR1) và đặt dòng phạt; ghi nhật ký `LATE_FEE_APPLIED`.
 
 **Quy tắc nghiệp vụ**
-- BR1. Phạt theo %: % × tiền hóa đơn chưa tính phạt; phạt cố định: số tiền cấu hình; không vượt mức tối đa nếu có. Làm tròn đến đồng.
+- BR1. Phạt theo %: % × tiền hóa đơn chưa tính phạt cho mỗi ngày bị phạt; phạt cố định: số tiền cấu hình cho mỗi ngày bị phạt; không vượt mức tối đa nếu có. Làm tròn đến đồng.
 - BR2. Mỗi hóa đơn có tối đa một dòng phạt; dòng phạt được thay chứ không cộng thêm.
 - BR3. Hóa đơn đã trả đủ, đã hủy, hoặc đã gộp thì không phạt.
 

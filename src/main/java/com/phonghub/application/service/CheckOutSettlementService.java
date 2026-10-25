@@ -83,8 +83,9 @@ public class CheckOutSettlementService implements CheckOutSettlementUseCase {
         estimate(contract, MeterType.WATER, handover.initialWaterMeter(), ChargeType.PER_M3, rates)
             .ifPresent(utilities::add);
 
-        return Optional.of(new Settlement(contract.getDepositAmount(), deduction, deductionFinal, outstanding,
-            unpaid.size(), List.copyOf(utilities)));
+        return Optional.of(new Settlement(contract.getDepositAmount(), contract.getDepositAppliedAmount(),
+            contract.getSettlementCreditAmount(), deduction, deductionFinal, outstanding, unpaid.size(),
+            List.copyOf(utilities)));
     }
 
     /**

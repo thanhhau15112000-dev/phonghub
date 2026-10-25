@@ -5,6 +5,9 @@ import com.phonghub.domain.exception.InvalidContractStateException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -25,6 +28,9 @@ public class Contract {
     private final List<ContractOccupant> occupants;
     private final Instant createdAt;
     private Instant updatedAt;
+    private Instant activatedAt;
+    private BigDecimal depositAppliedAmount;
+    private BigDecimal settlementCreditAmount;
     private long version;
 
     public Contract(
@@ -39,6 +45,28 @@ public class Contract {
         int paymentDay,
         ContractStatus status,
         List<ContractOccupant> occupants,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
+        this(id, propertyId, roomId, primaryTenantId, depositAmount, rentAmount, startDate, endDate, paymentDay,
+            status, occupants, null, BigDecimal.ZERO, BigDecimal.ZERO, createdAt, updatedAt);
+    }
+
+    public Contract(
+        UUID id,
+        UUID propertyId,
+        UUID roomId,
+        UUID primaryTenantId,
+        BigDecimal depositAmount,
+        BigDecimal rentAmount,
+        LocalDate startDate,
+        LocalDate endDate,
+        int paymentDay,
+        ContractStatus status,
+        List<ContractOccupant> occupants,
+        Instant activatedAt,
+        BigDecimal depositAppliedAmount,
+        BigDecimal settlementCreditAmount,
         Instant createdAt,
         Instant updatedAt
     ) {
@@ -86,6 +114,12 @@ public class Contract {
         }
         this.createdAt = createdAt != null ? createdAt : Instant.now();
         this.updatedAt = updatedAt != null ? updatedAt : this.createdAt;
+        this.activatedAt = activatedAt;
+        this.depositAppliedAmount = depositAppliedAmount != null ? depositAppliedAmount : BigDecimal.ZERO;
+        this.settlementCreditAmount = settlementCreditAmount != null ? settlementCreditAmount : BigDecimal.ZERO;
+        if (this.depositAppliedAmount.signum() < 0 || this.settlementCreditAmount.signum() < 0) {
+            throw new IllegalArgumentException("Số dư quyết toán không được âm.");
+        }
     }
 
     public static Contract create(
@@ -256,13 +290,96 @@ public class Contract {
     }
 
     public void activate() {
+        activate(Instant.now());
+    }
+
+    public void activate(Instant activationTime) {
         if (this.status != ContractStatus.DRAFT) {
             throw new DomainException(String.format(
                 "Hợp đồng %s không kích hoạt được vì đang ở trạng thái %s (chỉ kích hoạt hợp đồng nháp).",
                 id, status
             ));
         }
+        if (activationTime == null) {
+            throw new IllegalArgumentException("Thời điểm kích hoạt không được để trống.");
+        }
         this.status = ContractStatus.ACTIVE;
+        this.activatedAt = activationTime;
+        this.updatedAt = Instant.now();
+    }
+
+    /** Ngày địa phương làm mốc tính chu kỳ; hợp đồng cũ không có activated_at dùng startDate. */
+    public LocalDate billingAnchorDate() {
+        return activatedAt == null ? startDate : activatedAt.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate();
+    }
+
+    /** Tính chu kỳ có ngày bắt đầu trong tháng đã chọn, nếu chu kỳ đó nằm trong thời hạn hợp đồng. */
+    public java.util.Optional<BillingCycle> billingCycle(YearMonth period) {
+        if (period == null) {
+            return java.util.Optional.empty();
+        }
+        LocalDate anchor = billingAnchorDate();
+        long monthOffset = ChronoUnit.MONTHS.between(YearMonth.from(anchor), period);
+        if (monthOffset < 0) {
+            return java.util.Optional.empty();
+        }
+        LocalDate cycleStart = anchor.plusMonths(monthOffset);
+        if (!YearMonth.from(cycleStart).equals(period) || cycleStart.isAfter(endDate)) {
+            return java.util.Optional.empty();
+        }
+        LocalDate nextStart = anchor.plusMonths(monthOffset + 1);
+        return java.util.Optional.of(new BillingCycle(Math.toIntExact(monthOffset + 1), cycleStart,
+            nextStart.minusDays(1)));
+    }
+
+    /** Chu kỳ đang diễn ra vào ngày đã chọn; tháng ngắn dùng ngày cuối tháng rồi quay về ngày gốc sau đó. */
+    public java.util.Optional<BillingCycle> billingCycleFor(LocalDate date) {
+        if (date == null || date.isBefore(billingAnchorDate())) {
+            return java.util.Optional.empty();
+        }
+        YearMonth period = YearMonth.from(date);
+        java.util.Optional<BillingCycle> cycle = billingCycle(period);
+        if (cycle.isPresent() && cycle.get().startDate().isAfter(date)) {
+            cycle = billingCycle(period.minusMonths(1));
+        }
+        return cycle.filter(found -> !found.startDate().isAfter(date));
+    }
+
+    /** Lịch chu kỳ tiền thuê theo ngày kích hoạt, gồm cả chu kỳ bắt đầu trong tháng kết thúc hợp đồng. */
+    public List<BillingCycle> billingCycles() {
+        LocalDate anchor = billingAnchorDate();
+        List<BillingCycle> cycles = new ArrayList<>();
+        for (long offset = 0; ; offset++) {
+            LocalDate start = anchor.plusMonths(offset);
+            if (start.isAfter(endDate)) {
+                break;
+            }
+            LocalDate end = anchor.plusMonths(offset + 1).minusDays(1);
+            cycles.add(new BillingCycle(Math.toIntExact(offset + 1), start, end));
+        }
+        return Collections.unmodifiableList(cycles);
+    }
+
+    public BigDecimal availableDeposit() {
+        BigDecimal available = depositAmount.subtract(depositAppliedAmount);
+        return available.signum() > 0 ? available : BigDecimal.ZERO;
+    }
+
+    /** Ghi nhận một khoản hóa đơn đã thanh toán trực tiếp từ tiền cọc. */
+    public void applyDeposit(BigDecimal amount) {
+        if (amount == null || amount.signum() <= 0 || amount.compareTo(availableDeposit()) > 0) {
+            throw new IllegalArgumentException("Số tiền trừ cọc vượt quá số dư cọc hiện có.");
+        }
+        this.depositAppliedAmount = this.depositAppliedAmount.add(amount);
+        this.updatedAt = Instant.now();
+    }
+
+    /** Ghi nhận khoản hoàn/đối trừ cho người thuê trong quyết toán cuối. */
+    public void addSettlementCredit(BigDecimal amount) {
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("Khoản đối trừ phải lớn hơn 0.");
+        }
+        this.settlementCreditAmount = this.settlementCreditAmount.add(amount);
         this.updatedAt = Instant.now();
     }
 
@@ -408,6 +525,18 @@ public class Contract {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public Instant getActivatedAt() {
+        return activatedAt;
+    }
+
+    public BigDecimal getDepositAppliedAmount() {
+        return depositAppliedAmount;
+    }
+
+    public BigDecimal getSettlementCreditAmount() {
+        return settlementCreditAmount;
     }
 
     @Override

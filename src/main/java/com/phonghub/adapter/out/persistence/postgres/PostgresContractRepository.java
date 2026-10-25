@@ -64,6 +64,9 @@ public class PostgresContractRepository implements ContractRepositoryPort {
             rs.getInt("payment_day"),
             ContractStatus.valueOf(rs.getString("status")),
             occupants,
+            rs.getTimestamp("activated_at") != null ? rs.getTimestamp("activated_at").toInstant() : null,
+            rs.getBigDecimal("deposit_applied_amount"),
+            rs.getBigDecimal("settlement_credit_amount"),
             toInstant(rs.getTimestamp("created_at")),
             toInstant(rs.getTimestamp("updated_at"))
         );
@@ -74,8 +77,8 @@ public class PostgresContractRepository implements ContractRepositoryPort {
     @Override
     public Contract save(Contract contract) {
         String sql = """
-            INSERT INTO contracts (id, property_id, room_id, primary_tenant_id, deposit_amount, rent_amount, start_date, end_date, payment_day, status, created_at, updated_at, version)
-            VALUES (:id, :propertyId, :roomId, :primaryTenantId, :depositAmount, :rentAmount, :startDate, :endDate, :paymentDay, :status, :createdAt, :updatedAt, :version)
+            INSERT INTO contracts (id, property_id, room_id, primary_tenant_id, deposit_amount, rent_amount, start_date, end_date, payment_day, status, activated_at, deposit_applied_amount, settlement_credit_amount, created_at, updated_at, version)
+            VALUES (:id, :propertyId, :roomId, :primaryTenantId, :depositAmount, :rentAmount, :startDate, :endDate, :paymentDay, :status, :activatedAt, :depositAppliedAmount, :settlementCreditAmount, :createdAt, :updatedAt, :version)
             ON CONFLICT (id) DO UPDATE SET
                 property_id = EXCLUDED.property_id,
                 room_id = EXCLUDED.room_id,
@@ -86,6 +89,9 @@ public class PostgresContractRepository implements ContractRepositoryPort {
                 end_date = EXCLUDED.end_date,
                 payment_day = EXCLUDED.payment_day,
                 status = EXCLUDED.status,
+                activated_at = EXCLUDED.activated_at,
+                deposit_applied_amount = EXCLUDED.deposit_applied_amount,
+                settlement_credit_amount = EXCLUDED.settlement_credit_amount,
                 updated_at = EXCLUDED.updated_at,
                 version = contracts.version + 1
             WHERE contracts.version = :version
@@ -104,6 +110,9 @@ public class PostgresContractRepository implements ContractRepositoryPort {
             .addValue("endDate", Date.valueOf(contract.getEndDate()))
             .addValue("paymentDay", contract.getPaymentDay())
             .addValue("status", contract.getStatus().name())
+            .addValue("activatedAt", contract.getActivatedAt() != null ? Timestamp.from(contract.getActivatedAt()) : null)
+            .addValue("depositAppliedAmount", contract.getDepositAppliedAmount())
+            .addValue("settlementCreditAmount", contract.getSettlementCreditAmount())
             .addValue("createdAt", Timestamp.from(contract.getCreatedAt()))
             .addValue("updatedAt", Timestamp.from(contract.getUpdatedAt()));
 
@@ -139,6 +148,13 @@ public class PostgresContractRepository implements ContractRepositoryPort {
         String sql = "SELECT * FROM contracts WHERE id = :id";
         List<Contract> list = jdbcTemplate.query(sql, Map.of("id", id), (rs, rn) -> mapContract(rs));
         return list.isEmpty() ? Optional.empty() : Optional.of(list.getFirst());
+    }
+
+    @Override
+    public Optional<Contract> findByIdForUpdate(UUID id) {
+        String sql = "SELECT * FROM contracts WHERE id = :id FOR UPDATE";
+        List<Contract> list = jdbcTemplate.query(sql, Map.of("id", id), (rs, rn) -> mapContract(rs));
+        return list.stream().findFirst();
     }
 
     @Override

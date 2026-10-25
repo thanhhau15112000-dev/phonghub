@@ -167,11 +167,13 @@ public class PaymentReconciliationService implements PaymentReconciliationUseCas
             "BL-" + (invoice.getPaymentCode() != null ? invoice.getPaymentCode()
                 : invoice.getId().toString().substring(0, 8).toUpperCase()),
             invoice.getId(), invoice.getContractId(), invoice.getType(), invoice.getMonth(), invoice.getYear(),
+            invoice.getCycleNumber(), invoice.getCycleStartDate(), invoice.getCycleEndDate(),
             invoice.getPaymentCode(),
             property.map(Property::name).orElse(null), property.map(Property::address).orElse(null),
             room.map(Room::getRoomNumber).orElse(null), tenant.map(Tenant::fullName).orElse(null),
-            invoice.getTotalAmount(), invoice.getPaidAmount(), invoice.remainingAmount(), invoice.getStatus(), paidAt,
-            payments);
+            invoice.getTotalAmount(), invoice.getPaidAmount(), invoice.getDepositPaidAmount(),
+            invoice.getSettlementCreditAmount(), invoice.remainingAmount(),
+            invoice.getStatus(), paidAt, payments);
     }
 
     /**

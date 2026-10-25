@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-/** #80: chính sách phạt lưu được, phạt không cộng dồn khi chạy lại, hóa đơn quá hạn được tìm đúng. */
+/** #80/#225: chính sách phạt lưu được, tiền phạt tăng theo ngày trong mức trần, hóa đơn quá hạn được tìm đúng. */
 @Testcontainers(disabledWithoutDocker = true)
 class LateFeePostgresTest {
 
@@ -58,7 +58,43 @@ class LateFeePostgresTest {
     }
 
     @Test
-    @DisplayName("policy round-trip, DB constraints, and an idempotent assessment on a real overdue invoice")
+    @DisplayName("migration raises existing late-fee grace periods below seven days")
+    void existingGracePeriodIsBackfilledToSevenDays() throws Exception {
+        String databaseName = "late_fee_backfill_" + UUID.randomUUID().toString().replace("-", "");
+        PGSimpleDataSource admin = new PGSimpleDataSource();
+        admin.setUrl(POSTGRES.getJdbcUrl());
+        admin.setUser(POSTGRES.getUsername());
+        admin.setPassword(POSTGRES.getPassword());
+        try (Connection c = admin.getConnection(); Statement st = c.createStatement()) {
+            st.execute("CREATE DATABASE " + databaseName);
+        }
+
+        PGSimpleDataSource ds = new PGSimpleDataSource();
+        String jdbcUrl = POSTGRES.getJdbcUrl();
+        ds.setUrl(jdbcUrl.substring(0, jdbcUrl.lastIndexOf('/') + 1) + databaseName);
+        ds.setUser(POSTGRES.getUsername());
+        ds.setPassword(POSTGRES.getPassword());
+
+        Flyway.configure().dataSource(ds).locations(MAIN, FIXTURE).target("52").load().migrate();
+        UUID propertyId;
+        try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
+            propertyId = UUID.fromString(scalar(st, "SELECT id FROM properties LIMIT 1"));
+            st.execute("INSERT INTO property_late_fee_policies (property_id, enabled, fee_type, fee_value, grace_days) "
+                + "VALUES ('" + propertyId + "', FALSE, 'FIXED', 0, 0)");
+        }
+
+        Flyway.configure().dataSource(ds).locations(MAIN, FIXTURE).load().migrate();
+
+        try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
+            assertEquals("7", scalar(st, "SELECT grace_days FROM property_late_fee_policies WHERE property_id = '"
+                + propertyId + "'"));
+            assertThrows(SQLException.class, () -> st.execute("UPDATE property_late_fee_policies SET grace_days = 6 "
+                + "WHERE property_id = '" + propertyId + "'"), "DB rejects a grace period below seven days");
+        }
+    }
+
+    @Test
+    @DisplayName("policy round-trip, DB constraints, and a capped daily assessment on a real overdue invoice")
     void policyAndAssessment() throws Exception {
         PGSimpleDataSource ds = migrated();
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
@@ -76,11 +112,11 @@ class LateFeePostgresTest {
 
         assertTrue(policies.findByPropertyId(propertyId).isEmpty());
         LateFeePolicy saved = policies.save(new LateFeePolicy(propertyId, true, LateFeePolicy.FeeType.PERCENT,
-            new BigDecimal("2.5"), 2, new BigDecimal("100000"), Instant.now(), null));
+            new BigDecimal("2.5"), 7, new BigDecimal("100000"), Instant.now(), null));
         LateFeePolicy loaded = policies.findByPropertyId(propertyId).orElseThrow();
         assertEquals(saved.feeType(), loaded.feeType());
         assertEquals(0, new BigDecimal("2.5").compareTo(loaded.feeValue()));
-        assertEquals(2, loaded.graceDays());
+        assertEquals(7, loaded.graceDays());
         assertEquals(0, new BigDecimal("100000").compareTo(loaded.capAmount()));
 
         try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
@@ -99,13 +135,15 @@ class LateFeePostgresTest {
         BigDecimal principal = created.getTotalAmount();
         assertTrue(service.assessInvoice(created.getId(), today));
         assertFalse(service.assessInvoice(created.getId(), today));
-        assertFalse(service.assessInvoice(created.getId(), today.plusDays(20)));
+        assertTrue(service.assessInvoice(created.getId(), today.plusDays(20)),
+            "same cap amount still updates the displayed number of penalty days");
 
         Invoice reloaded = invoices.findById(created.getId()).orElseThrow();
         BigDecimal expectedFee = policies.findByPropertyId(propertyId).orElseThrow().feeFor(principal, 10);
         assertEquals(1, reloaded.getItems().stream().filter(InvoiceItem::isLateFee).count());
         assertEquals(0, principal.add(expectedFee).compareTo(reloaded.getTotalAmount()));
         assertEquals(0, principal.compareTo(reloaded.principalAmount()));
+        assertEquals("Phạt trả trễ (23 ngày)", reloaded.lateFeeItem().orElseThrow().name());
         assertTrue(invoices.findByIdForUpdate(created.getId()).isPresent());
     }
 }

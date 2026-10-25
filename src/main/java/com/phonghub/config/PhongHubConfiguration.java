@@ -402,11 +402,13 @@ public class PhongHubConfiguration {
         AuthorizationService authorizationService,
         AuditPort auditPort,
         HandoverRepositoryPort handoverRepo,
-        com.phonghub.application.port.out.DraftHandoverCleanupPort draftHandoverCleanupPort
+        com.phonghub.application.port.out.DraftHandoverCleanupPort draftHandoverCleanupPort,
+        MonthlyInvoiceUseCase monthlyInvoiceUseCase,
+        com.phonghub.application.service.EarlyTerminationBillingService earlyTerminationBillingService
     ) {
         ContractService service = new ContractService(
             contractRepo, roomRepo, propertyRepo, tenantRepo, userRepo, identityProviderPort, currentUserPort, authorizationService,
-            auditPort, handoverRepo, draftHandoverCleanupPort
+            auditPort, handoverRepo, draftHandoverCleanupPort, monthlyInvoiceUseCase, earlyTerminationBillingService
         );
         return new TransactionalContractUseCase(service);
     }
@@ -420,6 +422,17 @@ public class PhongHubConfiguration {
     ) {
         return new com.phonghub.application.service.HandoverDraftCleanupService(
             handoverRepo, photoRepo, itemRepo, fileStoragePort);
+    }
+
+    @Bean
+    public com.phonghub.application.service.EarlyTerminationBillingService earlyTerminationBillingService(
+        InvoiceRepositoryPort invoiceRepository,
+        MeterReadingRepositoryPort readingRepository,
+        ServiceRateRepositoryPort rateRepository,
+        AuditPort auditPort
+    ) {
+        return new com.phonghub.application.service.EarlyTerminationBillingService(
+            invoiceRepository, readingRepository, rateRepository, auditPort);
     }
 
     @Bean

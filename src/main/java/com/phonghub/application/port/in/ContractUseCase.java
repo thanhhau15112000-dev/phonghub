@@ -16,7 +16,8 @@ public interface ContractUseCase {
 
     /**
      * Chấm dứt hợp đồng ngay, không qua biên bản check-out (người thuê bỏ đi, vi phạm...): chỉ chủ nhà trọ hoặc quản trị
-     * viên, bắt buộc có lý do (ghi vào nhật ký). Trả phòng thông thường dùng quy trình check-out.
+     * viên hoặc nhân viên được cấp quyền quản lý hợp đồng, bắt buộc có lý do (ghi vào nhật ký). Trả phòng thông thường
+     * dùng quy trình check-out.
      */
     Contract terminateEarly(UUID contractId, boolean requiresMaintenance, String reason);
 

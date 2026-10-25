@@ -93,10 +93,6 @@
                         <td style="color: var(--text-secondary);">Tiền đặt cọc:</td>
                         <td th:text="${#numbers.formatDecimal(contract.getDepositAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     </tr>
-                    <tr>
-                        <td style="color: var(--text-secondary);">Ngày thanh toán hàng tháng:</td>
-                        <td th:text="'Ngày ' + ${contract.getPaymentDay()} + ' hằng tháng'">Ngày 5 hằng tháng</td>
-                    </tr>
                 </tbody>
             </table>
         </div>
@@ -220,6 +216,26 @@
                 </tbody>
             </table>
         </div>
+    </div>
+
+    <div class="card" id="billing-cycles" style="margin-top: 20px;">
+        <h2 style="margin-top: 0;">Chu kỳ thanh toán</h2>
+        <p style="color: var(--text-secondary); font-size: 13px;">
+            Chu kỳ đầu bắt đầu từ ngày <strong th:text="${uiText.date(contract.billingAnchorDate())}">25/10/2026</strong>;
+            tháng ngắn dùng ngày cuối tháng.
+        </p>
+        <div th:if="${#lists.isEmpty(billingCycles)}" class="empty-state" style="padding: 12px;">
+            Chưa có chu kỳ trong thời hạn hợp đồng.
+        </div>
+        <table th:unless="${#lists.isEmpty(billingCycles)}" class="data-table" style="font-size: 13px;">
+            <thead><tr><th>Kỳ</th><th>Thời gian</th></tr></thead>
+            <tbody>
+                <tr th:each="cycle : ${billingCycles}">
+                    <td th:text="${cycle.number()}">1</td>
+                    <td th:text="${uiText.date(cycle.startDate()) + ' – ' + uiText.date(cycle.endDate())}">25/10/2026 – 24/11/2026</td>
+                </tr>
+            </tbody>
+        </table>
     </div>
 
     <!-- Thanh toán tiền thuê (quản trị viên không xem số liệu tiền, #163) -->
@@ -720,10 +736,10 @@
                     <input type="date" id="draftEnd" name="endDate" class="form-control" required th:value="${contract.getEndDate()}">
                 </div>
             </div>
-            <div class="form-group">
-                <label class="form-label" for="draftPaymentDay">Ngày thanh toán hằng tháng (1–31) *</label>
-                <input type="number" id="draftPaymentDay" name="paymentDay" class="form-control" min="1" max="31" required th:value="${contract.getPaymentDay()}">
-            </div>
+            <input type="hidden" name="paymentDay" th:value="${contract.getPaymentDay()}">
+            <p style="color: var(--text-secondary); font-size: 12px; margin-top: -4px;">
+                Hạn thanh toán được tính 7 ngày sau ngày bắt đầu của từng chu kỳ.
+            </p>
             <div style="display: flex; justify-content: flex-end; gap: 8px;">
                 <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('editDraftModal').close()">Đóng</button>
                 <button type="submit" class="btn btn-sm btn-primary">Lưu thay đổi</button>

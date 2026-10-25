@@ -56,7 +56,7 @@
                 </tr>
                 <tr>
                     <td style="color: var(--text-secondary);">Khoản thanh toán:</td>
-                    <td th:text="${(receipt.type().name() == 'MAINTENANCE' ? 'Phí sửa chữa ' : 'Tiền thuê ') + #numbers.formatInteger(receipt.month(), 2) + '/' + receipt.year()}">Tiền thuê 10/2026</td>
+                    <td th:text="${receipt.type().name() == 'MAINTENANCE' ? 'Phí sửa chữa' : receipt.type().name() == 'CANCELLATION' ? 'Phí hủy hợp đồng kỳ ' + receipt.cycleNumber() : receipt.cycleNumber() > 0 ? 'Tiền thuê kỳ ' + receipt.cycleNumber() + ' (' + uiText.date(receipt.cycleStartDate()) + ' – ' + uiText.date(receipt.cycleEndDate()) + ')' : 'Tiền thuê ' + #numbers.formatInteger(receipt.month(), 2) + '/' + receipt.year()}">Tiền thuê 10/2026</td>
                 </tr>
                 <tr th:if="${receipt.paymentCode() != null}">
                     <td style="color: var(--text-secondary);">Mã thanh toán:</td>
@@ -69,6 +69,14 @@
                 <tr>
                     <td style="color: var(--text-secondary);">Đã thanh toán:</td>
                     <td style="font-weight: 700;" th:text="${#numbers.formatDecimal(receipt.paidAmount(), 0, 'POINT', 0, 'COMMA')} + ' đ'">3,500,000 đ</td>
+                </tr>
+                <tr th:if="${receipt.depositPaidAmount().signum() > 0}">
+                    <td style="color: var(--text-secondary);">Đã trừ từ tiền cọc:</td>
+                    <td th:text="${#numbers.formatDecimal(receipt.depositPaidAmount(), 0, 'POINT', 0, 'COMMA')} + ' đ'">0 đ</td>
+                </tr>
+                <tr th:if="${receipt.settlementCreditAmount().signum() > 0}">
+                    <td style="color: var(--text-secondary);">Tiền hoàn/đối trừ:</td>
+                    <td th:text="${#numbers.formatDecimal(receipt.settlementCreditAmount(), 0, 'POINT', 0, 'COMMA')} + ' đ'">0 đ</td>
                 </tr>
                 <tr th:if="${!receipt.fullyPaid()}">
                     <td style="color: var(--text-secondary);">Còn lại:</td>

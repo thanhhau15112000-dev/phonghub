@@ -49,12 +49,14 @@ class InvoiceVoidIntegrationTest extends SeededWebTest {
     @BeforeEach
     void pickFreePeriod() {
         contract = contracts.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
-        // Kho hóa đơn in-memory dùng chung giữa các lớp test: chọn kỳ còn trống trong thời hạn hợp đồng.
-        period = YearMonth.from(contract.getStartDate()).plusMonths(3);
-        while (invoices.findActiveRentByContractIdAndPeriod(contract.getId(), period.getYear(), period.getMonthValue())
-            .isPresent()) {
-            period = period.plusMonths(1);
-        }
+        // Chọn kỳ gần nhất đã bắt đầu và chưa phát hành; kỳ tương lai chưa được phép tạo thủ công.
+        period = contract.billingCycles().stream()
+            .filter(cycle -> !cycle.startDate().isAfter(LocalDate.now()))
+            .map(com.phonghub.domain.model.BillingCycle::period)
+            .filter(candidate -> invoices.findActiveRentByContractIdAndPeriod(contract.getId(), candidate.getYear(),
+                candidate.getMonthValue()).isEmpty())
+            .max(YearMonth::compareTo)
+            .orElseThrow(() -> new AssertionError("Không có kỳ thanh toán đã bắt đầu và còn trống."));
     }
 
     private Invoice rent() {

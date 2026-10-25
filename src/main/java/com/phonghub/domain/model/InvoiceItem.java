@@ -59,8 +59,14 @@ public record InvoiceItem(
         return new InvoiceItem(null, LATE_FEE_NAME, BigDecimal.ONE, amount, amount, null, null, null);
     }
 
+    public static InvoiceItem lateFee(BigDecimal amount, long days) {
+        String name = days > 0 ? LATE_FEE_NAME + " (" + days + " ngày)" : LATE_FEE_NAME;
+        return new InvoiceItem(null, name, BigDecimal.ONE, amount, amount, null, null, null);
+    }
+
     public boolean isLateFee() {
-        return LATE_FEE_NAME.equals(name) && rateId == null && readingId == null && sourceInvoiceId == null;
+        return (LATE_FEE_NAME.equals(name) || name.startsWith(LATE_FEE_NAME + " ("))
+            && rateId == null && readingId == null && sourceInvoiceId == null;
     }
 
     public static InvoiceItem of(String name, BigDecimal amount, UUID sourceInvoiceId) {

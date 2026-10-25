@@ -29,14 +29,15 @@ class LateFeePolicyUiIntegrationTest extends SeededWebTest {
     @DisplayName("owner lưu cấu hình và thấy lại giá trị đã lưu")
     void ownerSavesPolicy() throws Exception {
         mockMvc.perform(post(PAGE).header("X-User-Id", OWNER_1).param("enabled", "true").param("feeType", "PERCENT")
-                .param("feeValue", "3").param("graceDays", "4").param("capAmount", "200000"))
+                .param("feeValue", "3").param("graceDays", "7").param("capAmount", "200000"))
             .andExpect(status().is3xxRedirection())
             .andExpect(flash().attribute("successMessage", "Đã lưu cấu hình phạt trả trễ."));
 
         String html = mockMvc.perform(get(PAGE).header("X-User-Id", OWNER_1))
             .andExpect(status().isOk()).andExpect(view().name("properties/late-fee"))
             .andReturn().getResponse().getContentAsString();
-        assertTrue(html.contains("value=\"4\""), "grace days shown");
+        assertTrue(html.contains("value=\"7\""), "grace days shown");
+        assertTrue(html.contains("min=\"7\""), "UI enforces the required minimum grace");
         assertTrue(html.contains("200000"), "cap shown");
     }
 
@@ -44,9 +45,18 @@ class LateFeePolicyUiIntegrationTest extends SeededWebTest {
     @DisplayName("cấu hình sai hiển thị lỗi và không lưu")
     void invalidPolicyRejected() throws Exception {
         mockMvc.perform(post(PAGE).header("X-User-Id", OWNER_1).param("enabled", "true").param("feeType", "PERCENT")
-                .param("feeValue", "150").param("graceDays", "0"))
+                .param("feeValue", "150").param("graceDays", "7"))
             .andExpect(status().is3xxRedirection())
             .andExpect(flash().attribute("errorMessage", "Phạt theo phần trăm không được vượt quá 100%."));
+    }
+
+    @Test
+    @DisplayName("không cho cấu hình ân hạn dưới 7 ngày")
+    void gracePeriodCannotBeShorterThanSevenDays() throws Exception {
+        mockMvc.perform(post(PAGE).header("X-User-Id", OWNER_1).param("enabled", "true").param("feeType", "FIXED")
+                .param("feeValue", "50000").param("graceDays", "6"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(flash().attribute("errorMessage", "Số ngày ân hạn phải từ 7 đến 365."));
     }
 
     @Test
@@ -55,7 +65,7 @@ class LateFeePolicyUiIntegrationTest extends SeededWebTest {
         for (String user : new String[] {OWNER_2, STAFF_1, TENANT_1}) {
             mockMvc.perform(get(PAGE).header("X-User-Id", user)).andExpect(status().is3xxRedirection());
             mockMvc.perform(post(PAGE).header("X-User-Id", user).param("enabled", "true").param("feeType", "FIXED")
-                    .param("feeValue", "50000").param("graceDays", "0"))
+                    .param("feeValue", "50000").param("graceDays", "7"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(flash().attributeExists("errorMessage"));
         }
