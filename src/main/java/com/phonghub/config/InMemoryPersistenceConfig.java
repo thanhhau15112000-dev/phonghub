@@ -15,6 +15,7 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverPhotoReposi
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyHouseRulesRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomAssetRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomConditionRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantDocumentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
@@ -158,6 +159,11 @@ public class InMemoryPersistenceConfig {
     @Bean
     public InMemoryRoomAssetRepository roomAssetRepository() {
         return new InMemoryRoomAssetRepository();
+    }
+
+    @Bean
+    public InMemoryRoomConditionRepository roomConditionRepository() {
+        return new InMemoryRoomConditionRepository();
     }
 
     @Bean

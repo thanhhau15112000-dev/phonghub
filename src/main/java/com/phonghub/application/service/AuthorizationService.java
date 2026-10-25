@@ -370,6 +370,25 @@ public class AuthorizationService {
         }
     }
 
+    /** Quản lý phòng/tài sản: owner/admin hoặc staff được owner cấp quyền riêng. */
+    public void assertCanManageRoomsAndAssets(CurrentUser user, UUID propertyId) {
+        assertCanManageProperty(user, propertyId);
+        if (user.role() == UserRole.STAFF && !assignmentPort.find(user.id(), propertyId)
+            .map(assignment -> assignment.canManageRoomsAndAssets()).orElse(false)) {
+            throw new UnauthorizedPropertyAccessException(
+                "Bạn chưa được cấp quyền quản lý phòng và tài sản tại nhà trọ này.");
+        }
+    }
+
+    public boolean canManageRoomsAndAssets(CurrentUser user, UUID propertyId) {
+        try {
+            assertCanManageRoomsAndAssets(user, propertyId);
+            return true;
+        } catch (UnauthorizedPropertyAccessException ex) {
+            return false;
+        }
+    }
+
     /** Thu tiền: staff cần quyền can_collect_payment; admin không xem tiền (#163). */
     public void assertCanCollectPayment(CurrentUser user, UUID propertyId) {
         assertCanViewFinance(user);

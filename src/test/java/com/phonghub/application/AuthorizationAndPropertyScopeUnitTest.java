@@ -104,6 +104,20 @@ class AuthorizationAndPropertyScopeUnitTest {
     }
 
     @Test
+    @DisplayName("STAFF needs the separate room and asset permission to manage room data")
+    void staffNeedsRoomManagementPermission() {
+        assertFalse(authService.canManageRoomsAndAssets(staffUser, prop1Id));
+        assertThrows(UnauthorizedPropertyAccessException.class,
+            () -> authService.assertCanManageRoomsAndAssets(staffUser, prop1Id));
+        assignmentRepo.save(new StaffPropertyAssignment(UUID.randomUUID(), staffUser.id(), prop1Id,
+            true, true, true, true, Instant.now()));
+        assertTrue(authService.canManageRoomsAndAssets(staffUser, prop1Id));
+        assertDoesNotThrow(() -> authService.assertCanManageRoomsAndAssets(staffUser, prop1Id));
+        assertThrows(UnauthorizedPropertyAccessException.class,
+            () -> authService.assertCanManageRoomsAndAssets(techUser, prop1Id));
+    }
+
+    @Test
     @DisplayName("TECHNICIAN can work on assigned property; unassigned throws UnauthorizedPropertyAccessException")
     void testTechnicianScope() {
         assertDoesNotThrow(() -> authService.assertTechnicianCanWorkOnProperty(techUser, prop1Id));

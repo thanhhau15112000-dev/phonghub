@@ -103,7 +103,7 @@ public class RoomService implements RoomUseCase {
     @Override
     public Room createRoom(CreateRoomCommand command) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
-        authorizationService.assertCanManageProperty(currentUser, command.propertyId());
+        authorizationService.assertCanManageRoomsAndAssets(currentUser, command.propertyId());
 
         Property property = propertyRepository.findById(command.propertyId())
             .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + command.propertyId()));
@@ -168,7 +168,7 @@ public class RoomService implements RoomUseCase {
         Room room = roomRepository.findById(command.roomId())
             .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + command.roomId()));
 
-        authorizationService.assertOwnerOrAdmin(currentUser, room.getPropertyId());
+        authorizationService.assertCanManageRoomsAndAssets(currentUser, room.getPropertyId());
         assertInUse(room, "sửa thông tin");
 
         if (command.expectedVersion() != null && command.expectedVersion() != room.getVersion()) {
@@ -294,7 +294,7 @@ public class RoomService implements RoomUseCase {
         Room room = roomRepository.findById(roomId)
             .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + roomId));
 
-        authorizationService.assertCanManageProperty(currentUser, room.getPropertyId());
+        authorizationService.assertCanManageRoomsAndAssets(currentUser, room.getPropertyId());
         assertInUse(room, "đổi trạng thái");
 
         if (targetStatus == null) {

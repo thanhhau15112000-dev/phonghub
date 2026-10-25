@@ -831,25 +831,30 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 
 | Mục | Nội dung |
 |---|---|
-| Tác nhân chính | Chủ trọ, Nhân viên, Quản trị viên |
-| Mô tả | Thêm phòng vào nhà trọ (số phòng, tầng, diện tích, giá, sức chứa). |
+| Tác nhân chính | Chủ trọ, Nhân viên được cấp quyền quản lý phòng và tài sản, Quản trị viên |
+| Mô tả | Thêm một hoặc nhiều phòng vào nhà trọ; mỗi phòng có biên bản hiện trạng ban đầu gồm chỉ số điện, nước, ghi chú và danh sách tài sản từ mẫu hoặc nhập thủ công, hoặc xác nhận không có tài sản. |
 | Tiền điều kiện | Nhà trọ của mình, đã `VERIFIED` và chưa bị ẩn. |
-| Hậu điều kiện | Phòng mới ở trạng thái `AVAILABLE`. |
-| Kênh | Web `/properties/{id}/rooms`; API `POST /api/properties/{id}/rooms` |
+| Hậu điều kiện | Phòng mới ở trạng thái `AVAILABLE`, có mốc hiện trạng bất biến để xem lại và điền sẵn vào check-in đầu tiên. |
+| Kênh | Web `/properties/{id}/rooms`, `/properties/{id}/rooms/batch`; API `POST /api/properties/{id}/rooms`, `/api/properties/{id}/rooms/batch` |
 
 **Luồng chính**
-1. Tác nhân nhập số phòng, tầng, diện tích, giá cơ bản, số người tối đa.
-2. Hệ thống kiểm tra dữ liệu và lưu phòng.
+1. Tác nhân nhập số phòng, tầng, diện tích, giá cơ bản, số người tối đa, chỉ số điện/nước, ghi chú và chọn mẫu tài sản, nhập từng tài sản, hoặc xác nhận phòng không có tài sản.
+2. Hệ thống kiểm tra quyền, dữ liệu, giới hạn số phòng và số phòng trùng; lưu phòng, tài sản và mốc hiện trạng trong cùng transaction.
+
+**Luồng thay thế**
+- A1. Tạo theo lô: nhập danh sách hoặc khoảng số phòng, dùng chung thông số và mẫu tài sản; nhập chỉ số điện/nước riêng cho từng phòng, xem trước rồi lưu tất cả hoặc không lưu phòng nào.
 
 **Ngoại lệ**
 - E1. Trùng số phòng trong cùng nhà trọ (kể cả phòng đã ngừng sử dụng): báo trùng.
 - E2. Nhà trọ chưa duyệt hoặc đã bị ẩn: từ chối.
+- E3. Nhân viên chưa được cấp quyền quản lý phòng và tài sản: từ chối.
+- E4. Danh sách trùng số phòng hoặc vượt tổng phòng đã khai báo: từ chối toàn bộ lô.
 
 #### UC-18. Cập nhật thông tin phòng
 
 | Mục | Nội dung |
 |---|---|
-| Tác nhân chính | Chủ trọ, Quản trị viên |
+| Tác nhân chính | Chủ trọ, Nhân viên được cấp quyền quản lý phòng và tài sản, Quản trị viên |
 | Mô tả | Sửa số phòng, tầng, diện tích, giá, sức chứa. |
 | Tiền điều kiện | Phòng thuộc nhà trọ của mình, chưa bị ẩn. |
 | Hậu điều kiện | Thông tin phòng được cập nhật (không đổi hợp đồng đang có). |
@@ -863,8 +868,8 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 
 | Mục | Nội dung |
 |---|---|
-| Tác nhân chính | Chủ trọ, Nhân viên, Quản trị viên |
-| Mô tả | Đổi tay trạng thái phòng giữa `AVAILABLE`, `RESERVED` (giữ chỗ), `MAINTENANCE` (bảo trì). |
+| Tác nhân chính | Chủ trọ, Nhân viên được cấp quyền quản lý phòng và tài sản, Quản trị viên |
+| Mô tả | Đổi tay trạng thái phòng giữa `AVAILABLE`, `RESERVED` (giữ chỗ), `MAINTENANCE` (bảo trì); nhân viên cần quyền quản lý phòng và tài sản. |
 | Tiền điều kiện | Phòng thuộc nhà trọ của mình, chưa bị ẩn. |
 | Hậu điều kiện | Trạng thái phòng thay đổi. |
 | Kênh | Web `/rooms/{id}/status`; API `PATCH /api/rooms/{id}/status` |
@@ -918,9 +923,9 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 
 | Mục | Nội dung |
 |---|---|
-| Tác nhân chính | Chủ trọ, Nhân viên, Quản trị viên |
+| Tác nhân chính | Chủ trọ, Nhân viên được cấp quyền quản lý phòng và tài sản, Quản trị viên |
 | Tác nhân phụ | Kho tệp riêng tư |
-| Mô tả | Thêm, sửa, xóa tài sản (tên, số lượng, tình trạng, giá trị, ảnh) của phòng; thêm từ danh sách mẫu; thêm cùng lúc cho nhiều phòng. |
+| Mô tả | Thêm, sửa, xóa tài sản (tên, số lượng, tình trạng, giá trị, ảnh) của phòng; thêm từ danh sách mẫu; thêm cùng lúc cho nhiều phòng được chọn hoặc theo tầng. |
 | Tiền điều kiện | Phòng thuộc nhà trọ của mình. |
 | Hậu điều kiện | Danh sách tài sản được cập nhật. Biên bản bàn giao lập sau đó lấy danh sách này làm mục kiểm tra. |
 | Kênh | Web `/rooms/{id}/assets…`; API `/api/rooms/{id}/assets…`, `/api/assets/{id}` |
@@ -932,14 +937,14 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 
 **Luồng thay thế**
 - 1a. Thêm từ mẫu: chọn mẫu *Cơ bản* hoặc *Đầy đủ*, hệ thống tạo sẵn các tài sản thường gặp.
-- 1b. Thêm theo lô: tác nhân chọn nhiều phòng, hệ thống tạo cùng một tài sản cho từng phòng.
+- 1b. Thêm theo lô: tác nhân chọn nhiều phòng, theo tầng hoặc tất cả phòng trong nhà trọ; hệ thống tạo cùng danh sách tài sản cho từng phòng.
 - 1c. Sửa hoặc xóa tài sản đã có.
 
 #### UC-23. Ghi sự kiện tài sản và in mã QR
 
 | Mục | Nội dung |
 |---|---|
-| Tác nhân chính | Chủ trọ, Nhân viên, Quản trị viên |
+| Tác nhân chính | Chủ trọ, Nhân viên được cấp quyền quản lý phòng và tài sản, Quản trị viên |
 | Mô tả | Ghi lịch sử tài sản (hỏng, sửa, thay mới…), có thể gắn với phiếu bảo trì của cùng phòng; xem lịch sử; tạo mã QR dán lên tài sản. |
 | Tiền điều kiện | Tài sản thuộc phòng của nhà trọ mình. |
 | Hậu điều kiện | Sự kiện được thêm vào lịch sử tài sản. |

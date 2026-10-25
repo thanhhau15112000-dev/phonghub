@@ -174,7 +174,7 @@ class RoomAssetServiceUnitTest {
         RoomAsset asset = asset(null);
         when(assets.findById(asset.id())).thenReturn(Optional.of(asset));
         doThrow(new UnauthorizedPropertyAccessException("no")).when(authorization)
-            .assertCanManageProperty(owner, propertyId);
+            .assertCanManageRoomsAndAssets(owner, propertyId);
 
         assertThrows(UnauthorizedPropertyAccessException.class, () -> service.recordEvent(event(asset, null)));
         verify(events, never()).save(any());

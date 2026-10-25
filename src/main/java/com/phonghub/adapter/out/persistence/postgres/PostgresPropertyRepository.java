@@ -92,6 +92,12 @@ public class PostgresPropertyRepository implements PropertyRepositoryPort {
     }
 
     @Override
+    public void lockById(UUID id) {
+        jdbcTemplate.query("SELECT id FROM properties WHERE id = :id FOR UPDATE", Map.of("id", id),
+            (rs, rowNum) -> rs.getObject("id", UUID.class));
+    }
+
+    @Override
     public List<Property> findAll() {
         String sql = "SELECT id, name, address, description, total_rooms, owner_id, approval_status, rejection_reason, created_at, archived_at FROM properties ORDER BY created_at DESC";
         return jdbcTemplate.query(sql, ROW_MAPPER);

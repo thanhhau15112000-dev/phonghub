@@ -9,6 +9,7 @@ import com.phonghub.application.port.in.RoomAssetUseCase;
 import com.phonghub.application.port.in.TenantDocumentUseCase;
 import com.phonghub.application.port.in.UtilityUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
+import com.phonghub.application.port.in.RoomSetupUseCase;
 import com.phonghub.application.port.in.TenantUseCase;
 import com.phonghub.application.port.in.UserUseCase;
 import com.phonghub.application.service.TenantService;
@@ -30,6 +31,7 @@ import com.phonghub.application.port.out.RoomAssetRepositoryPort;
 import com.phonghub.application.port.out.TenantDataProtectionPort;
 import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
+import com.phonghub.application.port.out.RoomConditionRepositoryPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
@@ -43,6 +45,7 @@ import com.phonghub.application.service.RoomAssetService;
 import com.phonghub.application.service.TenantDocumentService;
 import com.phonghub.application.service.UtilityService;
 import com.phonghub.application.service.RoomService;
+import com.phonghub.application.service.RoomSetupService;
 import com.phonghub.application.service.UserService;
 import com.phonghub.application.port.in.InvoiceDueReminderUseCase;
 import com.phonghub.application.port.in.NotificationInboxUseCase;
@@ -166,6 +169,20 @@ public class PhongHubConfiguration {
         return new TransactionalRoomAssetUseCase(service);
     }
 
+    @Bean
+    public RoomSetupUseCase roomSetupUseCase(
+        RoomUseCase roomUseCase,
+        RoomAssetUseCase roomAssetUseCase,
+        RoomConditionRepositoryPort conditionRepository,
+        RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService
+    ) {
+        return new TransactionalRoomSetupUseCase(new RoomSetupService(roomUseCase, roomAssetUseCase,
+            conditionRepository, roomRepository, propertyRepository, currentUserPort, authorizationService));
+    }
+
     /**
      * OCR chỉ số đồng hồ (#67): {@code phonghub.ocr.engine=tesseract} dùng lệnh tesseract (image Docker đã cài). Chọn
      * tesseract mà máy không có lệnh thì ghi cảnh báo và quay về nhập tay, không làm app lỗi khi khởi động.
@@ -228,12 +245,13 @@ public class PhongHubConfiguration {
         AuthorizationService authorizationService,
         AuditPort auditPort,
         StorageProperties storageProperties,
-        NotificationDispatcher notificationDispatcher
+        NotificationDispatcher notificationDispatcher,
+        RoomConditionRepositoryPort roomConditionRepository
     ) {
         HandoverService service = new HandoverService(
             handoverRepo, photoRepo, itemRepo, rulesRepo, contractRepo, assetRepo, tenantRepo, documentRepo,
             contractUseCase, fileStoragePort, currentUserPort, authorizationService, auditPort, storageProperties.getMaxFileSizeBytes(),
-            notificationDispatcher
+            notificationDispatcher, roomConditionRepository
         );
         return new TransactionalHandoverUseCase(service);
     }

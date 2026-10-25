@@ -11,6 +11,7 @@ import com.phonghub.application.port.out.HandoverItemRepositoryPort;
 import com.phonghub.application.port.out.HandoverPhotoRepositoryPort;
 import com.phonghub.application.port.out.HandoverRepositoryPort;
 import com.phonghub.application.port.out.PropertyHouseRulesRepositoryPort;
+import com.phonghub.application.port.out.RoomConditionRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetRepositoryPort;
 import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
@@ -32,6 +33,7 @@ import com.phonghub.domain.model.HandoverStatus;
 import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.PropertyHouseRules;
 import com.phonghub.domain.model.RoomAsset;
+import com.phonghub.domain.model.RoomConditionItem;
 import com.phonghub.domain.model.Tenant;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -70,6 +72,7 @@ public class HandoverService implements HandoverUseCase {
     private final AuditPort auditPort;
     private final long maxFileSizeBytes;
     private final NotificationDispatcher notifications;
+    private final RoomConditionRepositoryPort roomConditionRepository;
 
     public HandoverService(
         HandoverRepositoryPort handoverRepository,
@@ -89,7 +92,7 @@ public class HandoverService implements HandoverUseCase {
     ) {
         this(handoverRepository, photoRepository, itemRepository, rulesRepository, contractRepository, assetRepository,
             tenantRepository, documentRepository, contractUseCase, storagePort, currentUserPort, authorizationService,
-            auditPort, maxFileSizeBytes, null);
+            auditPort, maxFileSizeBytes, null, null);
     }
 
     /** {@code notifications} null thì không gửi thông báo yêu cầu xác nhận/duyệt biên bản (#86). */
@@ -110,7 +113,32 @@ public class HandoverService implements HandoverUseCase {
         long maxFileSizeBytes,
         NotificationDispatcher notifications
     ) {
+        this(handoverRepository, photoRepository, itemRepository, rulesRepository, contractRepository, assetRepository,
+            tenantRepository, documentRepository, contractUseCase, storagePort, currentUserPort, authorizationService,
+            auditPort, maxFileSizeBytes, notifications, null);
+    }
+
+    /** Room condition is optional for legacy/manual callers; configured application wiring supplies it. */
+    public HandoverService(
+        HandoverRepositoryPort handoverRepository,
+        HandoverPhotoRepositoryPort photoRepository,
+        HandoverItemRepositoryPort itemRepository,
+        PropertyHouseRulesRepositoryPort rulesRepository,
+        ContractRepositoryPort contractRepository,
+        RoomAssetRepositoryPort assetRepository,
+        TenantRepositoryPort tenantRepository,
+        TenantDocumentRepositoryPort documentRepository,
+        ContractUseCase contractUseCase,
+        FileStoragePort storagePort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        long maxFileSizeBytes,
+        NotificationDispatcher notifications,
+        RoomConditionRepositoryPort roomConditionRepository
+    ) {
         this.notifications = notifications;
+        this.roomConditionRepository = roomConditionRepository;
         this.handoverRepository = handoverRepository;
         this.photoRepository = photoRepository;
         this.itemRepository = itemRepository;
@@ -282,8 +310,16 @@ public class HandoverService implements HandoverUseCase {
 
         int itemCount;
         if (type == HandoverType.CHECK_IN) {
-            List<HandoverItem> items = assetRepository.findActiveByRoomId(contract.getRoomId()).stream()
-                .map(asset -> snapshot(handover.id(), asset)).toList();
+            List<HandoverItem> items = roomConditionRepository == null ? null
+                : roomConditionRepository.findLatestByRoomId(contract.getRoomId())
+                    .map(baseline -> roomConditionRepository.findItemsBySnapshotId(baseline.id()).stream()
+                        .map(item -> snapshot(handover.id(), item)).toList())
+                    .orElse(null);
+            if (items == null) {
+                // Phòng cũ chưa có biên bản hiện trạng thì giữ cách chụp từ tài sản đang gắn với phòng.
+                items = assetRepository.findActiveByRoomId(contract.getRoomId()).stream()
+                    .map(asset -> snapshot(handover.id(), asset)).toList();
+            }
             itemRepository.replaceAll(handover.id(), items, user.id());
             itemCount = items.size();
         } else {
@@ -490,6 +526,11 @@ public class HandoverService implements HandoverUseCase {
     private HandoverItem snapshot(UUID handoverId, RoomAsset asset) {
         return new HandoverItem(UUID.randomUUID(), handoverId, asset.id(), asset.name(), asset.quantity(),
             asset.status(), asset.note());
+    }
+
+    private HandoverItem snapshot(UUID handoverId, RoomConditionItem item) {
+        return new HandoverItem(UUID.randomUUID(), handoverId, item.assetId(), item.name(), item.quantity(),
+            item.status(), item.note());
     }
 
     private Contract findContract(UUID contractId) {

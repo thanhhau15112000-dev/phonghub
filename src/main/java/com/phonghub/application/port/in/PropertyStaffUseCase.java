@@ -14,7 +14,12 @@ public interface PropertyStaffUseCase {
     Member assign(AssignCommand command);
 
     Member updatePermissions(UUID propertyId, UUID userId, boolean canCollectPayment, boolean canManageContracts,
-                             boolean canViewDocuments);
+                             boolean canViewDocuments, boolean canManageRoomsAndAssets);
+
+    default Member updatePermissions(UUID propertyId, UUID userId, boolean canCollectPayment,
+                                     boolean canManageContracts, boolean canViewDocuments) {
+        return updatePermissions(propertyId, userId, canCollectPayment, canManageContracts, canViewDocuments, false);
+    }
 
     /** Gỡ khỏi nhà trọ; bị chặn khi kỹ thuật viên còn phiếu bảo trì đang giao/đang xử lý tại nhà trọ đó. */
     void unassign(UUID propertyId, UUID userId);
@@ -22,10 +27,15 @@ public interface PropertyStaffUseCase {
     record Member(User user, StaffPropertyAssignment assignment) {}
 
     record AssignCommand(UUID propertyId, String usernameOrEmail, boolean canCollectPayment,
-                         boolean canManageContracts, boolean canViewDocuments) {
+                         boolean canManageContracts, boolean canViewDocuments, boolean canManageRoomsAndAssets) {
+        public AssignCommand(UUID propertyId, String usernameOrEmail, boolean canCollectPayment,
+                             boolean canManageContracts, boolean canViewDocuments) {
+            this(propertyId, usernameOrEmail, canCollectPayment, canManageContracts, canViewDocuments, false);
+        }
+
         public AssignCommand(UUID propertyId, String usernameOrEmail, boolean canCollectPayment,
                              boolean canManageContracts) {
-            this(propertyId, usernameOrEmail, canCollectPayment, canManageContracts, false);
+            this(propertyId, usernameOrEmail, canCollectPayment, canManageContracts, false, false);
         }
 
         public AssignCommand {

@@ -126,7 +126,8 @@ class RoomArchiveIntegrationTest extends SeededWebTest {
                 .content("{\"roomNumber\":\"P104\",\"floor\":1,\"basePrice\":4100000,\"maxOccupants\":3}"))
             .andExpect(status().isConflict());
         mockMvc.perform(post(rooms).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"roomNumber\":\"P104\",\"floor\":1,\"basePrice\":3000000,\"maxOccupants\":2}"))
+                .content("{\"roomNumber\":\"P104\",\"floor\":1,\"basePrice\":3000000,\"maxOccupants\":2,"
+                    + "\"electricMeter\":0,\"waterMeter\":0,\"conditionNote\":\"Hiện trạng ban đầu\",\"noAssets\":true}"))
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.detail", containsString("khôi phục phòng đó")));
 

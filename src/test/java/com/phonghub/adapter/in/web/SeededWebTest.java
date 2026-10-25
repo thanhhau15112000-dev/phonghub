@@ -5,6 +5,8 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomAssetRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomConditionRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
@@ -34,6 +36,8 @@ abstract class SeededWebTest {
     @Autowired private InMemoryPropertyRepository seedProperties;
     @Autowired private InMemoryStaffPropertyAssignmentRepository seedAssignments;
     @Autowired private InMemoryRoomRepository seedRooms;
+    @Autowired private InMemoryRoomAssetRepository seedRoomAssets;
+    @Autowired private InMemoryRoomConditionRepository seedRoomConditions;
     @Autowired private InMemoryTenantRepository seedTenants;
     @Autowired private InMemoryContractRepository seedContracts;
     @Autowired private InMemoryMaintenanceTicketRepository seedTickets;
@@ -55,6 +59,8 @@ abstract class SeededWebTest {
         seedProperties.clear();
         seedAssignments.clear();
         seedRooms.clear();
+        seedRoomAssets.clear();
+        seedRoomConditions.clear();
         seedTenants.clear();
         seedContracts.clear();
         seedTickets.clear();

@@ -12,6 +12,7 @@ import com.phonghub.application.port.out.HandoverItemRepositoryPort;
 import com.phonghub.application.port.out.HandoverPhotoRepositoryPort;
 import com.phonghub.application.port.out.HandoverRepositoryPort;
 import com.phonghub.application.port.out.PropertyHouseRulesRepositoryPort;
+import com.phonghub.application.port.out.RoomConditionRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetRepositoryPort;
 import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
@@ -30,6 +31,8 @@ import com.phonghub.domain.model.HandoverPhotoKind;
 import com.phonghub.domain.model.HandoverStatus;
 import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.RoomAsset;
+import com.phonghub.domain.model.RoomConditionItem;
+import com.phonghub.domain.model.RoomConditionSnapshot;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
@@ -70,6 +73,7 @@ class HandoverServiceUnitTest {
     private PropertyHouseRulesRepositoryPort rules;
     private ContractRepositoryPort contracts;
     private RoomAssetRepositoryPort assets;
+    private RoomConditionRepositoryPort roomConditions;
     private TenantRepositoryPort tenants;
     private TenantDocumentRepositoryPort documents;
     private ContractUseCase contractUseCase;
@@ -88,6 +92,7 @@ class HandoverServiceUnitTest {
         rules = mock(PropertyHouseRulesRepositoryPort.class);
         contracts = mock(ContractRepositoryPort.class);
         assets = mock(RoomAssetRepositoryPort.class);
+        roomConditions = mock(RoomConditionRepositoryPort.class);
         tenants = mock(TenantRepositoryPort.class);
         documents = mock(TenantDocumentRepositoryPort.class);
         contractUseCase = mock(ContractUseCase.class);
@@ -109,7 +114,7 @@ class HandoverServiceUnitTest {
 
         service = new HandoverService(handovers, photos, items, rules, contracts, assets, tenants, documents,
             contractUseCase, storage, currentUser, authorization, mock(AuditPort.class),
-            1024 * 1024);
+            1024 * 1024, null, roomConditions);
     }
 
     private HandoverCommand command() {
@@ -171,6 +176,33 @@ class HandoverServiceUnitTest {
         verify(items).replaceAll(eq(created.id()), captor.capture(), eq(staff.id()));
         assertEquals(1, captor.getValue().size());
         assertEquals(BigDecimal.ZERO, captor.getValue().get(0).deductionAmount());
+    }
+
+    @Test
+    void sendingFirstCheckInCopiesAssetsFromLatestRoomConditionBaseline() {
+        Handover checkIn = existing(HandoverType.CHECK_IN, HandoverStatus.DRAFT);
+        givenHandover(checkIn);
+        when(photos.findByHandoverId(checkIn.id())).thenReturn(java.util.Arrays.stream(HandoverPhotoKind.values())
+            .map(kind -> new HandoverPhoto(UUID.randomUUID(), checkIn.id(), kind, "photo-" + kind, "image/png",
+                Instant.now(), staff.id())).toList());
+        UUID snapshotId = UUID.randomUUID();
+        when(roomConditions.findLatestByRoomId(roomId)).thenReturn(Optional.of(new RoomConditionSnapshot(
+            snapshotId, roomId, new BigDecimal("100"), new BigDecimal("20"), "Phòng mới", null, null,
+            Instant.now(), owner.id())));
+        UUID baselineAssetId = UUID.randomUUID();
+        when(roomConditions.findItemsBySnapshotId(snapshotId)).thenReturn(List.of(new RoomConditionItem(
+            UUID.randomUUID(), snapshotId, baselineAssetId, 0, "Giường ban đầu", 2, AssetStatus.GOOD,
+            "Còn mới", new BigDecimal("2500000"))));
+
+        service.send(HandoverType.CHECK_IN, contract.getId());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<HandoverItem>> captor = ArgumentCaptor.forClass(List.class);
+        verify(items).replaceAll(eq(checkIn.id()), captor.capture(), eq(staff.id()));
+        assertEquals(1, captor.getValue().size());
+        assertEquals("Giường ban đầu", captor.getValue().getFirst().assetName());
+        assertEquals(2, captor.getValue().getFirst().quantity());
+        verify(assets, never()).findActiveByRoomId(roomId);
     }
 
     // ---- photos / items ----
