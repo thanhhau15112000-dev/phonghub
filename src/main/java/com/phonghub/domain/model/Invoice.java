@@ -157,6 +157,11 @@ public class Invoice {
             throw new IllegalArgumentException("Payment code is required");
         }
         int dueDay = Math.min(contract.getPaymentDay(), period.lengthOfMonth());
+        LocalDate dueDate = period.atDay(dueDay);
+        // A first-month invoice must not be overdue before the rent obligation begins.
+        if (dueDate.isBefore(contract.getStartDate())) {
+            dueDate = contract.getStartDate();
+        }
         Instant now = Instant.now();
         UUID invoiceId = UUID.randomUUID();
 
@@ -187,7 +192,7 @@ public class Invoice {
             contract.getRentAmount(),
             total,
             BigDecimal.ZERO,
-            period.atDay(dueDay),
+            dueDate,
             InvoiceStatus.ISSUED,
             paymentCode,
             InvoiceType.RENT,
