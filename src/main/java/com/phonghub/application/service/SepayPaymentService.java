@@ -577,9 +577,12 @@ public class SepayPaymentService implements SepayWebhookUseCase {
             amount, gateway, acc, content
         );
         if (invoice != null) {
-            String label = invoice.getType() == InvoiceType.MAINTENANCE
-                ? "Phí sửa chữa"
-                : String.format("Kỳ %02d/%d", invoice.getMonth(), invoice.getYear());
+            String label = switch (invoice.getType()) {
+                case MAINTENANCE -> "Phí sửa chữa";
+                case CHECK_OUT -> "Hóa đơn chốt điện/nước";
+                case CANCELLATION -> "Phí hủy hợp đồng";
+                case RENT -> String.format("Kỳ %02d/%d", invoice.getMonth(), invoice.getYear());
+            };
             message += String.format(
                 ". %s (mã %s): đã thu %,.0f / %,.0f đ.",
                 label, invoice.getPaymentCode(), invoice.getPaidAmount(), invoice.getTotalAmount()

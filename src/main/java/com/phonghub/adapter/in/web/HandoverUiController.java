@@ -7,6 +7,7 @@ import com.phonghub.application.port.in.RoomSetupUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.domain.exception.DomainException;
@@ -53,6 +54,7 @@ public class HandoverUiController {
     private final CurrentUserPort currentUserPort;
     private final CheckOutSettlementUseCase settlementUseCase;
     private final RoomSetupUseCase roomSetupUseCase;
+    private final AuthorizationService authorizationService;
 
     public HandoverUiController(
         HandoverUseCase handoverUseCase,
@@ -62,7 +64,8 @@ public class HandoverUiController {
         TenantRepositoryPort tenantRepository,
         CurrentUserPort currentUserPort,
         CheckOutSettlementUseCase settlementUseCase,
-        RoomSetupUseCase roomSetupUseCase
+        RoomSetupUseCase roomSetupUseCase,
+        AuthorizationService authorizationService
     ) {
         this.handoverUseCase = handoverUseCase;
         this.contractUseCase = contractUseCase;
@@ -72,6 +75,7 @@ public class HandoverUiController {
         this.currentUserPort = currentUserPort;
         this.settlementUseCase = settlementUseCase;
         this.roomSetupUseCase = roomSetupUseCase;
+        this.authorizationService = authorizationService;
     }
 
     private static HandoverType typeOf(String kind) {
@@ -101,8 +105,7 @@ public class HandoverUiController {
                 ? propertyRepository.findById(contract.getPropertyId())
                     .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + contract.getPropertyId()))
                 : propertyUseCase.getProperty(contract.getPropertyId());
-            boolean canManage = user != null && (user.role() == UserRole.ADMIN || user.role() == UserRole.STAFF
-                || (user.role() == UserRole.OWNER && user.id().equals(property.ownerId())));
+            boolean canManage = authorizationService.canManageContracts(user, contract.getPropertyId());
             boolean ownerOrAdmin = user != null && (user.role() == UserRole.ADMIN
                 || (user.role() == UserRole.OWNER && user.id().equals(property.ownerId())));
             boolean primaryTenant = false;
@@ -278,13 +281,14 @@ public class HandoverUiController {
         @PathVariable UUID contractId,
         @PathVariable String kind,
         @RequestParam(required = false) BigDecimal finalDeduction,
+        @RequestParam(required = false) java.util.List<UUID> depositOffsetInvoiceIds,
         RedirectAttributes ra
     ) {
         String message = typeOf(kind) == HandoverType.CHECK_OUT
             ? "Đã duyệt check-out: hợp đồng đã kết thúc và phòng đã được trả."
             : "Đã duyệt biên bản check-in; hợp đồng đã có hiệu lực và phòng đang được thuê.";
         return handle(contractId, kind, ra, message, () ->
-            handoverUseCase.approve(typeOf(kind), contractId, finalDeduction));
+            handoverUseCase.approve(typeOf(kind), contractId, finalDeduction, depositOffsetInvoiceIds));
     }
 
     @PostMapping("/reject")

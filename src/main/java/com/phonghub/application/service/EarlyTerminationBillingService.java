@@ -37,8 +37,19 @@ public class EarlyTerminationBillingService {
         this.auditPort = auditPort != null ? auditPort : event -> {};
     }
 
-    /** Caller must hold the contract row lock and call this before changing its status to TERMINATED. */
+    /** Điện/nước tính theo chỉ số công tơ đã ghi; dùng khi không có biên bản check-out cung cấp chỉ số cuối. */
     public void billEarlyTermination(Contract contract, CurrentUser actor, LocalDate today) {
+        billEarlyTermination(contract, actor, today, null);
+    }
+
+    /**
+     * Lập hóa đơn phí hủy giữa kỳ khi check-out trước ngày kết thúc hợp đồng. {@code utilityCharges} là điện/nước theo
+     * chỉ số check-out (null thì tính từ chỉ số công tơ đã ghi). Hóa đơn chưa trừ cọc: việc trừ cọc do chủ trọ chọn
+     * lúc duyệt check-out, cùng một cơ chế với mọi khoản nợ khác (#222). Gọi nhiều lần chỉ lập một lần. Người gọi giữ
+     * khóa hợp đồng và lưu hợp đồng sau khi gọi.
+     */
+    public void billEarlyTermination(Contract contract, CurrentUser actor, LocalDate today,
+                                     List<InvoiceItem> utilityCharges) {
         if (contract == null || today == null || !today.isBefore(contract.getEndDate())) {
             return;
         }
@@ -48,7 +59,13 @@ public class EarlyTerminationBillingService {
         }
 
         List<Invoice> invoices = invoiceRepository.findByContractId(contract.getId());
-        List<InvoiceItem> utilityCharges = utilityBilling.cancellationCharges(contract, today, invoices);
+        if (invoices.stream().anyMatch(invoice -> invoice.getType() == InvoiceType.CANCELLATION
+            && invoice.getStatus() != InvoiceStatus.VOIDED)) {
+            return;
+        }
+        if (utilityCharges == null) {
+            utilityCharges = utilityBilling.cancellationCharges(contract, today, invoices);
+        }
         BigDecimal rentFee = contract.getRentAmount().multiply(new BigDecimal("0.5"))
             .setScale(0, RoundingMode.HALF_UP);
         Invoice cancellationInvoice = invoices.stream()
@@ -84,18 +101,13 @@ public class EarlyTerminationBillingService {
             invoiceRepository.save(invoice);
         }
 
-        BigDecimal depositPayment = contract.availableDeposit().min(cancellationInvoice.remainingAmount());
-        if (depositPayment.signum() > 0) {
-            contract.applyDeposit(depositPayment);
-            cancellationInvoice.applyPaymentFromDeposit(depositPayment, Instant.now());
-        }
         invoiceRepository.save(cancellationInvoice);
 
         auditPort.recordEvent(AuditPort.AuditEvent.of("EARLY_TERMINATION_BILLING_CREATED",
             actor != null ? actor.id() : null, "CONTRACT", contract.getId().toString(), contract.getPropertyId(),
             Map.of("cycleNumber", cycle.number(), "cycleStart", cycle.startDate().toString(),
                 "cycleEnd", cycle.endDate().toString(), "rentFee", rentFee.toPlainString(),
-                "depositApplied", depositPayment.toPlainString(), "refundCredit", totalRefundCredit.toPlainString(),
+                "refundCredit", totalRefundCredit.toPlainString(),
                 "cancellationInvoiceId", cancellationInvoice.getId().toString())));
     }
 }

@@ -1,7 +1,9 @@
 package com.phonghub.application.port.in;
 
 import com.phonghub.domain.model.MeterType;
+import com.phonghub.domain.model.InvoiceType;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,6 +22,9 @@ public interface CheckOutSettlementUseCase {
     record UtilityEstimate(MeterType meterType, BigDecimal fromValue, BigDecimal toValue, BigDecimal consumption,
                            BigDecimal unitPrice, BigDecimal amount) {}
 
+    record OutstandingInvoice(UUID id, InvoiceType type, int month, int year, BigDecimal remainingAmount,
+                              LocalDate dueDate) {}
+
     record Settlement(
         BigDecimal deposit,
         BigDecimal depositApplied,
@@ -29,8 +34,16 @@ public interface CheckOutSettlementUseCase {
         boolean deductionFinal,
         BigDecimal outstanding,
         int unpaidInvoices,
-        List<UtilityEstimate> utilities
+        List<UtilityEstimate> utilities,
+        List<OutstandingInvoice> openInvoices
     ) {
+        public Settlement(BigDecimal deposit, BigDecimal depositApplied, BigDecimal settlementCredit,
+                          BigDecimal deduction, boolean deductionFinal, BigDecimal outstanding, int unpaidInvoices,
+                          List<UtilityEstimate> utilities) {
+            this(deposit, depositApplied, settlementCredit, deduction, deductionFinal, outstanding, unpaidInvoices,
+                utilities, List.of());
+        }
+
         public BigDecimal utilityTotal() {
             return utilities.stream().map(UtilityEstimate::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
         }
@@ -39,6 +52,11 @@ public interface CheckOutSettlementUseCase {
         public BigDecimal balance() {
             return deposit.subtract(depositApplied).add(settlementCredit)
                 .subtract(deduction).subtract(outstanding).subtract(utilityTotal());
+        }
+
+        /** Tiền cọc còn dùng được để cấn trừ nợ: cọc trừ phần đã cấn trừ và khoản khấu trừ tài sản. */
+        public BigDecimal usableDeposit() {
+            return deposit.subtract(depositApplied).subtract(deduction).max(BigDecimal.ZERO);
         }
     }
 }

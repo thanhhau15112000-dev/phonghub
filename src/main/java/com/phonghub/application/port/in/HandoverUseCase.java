@@ -22,6 +22,9 @@ public interface HandoverUseCase {
     /** Chuẩn bị biên bản check-in từ hiện trạng gần nhất; gọi lại sẽ trả biên bản đang có. */
     Handover prepareCheckIn(UUID contractId);
 
+    /** Mở một bản nháp check-out có lý do kết thúc sớm đã lưu; chưa kết thúc hợp đồng. */
+    Handover prepareEarlyTerminationCheckout(UUID contractId, String reason);
+
     Handover create(HandoverType type, HandoverCommand command);
 
     /** Thêm tài sản vào kho phòng và bản chụp check-in đang nháp. */
@@ -43,8 +46,13 @@ public interface HandoverUseCase {
     /** Người thuê chính xác nhận; check-in cần đã tải giấy tờ CCCD. */
     Handover confirm(HandoverType type, UUID contractId);
 
-    /** Duyệt. Check-out chỉ owner/admin duyệt và chốt khoản khấu trừ (mặc định bằng tổng đề xuất). */
-    Handover approve(HandoverType type, UUID contractId, BigDecimal finalDeduction);
+    /** Duyệt. Khoản nợ được cấn trừ toàn phần theo từng hóa đơn đã chọn trong giới hạn tiền cọc còn lại. */
+    Handover approve(HandoverType type, UUID contractId, BigDecimal finalDeduction,
+                     List<UUID> depositOffsetInvoiceIds);
+
+    default Handover approve(HandoverType type, UUID contractId, BigDecimal finalDeduction) {
+        return approve(type, contractId, finalDeduction, List.of());
+    }
 
     Handover reject(HandoverType type, UUID contractId, String reason);
 
@@ -69,8 +77,15 @@ public interface HandoverUseCase {
         BigDecimal initialElectricMeter,
         BigDecimal initialWaterMeter,
         String roomCondition,
-        String keysProvided
-    ) {}
+        String keysProvided,
+        boolean earlyTermination,
+        String terminationReason
+    ) {
+        public HandoverCommand(UUID contractId, BigDecimal initialElectricMeter, BigDecimal initialWaterMeter,
+                               String roomCondition, String keysProvided) {
+            this(contractId, initialElectricMeter, initialWaterMeter, roomCondition, keysProvided, false, null);
+        }
+    }
 
     record ItemCommand(AssetStatus status, String conditionNote, BigDecimal deductionAmount) {}
 

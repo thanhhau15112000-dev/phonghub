@@ -28,6 +28,12 @@ public class TransactionalHandoverUseCase implements HandoverUseCase {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public Handover prepareEarlyTerminationCheckout(UUID contractId, String reason) {
+        return delegate.prepareEarlyTerminationCheckout(contractId, reason);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public Handover create(HandoverType type, HandoverCommand command) {
         return delegate.create(type, command);
     }
@@ -77,8 +83,9 @@ public class TransactionalHandoverUseCase implements HandoverUseCase {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Handover approve(HandoverType type, UUID contractId, BigDecimal finalDeduction) {
-        return delegate.approve(type, contractId, finalDeduction);
+    public Handover approve(HandoverType type, UUID contractId, BigDecimal finalDeduction,
+                            java.util.List<UUID> depositOffsetInvoiceIds) {
+        return delegate.approve(type, contractId, finalDeduction, depositOffsetInvoiceIds);
     }
 
     @Override

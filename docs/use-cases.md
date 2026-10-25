@@ -1256,24 +1256,23 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Mục | Nội dung |
 |---|---|
 | Tác nhân chính | Chủ trọ, Nhân viên có quyền quản lý hợp đồng, Quản trị viên |
-| Mô tả | Kết thúc hợp đồng ngay theo yêu cầu chấm dứt sớm do chủ trọ hoặc nhân viên có quyền xử lý, không qua biên bản check-out. |
-| Tiền điều kiện | Hợp đồng đang ở. |
-| Hậu điều kiện | Hợp đồng `TERMINATED`; phòng `AVAILABLE`, hoặc `MAINTENANCE` nếu chọn cần sửa; hóa đơn kỳ hiện tại được điều chỉnh thành 50% tiền thuê cộng tiền điện nước chưa lập hóa đơn; tiền cọc được trừ vào khoản còn nợ; các hóa đơn thuê tương lai bị hủy và tiền đã thu thành khoản hoàn/đối trừ; nhật ký ghi lý do. |
-| Kênh | Web `/contracts/{id}/terminate`; API `POST /api/contracts/{id}/terminate` |
+| Mô tả | Bắt đầu quy trình check-out sớm, giữ hợp đồng và phòng ở trạng thái đang cư trú cho tới khi duyệt check-out. |
+| Tiền điều kiện | Hợp đồng `ACTIVE` hoặc `EXPIRED`, có biên bản check-in được duyệt và lý do kết thúc sớm. |
+| Hậu điều kiện | Biên bản check-out có cờ kết thúc sớm và lý do; hợp đồng chỉ `TERMINATED` sau khi người thuê xác nhận và người quản lý duyệt. |
+| Kênh | Web `/contracts/{id}/terminate` mở biên bản; API `POST /api/contracts/{id}/terminate` trả `409` nếu chưa có check-out được duyệt |
 
 **Luồng chính**
-1. Tác nhân xử lý yêu cầu của người thuê, chọn "Chấm dứt", nhập lý do, chọn phòng có cần bảo trì không.
-2. Nếu ngày chấm dứt trước ngày kết thúc hợp đồng, hệ thống thay tiền thuê chu kỳ hiện tại bằng 50% tiền thuê chu kỳ đó, cộng điện nước chưa lập hóa đơn theo chỉ số cuối đã ghi; nếu tiền thuê đã trả vượt khoản mới, phần chênh lệch thành khoản hoàn/đối trừ.
-3. Hệ thống hủy các hóa đơn thuê có chu kỳ bắt đầu sau chu kỳ hiện tại, trừ tiền cọc vào hóa đơn chấm dứt đến mức còn khả dụng, rồi chấm dứt hợp đồng và cập nhật trạng thái phòng. Nếu cọc không đủ, phần còn lại vẫn phải trả.
+1. Tác nhân chọn "Kết thúc sớm" và nhập lý do.
+2. Hệ thống mở hoặc cập nhật biên bản check-out và ghi lý do vào lịch sử.
+3. Tác nhân hoàn thiện chỉ số cuối, tài sản và ảnh, rồi gửi người thuê xác nhận (UC-42).
 
 **Ngoại lệ**
 - E1. Không nhập lý do, hoặc lý do dài quá 500 ký tự: báo lỗi.
-- E2. Hợp đồng không còn ở: từ chối.
+- E2. Hợp đồng không còn ở hoặc chưa có check-in được duyệt: từ chối.
 
 **Quy tắc nghiệp vụ**
-- BR1. Người thuê không tự chấm dứt hợp đồng; chủ trọ hoặc nhân viên có quyền quản lý hợp đồng xử lý yêu cầu của người thuê.
-- BR2. Cách kết thúc thông thường là check-out (UC-42): duyệt check-out tự kết thúc hợp đồng và có quyết toán tiền cọc. Chấm dứt sớm thì không lập được biên bản check-out sau đó.
-- BR3. Chấm dứt vào hoặc sau ngày kết thúc hợp đồng không chịu khoản 50% tiền thuê chấm dứt sớm.
+- BR1. Người thuê không tự chấm dứt hợp đồng.
+- BR2. Hợp đồng đã kích hoạt luôn kết thúc qua check-out; hợp đồng nháp chưa từng có hiệu lực vẫn hủy được như cũ.
 
 #### UC-38. Tự động hết hạn và nhắc hết hạn hợp đồng
 
@@ -1332,7 +1331,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 1. Người thuê chính mở biên bản từ thông báo hoặc trang hợp đồng.
 2. Người thuê kiểm tra chỉ số, tình trạng, ảnh, nội quy.
 3. Người thuê chọn "Tôi xác nhận biên bản".
-4. Hệ thống kiểm tra tiền điều kiện, lưu xác nhận, chuyển sang `PENDING_APPROVAL` và báo người quản lý.
+4. Hệ thống kiểm tra tiền điều kiện, lưu xác nhận, chuyển sang `PENDING_APPROVAL` và báo người quản lý. Với check-out, đồng thời lập hóa đơn chốt điện/nước theo tiêu thụ từ lần ghi gần nhất của hợp đồng nếu có đơn giá.
 
 **Luồng thay thế**
 - 2a. Chưa có ảnh CCCD (check-in): người thuê chọn "Tải giấy tờ" để làm UC-27, rồi quay lại bước 3.
@@ -1345,7 +1344,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 
 | Mục | Nội dung |
 |---|---|
-| Tác nhân chính | Check-in: Chủ trọ, Nhân viên có quyền quản lý hợp đồng, Quản trị viên. Duyệt check-out: chỉ Chủ trọ, Quản trị viên. |
+| Tác nhân chính | Check-in và check-out: Chủ trọ, Nhân viên có quyền quản lý hợp đồng, Quản trị viên. |
 | Mô tả | Người quản lý duyệt biên bản đã được người thuê xác nhận, từ chối kèm lý do, hoặc mở lại biên bản để sửa. |
 | Tiền điều kiện | Duyệt/từ chối: biên bản `PENDING_APPROVAL`. Mở lại: biên bản bị từ chối. |
 | Hậu điều kiện | `APPROVED`, `REJECTED` (kèm lý do), hoặc trở về `DRAFT`. |
@@ -1365,7 +1364,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 
 | Mục | Nội dung |
 |---|---|
-| Tác nhân chính | Lập: như UC-39. Duyệt: Chủ trọ, Quản trị viên. |
+| Tác nhân chính | Lập và duyệt: Chủ trọ, Nhân viên có quyền quản lý hợp đồng, Quản trị viên; người thuê chính xác nhận. |
 | Tác nhân phụ | Kho tệp riêng tư |
 | Mô tả | Khi người thuê trả phòng: ghi chỉ số cuối, kiểm tài sản, đề xuất khấu trừ; hệ thống tính quyết toán tiền cọc; duyệt thì kết thúc hợp đồng. |
 | Tiền điều kiện | Hợp đồng đang ở (`ACTIVE`, hoặc `EXPIRED` chưa trả phòng). |
@@ -1377,17 +1376,20 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 2. Tác nhân ghi tình trạng từng tài sản và số tiền khấu trừ đề xuất; tải ảnh.
 3. Tác nhân gửi người thuê (như UC-39 bước 4–6).
 4. Người thuê chính xác nhận (UC-40).
-5. Hệ thống hiện bảng quyết toán: tiền cọc, khấu trừ đề xuất, công nợ hóa đơn chưa trả, ước tính điện nước từ lần ghi chỉ số gần nhất tới chỉ số cuối.
-6. Chủ trọ nhập khoản khấu trừ chốt (mặc định bằng tổng đề xuất) và chọn "Duyệt".
-7. Hệ thống duyệt biên bản và kết thúc hợp đồng trong cùng một giao dịch.
+5. Hệ thống hiện bảng quyết toán, từng hóa đơn còn nợ, hạn thanh toán, khấu trừ tài sản và hóa đơn chốt điện/nước nếu đã được phát hành.
+6. Người quản lý nhập khoản khấu trừ chốt (mặc định bằng tổng đề xuất), chọn từng hóa đơn cần cấn trừ từ cọc và chọn "Duyệt". Hóa đơn không được chọn phải thanh toán trước.
+7. Hệ thống kiểm tra công nợ trong transaction và khóa các hóa đơn liên quan. Cọc khả dụng bằng tiền cọc trừ khấu trừ tài sản; nếu không đủ cấn trừ toàn bộ hóa đơn được chọn thì báo số tiền còn thiếu và không duyệt.
+8. Hệ thống ghi giao dịch cấn trừ, cập nhật hóa đơn, duyệt biên bản và kết thúc hợp đồng trong cùng một transaction.
 
 **Ngoại lệ**
-- E1. Hợp đồng đã chấm dứt sớm (UC-37): không lập được biên bản check-out.
+- E1. API chấm dứt trực tiếp trả `409` cho hợp đồng đã kích hoạt; cần hoàn thiện và duyệt biên bản check-out.
 - E2. Kết thúc hợp đồng thất bại: biên bản vẫn ở `PENDING_APPROVAL`.
+- E3. Còn hóa đơn chưa thanh toán hoặc hóa đơn đã chọn cấn trừ vượt cọc khả dụng: `409`, nêu số khoản còn nợ hoặc phần tiền thiếu.
 
 **Quy tắc nghiệp vụ**
-- BR1. Bảng quyết toán chỉ để đối chiếu: hệ thống không tự tạo khoản thu hay hoàn tiền.
-- BR2. Ước tính điện nước bỏ qua chỉ số lùi (thay đồng hồ).
+- BR1. Chỉ cấn trừ hóa đơn payable của chính hợp đồng; thanh toán đồng thời được tuần tự hóa bằng khóa hóa đơn. Hóa đơn được bù từ cọc chuyển sang `PAID` hoặc `PARTIALLY_PAID` theo số tiền còn thiếu.
+- BR2. Hóa đơn chốt điện/nước chỉ được lập sau khi người thuê xác nhận check-out; bỏ qua chỉ số lùi (thay đồng hồ).
+- BR3. Giao dịch cấn trừ xuất hiện trong lịch sử thanh toán và biên lai; quyết toán tính tiền cọc − khấu trừ tài sản − cấn trừ − công nợ chưa thu − hóa đơn chốt chưa thanh toán.
 
 #### UC-43. So sánh check-in/check-out và xuất PDF
 

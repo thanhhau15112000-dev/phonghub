@@ -238,7 +238,12 @@ public class ExportService implements ExportUseCase {
             Tenant tenant = data.tenant(line.contract());
             rows.add(row(data.propertyName(line.contract()), data.roomNumber(line.contract()),
                 tenant == null ? "" : tenant.fullName(), String.format("%02d/%d", i.getMonth(), i.getYear()),
-                i.getType() == InvoiceType.MAINTENANCE ? "Phí sửa chữa" : "Tiền thuê", i.getTotalAmount(),
+                switch (i.getType()) {
+                    case MAINTENANCE -> "Phí sửa chữa";
+                    case CHECK_OUT -> "Chốt điện/nước";
+                    case CANCELLATION -> "Phí hủy hợp đồng";
+                    case RENT -> "Tiền thuê";
+                }, i.getTotalAmount(),
                 i.getPaidAmount(), i.remainingAmount(), i.getDueDate(), invoiceStatus(i, today), i.getPaymentCode()));
         }
         return new Table("Hóa đơn " + format(from) + " - " + format(to), subtitle,

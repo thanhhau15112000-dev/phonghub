@@ -152,6 +152,9 @@ public final class UiText {
                 ? cycleInvoiceLabel("Phí hủy hợp đồng", invoice)
                 : "Phí hủy hợp đồng";
         }
+        if (invoice.getType() == InvoiceType.CHECK_OUT) {
+            return "Hóa đơn chốt điện/nước";
+        }
         if (invoice.getCycleNumber() > 0) {
             return cycleInvoiceLabel("Tiền thuê", invoice);
         }

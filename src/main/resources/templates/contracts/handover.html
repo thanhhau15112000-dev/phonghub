@@ -10,6 +10,10 @@
     <div class="page-title-row">
         <div>
             <h1 th:text="${checkOut} ? 'Biên bản check-out (trả phòng)' : 'Biên bản check-in'">Biên bản check-in</h1>
+            <p th:if="${checkOut and details != null and details.handover().earlyTermination()}"
+               style="margin: 4px 0 0; color: var(--text-secondary);">
+                Kết thúc sớm — lý do: <strong th:text="${details.handover().terminationReason()}">Lý do</strong>
+            </p>
             <p th:unless="${checkOut}" style="color: var(--text-secondary); font-size: 13px;">
                 Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Hợp đồng chỉ có hiệu lực và phòng chuyển sang đang thuê sau khi người thuê chính xác nhận, người quản lý duyệt biên bản.
             </p>
@@ -111,10 +115,19 @@
                 <a th:if="${primaryTenant and details.handover().status().name() == 'PENDING_TENANT'}"
                    th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${contract.getPrimaryTenantId()} + '/documents'}"
                    class="btn btn-secondary">Tải giấy tờ</a>
-                <form th:if="${(checkOut ? ownerOrAdmin : canManage) and details.handover().status().name() == 'PENDING_APPROVAL'}" th:action="@{${base} + '/approve'}" method="post" style="display: flex; gap: 6px; margin: 0;">
+                <form th:if="${canManage and details.handover().status().name() == 'PENDING_APPROVAL'}" th:action="@{${base} + '/approve'}" method="post" style="display: flex; gap: 6px; margin: 0; flex-wrap: wrap;">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <input th:if="${checkOut}" type="number" min="0" step="1000" name="finalDeduction" class="form-control"
                            th:value="${details.proposedDeduction()}" title="Khoản khấu trừ chốt" style="width: 150px;">
+                    <div th:if="${checkOut and settlement != null and !#lists.isEmpty(settlement.openInvoices())}"
+                         style="flex-basis: 100%; padding: 8px 10px; border: 1px solid var(--border-color);">
+                        <strong>Công nợ cần xử lý trước khi duyệt</strong>
+                        <p style="margin: 4px 0; font-size: 12px;">Chọn từng hóa đơn để cấn trừ toàn bộ số còn nợ vào phần tiền cọc còn lại sau khấu trừ tài sản. Nếu cọc thiếu, thanh toán phần thiếu rồi tải lại trang.</p>
+                        <label th:each="debt : ${settlement.openInvoices()}" style="display: block; font-size: 13px; margin-top: 4px;">
+                            <input type="checkbox" name="depositOffsetInvoiceIds" th:value="${debt.id()}">
+                            <span th:text="${(debt.type().name() == 'CHECK_OUT' ? 'Chốt điện/nước ' : (debt.type().name() == 'MAINTENANCE' ? 'Phí sửa chữa ' : 'Hóa đơn ')) + #numbers.formatInteger(debt.month(), 2) + '/' + debt.year() + ' · còn ' + #numbers.formatDecimal(debt.remainingAmount(), 0, 'POINT', 0, 'COMMA') + ' đ · hạn ' + #temporals.format(debt.dueDate(), 'dd/MM/yyyy')}">Khoản còn nợ</span>
+                        </label>
+                    </div>
                     <button type="submit" class="btn btn-primary">Duyệt</button>
                 </form>
                 <form th:if="${canManage and details.handover().status().name() == 'PENDING_APPROVAL'}" th:action="@{${base} + '/reject'}" method="post" style="display: flex; gap: 6px; margin: 0;">
@@ -310,8 +323,12 @@
                         <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(settlement.deduction(), 0, 'POINT', 0, 'COMMA') + ' đ'}">− 0 đ</td>
                     </tr>
                     <tr>
-                        <td th:text="${'Hóa đơn chưa thu (' + settlement.unpaidInvoices() + ' hóa đơn)'}">Hóa đơn chưa thu</td>
+                        <td th:text="${'Công nợ chưa thanh toán (' + settlement.unpaidInvoices() + ' hóa đơn)'}">Công nợ chưa thanh toán</td>
                         <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(settlement.outstanding(), 0, 'POINT', 0, 'COMMA') + ' đ'}">− 0 đ</td>
+                    </tr>
+                    <tr>
+                        <td>Đã cấn trừ từ tiền cọc</td>
+                        <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(settlement.depositOffset(), 0, 'POINT', 0, 'COMMA') + ' đ'}">− 0 đ</td>
                     </tr>
                     <tr th:each="u : ${settlement.utilities()}">
                         <td>
@@ -330,9 +347,9 @@
                     </tr>
                 </tbody>
             </table>
-            <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 0;">
-                Tiền điện/nước tính từ lần ghi chỉ số gần nhất tới chỉ số trong biên bản này theo đơn giá hiện tại (ước tính,
-                chưa lập hóa đơn). Hóa đơn chưa thu vẫn giữ để đối chiếu sau khi trả phòng.
+            <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 0;"
+               th:text="${details.handover().confirmedByTenant() and settlement.utilities().isEmpty() ? 'Hóa đơn chốt điện/nước đã được tạo nếu có tiêu thụ và đơn giá; công nợ được xử lý trước khi duyệt.' : 'Tiền điện/nước đang là ước tính theo chỉ số và đơn giá hiện tại; hóa đơn chốt được tạo khi người thuê xác nhận biên bản.'}">
+                Hóa đơn chốt điện/nước được tạo khi người thuê xác nhận biên bản.
             </p>
         </div>
 

@@ -56,7 +56,7 @@
                 </tr>
                 <tr>
                     <td style="color: var(--text-secondary);">Khoản thanh toán:</td>
-                    <td th:text="${receipt.type().name() == 'MAINTENANCE' ? 'Phí sửa chữa' : receipt.type().name() == 'CANCELLATION' ? 'Phí hủy hợp đồng kỳ ' + receipt.cycleNumber() : receipt.cycleNumber() > 0 ? 'Tiền thuê kỳ ' + receipt.cycleNumber() + ' (' + uiText.date(receipt.cycleStartDate()) + ' – ' + uiText.date(receipt.cycleEndDate()) + ')' : 'Tiền thuê ' + #numbers.formatInteger(receipt.month(), 2) + '/' + receipt.year()}">Tiền thuê 10/2026</td>
+                    <td th:text="${receipt.type().name() == 'MAINTENANCE' ? 'Phí sửa chữa ' + #numbers.formatInteger(receipt.month(), 2) + '/' + receipt.year() : receipt.type().name() == 'CHECK_OUT' ? 'Hóa đơn chốt điện/nước' : receipt.type().name() == 'CANCELLATION' ? 'Phí hủy hợp đồng kỳ ' + receipt.cycleNumber() : receipt.cycleNumber() > 0 ? 'Tiền thuê kỳ ' + receipt.cycleNumber() + ' (' + uiText.date(receipt.cycleStartDate()) + ' – ' + uiText.date(receipt.cycleEndDate()) + ')' : 'Tiền thuê ' + #numbers.formatInteger(receipt.month(), 2) + '/' + receipt.year()}">Tiền thuê 10/2026</td>
                 </tr>
                 <tr th:if="${receipt.paymentCode() != null}">
                     <td style="color: var(--text-secondary);">Mã thanh toán:</td>
@@ -89,15 +89,15 @@
             </tbody>
         </table>
 
-        <h3 style="margin-bottom: 8px;">Các lần tiền về</h3>
+        <h3 style="margin-bottom: 8px;">Các khoản ghi nhận thanh toán</h3>
         <div th:if="${#lists.isEmpty(receipt.payments())}" class="empty-state">
-            <p>Không có giao dịch chuyển khoản được ghi nhận cho hóa đơn này.</p>
+            <p>Chưa có khoản thanh toán nào được ghi nhận cho hóa đơn này.</p>
         </div>
         <table th:if="${!#lists.isEmpty(receipt.payments())}" class="data-table" id="receiptPayments">
             <thead>
                 <tr>
                     <th>Thời gian</th>
-                    <th>Ngân hàng</th>
+                    <th>Nguồn thanh toán</th>
                     <th>Mã tham chiếu</th>
                     <th class="col-number">Số tiền ghi nhận</th>
                 </tr>

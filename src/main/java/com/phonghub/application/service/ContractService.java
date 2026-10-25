@@ -26,6 +26,7 @@ import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
 import com.phonghub.domain.model.ContractStatus;
 import com.phonghub.domain.model.HandoverStatus;
+import com.phonghub.domain.model.Handover;
 import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyApprovalStatus;
@@ -60,7 +61,6 @@ public class ContractService implements ContractUseCase {
     private final HandoverRepositoryPort handoverRepository;
     private final DraftHandoverCleanupPort draftHandoverCleanupPort;
     private final MonthlyInvoiceUseCase monthlyInvoiceUseCase;
-    private final EarlyTerminationBillingService earlyTerminationBillingService;
 
     public ContractService(
         ContractRepositoryPort contractRepository,
@@ -74,7 +74,7 @@ public class ContractService implements ContractUseCase {
         AuditPort auditPort
     ) {
         this(contractRepository, roomRepository, propertyRepository, tenantRepository, userRepository, identityProviderPort,
-            currentUserPort, authorizationService, auditPort, null, null, null, null);
+            currentUserPort, authorizationService, auditPort, null, null, null);
     }
 
     public ContractService(
@@ -90,7 +90,7 @@ public class ContractService implements ContractUseCase {
         HandoverRepositoryPort handoverRepository
     ) {
         this(contractRepository, roomRepository, propertyRepository, tenantRepository, userRepository, identityProviderPort,
-            currentUserPort, authorizationService, auditPort, handoverRepository, null, null, null);
+            currentUserPort, authorizationService, auditPort, handoverRepository, null, null);
     }
 
     public ContractService(
@@ -107,7 +107,7 @@ public class ContractService implements ContractUseCase {
         DraftHandoverCleanupPort draftHandoverCleanupPort
     ) {
         this(contractRepository, roomRepository, propertyRepository, tenantRepository, userRepository, identityProviderPort,
-            currentUserPort, authorizationService, auditPort, handoverRepository, draftHandoverCleanupPort, null, null);
+            currentUserPort, authorizationService, auditPort, handoverRepository, draftHandoverCleanupPort, null);
     }
 
     public ContractService(
@@ -122,8 +122,7 @@ public class ContractService implements ContractUseCase {
         AuditPort auditPort,
         HandoverRepositoryPort handoverRepository,
         DraftHandoverCleanupPort draftHandoverCleanupPort,
-        MonthlyInvoiceUseCase monthlyInvoiceUseCase,
-        EarlyTerminationBillingService earlyTerminationBillingService
+        MonthlyInvoiceUseCase monthlyInvoiceUseCase
     ) {
         this.contractRepository = contractRepository;
         this.roomRepository = roomRepository;
@@ -137,7 +136,6 @@ public class ContractService implements ContractUseCase {
         this.handoverRepository = handoverRepository;
         this.draftHandoverCleanupPort = draftHandoverCleanupPort;
         this.monthlyInvoiceUseCase = monthlyInvoiceUseCase;
-        this.earlyTerminationBillingService = earlyTerminationBillingService;
     }
 
     public ContractService(
@@ -313,7 +311,14 @@ public class ContractService implements ContractUseCase {
             .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
 
         Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
+        authorizationService.assertCanManageContracts(currentUser, contract.getPropertyId());
         assertResiding(contract);
+        Handover checkOut = handoverRepository == null ? null
+            : handoverRepository.find(contractId, HandoverType.CHECK_OUT).orElse(null);
+        if (checkOut == null || checkOut.status() != HandoverStatus.APPROVED || !checkOut.confirmedByTenant()) {
+            throw new com.phonghub.domain.exception.ConflictException(
+                "Hợp đồng chỉ được kết thúc sau khi biên bản check-out đã được người thuê xác nhận và duyệt.");
+        }
         return terminate(currentUser, contract, room, requiresMaintenance, Map.of());
     }
 
@@ -332,14 +337,8 @@ public class ContractService implements ContractUseCase {
         if (trimmed.length() > 500) {
             throw new IllegalArgumentException("Lý do chấm dứt tối đa 500 ký tự.");
         }
-        Contract locked = contractRepository.findByIdForUpdate(contractId)
-            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
-        assertResiding(locked);
-        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
-        if (earlyTerminationBillingService != null) {
-            earlyTerminationBillingService.billEarlyTermination(locked, currentUser, today);
-        }
-        return terminate(currentUser, locked, room, requiresMaintenance, Map.of("reason", trimmed, "early", true));
+        throw new com.phonghub.domain.exception.ConflictException(
+            "Hợp đồng không thể chấm dứt trực tiếp. Hãy hoàn tất biên bản check-out với lý do: " + trimmed);
     }
 
     private static void assertResiding(Contract contract) {

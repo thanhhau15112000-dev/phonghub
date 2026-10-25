@@ -307,6 +307,10 @@ class ContractServiceCheckOutOccupantUnitTest {
     @Test
     @DisplayName("Cannot check out occupant from non-active contract")
     void testCannotCheckOutFromTerminatedContract() {
+        UUID actor = authAdapter.getCurrentUser().id();
+        handoverRepo.save(Handover.draft(activeContract.getId(), HandoverType.CHECK_OUT, BigDecimal.ZERO,
+            BigDecimal.ZERO, "Phòng đã kiểm tra", null, actor).send("terms-hash", null, null, actor)
+            .tenantConfirm(actor).approve(actor));
         contractService.terminateContract(activeContract.getId(), false);
 
         ContractUseCase.CheckOutOccupantCommand cmd = new ContractUseCase.CheckOutOccupantCommand(
