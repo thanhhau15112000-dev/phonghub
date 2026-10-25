@@ -76,6 +76,48 @@ public class TransactionalMaintenanceUseCase implements MaintenanceUseCase {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket confirmBranch(UUID ticketId, com.phonghub.domain.model.LiableParty branch, String reason) {
+        return delegate.confirmBranch(ticketId, branch, reason);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket ownerApprove(UUID ticketId) {
+        return delegate.ownerApprove(ticketId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket ownerReject(UUID ticketId, String reason) {
+        return delegate.ownerReject(ticketId, reason);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket submitQuote(SubmitQuoteCommand command) {
+        return delegate.submitQuote(command);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket approveQuote(UUID ticketId) {
+        return delegate.approveQuote(ticketId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MaintenanceTicket negotiateQuote(UUID ticketId, String note) {
+        return delegate.negotiateQuote(ticketId, note);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<com.phonghub.domain.model.MaintenanceQuoteVersion> quoteHistory(UUID ticketId) {
+        return delegate.quoteHistory(ticketId);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public MaintenanceTicket.Quote visibleQuote(UUID ticketId) {
         return delegate.visibleQuote(ticketId);

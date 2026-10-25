@@ -1,6 +1,8 @@
 package com.phonghub.adapter.in.web.api.dto;
 
 import com.phonghub.application.service.MaintenanceAssignmentTimeoutPolicy;
+import com.phonghub.domain.model.LiableParty;
+import com.phonghub.domain.model.MaintenanceCause;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
@@ -27,7 +29,15 @@ public record MaintenanceTicketResponse(
     Instant updatedAt,
     Instant assignedAt,
     Instant understaffedNotifiedAt,
-    Instant autoCancelAt
+    Instant autoCancelAt,
+    MaintenanceCause causeCategory,
+    LiableParty liableParty,
+    boolean branchConfirmed,
+    Instant branchConfirmedAt,
+    Instant approvalDueAt,
+    Instant quoteDueAt,
+    int quoteVersion,
+    int negotiationRounds
 ) {
     public static MaintenanceTicketResponse from(MaintenanceTicket ticket) {
         return from(ticket, MaintenanceAssignmentTimeoutPolicy.defaults());
@@ -57,7 +67,15 @@ public record MaintenanceTicketResponse(
             ticket.getUpdatedAt(),
             ticket.getAssignedAt(),
             notifiedAt,
-            notifiedAt == null ? null : notifiedAt.plus(timeoutPolicy.understaffedCancelAfter())
+            notifiedAt == null ? null : notifiedAt.plus(timeoutPolicy.understaffedCancelAfter()),
+            ticket.getCauseCategory(),
+            ticket.getLiableParty(),
+            ticket.isBranchConfirmed(),
+            ticket.getBranchConfirmedAt(),
+            ticket.getApprovalDueAt(),
+            ticket.getQuoteDueAt(),
+            ticket.getQuoteVersion(),
+            ticket.getNegotiationRounds()
         );
     }
 }

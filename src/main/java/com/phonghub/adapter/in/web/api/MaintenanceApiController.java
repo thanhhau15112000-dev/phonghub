@@ -5,7 +5,10 @@ import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.in.MaintenanceAttachmentUseCase;
 import com.phonghub.application.port.in.MaintenanceSubmissionUseCase;
 import com.phonghub.application.service.MaintenanceAssignmentTimeoutPolicy;
+import com.phonghub.domain.model.LiableParty;
+import com.phonghub.domain.model.MaintenanceCause;
 import com.phonghub.domain.model.MaintenancePriority;
+import com.phonghub.domain.model.MaintenanceQuoteVersion;
 import com.phonghub.domain.model.MaintenanceTicket;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
@@ -72,7 +75,8 @@ public class MaintenanceApiController {
             request.title(),
             request.description(),
             request.priority() != null ? request.priority() : MaintenancePriority.MEDIUM,
-            request.setRoomMaintenance()
+            request.setRoomMaintenance(),
+            request.cause()
         ));
         MaintenanceTicketResponse response = response(ticket);
         return ResponseEntity.created(URI.create("/api/maintenance/" + response.id())).body(response);
@@ -85,6 +89,7 @@ public class MaintenanceApiController {
         @RequestParam String description,
         @RequestParam(required = false) MaintenancePriority priority,
         @RequestParam(defaultValue = "false") boolean setRoomMaintenance,
+        @RequestParam(required = false) MaintenanceCause cause,
         @RequestParam(name = "files", required = false) List<MultipartFile> files
     ) throws IOException {
         List<MaintenanceAttachmentUseCase.AttachmentFile> uploads = new java.util.ArrayList<>();
@@ -96,7 +101,8 @@ public class MaintenanceApiController {
             }
         }
         MaintenanceTicket ticket = submissionUseCase.createTicketWithAttachments(new MaintenanceUseCase.CreateMaintenanceTicketCommand(
-            roomId, title, description, priority != null ? priority : MaintenancePriority.MEDIUM, setRoomMaintenance), uploads);
+            roomId, title, description, priority != null ? priority : MaintenancePriority.MEDIUM, setRoomMaintenance,
+            cause), uploads);
         MaintenanceTicketResponse response = MaintenanceTicketResponse.from(ticket);
         return ResponseEntity.created(URI.create("/api/maintenance/" + response.id())).body(response);
     }
@@ -182,6 +188,105 @@ public class MaintenanceApiController {
         return quote == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(QuoteResponse.from(id, quote));
     }
 
+    /** Staff hoặc chủ trọ chốt/đổi nhánh: OWNER = hao mòn (chủ trọ chịu phí), TENANT = lỗi do người thuê. */
+    @PostMapping("/maintenance/{id}/branch")
+    public ResponseEntity<MaintenanceTicketResponse> confirmBranch(
+        @PathVariable UUID id,
+        @Valid @RequestBody BranchRequest request
+    ) {
+        return ResponseEntity.ok(response(maintenanceUseCase.confirmBranch(id, request.branch(), request.reason())));
+    }
+
+    /** Chủ trọ duyệt phiếu hao mòn đang chờ duyệt. */
+    @PostMapping("/maintenance/{id}/owner-approve")
+    public ResponseEntity<MaintenanceTicketResponse> ownerApprove(@PathVariable UUID id) {
+        return ResponseEntity.ok(response(maintenanceUseCase.ownerApprove(id)));
+    }
+
+    /** Chủ trọ từ chối phiếu hao mòn đang chờ duyệt. */
+    @PostMapping("/maintenance/{id}/owner-reject")
+    public ResponseEntity<MaintenanceTicketResponse> ownerReject(
+        @PathVariable UUID id,
+        @Valid @RequestBody RejectTicketRequest request
+    ) {
+        return ResponseEntity.ok(response(maintenanceUseCase.ownerReject(id, request.reason())));
+    }
+
+    /** Gửi báo giá chi tiết (linh kiện, công sửa) cho người thuê phê duyệt. */
+    @PostMapping("/maintenance/{id}/quote-versions")
+    public ResponseEntity<MaintenanceTicketResponse> submitQuote(
+        @PathVariable UUID id,
+        @Valid @RequestBody QuoteDetailRequest request
+    ) {
+        List<MaintenanceQuoteVersion.Line> lines = request.lines() == null ? List.of()
+            : request.lines().stream()
+                .map(line -> new MaintenanceQuoteVersion.Line(line.name(), line.quantity(), line.unitPrice()))
+                .toList();
+        return ResponseEntity.ok(response(maintenanceUseCase.submitQuote(
+            new MaintenanceUseCase.SubmitQuoteCommand(id, lines, request.laborAmount(), request.note()))));
+    }
+
+    @GetMapping("/maintenance/{id}/quote-versions")
+    public ResponseEntity<List<QuoteVersionResponse>> quoteVersions(@PathVariable UUID id) {
+        return ResponseEntity.ok(maintenanceUseCase.quoteHistory(id).stream().map(QuoteVersionResponse::from).toList());
+    }
+
+    /** Người thuê phê duyệt báo giá. */
+    @PostMapping("/maintenance/{id}/quote/approve")
+    public ResponseEntity<MaintenanceTicketResponse> approveQuote(@PathVariable UUID id) {
+        return ResponseEntity.ok(response(maintenanceUseCase.approveQuote(id)));
+    }
+
+    /** Người thuê đề nghị điều chỉnh báo giá (tối đa 2 vòng). */
+    @PostMapping("/maintenance/{id}/quote/negotiate")
+    public ResponseEntity<MaintenanceTicketResponse> negotiateQuote(
+        @PathVariable UUID id,
+        @Valid @RequestBody NegotiateRequest request
+    ) {
+        return ResponseEntity.ok(response(maintenanceUseCase.negotiateQuote(id, request.note())));
+    }
+
+    public record BranchRequest(
+        @NotNull(message = "Branch is required") LiableParty branch,
+        String reason
+    ) {}
+
+    public record NegotiateRequest(@NotBlank(message = "Note is required") String note) {}
+
+    public record QuoteLineRequest(
+        @NotBlank(message = "Name is required") String name,
+        @jakarta.validation.constraints.Min(value = 1, message = "Quantity must be positive") int quantity,
+        @NotNull(message = "Unit price is required")
+        @DecimalMin(value = "0.0", message = "Unit price cannot be negative") BigDecimal unitPrice
+    ) {}
+
+    public record QuoteDetailRequest(
+        @Valid List<QuoteLineRequest> lines,
+        @DecimalMin(value = "0.0", message = "Labor cannot be negative") BigDecimal laborAmount,
+        String note
+    ) {}
+
+    public record QuoteVersionResponse(
+        int version,
+        List<QuoteLineRequest> lines,
+        BigDecimal laborAmount,
+        BigDecimal totalAmount,
+        String note,
+        UUID quotedBy,
+        java.time.Instant quotedAt,
+        String status,
+        String tenantNote,
+        java.time.Instant decidedAt
+    ) {
+        static QuoteVersionResponse from(MaintenanceQuoteVersion version) {
+            return new QuoteVersionResponse(version.version(),
+                version.lines().stream()
+                    .map(line -> new QuoteLineRequest(line.name(), line.quantity(), line.unitPrice())).toList(),
+                version.laborAmount(), version.totalAmount(), version.note(), version.quotedBy(), version.quotedAt(),
+                version.status().name(), version.tenantNote(), version.decidedAt());
+        }
+    }
+
     /** Người thuê xác nhận đã sửa đạt. */
     @PostMapping("/maintenance/{id}/verify")
     public ResponseEntity<MaintenanceTicketResponse> verifyTicket(@PathVariable UUID id) {
@@ -224,8 +329,16 @@ public class MaintenanceApiController {
 
         MaintenancePriority priority,
 
-        boolean setRoomMaintenance
-    ) {}
+        boolean setRoomMaintenance,
+
+        /** Nguyên nhân người báo khai (nhánh dự kiến); staff chốt nhánh cuối cùng. */
+        MaintenanceCause cause
+    ) {
+        public CreateTicketRequest(UUID roomId, String title, String description, MaintenancePriority priority,
+                                   boolean setRoomMaintenance) {
+            this(roomId, title, description, priority, setRoomMaintenance, null);
+        }
+    }
 
     public record TimelineEntry(String from, String to, UUID actorId, String note, java.time.Instant at) {}
 

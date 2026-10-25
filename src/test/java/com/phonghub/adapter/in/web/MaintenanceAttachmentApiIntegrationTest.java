@@ -98,6 +98,7 @@ class MaintenanceAttachmentApiIntegrationTest extends SeededWebTest {
             mockMvc.perform(get(path + "/" + attachment).header("X-User-Id", denied)).andExpect(status().isForbidden());
         }
         // Giao phiếu cho technician thì technician xem được nhưng không tải lên được.
+        MaintenanceTestFlow.wearReady(mockMvc, id, OWNER_1);
         mockMvc.perform(post("/api/maintenance/" + id + "/assign").header("X-User-Id", OWNER_1)
             .contentType(MediaType.APPLICATION_JSON).content("{\"technicianId\":\"" + TECH_1 + "\"}"))
             .andExpect(status().isOk());

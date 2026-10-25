@@ -489,6 +489,45 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.service.MaintenanceApprovalPolicy maintenanceApprovalPolicy(
+        @org.springframework.beans.factory.annotation.Value(
+            "${phonghub.maintenance.owner-approval-window:P3D}") String ownerWindow,
+        @org.springframework.beans.factory.annotation.Value(
+            "${phonghub.maintenance.quote-approval-window:P7D}") String quoteWindow,
+        @org.springframework.beans.factory.annotation.Value(
+            "${phonghub.maintenance.owner-reminder-before:P1D}") String ownerReminder,
+        @org.springframework.beans.factory.annotation.Value(
+            "${phonghub.maintenance.quote-reminder-before:P2D}") String quoteReminder
+    ) {
+        return new com.phonghub.application.service.MaintenanceApprovalPolicy(
+            java.time.Duration.parse(ownerWindow), java.time.Duration.parse(quoteWindow),
+            java.time.Duration.parse(ownerReminder), java.time.Duration.parse(quoteReminder));
+    }
+
+    @Bean
+    public com.phonghub.application.service.MaintenanceNotifier maintenanceNotifier(
+        PropertyRepositoryPort propertyRepo,
+        StaffPropertyAssignmentPort assignmentRepo,
+        TenantRepositoryPort tenantRepo,
+        UserRepositoryPort userRepo,
+        NotificationRepositoryPort notificationRepo
+    ) {
+        return new com.phonghub.application.service.MaintenanceNotifier(
+            propertyRepo, assignmentRepo, tenantRepo, userRepo, notificationRepo);
+    }
+
+    @Bean
+    public com.phonghub.application.service.MaintenanceApprovalService maintenanceApprovalService(
+        MaintenanceTicketRepositoryPort ticketRepo,
+        com.phonghub.application.service.MaintenanceNotifier notifier,
+        AuditPort auditPort,
+        com.phonghub.application.service.MaintenanceApprovalPolicy approvalPolicy
+    ) {
+        return new com.phonghub.application.service.MaintenanceApprovalService(
+            ticketRepo, notifier, auditPort, approvalPolicy);
+    }
+
+    @Bean
     public MaintenanceUseCase maintenanceUseCase(
         MaintenanceTicketRepositoryPort ticketRepo,
         RoomRepositoryPort roomRepo,
@@ -501,11 +540,14 @@ public class PhongHubConfiguration {
         UserRepositoryPort userRepo,
         StaffPropertyAssignmentPort assignmentRepo,
         NotificationRepositoryPort notificationRepo,
-        com.phonghub.application.service.MaintenanceSlaPolicy slaPolicy
+        com.phonghub.application.service.MaintenanceSlaPolicy slaPolicy,
+        com.phonghub.application.service.MaintenanceApprovalPolicy approvalPolicy,
+        com.phonghub.application.service.MaintenanceNotifier notifier
     ) {
         MaintenanceService service = new MaintenanceService(
             ticketRepo, roomRepo, tenantRepo, contractRepo, invoiceRepo, auditPort,
-            currentUserPort, authorizationService, userRepo, assignmentRepo, notificationRepo, slaPolicy
+            currentUserPort, authorizationService, userRepo, assignmentRepo, notificationRepo, slaPolicy,
+            approvalPolicy, notifier
         );
         return new TransactionalMaintenanceUseCase(service);
     }

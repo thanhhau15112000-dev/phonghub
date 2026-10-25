@@ -27,6 +27,8 @@ public record MaintenanceListFilter(
     /** Các trạng thái chưa hoàn thành, theo thứ tự hiển thị trong bộ lọc. */
     public static final List<MaintenanceStatus> OPEN_STATUSES = List.of(
         MaintenanceStatus.REPORTED,
+        MaintenanceStatus.PENDING_OWNER_APPROVAL,
+        MaintenanceStatus.PENDING_TENANT_APPROVAL,
         MaintenanceStatus.ASSIGNED,
         MaintenanceStatus.IN_PROGRESS,
         MaintenanceStatus.AWAITING_PAYMENT

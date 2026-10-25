@@ -33,7 +33,7 @@
             </div>
 
             <!-- Thao tác của kỹ thuật viên: tiếp nhận yêu cầu -->
-            <div th:if="${((currentUser.role().name() == 'TECHNICIAN' and ticket.getAssignedTechnicianId() == currentUser.id()) or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED')}">
+            <div th:if="${((currentUser.role().name() == 'TECHNICIAN' and ticket.getAssignedTechnicianId() == currentUser.id()) or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED') and ticket.canStartWork()}">
                 <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/accept'}" method="post">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <button type="submit" class="btn btn-primary">Tiếp nhận và bắt đầu xử lý</button>
@@ -69,7 +69,62 @@
                 <span style="color: var(--text-secondary);">Bên chịu phí:</span>
                 <strong th:text="${uiText.liableParty(ticket.getLiableParty())}">Chủ trọ</strong>
             </div>
+            <div id="branch-summary">
+                <span style="color: var(--text-secondary);">Nhánh xử lý:</span>
+                <strong th:if="${ticket.isBranchConfirmed()}"
+                        th:text="${ticket.getLiableParty().name() == 'OWNER' ? 'A · Hao mòn tự nhiên' : 'B · Lỗi do người thuê'}">A · Hao mòn tự nhiên</strong>
+                <span th:unless="${ticket.isBranchConfirmed()}" style="color: var(--text-secondary);">Chưa chốt (nhân viên chốt khi tiếp nhận)</span>
+            </div>
         </div>
+    </div>
+
+    <!-- Chốt nhánh xử lý (#202, #203): chủ trọ hoặc nhân viên, khi chưa bắt đầu sửa -->
+    <div th:if="${(currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED' or ticket.isPendingApproval())}"
+         class="card" style="margin-bottom: 20px;" id="branch-card">
+        <h2 th:text="${ticket.isBranchConfirmed() ? 'Đổi nhánh xử lý' : 'Chốt nhánh xử lý'}">Chốt nhánh xử lý</h2>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+            Người thuê khai: <strong th:text="${uiText.maintenanceCause(ticket.getCauseCategory())}">Hao mòn tự nhiên</strong>.
+            Hao mòn tự nhiên: chủ trọ chịu 100% chi phí và phải duyệt trong 3 ngày. Lỗi do người thuê: người thuê phải phê duyệt báo giá trước khi sửa.
+        </p>
+        <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/branch'}" method="post"
+              style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group" style="margin: 0; min-width: 220px;">
+                <label class="form-label" for="branchSelect">Nhánh</label>
+                <select id="branchSelect" name="branch" class="form-control" required>
+                    <option value="OWNER" th:selected="${ticket.getLiableParty().name() == 'OWNER'}">A · Hao mòn tự nhiên (chủ trọ chịu phí)</option>
+                    <option value="TENANT" th:selected="${ticket.getLiableParty().name() == 'TENANT'}">B · Lỗi do người thuê (người thuê chịu phí)</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin: 0; flex: 1; min-width: 220px;">
+                <label class="form-label" for="branchReason">Lý do <span style="color: var(--text-secondary); font-weight: normal;">(bắt buộc khi khác nguyên nhân người thuê khai hoặc khi đổi nhánh)</span></label>
+                <input type="text" id="branchReason" name="reason" class="form-control" maxlength="500">
+            </div>
+            <button type="submit" class="btn btn-primary" th:text="${ticket.isBranchConfirmed() ? 'Đổi nhánh' : 'Chốt nhánh'}">Chốt nhánh</button>
+        </form>
+    </div>
+
+    <!-- Nhánh A: chờ chủ trọ duyệt trong 3 ngày (#202) -->
+    <div th:if="${ticket.getStatus().name() == 'PENDING_OWNER_APPROVAL'}" class="card" style="margin-bottom: 20px;" id="owner-approval">
+        <h2>Chờ chủ trọ duyệt</h2>
+        <p style="font-size: 13px; margin-bottom: 12px;">
+            Hạn duyệt: <strong th:text="${ticket.getApprovalDueAt() != null ? #temporals.format(ticket.getApprovalDueAt(), 'dd/MM/yyyy HH:mm') : '—'}">01/01/2026 10:00</strong>.
+            Quá hạn mà chưa phản hồi, phiếu tự chuyển cho nhân viên/kỹ thuật viên xử lý. Chi phí do chủ trọ chịu 100%, không tạo khoản phí cho người thuê.
+        </p>
+        <div th:if="${currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'ADMIN'}"
+             style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start;">
+            <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/owner-approve'}" method="post">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn btn-primary">Duyệt xử lý</button>
+            </form>
+            <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/owner-reject'}" method="post" style="display: flex; gap: 8px; flex: 1; min-width: 260px;">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <input type="text" name="reason" class="form-control" placeholder="Lý do từ chối (người thuê sẽ nhận được)" required>
+                <button type="submit" class="btn btn-danger">Từ chối</button>
+            </form>
+        </div>
+        <p th:unless="${currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'ADMIN'}"
+           style="font-size: 13px; color: var(--text-secondary);">Chỉ chủ trọ duyệt hoặc từ chối được ở bước này.</p>
     </div>
 
     <div th:if="${ticket.getAssignedAt() != null}" class="card" style="margin-bottom: 20px;" id="assignment-timeout">
@@ -96,7 +151,7 @@
     </div>
 
     <!-- Báo giá sửa chữa (#83): người thuê chỉ thấy khi là bên chịu phí -->
-    <div th:if="${quote != null or ((currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED' or ticket.getStatus().name() == 'IN_PROGRESS'))}"
+    <div th:if="${!ticket.requiresQuoteApproval() and (quote != null or ((currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED' or ticket.getStatus().name() == 'IN_PROGRESS')))}"
          class="card" style="margin-bottom: 20px;" id="quote">
         <h2>Báo giá sửa chữa</h2>
         <div th:if="${quote != null}" style="font-size: 13px; margin-bottom: 12px;" id="quote-detail">
@@ -130,6 +185,126 @@
             </div>
             <button type="submit" class="btn btn-primary" th:text="${quote != null ? 'Cập nhật báo giá' : 'Lưu báo giá'}">Lưu báo giá</button>
         </form>
+    </div>
+
+    <!-- Nhánh B: báo giá chi tiết, người thuê phê duyệt hoặc thương lượng trong 7 ngày (#203) -->
+    <div th:if="${ticket.requiresQuoteApproval() and (currentUser.role().name() != 'TENANT' or ticket.getLiableParty().name() == 'TENANT') and currentUser.role().name() != 'ADMIN'}"
+         class="card" style="margin-bottom: 20px;" id="quote-b">
+        <h2>Báo giá sửa chữa (lỗi do người thuê)</h2>
+        <p th:if="${ticket.getStatus().name() == 'PENDING_TENANT_APPROVAL'}" style="font-size: 13px; margin-bottom: 12px;">
+            Chờ người thuê phê duyệt trước <strong th:text="${ticket.getQuoteDueAt() != null ? #temporals.format(ticket.getQuoteDueAt(), 'dd/MM/yyyy HH:mm') : '—'}">01/01/2026 10:00</strong>.
+            Quá hạn, yêu cầu tự hủy và không phát sinh phí.
+        </p>
+        <p th:if="${ticket.getQuoteApprovedAt() != null and !ticket.isPendingApproval()}" style="font-size: 13px; margin-bottom: 12px; color: var(--text-secondary);">
+            Báo giá đã được phê duyệt: tối đa <strong th:text="${#numbers.formatDecimal(ticket.getApprovedQuoteTotal(), 0, 'POINT', 0, 'COMMA') + ' đ'}">500,000 đ</strong>.
+            Chi phí thực tế vượt mức này cần báo giá bổ sung và người thuê phê duyệt lại.
+        </p>
+        <p th:if="${ticket.isAwaitingRequote()}" style="font-size: 13px; margin-bottom: 12px;">
+            Người thuê đã đề nghị điều chỉnh. Hãy chỉnh và gửi lại báo giá.
+        </p>
+        <p th:if="${quoteVersions.isEmpty()}" style="font-size: 13px; color: var(--text-secondary);">Chưa có báo giá.</p>
+        <div th:each="v : ${quoteVersions}" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; font-size: 13px;"
+             th:id="'quote-version-' + ${v.version()}">
+            <div style="display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px;">
+                <strong th:text="'Phiên bản ' + ${v.version()} + ' · ' + ${#numbers.formatDecimal(v.totalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">Phiên bản 1 · 500,000 đ</strong>
+                <span class="badge"
+                      th:text="${v.status().name() == 'APPROVED' ? 'Đã phê duyệt' : v.status().name() == 'NEGOTIATED' ? 'Người thuê đề nghị điều chỉnh' : v.status().name() == 'EXPIRED' ? 'Hết hạn' : 'Chờ phê duyệt'}">Chờ phê duyệt</span>
+            </div>
+            <table class="table" style="margin: 0 0 6px;">
+                <thead><tr><th>Khoản</th><th class="col-number">SL</th><th class="col-number">Đơn giá</th><th class="col-number">Thành tiền</th></tr></thead>
+                <tbody>
+                    <tr th:each="line : ${v.lines()}">
+                        <td th:text="${line.name()}">Vòi nước</td>
+                        <td class="col-number" th:text="${line.quantity()}">1</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(line.unitPrice(), 0, 'POINT', 0, 'COMMA')}">150,000</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(line.amount(), 0, 'POINT', 0, 'COMMA')}">150,000</td>
+                    </tr>
+                    <tr th:if="${v.laborAmount().signum() > 0}">
+                        <td colspan="3">Công sửa</td>
+                        <td class="col-number" th:text="${#numbers.formatDecimal(v.laborAmount(), 0, 'POINT', 0, 'COMMA')}">100,000</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div th:if="${v.note() != null}" style="color: var(--text-secondary);" th:text="'Ghi chú: ' + ${v.note()}">Ghi chú</div>
+            <div th:if="${v.tenantNote() != null}" style="color: var(--text-secondary);" th:text="'Phản hồi của người thuê: ' + ${v.tenantNote()}">Phản hồi</div>
+        </div>
+
+        <!-- Người thuê phê duyệt / thương lượng -->
+        <div th:if="${currentUser.role().name() == 'TENANT' and ticket.getStatus().name() == 'PENDING_TENANT_APPROVAL'}" id="tenant-quote-actions"
+             style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+            <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/quote/approve'}" method="post" style="margin-bottom: 12px;">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn btn-primary">Phê duyệt báo giá</button>
+            </form>
+            <form th:if="${ticket.getNegotiationRounds() < maxNegotiationRounds}"
+                  th:action="@{'/maintenance/' + ${ticket.getId()} + '/quote/negotiate'}" method="post">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <label class="form-label" for="negotiateNote"
+                       th:text="'Thương lượng (còn ' + ${maxNegotiationRounds - ticket.getNegotiationRounds()} + ' vòng): đề nghị giảm hoặc bỏ khoản nào'">Thương lượng</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="negotiateNote" name="note" class="form-control" maxlength="1000" required>
+                    <button type="submit" class="btn">Gửi đề nghị</button>
+                </div>
+            </form>
+            <p th:if="${ticket.getNegotiationRounds() >= maxNegotiationRounds}" style="font-size: 13px; color: var(--text-secondary);">
+                Đã hết lượt thương lượng; chỉ còn phê duyệt hoặc để hết hạn.
+            </p>
+        </div>
+
+        <!-- Người lập báo giá: gửi báo giá mới / báo giá bổ sung -->
+        <form th:if="${(currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED' or ticket.getStatus().name() == 'IN_PROGRESS')}"
+              th:action="@{'/maintenance/' + ${ticket.getId()} + '/quote-detail'}" method="post" id="quote-submit-form"
+              style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <h3 style="font-size: 14px; margin-bottom: 8px"
+                th:text="${ticket.getQuoteApprovedAt() != null ? 'Gửi báo giá bổ sung (phần phát sinh)' : 'Lập báo giá'}">Lập báo giá</h3>
+            <div id="quoteRows"></div>
+            <button type="button" id="addQuoteRow" class="btn btn-sm btn-secondary" style="margin-bottom: 10px;">+ Thêm linh kiện</button>
+            <div class="form-row">
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label" for="quoteLabor">Công sửa (VND)</label>
+                    <input type="number" id="quoteLabor" name="laborAmount" class="form-control" min="0" step="1000" value="0">
+                </div>
+                <div class="form-group" style="flex: 2;">
+                    <label class="form-label" for="quoteDetailNote">Ghi chú</label>
+                    <input type="text" id="quoteDetailNote" name="note" class="form-control" maxlength="1000">
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <button type="submit" class="btn btn-primary">Gửi báo giá cho người thuê</button>
+                <span style="font-size: 13px;">Tổng: <strong id="quoteTotal">0 đ</strong></span>
+            </div>
+        </form>
+        <script th:if="${(currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED' or ticket.getStatus().name() == 'IN_PROGRESS')}">
+            (function () {
+                var rows = document.getElementById('quoteRows');
+                var total = document.getElementById('quoteTotal');
+                var labor = document.getElementById('quoteLabor');
+                function recalc() {
+                    var sum = Number(labor.value || 0);
+                    rows.querySelectorAll('.quote-row').forEach(function (row) {
+                        sum += Number(row.querySelector('[name=itemQuantities]').value || 0)
+                            * Number(row.querySelector('[name=itemPrices]').value || 0);
+                    });
+                    total.textContent = sum.toLocaleString('vi-VN') + ' đ';
+                }
+                function addRow() {
+                    var row = document.createElement('div');
+                    row.className = 'quote-row';
+                    row.style.cssText = 'display: grid; grid-template-columns: 3fr 1fr 2fr auto; gap: 8px; margin-bottom: 8px;';
+                    row.innerHTML = '<input name="itemNames" class="form-control" placeholder="Tên linh kiện" maxlength="200">'
+                        + '<input name="itemQuantities" type="number" min="1" value="1" class="form-control" placeholder="SL">'
+                        + '<input name="itemPrices" type="number" min="0" step="1000" class="form-control" placeholder="Đơn giá">'
+                        + '<button type="button" class="btn btn-sm btn-secondary">Bỏ</button>';
+                    row.querySelector('button').addEventListener('click', function () { row.remove(); recalc(); });
+                    row.addEventListener('input', recalc);
+                    rows.appendChild(row);
+                }
+                document.getElementById('addQuoteRow').addEventListener('click', addRow);
+                labor.addEventListener('input', recalc);
+                addRow();
+            })();
+        </script>
     </div>
 
     <!-- Khoản phí sửa chữa chờ thanh toán -->
@@ -275,8 +450,13 @@
         });
     </script>
 
+    <p th:if="${(currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED') and ticket.getRequestedByTenantId() != null and !ticket.isBranchConfirmed() and ticket.getAssignedTechnicianId() == null}"
+       class="alert alert-warning" style="margin-bottom: 20px;" id="assign-needs-branch">
+        Cần chốt nhánh xử lý (hao mòn tự nhiên hoặc lỗi do người thuê) trước khi giao việc cho kỹ thuật viên.
+    </p>
+
     <!-- Owner/staff: giao việc, giao lại cả khi đang xử lý, hoặc từ chối phiếu chưa bắt đầu -->
-    <div th:if="${(currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED' or ticket.getStatus().name() == 'IN_PROGRESS')}" class="card" style="margin-bottom: 20px;">
+    <div th:if="${(currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED' or ticket.getStatus().name() == 'IN_PROGRESS') and (ticket.getRequestedByTenantId() == null or ticket.isBranchConfirmed() or ticket.getAssignedTechnicianId() != null)}" class="card" style="margin-bottom: 20px;">
         <h2>Phân công kỹ thuật viên</h2>
         <p th:if="${ticket.getAssignedTechnicianId() != null}" style="font-size: 13px; color: var(--text-secondary);">
             Giao lại sẽ thu hồi quyền xử lý của kỹ thuật viên hiện tại và bắt đầu lại mốc 72 giờ.
@@ -349,7 +529,7 @@
 
     <div th:if="${ticket.getStatus().name() == 'CANCELLED'}" class="card" style="margin-bottom: 20px;">
         <h2>Yêu cầu đã bị hủy</h2>
-        <p style="font-size: 13px; color: var(--text-secondary);">Phiếu đã được hủy trước khi xử lý. Xem lý do và người hủy ở mục Lịch sử xử lý.</p>
+        <p style="font-size: 13px; color: var(--text-secondary);">Phiếu đã được hủy trước khi sửa xong (do người dùng hủy, hết hạn phê duyệt báo giá hoặc thiếu nhân lực). Xem lý do ở mục Lịch sử xử lý.</p>
     </div>
 
     <div th:if="${ticket.getStatus().name() == 'REJECTED'}" class="card" style="margin-bottom: 20px;">
@@ -358,7 +538,7 @@
     </div>
 
     <!-- Biểu mẫu hoàn tất xử lý -->
-    <div th:if="${!ticket.isResolved() and ticket.getStatus().name() != 'AWAITING_PAYMENT' and ticket.getStatus().name() != 'REJECTED' and ticket.getStatus().name() != 'CANCELLED' and (currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" class="card">
+    <div th:if="${!ticket.isResolved() and ticket.getStatus().name() != 'AWAITING_PAYMENT' and ticket.getStatus().name() != 'REJECTED' and ticket.getStatus().name() != 'CANCELLED' and ticket.canStartWork() and (currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF')}" class="card">
         <h2>Xử lý yêu cầu bảo trì</h2>
         <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 16px;">
             Gửi báo cáo này sẽ hoàn tất yêu cầu và tùy chọn đưa phòng từ trạng thái BẢO TRÌ về trạng thái TRỐNG.
@@ -375,11 +555,12 @@
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label">Chi phí sửa chữa (VND)</label>
                     <input type="number" name="repairCost" class="form-control" min="0"
-                           th:value="${quote != null ? quote.amount() : 0}">
+                           th:max="${ticket.getApprovedQuoteTotal()}"
+                           th:value="${ticket.getApprovedQuoteTotal() != null ? ticket.getApprovedQuoteTotal() : (quote != null ? quote.amount() : 0)}">
                 </div>
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label">Bên chịu phí</label>
-                    <select name="liableParty" class="form-control">
+                    <select name="liableParty" class="form-control" th:disabled="${ticket.isBranchConfirmed()}">
                         <option th:each="l : ${liableParties}"
                                 th:value="${l}"
                                 th:text="${uiText.liableParty(l)}"

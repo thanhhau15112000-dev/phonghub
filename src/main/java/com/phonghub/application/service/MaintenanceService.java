@@ -21,6 +21,7 @@ import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.LiableParty;
 import com.phonghub.domain.model.MaintenancePriority;
+import com.phonghub.domain.model.MaintenanceQuoteVersion;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.MaintenanceTicketEvent;
@@ -51,6 +52,8 @@ public class MaintenanceService implements MaintenanceUseCase {
     private final StaffPropertyAssignmentPort assignmentPort;
     private final NotificationRepositoryPort notificationRepository;
     private final MaintenanceSlaPolicy slaPolicy;
+    private final MaintenanceApprovalPolicy approvalPolicy;
+    private final MaintenanceNotifier notifier;
 
     /** Không hỗ trợ thu phí sửa chữa: phiếu có chi phí do người thuê chịu sẽ bị từ chối khi xử lý. */
     public MaintenanceService(
@@ -110,6 +113,30 @@ public class MaintenanceService implements MaintenanceUseCase {
         NotificationRepositoryPort notificationRepository,
         MaintenanceSlaPolicy slaPolicy
     ) {
+        this(maintenanceTicketRepository, roomRepository, tenantRepository, contractRepository, invoiceRepository,
+            auditPort, currentUserPort, authorizationService, userRepository, assignmentPort, notificationRepository,
+            slaPolicy, MaintenanceApprovalPolicy.defaults(), null);
+    }
+
+    public MaintenanceService(
+        MaintenanceTicketRepositoryPort maintenanceTicketRepository,
+        RoomRepositoryPort roomRepository,
+        TenantRepositoryPort tenantRepository,
+        ContractRepositoryPort contractRepository,
+        InvoiceRepositoryPort invoiceRepository,
+        AuditPort auditPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        UserRepositoryPort userRepository,
+        StaffPropertyAssignmentPort assignmentPort,
+        NotificationRepositoryPort notificationRepository,
+        MaintenanceSlaPolicy slaPolicy,
+        MaintenanceApprovalPolicy approvalPolicy,
+        MaintenanceNotifier notifier
+    ) {
+        this.approvalPolicy = approvalPolicy;
+        this.notifier = notifier != null ? notifier
+            : new MaintenanceNotifier(null, assignmentPort, tenantRepository, userRepository, notificationRepository);
         this.slaPolicy = slaPolicy;
         this.userRepository = userRepository;
         this.assignmentPort = assignmentPort;
@@ -259,6 +286,10 @@ public class MaintenanceService implements MaintenanceUseCase {
         MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
             .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + ticketId));
         authorizationService.assertCanManageProperty(currentUser, ticket.getPropertyId());
+        if (ticket.getStatus() == MaintenanceStatus.PENDING_OWNER_APPROVAL) {
+            // Bước chờ duyệt của nhánh hao mòn là của chủ trọ (#202), nhân viên không từ chối thay.
+            authorizationService.assertOwnerOrAdmin(currentUser, ticket.getPropertyId());
+        }
         ticket.reject(reason);
         ticket.attributeEventsTo(currentUser.id());
         MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
@@ -344,16 +375,8 @@ public class MaintenanceService implements MaintenanceUseCase {
     }
 
     private void notifyRequester(MaintenanceTicket ticket) {
-        if (notificationRepository == null || userRepository == null || ticket.getRequestedByTenantId() == null) {
-            return;
-        }
-        tenantRepository.findById(ticket.getRequestedByTenantId())
-            .filter(tenant -> tenant.userId() != null)
-            .flatMap(tenant -> userRepository.findById(tenant.userId()))
-            .ifPresent(user -> notificationRepository.save(Notification.createGeneral(
-                "Yêu cầu bảo trì bị từ chối",
-                "Yêu cầu \"" + ticket.getTitle() + "\" đã bị từ chối. Lý do: " + ticket.getRejectionReason(),
-                user.id(), user.username(), user.fullName(), user.role())));
+        notifier.notifyTenant(ticket, "Yêu cầu bảo trì bị từ chối",
+            "Yêu cầu \"" + ticket.getTitle() + "\" đã bị từ chối. Lý do: " + ticket.getRejectionReason());
     }
 
     /** Kỹ thuật viên chỉ làm phiếu được giao cho chính mình (admin không bị giới hạn). */
@@ -377,7 +400,8 @@ public class MaintenanceService implements MaintenanceUseCase {
         assertAssignedToTechnician(currentUser, ticket);
 
         // Kiểm tra điều kiện thu phí TRƯỚC khi thay đổi bất kỳ trạng thái nào
-        LiableParty liable = command.liableParty() != null ? command.liableParty() : ticket.getLiableParty();
+        LiableParty liable = !ticket.isBranchConfirmed() && command.liableParty() != null
+            ? command.liableParty() : ticket.getLiableParty();
         BigDecimal cost = command.repairCost() != null ? command.repairCost() : ticket.getRepairCost();
         if (liable == LiableParty.UNDETERMINED && cost.signum() > 0) {
             throw new MaintenanceTicketException("Cần xác định bên chịu phí (chủ trọ hoặc người thuê) trước khi ghi nhận chi phí sửa chữa");
@@ -528,6 +552,166 @@ public class MaintenanceService implements MaintenanceUseCase {
         MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
         audit("MAINTENANCE_QUOTED", currentUser, saved, Map.of("amount", amount.toPlainString()));
         return saved;
+    }
+
+    @Override
+    public MaintenanceTicket confirmBranch(UUID ticketId, LiableParty branch, String reason) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + ticketId));
+        authorizationService.assertCanManageProperty(currentUser, ticket.getPropertyId());
+        if (currentUser.role() == UserRole.TECHNICIAN) {
+            throw new UnauthorizedPropertyAccessException("Kỹ thuật viên không chốt nhánh xử lý của phiếu");
+        }
+
+        LiableParty previous = ticket.getLiableParty();
+        boolean wasConfirmed = ticket.isBranchConfirmed();
+        ticket.confirmBranch(branch, reason, currentUser.id(), approvalPolicy.ownerApprovalWindow());
+        ticket.attributeEventsTo(currentUser.id());
+        MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
+
+        Map<String, Object> details = new java.util.LinkedHashMap<>();
+        details.put("from", previous.name());
+        details.put("to", branch.name());
+        details.put("alreadyConfirmed", wasConfirmed);
+        details.put("reportedCause", saved.getCauseCategory() != null ? saved.getCauseCategory().name() : "NONE");
+        if (reason != null && !reason.isBlank()) {
+            details.put("reason", reason.trim());
+        }
+        audit("MAINTENANCE_BRANCH_CONFIRMED", currentUser, saved, details);
+
+        String branchLabel = branch == LiableParty.OWNER
+            ? "hao mòn tự nhiên, chủ trọ chịu chi phí" : "lỗi do người thuê, người thuê chịu chi phí";
+        boolean changedFromDeclared = wasConfirmed || saved.getCauseCategory() == null
+            || saved.getCauseCategory().defaultLiableParty() != branch;
+        notifier.notifyTenant(saved, changedFromDeclared ? "Phiếu bảo trì được phân loại lại" : "Phiếu bảo trì được tiếp nhận",
+            "Phiếu \"" + saved.getTitle() + "\" được xác định là " + branchLabel + "."
+                + (reason != null && !reason.isBlank() ? " Lý do: " + reason.trim() : ""));
+        if (branch == LiableParty.OWNER && !isOwnerActing(currentUser, saved)) {
+            notifier.notifyOwner(saved, "Phiếu bảo trì chờ bạn duyệt", "Phiếu \"" + saved.getTitle()
+                + "\" là hao mòn tự nhiên, cần bạn duyệt trong " + approvalPolicy.ownerApprovalWindow().toDays()
+                + " ngày. Quá hạn, phiếu tự chuyển cho nhân viên xử lý.");
+        }
+        return saved;
+    }
+
+    private boolean isOwnerActing(CurrentUser user, MaintenanceTicket ticket) {
+        return user.role() == UserRole.OWNER;
+    }
+
+    @Override
+    public MaintenanceTicket ownerApprove(UUID ticketId) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + ticketId));
+        authorizationService.assertOwnerOrAdmin(currentUser, ticket.getPropertyId());
+        ticket.ownerApprove();
+        ticket.attributeEventsTo(currentUser.id());
+        MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
+        audit("MAINTENANCE_OWNER_APPROVED", currentUser, saved, Map.of());
+        notifier.notifyTenant(saved, "Phiếu bảo trì đã được duyệt",
+            "Chủ trọ đã duyệt phiếu \"" + saved.getTitle() + "\". Phiếu sẽ được giao kỹ thuật viên xử lý.");
+        notifier.notifyManagers(saved, "Phiếu bảo trì đã được duyệt",
+            "Chủ trọ đã duyệt phiếu \"" + saved.getTitle() + "\". Hãy giao kỹ thuật viên xử lý.");
+        return saved;
+    }
+
+    @Override
+    public MaintenanceTicket ownerReject(UUID ticketId, String reason) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = maintenanceTicketRepository.findById(ticketId)
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + ticketId));
+        authorizationService.assertOwnerOrAdmin(currentUser, ticket.getPropertyId());
+        if (ticket.getStatus() != MaintenanceStatus.PENDING_OWNER_APPROVAL) {
+            throw new com.phonghub.domain.exception.InvalidMaintenanceStateException(
+                "Chỉ từ chối được phiếu đang chờ chủ trọ duyệt; phiếu hiện ở trạng thái " + ticket.getStatus());
+        }
+        ticket.reject(reason);
+        ticket.attributeEventsTo(currentUser.id());
+        MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
+        audit("MAINTENANCE_OWNER_REJECTED", currentUser, saved, Map.of("reason", saved.getRejectionReason()));
+        notifyRequester(saved);
+        return saved;
+    }
+
+    @Override
+    public MaintenanceTicket submitQuote(SubmitQuoteCommand command) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = maintenanceTicketRepository.findById(command.ticketId())
+            .orElseThrow(() -> new MaintenanceTicketException("Không tìm thấy phiếu bảo trì: " + command.ticketId()));
+        if (currentUser != null && currentUser.role() == UserRole.TECHNICIAN) {
+            authorizationService.assertTechnicianCanWorkOnProperty(currentUser, ticket.getPropertyId());
+            assertAssignedToTechnician(currentUser, ticket);
+        } else {
+            authorizationService.assertCanManageProperty(currentUser, ticket.getPropertyId());
+        }
+        boolean supplement = ticket.getQuoteApprovedAt() != null;
+        MaintenanceQuoteVersion version = ticket.submitQuote(command.lines(), command.laborAmount(), command.note(),
+            currentUser.id(), approvalPolicy.quoteApprovalWindow());
+        ticket.attributeEventsTo(currentUser.id());
+        MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
+        maintenanceTicketRepository.saveQuoteVersion(version);
+        audit("MAINTENANCE_QUOTE_SUBMITTED", currentUser, saved, Map.of(
+            "version", version.version(), "total", version.totalAmount().toPlainString(), "supplement", supplement));
+        notifier.notifyTenant(saved, "Có báo giá cần bạn phê duyệt", "Phiếu \"" + saved.getTitle()
+            + "\" có báo giá " + version.totalAmount().toBigInteger() + " đ (phiên bản " + version.version()
+            + "). Hãy phê duyệt hoặc thương lượng trong " + approvalPolicy.quoteApprovalWindow().toDays()
+            + " ngày, nếu không yêu cầu sẽ bị hủy.");
+        return saved;
+    }
+
+    @Override
+    public MaintenanceTicket approveQuote(UUID ticketId) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = tenantOwnedTicket(currentUser, ticketId);
+        ticket.tenantApproveQuote();
+        ticket.attributeEventsTo(currentUser.id());
+        MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
+        decideLatestVersion(saved, MaintenanceQuoteVersion.Status.APPROVED, null);
+        audit("MAINTENANCE_QUOTE_APPROVED", currentUser, saved, Map.of(
+            "version", saved.getQuoteVersion(), "total", saved.getApprovedQuoteTotal().toPlainString()));
+        String message = "Người thuê đã phê duyệt báo giá " + saved.getApprovedQuoteTotal().toBigInteger()
+            + " đ của phiếu \"" + saved.getTitle() + "\". Có thể bắt đầu sửa.";
+        notifier.notifyManagers(saved, "Báo giá được phê duyệt", message);
+        notifier.notifyTechnician(saved, "Báo giá được phê duyệt", message);
+        return saved;
+    }
+
+    @Override
+    public MaintenanceTicket negotiateQuote(UUID ticketId, String note) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = tenantOwnedTicket(currentUser, ticketId);
+        ticket.tenantNegotiateQuote(note);
+        ticket.attributeEventsTo(currentUser.id());
+        MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
+        decideLatestVersion(saved, MaintenanceQuoteVersion.Status.NEGOTIATED, note.trim());
+        audit("MAINTENANCE_QUOTE_NEGOTIATED", currentUser, saved, Map.of(
+            "version", saved.getQuoteVersion(), "round", saved.getNegotiationRounds()));
+        String message = "Người thuê đề nghị điều chỉnh báo giá phiếu \"" + saved.getTitle() + "\": " + note.trim();
+        notifier.notifyManagers(saved, "Người thuê thương lượng báo giá", message);
+        if (saved.getQuote() != null) {
+            notifier.notifyUser(saved, saved.getQuote().quotedBy(), "Người thuê thương lượng báo giá", message);
+        }
+        return saved;
+    }
+
+    private void decideLatestVersion(MaintenanceTicket ticket, MaintenanceQuoteVersion.Status status, String tenantNote) {
+        maintenanceTicketRepository.findQuoteVersions(ticket.getId()).stream()
+            .filter(version -> version.version() == ticket.getQuoteVersion())
+            .findFirst()
+            .ifPresent(version -> maintenanceTicketRepository.saveQuoteVersion(
+                version.decided(status, tenantNote, java.time.Instant.now())));
+    }
+
+    @Override
+    public List<MaintenanceQuoteVersion> quoteHistory(UUID ticketId) {
+        MaintenanceTicket ticket = getTicket(ticketId);
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        if (currentUser.role() == UserRole.ADMIN
+            || (currentUser.role() == UserRole.TENANT && ticket.getLiableParty() != LiableParty.TENANT)) {
+            return List.of();
+        }
+        return maintenanceTicketRepository.findQuoteVersions(ticketId);
     }
 
     @Override

@@ -19,8 +19,9 @@ import org.junit.jupiter.api.Test;
 class MaintenanceTicketFeeUnitTest {
 
     private MaintenanceTicket ticket(MaintenanceCause cause) {
+        // Phiếu do quản lý tạo (không có người thuê báo) không qua bước chốt nhánh (#202, #203); bước đó có test riêng.
         MaintenanceTicket t = MaintenanceTicket.create(
-            UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+            UUID.randomUUID(), UUID.randomUUID(), null,
             "Hỏng vòi", "Vòi nước bị hỏng", MaintenancePriority.MEDIUM, cause
         );
         t.accept(UUID.randomUUID());

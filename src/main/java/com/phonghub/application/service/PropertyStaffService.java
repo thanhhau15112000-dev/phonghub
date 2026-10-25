@@ -117,7 +117,8 @@ public class PropertyStaffService implements PropertyStaffUseCase {
             boolean hasOpenTickets = ticketRepository.findByAssignedTechnicianId(userId).stream()
                 .anyMatch(ticket -> propertyId.equals(ticket.getPropertyId())
                     && (ticket.getStatus() == MaintenanceStatus.ASSIGNED
-                        || ticket.getStatus() == MaintenanceStatus.IN_PROGRESS));
+                        || ticket.getStatus() == MaintenanceStatus.IN_PROGRESS
+                        || ticket.getStatus() == MaintenanceStatus.PENDING_TENANT_APPROVAL));
             if (hasOpenTickets) {
                 throw new StaffAssignmentConflictException(
                     "Kỹ thuật viên còn phiếu bảo trì đang giao hoặc đang xử lý tại nhà trọ này; hãy giao lại phiếu trước khi gỡ.");

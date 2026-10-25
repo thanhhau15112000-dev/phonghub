@@ -16,6 +16,7 @@ import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.model.LiableParty;
 import com.phonghub.domain.model.MaintenanceCause;
 import com.phonghub.domain.model.MaintenancePriority;
+import com.phonghub.domain.model.MaintenanceQuoteVersion;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.Room;
@@ -283,6 +284,8 @@ public class MaintenanceUiController {
             model.addAttribute("today", LocalDate.now());
             model.addAttribute("feeInvoice", invoiceUseCase.findFeeInvoiceForTicket(id).orElse(null));
             model.addAttribute("quote", maintenanceUseCase.visibleQuote(id));
+            model.addAttribute("quoteVersions", maintenanceUseCase.quoteHistory(id));
+            model.addAttribute("maxNegotiationRounds", MaintenanceTicket.MAX_NEGOTIATION_ROUNDS);
 
             return "maintenance/detail";
         } catch (DomainException ex) {
@@ -459,6 +462,81 @@ public class MaintenanceUiController {
     ) {
         return act(id, redirectAttributes, () -> maintenanceUseCase.quoteTicket(id, amount, note),
             "Đã lưu báo giá sửa chữa.");
+    }
+
+    /** Staff hoặc chủ trọ chốt/đổi nhánh: OWNER = hao mòn tự nhiên, TENANT = lỗi do người thuê (#202, #203). */
+    @PostMapping("/{id}/branch")
+    public String confirmBranch(
+        @PathVariable UUID id,
+        @RequestParam LiableParty branch,
+        @RequestParam(required = false) String reason,
+        RedirectAttributes redirectAttributes
+    ) {
+        return act(id, redirectAttributes, () -> maintenanceUseCase.confirmBranch(id, branch, reason),
+            branch == LiableParty.OWNER
+                ? "Đã chốt nhánh hao mòn tự nhiên. Phiếu chờ chủ trọ duyệt."
+                : "Đã chốt nhánh lỗi do người thuê. Hãy lập báo giá để người thuê phê duyệt.");
+    }
+
+    @PostMapping("/{id}/owner-approve")
+    public String ownerApprove(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        return act(id, redirectAttributes, () -> maintenanceUseCase.ownerApprove(id),
+            "Đã duyệt xử lý. Phiếu sẵn sàng giao kỹ thuật viên; chi phí do chủ trọ chịu.");
+    }
+
+    @PostMapping("/{id}/owner-reject")
+    public String ownerReject(
+        @PathVariable UUID id,
+        @RequestParam String reason,
+        RedirectAttributes redirectAttributes
+    ) {
+        return act(id, redirectAttributes, () -> maintenanceUseCase.ownerReject(id, reason),
+            "Đã từ chối phiếu và thông báo cho người thuê.");
+    }
+
+    /** Báo giá chi tiết: các cột itemNames/itemQuantities/itemPrices song song theo thứ tự dòng. */
+    @PostMapping("/{id}/quote-detail")
+    public String submitQuote(
+        @PathVariable UUID id,
+        @RequestParam(name = "itemNames", required = false) List<String> itemNames,
+        @RequestParam(name = "itemQuantities", required = false) List<String> itemQuantities,
+        @RequestParam(name = "itemPrices", required = false) List<String> itemPrices,
+        @RequestParam(name = "laborAmount", required = false) BigDecimal laborAmount,
+        @RequestParam(name = "note", required = false) String note,
+        RedirectAttributes redirectAttributes
+    ) {
+        return act(id, redirectAttributes, () -> {
+            List<MaintenanceQuoteVersion.Line> lines = new ArrayList<>();
+            int rows = itemNames == null ? 0 : itemNames.size();
+            for (int index = 0; index < rows; index++) {
+                String name = itemNames.get(index);
+                String quantity = index < itemQuantities.size() ? itemQuantities.get(index) : "";
+                String price = index < itemPrices.size() ? itemPrices.get(index) : "";
+                if ((name == null || name.isBlank()) && quantity.isBlank() && price.isBlank()) {
+                    continue;
+                }
+                lines.add(new MaintenanceQuoteVersion.Line(name,
+                    quantity.isBlank() ? 1 : Integer.parseInt(quantity.trim()),
+                    price.isBlank() ? BigDecimal.ZERO : new BigDecimal(price.trim())));
+            }
+            maintenanceUseCase.submitQuote(new MaintenanceUseCase.SubmitQuoteCommand(id, lines, laborAmount, note));
+        }, "Đã gửi báo giá cho người thuê phê duyệt.");
+    }
+
+    @PostMapping("/{id}/quote/approve")
+    public String approveQuote(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        return act(id, redirectAttributes, () -> maintenanceUseCase.approveQuote(id),
+            "Đã phê duyệt báo giá. Kỹ thuật viên có thể bắt đầu sửa.");
+    }
+
+    @PostMapping("/{id}/quote/negotiate")
+    public String negotiateQuote(
+        @PathVariable UUID id,
+        @RequestParam String note,
+        RedirectAttributes redirectAttributes
+    ) {
+        return act(id, redirectAttributes, () -> maintenanceUseCase.negotiateQuote(id, note),
+            "Đã gửi đề nghị điều chỉnh báo giá.");
     }
 
     @PostMapping("/{id}/verify")

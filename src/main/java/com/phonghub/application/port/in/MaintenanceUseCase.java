@@ -3,6 +3,7 @@ package com.phonghub.application.port.in;
 import com.phonghub.domain.model.LiableParty;
 import com.phonghub.domain.model.MaintenanceCause;
 import com.phonghub.domain.model.MaintenancePriority;
+import com.phonghub.domain.model.MaintenanceQuoteVersion;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.MaintenanceTicketEvent;
 import java.math.BigDecimal;
@@ -55,6 +56,34 @@ public interface MaintenanceUseCase {
     MaintenanceTicket verifyTicket(UUID ticketId);
     /** Người thuê của phòng phản hồi chưa đạt kèm lý do: phiếu mở lại để sửa tiếp (409 nếu chưa sửa xong). */
     MaintenanceTicket reopenTicket(UUID ticketId, String feedback);
+    /**
+     * Staff hoặc chủ trọ chốt (hoặc đổi) nhánh xử lý khi chưa bắt đầu sửa (#202, #203): chủ trọ chịu phí là hao mòn tự
+     * nhiên và chờ chủ trọ duyệt; người thuê chịu phí là lỗi do người thuê và chờ báo giá. Đổi nhánh phải ghi lý do.
+     */
+    MaintenanceTicket confirmBranch(UUID ticketId, LiableParty branch, String reason);
+    /** Chủ trọ duyệt xử lý phiếu hao mòn (409 nếu phiếu không chờ duyệt). */
+    MaintenanceTicket ownerApprove(UUID ticketId);
+    /** Chủ trọ từ chối phiếu hao mòn đang chờ duyệt, bắt buộc có lý do. */
+    MaintenanceTicket ownerReject(UUID ticketId, String reason);
+    /** Gửi báo giá chi tiết (linh kiện và công sửa) cho người thuê phê duyệt trong 7 ngày (#203). */
+    MaintenanceTicket submitQuote(SubmitQuoteCommand command);
+    /** Người thuê phê duyệt báo giá (409 nếu đã phê duyệt hoặc phiếu không chờ phê duyệt). */
+    MaintenanceTicket approveQuote(UUID ticketId);
+    /** Người thuê đề nghị điều chỉnh báo giá, tối đa 2 vòng. */
+    MaintenanceTicket negotiateQuote(UUID ticketId, String note);
+    /** Các phiên bản báo giá; người thuê chỉ thấy khi là bên chịu phí, quản trị viên không xem số liệu tiền. */
+    List<MaintenanceQuoteVersion> quoteHistory(UUID ticketId);
+
+    record SubmitQuoteCommand(UUID ticketId, List<MaintenanceQuoteVersion.Line> lines, BigDecimal laborAmount,
+                              String note) {
+        public SubmitQuoteCommand {
+            if (ticketId == null) {
+                throw new IllegalArgumentException("Ticket id is required");
+            }
+            lines = lines == null ? List.of() : List.copyOf(lines);
+        }
+    }
+
     /** Timeline trạng thái của phiếu; cùng quy tắc xem với {@link #getTicket}. */
     List<MaintenanceTicketEvent> getTimeline(UUID ticketId);
     List<MaintenanceTicket> listTicketsForProperty(UUID propertyId);

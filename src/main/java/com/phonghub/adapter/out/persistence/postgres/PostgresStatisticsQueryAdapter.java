@@ -136,7 +136,7 @@ public class PostgresStatisticsQueryAdapter implements StatisticsQueryPort {
             SELECT r.property_id, COUNT(*) AS open_count, COUNT(*) FILTER (WHERE t.due_at < :now) AS overdue_count
             FROM maintenance_tickets t
             JOIN rooms r ON r.id = t.room_id
-            WHERE t.status IN ('REPORTED', 'ASSIGNED', 'IN_PROGRESS')
+            WHERE t.status IN ('REPORTED', 'ASSIGNED', 'IN_PROGRESS', 'PENDING_OWNER_APPROVAL', 'PENDING_TENANT_APPROVAL')
             """
             + propertyFilter("r.property_id", propertyIds, params)
             + " GROUP BY r.property_id";

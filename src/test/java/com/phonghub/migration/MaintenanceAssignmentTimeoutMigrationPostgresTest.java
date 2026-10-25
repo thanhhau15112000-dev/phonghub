@@ -23,7 +23,7 @@ class MaintenanceAssignmentTimeoutMigrationPostgresTest {
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine");
 
     @Test
-    @DisplayName("V53 adds assignment timeout markers and gives existing active assignments a safe grace period")
+    @DisplayName("V55 adds assignment timeout markers and gives existing active assignments a safe grace period")
     void addsTimeoutColumnsAndBackfillsOnlyActiveAssignedTickets() throws Exception {
         PGSimpleDataSource dataSource = new PGSimpleDataSource();
         dataSource.setUrl(POSTGRES.getJdbcUrl());
@@ -50,7 +50,7 @@ class MaintenanceAssignmentTimeoutMigrationPostgresTest {
         }
 
         new ResourceDatabasePopulator(new ClassPathResource(
-            "db/migration/V53__maintenance_assignment_timeout.sql")).execute(dataSource);
+            "db/migration/V55__maintenance_assignment_timeout.sql")).execute(dataSource);
 
         try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
             try (ResultSet active = statement.executeQuery("""

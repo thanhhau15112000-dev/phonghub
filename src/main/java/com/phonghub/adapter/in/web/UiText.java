@@ -216,6 +216,8 @@ public final class UiText {
             case VERIFIED -> "Đã xác nhận";
             case REJECTED -> "Đã từ chối";
             case CANCELLED -> "Đã hủy";
+            case PENDING_OWNER_APPROVAL -> "Chờ chủ trọ duyệt";
+            case PENDING_TENANT_APPROVAL -> "Chờ người thuê duyệt báo giá";
         };
     }
 

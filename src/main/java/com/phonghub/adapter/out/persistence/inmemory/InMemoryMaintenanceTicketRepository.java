@@ -1,6 +1,7 @@
 package com.phonghub.adapter.out.persistence.inmemory;
 
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
+import com.phonghub.domain.model.MaintenanceQuoteVersion;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
 import java.util.ArrayList;
@@ -15,6 +16,7 @@ public class InMemoryMaintenanceTicketRepository implements MaintenanceTicketRep
 
     private final Map<UUID, MaintenanceTicket> store = new ConcurrentHashMap<>();
     private final Map<UUID, List<MaintenanceTicketEvent>> events = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<UUID, MaintenanceQuoteVersion>> quoteVersions = new ConcurrentHashMap<>();
 
     private MaintenanceTicket clone(MaintenanceTicket t) {
         if (t == null) return null;
@@ -40,6 +42,7 @@ public class InMemoryMaintenanceTicketRepository implements MaintenanceTicketRep
         );
         copy.restoreQuote(t.getQuote());
         copy.restoreAssignmentTimeoutState(t.getAssignedAt(), t.getUnderstaffedNotifiedAt());
+        copy.restoreApprovalState(t.approvalState());
         return copy;
     }
 
@@ -95,6 +98,18 @@ public class InMemoryMaintenanceTicketRepository implements MaintenanceTicketRep
     }
 
     @Override
+    public MaintenanceQuoteVersion saveQuoteVersion(MaintenanceQuoteVersion version) {
+        quoteVersions.computeIfAbsent(version.ticketId(), id -> new ConcurrentHashMap<>()).put(version.id(), version);
+        return version;
+    }
+
+    @Override
+    public List<MaintenanceQuoteVersion> findQuoteVersions(UUID ticketId) {
+        return quoteVersions.getOrDefault(ticketId, Map.of()).values().stream()
+            .sorted(java.util.Comparator.comparingInt(MaintenanceQuoteVersion::version)).toList();
+    }
+
+    @Override
     public List<MaintenanceTicketEvent> findEvents(UUID ticketId) {
         return List.copyOf(events.getOrDefault(ticketId, List.of()));
     }
@@ -115,5 +130,6 @@ public class InMemoryMaintenanceTicketRepository implements MaintenanceTicketRep
     public void clear() {
         store.clear();
         events.clear();
+        quoteVersions.clear();
     }
 }
