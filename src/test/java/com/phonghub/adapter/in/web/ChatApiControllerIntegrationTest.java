@@ -200,8 +200,8 @@ class ChatApiControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("Upload ảnh thành công qua endpoint POST /api/chat/rooms/{roomId}/media")
-    void uploadMediaSuccess() throws Exception {
+    @DisplayName("Chat chỉ còn văn bản: endpoint gửi ảnh/video đã gỡ, không tạo tin nhắn nào")
+    void mediaUploadEndpointRemoved() throws Exception {
         authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_TENANT_1);
         org.springframework.mock.web.MockMultipartFile mockFile = new org.springframework.mock.web.MockMultipartFile(
             "file", "room_sample.jpg", "image/jpeg", "image-content".getBytes()
@@ -210,10 +210,10 @@ class ChatApiControllerIntegrationTest {
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/chat/rooms/" + ChatRoom.GLOBAL_ROOM_ID + "/media")
                 .file(mockFile)
                 .param("caption", "Ảnh phòng thực tế"))
+            .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/api/chat/rooms/" + ChatRoom.GLOBAL_ROOM_ID + "/messages"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.id").isNotEmpty())
-            .andExpect(jsonPath("$.mediaUrl").isNotEmpty())
-            .andExpect(jsonPath("$.mediaType", is("IMAGE")))
-            .andExpect(jsonPath("$.content", is("Ảnh phòng thực tế")));
+            .andExpect(jsonPath("$.length()", is(0)));
     }
 }
