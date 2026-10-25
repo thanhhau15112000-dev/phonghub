@@ -41,6 +41,10 @@ class MaintenanceAssignmentTimeoutIntegrationTest extends SeededWebTest {
 
     private static final UUID OWNER_1 = LocalDemoAuthenticationAdapter.OWNER_1_ID;
     private static final UUID STAFF_1 = LocalDemoAuthenticationAdapter.STAFF_1_ID;
+    private static final UUID STAFF_WITHOUT_CONTRACT_PERMISSION =
+        UUID.fromString("33333333-3333-3333-3333-333333333333");
+    private static final UUID UNASSIGNED_STAFF = UUID.fromString("44444444-4444-4444-4444-444444444444");
+    private static final UUID INACTIVE_ASSIGNED_STAFF = UUID.fromString("55555555-5555-5555-5555-555555555555");
     private static final UUID TECH_1 = LocalDemoAuthenticationAdapter.TECH_1_ID;
     private static final UUID TENANT_1 = DataSeeder.TENANT_RECORD_ID;
     private static final UUID TECH_2 = UUID.fromString("22222222-2222-2222-2222-222222222222");
@@ -56,7 +60,7 @@ class MaintenanceAssignmentTimeoutIntegrationTest extends SeededWebTest {
     @DisplayName("At 72 hours an assigned or in-progress ticket is marked once and notifies tenant, owner and responsible staff")
     void notifiesAtAssignmentTimeoutExactlyOnce() throws Exception {
         Instant now = Instant.now();
-        addSecondTechnician();
+        addTimeoutNotificationRecipients();
         MaintenanceTicket ticket = saveTicket(MaintenanceStatus.IN_PROGRESS, TECH_1,
             now.minus(Duration.ofHours(72)), null);
         int before = notifications.findAll().size();
@@ -67,12 +71,14 @@ class MaintenanceAssignmentTimeoutIntegrationTest extends SeededWebTest {
         MaintenanceTicket marked = tickets.findById(ticket.getId()).orElseThrow();
         assertEquals(now, marked.getUnderstaffedNotifiedAt());
         assertEquals(now.minus(Duration.ofHours(72)), marked.getAssignedAt());
-        assertEquals(before + 3, notifications.findAll().size());
+        assertEquals(before + 4, notifications.findAll().size());
         var shortageNotifications = notifications.findAll().stream()
-            .filter(n -> n.title().equals("Phiếu bảo trì thiếu nhân lực"))
+            .filter(n -> n.title().equals("Phiếu bảo trì thiếu nhân lực")
+                && n.link().equals("/maintenance/" + ticket.getId()))
             .toList();
-        assertEquals(3, shortageNotifications.size());
-        assertEquals(Set.of(OWNER_1, STAFF_1, LocalDemoAuthenticationAdapter.TENANT_1_ID),
+        assertEquals(4, shortageNotifications.size());
+        assertEquals(Set.of(OWNER_1, STAFF_1, STAFF_WITHOUT_CONTRACT_PERMISSION,
+                LocalDemoAuthenticationAdapter.TENANT_1_ID),
             shortageNotifications.stream().map(n -> n.targetUserId()).collect(Collectors.toSet()));
         assertTrue(shortageNotifications.stream().anyMatch(n -> n.targetUserId().equals(OWNER_1)
             && n.message().contains("Kỹ thuật viên dự phòng")));
@@ -84,7 +90,7 @@ class MaintenanceAssignmentTimeoutIntegrationTest extends SeededWebTest {
 
         assertEquals(MaintenanceAssignmentTimeoutService.ProcessResult.NO_ACTION,
             timeoutService.processTicket(ticket.getId(), now.plusSeconds(1)));
-        assertEquals(before + 3, notifications.findAll().size());
+        assertEquals(before + 4, notifications.findAll().size());
     }
 
     @Test
@@ -106,6 +112,7 @@ class MaintenanceAssignmentTimeoutIntegrationTest extends SeededWebTest {
     @DisplayName("An understaffed ticket is auto-cancelled once after 24 hours with an audit timeline entry")
     void autoCancelsAfterTwentyFourHours() throws Exception {
         Instant now = Instant.now();
+        addTimeoutNotificationRecipients();
         MaintenanceTicket ticket = saveTicket(MaintenanceStatus.ASSIGNED, TECH_1,
             now.minus(Duration.ofHours(96)), now.minus(Duration.ofHours(24)));
         int before = notifications.findAll().size();
@@ -116,7 +123,15 @@ class MaintenanceAssignmentTimeoutIntegrationTest extends SeededWebTest {
         MaintenanceTicket cancelled = tickets.findById(ticket.getId()).orElseThrow();
         assertEquals(MaintenanceStatus.CANCELLED, cancelled.getStatus());
 
-        assertEquals(before + 3, notifications.findAll().size());
+        assertEquals(before + 4, notifications.findAll().size());
+        var cancellationNotifications = notifications.findAll().stream()
+            .filter(n -> n.title().equals("Phiếu bảo trì bị hủy tự động")
+                && n.link().equals("/maintenance/" + ticket.getId()))
+            .toList();
+        assertEquals(4, cancellationNotifications.size());
+        assertEquals(Set.of(OWNER_1, STAFF_1, STAFF_WITHOUT_CONTRACT_PERMISSION,
+                LocalDemoAuthenticationAdapter.TENANT_1_ID),
+            cancellationNotifications.stream().map(n -> n.targetUserId()).collect(Collectors.toSet()));
         assertTrue(tickets.findEvents(ticket.getId()).stream().anyMatch(event ->
             event.toStatus() == MaintenanceStatus.CANCELLED && event.note().contains("Hủy tự động do thiếu nhân lực")));
         mockMvc.perform(get("/maintenance/" + ticket.getId()).header("X-User-Id", OWNER_1))
@@ -127,7 +142,7 @@ class MaintenanceAssignmentTimeoutIntegrationTest extends SeededWebTest {
 
         assertEquals(MaintenanceAssignmentTimeoutService.ProcessResult.NO_ACTION,
             timeoutService.processTicket(ticket.getId(), now.plus(Duration.ofHours(1))));
-        assertEquals(before + 3, notifications.findAll().size());
+        assertEquals(before + 4, notifications.findAll().size());
     }
 
     @Test
@@ -202,6 +217,25 @@ class MaintenanceAssignmentTimeoutIntegrationTest extends SeededWebTest {
             UserRole.TECHNICIAN, User.UserStatus.ACTIVE, false, Instant.now()));
         assignments.save(new StaffPropertyAssignment(UUID.randomUUID(), TECH_2, DataSeeder.PROP_1_ID,
             false, false, false, Instant.now()));
+    }
+
+    private void addTimeoutNotificationRecipients() {
+        addSecondTechnician();
+        users.save(new User(STAFF_WITHOUT_CONTRACT_PERMISSION, "staff-no-contract-permission",
+            "staff-no-contract-permission@phonghub.local", "Nhân viên không có quyền hợp đồng", "0900000013",
+            UserRole.STAFF, User.UserStatus.ACTIVE, false, Instant.now()));
+        assignments.save(new StaffPropertyAssignment(UUID.randomUUID(), STAFF_WITHOUT_CONTRACT_PERMISSION,
+            DataSeeder.PROP_1_ID, false, false, false, Instant.now()));
+
+        users.save(new User(UNASSIGNED_STAFF, "unassigned-staff", "unassigned-staff@phonghub.local",
+            "Nhân viên chưa được phân công", "0900000014", UserRole.STAFF, User.UserStatus.ACTIVE, false,
+            Instant.now()));
+
+        users.save(new User(INACTIVE_ASSIGNED_STAFF, "inactive-assigned-staff",
+            "inactive-assigned-staff@phonghub.local", "Nhân viên đã ngừng hoạt động", "0900000015",
+            UserRole.STAFF, User.UserStatus.INACTIVE, false, Instant.now()));
+        assignments.save(new StaffPropertyAssignment(UUID.randomUUID(), INACTIVE_ASSIGNED_STAFF,
+            DataSeeder.PROP_1_ID, false, false, false, Instant.now()));
     }
 
     private MaintenanceTicket saveTicket(

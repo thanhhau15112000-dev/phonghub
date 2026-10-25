@@ -144,11 +144,10 @@ public class MaintenanceAssignmentTimeoutService {
             .flatMap(userRepository::findById)
             .ifPresent(owner -> recipients.put(owner.id(), owner));
         assignmentPort.findByPropertyId(ticket.getPropertyId()).stream()
-            .filter(StaffPropertyAssignment::canManageContracts)
             .map(StaffPropertyAssignment::staffUserId)
             .map(userRepository::findById)
             .flatMap(Optional::stream)
-            .filter(user -> user.role() == UserRole.STAFF)
+            .filter(user -> user.role() == UserRole.STAFF && user.status() == User.UserStatus.ACTIVE)
             .forEach(staff -> recipients.putIfAbsent(staff.id(), staff));
         return recipients;
     }
