@@ -67,6 +67,7 @@ class HandoverReportApiIntegrationTest extends SeededWebTest {
 
     @BeforeEach
     void reset() {
+        endSeededContractToday();
         handovers.clear();
         photos.clear();
         items.clear();

@@ -91,8 +91,8 @@ class EarlyTerminationBillingServiceTest {
     }
 
     @Test
-    @DisplayName("Insufficient deposit pays only what is available and leaves the rest due")
-    void insufficientDepositLeavesBalanceOwed() {
+    @DisplayName("The fee is left unpaid: the deposit is deducted later, when the check-out is approved")
+    void feeIsNotDeductedFromDepositAtBilling() {
         contract = new Contract(contract.getId(), contract.getPropertyId(), contract.getRoomId(), contract.getPrimaryTenantId(),
             new BigDecimal("500000"), contract.getRentAmount(), START, END, 5, ContractStatus.ACTIVE, List.of(),
             Instant.now(), Instant.now());
@@ -103,10 +103,22 @@ class EarlyTerminationBillingServiceTest {
         Invoice cancellation = invoices.findByContractId(contract.getId()).stream().findFirst().orElseThrow();
         assertEquals(InvoiceType.CANCELLATION, cancellation.getType());
         assertEquals(0, new BigDecimal("1750000").compareTo(cancellation.getTotalAmount()));
-        assertEquals(0, new BigDecimal("500000").compareTo(cancellation.getPaidAmount()));
-        assertEquals(0, new BigDecimal("1250000").compareTo(cancellation.remainingAmount()));
-        assertEquals(0, new BigDecimal("500000").compareTo(contract.getDepositAppliedAmount()));
-        assertEquals(0, contract.availableDeposit().signum());
+        assertEquals(0, cancellation.getPaidAmount().signum());
+        assertEquals(0, new BigDecimal("1750000").compareTo(cancellation.remainingAmount()));
+        assertEquals(0, contract.getDepositAppliedAmount().signum());
+        assertEquals(0, new BigDecimal("500000").compareTo(contract.availableDeposit()));
+    }
+
+    @Test
+    @DisplayName("Billing twice for the same contract issues a single cancellation invoice")
+    void billingIsIdempotent() {
+        service = new EarlyTerminationBillingService(invoices, null, null, event -> {});
+
+        service.billEarlyTermination(contract, null, LocalDate.of(2026, 10, 30));
+        service.billEarlyTermination(contract, null, LocalDate.of(2026, 10, 31));
+
+        assertEquals(1, invoices.findByContractId(contract.getId()).stream()
+            .filter(invoice -> invoice.getType() == InvoiceType.CANCELLATION).count());
     }
 
     @Test

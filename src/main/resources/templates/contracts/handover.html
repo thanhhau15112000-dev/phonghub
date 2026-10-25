@@ -326,10 +326,6 @@
                         <td th:text="${'Công nợ chưa thanh toán (' + settlement.unpaidInvoices() + ' hóa đơn)'}">Công nợ chưa thanh toán</td>
                         <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(settlement.outstanding(), 0, 'POINT', 0, 'COMMA') + ' đ'}">− 0 đ</td>
                     </tr>
-                    <tr>
-                        <td>Đã cấn trừ từ tiền cọc</td>
-                        <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(settlement.depositOffset(), 0, 'POINT', 0, 'COMMA') + ' đ'}">− 0 đ</td>
-                    </tr>
                     <tr th:each="u : ${settlement.utilities()}">
                         <td>
                             <span th:text="${u.meterType().name() == 'ELECTRIC' ? 'Điện' : 'Nước'}">Điện</span>

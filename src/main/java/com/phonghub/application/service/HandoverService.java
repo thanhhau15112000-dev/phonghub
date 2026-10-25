@@ -603,7 +603,9 @@ public class HandoverService implements HandoverUseCase {
         if (invoiceRepository == null || meterReadingRepository == null || serviceRateRepository == null) return;
         java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
         List<InvoiceItem> charges = finalUtilityCharges(contract, checkIn, checkOut);
-        if (earlyTerminationBilling != null && today.isBefore(contract.getEndDate())) {
+        boolean beforeEndDate = contract.getStatus() == com.phonghub.domain.model.ContractStatus.ACTIVE
+            && today.isBefore(contract.getEndDate());
+        if (earlyTerminationBilling != null && beforeEndDate) {
             Contract locked = contractRepository.findByIdForUpdate(contract.getId()).orElse(contract);
             earlyTerminationBilling.billEarlyTermination(locked, user, today, charges);
             contractRepository.save(locked);

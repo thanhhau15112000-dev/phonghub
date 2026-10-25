@@ -22,6 +22,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -71,6 +72,15 @@ abstract class SeededWebTest {
             .send("terms", null, null, actor).tenantConfirm(actor).approve(actor));
         seedMvc.perform(post("/api/contracts/" + contractId + "/activate").header("X-User-Id", actingUserId))
             .andExpect(status().isOk());
+    }
+
+    /**
+     * Hợp đồng mẫu kết thúc hôm nay: trả phòng đúng hạn, không phải hủy giữa kỳ. Test về phí hủy sớm (#225) giữ ngày kết thúc mẫu.
+     */
+    protected void endSeededContractToday() {
+        com.phonghub.domain.model.Contract contract = seedContracts.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        ReflectionTestUtils.setField(contract, "endDate", java.time.LocalDate.now());
+        seedContracts.save(contract);
     }
 
     @BeforeEach

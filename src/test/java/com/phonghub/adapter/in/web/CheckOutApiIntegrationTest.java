@@ -77,6 +77,7 @@ class CheckOutApiIntegrationTest extends SeededWebTest {
 
     @BeforeEach
     void reset() {
+        endSeededContractToday();
         handovers.clear();
         photos.clear();
         items.clear();
