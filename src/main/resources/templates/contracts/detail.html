@@ -264,6 +264,32 @@
             </form>
         </div>
 
+        <!-- Yêu cầu xác nhận thanh toán của người thuê (#205): chủ trọ và nhân viên thu tiền xác nhận hoặc từ chối -->
+        <div th:if="${canVoidInvoice and !#lists.isEmpty(paymentClaims.?[status().name() == 'PENDING'])}"
+             id="pending-claims" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; margin-bottom: 16px;">
+            <h3 style="font-size: 14px; margin: 0 0 8px;">Yêu cầu xác nhận thanh toán đang chờ</h3>
+            <div th:each="claim : ${paymentClaims.?[status().name() == 'PENDING']}"
+                 style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; padding: 8px 0; border-top: 1px solid var(--border-color); font-size: 13px;">
+                <span style="flex: 1; min-width: 220px;">
+                    <strong th:text="${#numbers.formatDecimal(claim.amount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">500,000 đ</strong>
+                    · <span th:text="${claim.method().name() == 'CASH' ? 'Tiền mặt' : 'Chuyển khoản'}">Tiền mặt</span>
+                    <span th:if="${claim.note() != null}" style="color: var(--text-secondary);" th:text="'· ' + ${claim.note()}">ghi chú</span>
+                    <a th:href="@{'/invoices/' + ${claim.invoiceId()} + '/pay'}" style="color: var(--accent);">Xem hóa đơn</a>
+                </span>
+                <form th:action="@{'/payment-claims/' + ${claim.id()} + '/confirm'}" method="post" style="margin: 0;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <input type="hidden" name="contractId" th:value="${contract.getId()}">
+                    <button type="submit" class="btn btn-sm btn-primary">Xác nhận đã nhận tiền</button>
+                </form>
+                <form th:action="@{'/payment-claims/' + ${claim.id()} + '/reject'}" method="post" style="margin: 0; display: flex; gap: 6px;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <input type="hidden" name="contractId" th:value="${contract.getId()}">
+                    <input type="text" name="reason" class="form-control" required maxlength="500" placeholder="Lý do từ chối">
+                    <button type="submit" class="btn btn-sm btn-danger">Từ chối</button>
+                </form>
+            </div>
+        </div>
+
         <!-- Hướng dẫn chuyển khoản cho kỳ còn nợ cũ nhất -->
         <div th:if="${payableInvoice != null}" style="display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 16px;">
             <img th:if="${paymentQrUrl != null}" th:src="${paymentQrUrl}" alt="Mã QR chuyển khoản" width="180" height="180" style="border: 1px solid var(--border-color);">

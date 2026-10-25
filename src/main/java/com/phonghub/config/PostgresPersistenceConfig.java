@@ -256,6 +256,13 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.application.port.out.PaymentClaimRepositoryPort paymentClaimRepository(
+        NamedParameterJdbcTemplate jdbcTemplate
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresPaymentClaimRepository(jdbcTemplate);
+    }
+
+    @Bean
     public com.phonghub.application.port.out.InvoicePaymentRecordRepositoryPort invoicePaymentRecordRepository(
         NamedParameterJdbcTemplate jdbcTemplate
     ) {

@@ -2,6 +2,7 @@ package com.phonghub.adapter.in.web;
 
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.InvoiceUseCase;
+import com.phonghub.application.port.in.ManualPaymentUseCase;
 import com.phonghub.application.port.in.HandoverUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
@@ -62,6 +63,7 @@ public class ContractUiController {
     private final SepayProperties sepayProperties;
     private final HandoverUseCase handoverUseCase;
     private final AuthorizationService authorizationService;
+    private final ManualPaymentUseCase manualPayments;
 
     public ContractUiController(
         ContractUseCase contractUseCase,
@@ -75,8 +77,10 @@ public class ContractUiController {
         InvoiceUseCase invoiceUseCase,
         SepayProperties sepayProperties,
         HandoverUseCase handoverUseCase,
-        AuthorizationService authorizationService
+        AuthorizationService authorizationService,
+        ManualPaymentUseCase manualPayments
     ) {
+        this.manualPayments = manualPayments;
         this.contractUseCase = contractUseCase;
         this.propertyUseCase = propertyUseCase;
         this.roomUseCase = roomUseCase;
@@ -357,6 +361,7 @@ public class ContractUiController {
         );
 
         model.addAttribute("invoices", invoices);
+        model.addAttribute("paymentClaims", manualPayments.listForContract(contract.getId()));
         model.addAttribute("openInvoiceCount", invoices.stream().filter(Invoice::isPayable)
             .filter(invoice -> invoice.remainingAmount().signum() > 0).count());
         model.addAttribute("invoiceWarnings", invoiceUseCase.utilityWarnings(contract.getId()));

@@ -528,6 +528,31 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.service.MaintenanceFeeSettlement maintenanceFeeSettlement(
+        InvoiceRepositoryPort invoiceRepo,
+        MaintenanceTicketRepositoryPort ticketRepo
+    ) {
+        return new com.phonghub.application.service.MaintenanceFeeSettlement(invoiceRepo, ticketRepo);
+    }
+
+    @Bean
+    public com.phonghub.application.port.in.ManualPaymentUseCase manualPaymentUseCase(
+        com.phonghub.application.port.out.PaymentClaimRepositoryPort claimRepo,
+        InvoiceRepositoryPort invoiceRepo,
+        ContractRepositoryPort contractRepo,
+        TenantRepositoryPort tenantRepo,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        NotificationDispatcher notificationDispatcher,
+        com.phonghub.application.service.MaintenanceFeeSettlement feeSettlement
+    ) {
+        return new TransactionalManualPaymentUseCase(new com.phonghub.application.service.ManualPaymentService(
+            claimRepo, invoiceRepo, contractRepo, tenantRepo, currentUserPort, authorizationService, auditPort,
+            notificationDispatcher, feeSettlement));
+    }
+
+    @Bean
     public MaintenanceUseCase maintenanceUseCase(
         MaintenanceTicketRepositoryPort ticketRepo,
         RoomRepositoryPort roomRepo,

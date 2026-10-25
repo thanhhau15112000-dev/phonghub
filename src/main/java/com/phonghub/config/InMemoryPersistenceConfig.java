@@ -202,6 +202,11 @@ public class InMemoryPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryPaymentClaimRepository paymentClaimRepository() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryPaymentClaimRepository();
+    }
+
+    @Bean
     public com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoicePaymentRecordRepository invoicePaymentRecordRepository() {
         return new com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoicePaymentRecordRepository();
     }
