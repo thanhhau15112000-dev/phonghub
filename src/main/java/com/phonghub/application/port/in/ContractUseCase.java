@@ -11,6 +11,7 @@ import java.util.UUID;
 
 public interface ContractUseCase {
     Contract createContract(CreateContractCommand command);
+    CreateContractResult createContractWithDetails(CreateContractCommand command);
     Contract activateContract(UUID contractId);
     Contract terminateContract(UUID contractId, boolean requiresMaintenance);
 
@@ -66,6 +67,7 @@ public interface ContractUseCase {
     /** Existing profiles visible in the property's tenant list that are not currently residing in a contract. */
     List<Tenant> listAvailableOccupants(UUID contractId);
     List<ContractOccupant> addExistingOccupants(AddExistingOccupantsCommand command);
+    AddOccupantsResult addOccupants(AddOccupantsCommand command);
     ContractOccupant checkOutOccupant(CheckOutOccupantCommand command);
 
     /**
@@ -77,6 +79,29 @@ public interface ContractUseCase {
             return new AddOccupantResult(occupant, null, null);
         }
     }
+
+    record AddOccupantsCommand(UUID contractId, List<AddOccupantCommand> occupants) {
+        public AddOccupantsCommand {
+            if (contractId == null) {
+                throw new IllegalArgumentException("Contract ID cannot be null");
+            }
+            if (occupants == null || occupants.isEmpty()) {
+                throw new IllegalArgumentException("Hãy chọn ít nhất một hồ sơ người thuê.");
+            }
+            if (occupants.stream().anyMatch(occupant -> !contractId.equals(occupant.contractId()))) {
+                throw new IllegalArgumentException("Tất cả người thuê phải thuộc cùng một hợp đồng.");
+            }
+            occupants = List.copyOf(occupants);
+        }
+    }
+
+    record AddOccupantsResult(List<AddOccupantResult> results) {
+        public AddOccupantsResult {
+            results = List.copyOf(results);
+        }
+    }
+
+    record CreateContractResult(Contract contract, String accountUsername, String temporaryPassword) {}
 
     record CheckOutOccupantCommand(
         UUID contractId,
@@ -104,20 +129,30 @@ public interface ContractUseCase {
         String email,
         String permanentAddress,
         LocalDate checkInDate,
-        boolean createAccount
+        boolean createAccount,
+        UUID tenantProfileId,
+        UUID tenantUserId
     ) {
+        public AddOccupantCommand(UUID contractId, String fullName, String identityCardNumber, String phone,
+                                  String email, String permanentAddress, LocalDate checkInDate, boolean createAccount) {
+            this(contractId, fullName, identityCardNumber, phone, email, permanentAddress, checkInDate,
+                createAccount, null, null);
+        }
+
         public AddOccupantCommand {
             if (contractId == null) {
                 throw new IllegalArgumentException("Contract ID cannot be null");
             }
-            if (fullName == null || fullName.isBlank()) {
-                throw new IllegalArgumentException("Họ và tên không được để trống");
-            }
-            if (identityCardNumber == null || identityCardNumber.isBlank()) {
-                throw new IllegalArgumentException("Số CCCD không được để trống");
-            }
-            if (phone == null || phone.isBlank()) {
-                throw new IllegalArgumentException("Số điện thoại không được để trống");
+            if (tenantProfileId == null) {
+                if (fullName == null || fullName.isBlank()) {
+                    throw new IllegalArgumentException("Họ và tên không được để trống");
+                }
+                if (identityCardNumber == null || identityCardNumber.isBlank()) {
+                    throw new IllegalArgumentException("Số CCCD không được để trống");
+                }
+                if (phone == null || phone.isBlank()) {
+                    throw new IllegalArgumentException("Số điện thoại không được để trống");
+                }
             }
             if (checkInDate == null) {
                 checkInDate = LocalDate.now();
@@ -158,8 +193,27 @@ public interface ContractUseCase {
         BigDecimal rentAmount,
         LocalDate startDate,
         LocalDate endDate,
-        int paymentDay
+        int paymentDay,
+        UUID primaryTenantProfileId,
+        boolean createPrimaryTenantAccount
     ) {
+        public CreateContractCommand(UUID propertyId, UUID roomId, String primaryTenantFullName,
+                                     String primaryTenantIdCard, String primaryTenantPhone, String primaryTenantEmail,
+                                     UUID primaryTenantUserId, BigDecimal depositAmount, BigDecimal rentAmount,
+                                     LocalDate startDate, LocalDate endDate, int paymentDay) {
+            this(propertyId, roomId, primaryTenantFullName, primaryTenantIdCard, primaryTenantPhone,
+                primaryTenantEmail, primaryTenantUserId, depositAmount, rentAmount, startDate, endDate, paymentDay, null, false);
+        }
+
+        public CreateContractCommand(UUID propertyId, UUID roomId, String primaryTenantFullName,
+                                     String primaryTenantIdCard, String primaryTenantPhone, String primaryTenantEmail,
+                                     UUID primaryTenantUserId, BigDecimal depositAmount, BigDecimal rentAmount,
+                                     LocalDate startDate, LocalDate endDate, int paymentDay, UUID primaryTenantProfileId) {
+            this(propertyId, roomId, primaryTenantFullName, primaryTenantIdCard, primaryTenantPhone,
+                primaryTenantEmail, primaryTenantUserId, depositAmount, rentAmount, startDate, endDate, paymentDay,
+                primaryTenantProfileId, false);
+        }
+
         public CreateContractCommand {
             if (propertyId == null) {
                 throw new IllegalArgumentException("Property id cannot be null");
@@ -167,14 +221,17 @@ public interface ContractUseCase {
             if (roomId == null) {
                 throw new IllegalArgumentException("Room id cannot be null");
             }
-            if (primaryTenantFullName == null || primaryTenantFullName.isBlank()) {
-                throw new IllegalArgumentException("Họ tên người thuê chính không được để trống.");
-            }
-            if (primaryTenantIdCard == null || primaryTenantIdCard.isBlank()) {
-                throw new IllegalArgumentException("Số CCCD người thuê chính không được để trống.");
-            }
-            if (primaryTenantPhone == null || primaryTenantPhone.isBlank()) {
-                throw new IllegalArgumentException("Số điện thoại người thuê chính không được để trống.");
+            // Chọn hồ sơ có sẵn thì thông tin lấy từ hồ sơ; chỉ người mới mới phải nhập đủ
+            if (primaryTenantProfileId == null) {
+                if (primaryTenantFullName == null || primaryTenantFullName.isBlank()) {
+                    throw new IllegalArgumentException("Họ tên người thuê chính không được để trống.");
+                }
+                if (primaryTenantIdCard == null || primaryTenantIdCard.isBlank()) {
+                    throw new IllegalArgumentException("Số CCCD người thuê chính không được để trống.");
+                }
+                if (primaryTenantPhone == null || primaryTenantPhone.isBlank()) {
+                    throw new IllegalArgumentException("Số điện thoại người thuê chính không được để trống.");
+                }
             }
             if (depositAmount == null || depositAmount.compareTo(BigDecimal.ZERO) < 0) {
                 throw new IllegalArgumentException("Tiền cọc không được âm.");

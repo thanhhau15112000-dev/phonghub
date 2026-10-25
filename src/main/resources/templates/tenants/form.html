@@ -21,6 +21,13 @@
         <form th:action="${tenant == null} ? @{'/properties/' + ${property.id()} + '/tenants'} : @{'/properties/' + ${property.id()} + '/tenants/' + ${tenant.id()} + '/edit'}"
               method="post" autocomplete="off">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <th:block th:if="${tenant == null}">
+                <div th:replace="~{fragments/tenant-picker :: data(${tenantChoices})}"></div>
+                <div class="form-group">
+                    <label class="form-label">Ai là người thuê?</label>
+                    <div th:replace="~{fragments/tenant-picker :: field('tenantProfileId', 'tenantUserId')}"></div>
+                </div>
+            </th:block>
             <div class="form-group">
                 <label class="form-label" for="fullName">Họ và tên *</label>
                 <input type="text" id="fullName" name="fullName" class="form-control" required maxlength="150"
@@ -41,6 +48,15 @@
                 <label class="form-label" for="email">Email</label>
                 <input type="email" id="email" name="email" class="form-control" th:value="${tenant != null} ? ${tenant.email()}">
             </div>
+            <div th:if="${tenant == null}" class="form-group">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                    <input type="checkbox" id="createAccount" name="createAccount" value="true">
+                    Cấp tài khoản đăng nhập cho người thuê (cần email; mật khẩu tạm hiển thị một lần)
+                </label>
+                <p id="createAccountHint" hidden style="margin: 4px 0 0; font-size: 12px; color: var(--text-secondary);">
+                    Người này đã có hoặc đã chọn tài khoản nên không cấp thêm.
+                </p>
+            </div>
             <div class="form-group">
                 <label class="form-label" for="permanentAddress">Địa chỉ thường trú</label>
                 <input type="text" id="permanentAddress" name="permanentAddress" class="form-control"
@@ -48,9 +64,47 @@
             </div>
             <button type="submit" class="btn btn-primary" th:text="${tenant == null} ? 'Thêm người thuê' : 'Lưu thay đổi'">Lưu</button>
         </form>
+        <form th:if="${tenant != null and tenant.userId() == null}"
+              th:action="@{'/properties/' + ${property.id()} + '/tenants/' + ${tenant.id()} + '/link-account'}"
+              method="post" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <h2 style="font-size: 15px;">Tài khoản đăng nhập</h2>
+            <p style="margin: 0 0 8px; font-size: 12px; color: var(--text-secondary);">
+                Người thuê này chưa có tài khoản app. Gắn tài khoản TENANT đã có theo email, hoặc cấp tài khoản mới
+                (mật khẩu tạm chỉ hiển thị một lần).
+            </p>
+            <label class="form-label" for="linkAccountEmail">Email</label>
+            <input type="email" id="linkAccountEmail" name="email" class="form-control" required
+                   th:value="${tenant.email()}" placeholder="tenant@example.com">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;">
+                <button type="submit" class="btn btn-secondary">Liên kết tài khoản có sẵn</button>
+                <button type="submit" class="btn btn-primary"
+                        th:formaction="@{'/properties/' + ${property.id()} + '/tenants/' + ${tenant.id()} + '/create-account'}">Cấp tài khoản mới</button>
+            </div>
+        </form>
+        <p th:if="${tenant != null and tenant.userId() != null}"
+           style="margin: 20px 0 0; padding-top: 16px; border-top: 1px solid var(--border-color); font-size: 13px; color: var(--text-secondary);">
+            Người thuê này đã có tài khoản app.
+        </p>
     </div>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>
+<th:block th:if="${tenant == null}">
+<div th:replace="~{fragments/tenant-picker :: script}"></div>
+<script>
+    wireTenantPicker(document.querySelector('.tenant-picker'), {
+        createAccount: document.getElementById('createAccount'),
+        createAccountHint: document.getElementById('createAccountHint'),
+        fields: {
+            fullName: document.getElementById('fullName'),
+            idCard: document.getElementById('identityCardNumber'),
+            phone: document.getElementById('phone'),
+            email: document.getElementById('email'),
+            address: document.getElementById('permanentAddress')
+        }
+    });
+</script>
+</th:block>
 </body>
 </html>

@@ -2,6 +2,8 @@ package com.phonghub.adapter.in.web.api;
 
 import com.phonghub.adapter.in.web.api.dto.MaintenanceTicketResponse;
 import com.phonghub.application.port.in.MaintenanceUseCase;
+import com.phonghub.application.port.in.MaintenanceAttachmentUseCase;
+import com.phonghub.application.port.in.MaintenanceSubmissionUseCase;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceTicket;
 import jakarta.validation.Valid;
@@ -13,21 +15,32 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/api")
 public class MaintenanceApiController {
 
     private final MaintenanceUseCase maintenanceUseCase;
+    private final MaintenanceSubmissionUseCase submissionUseCase;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MaintenanceApiController(MaintenanceUseCase maintenanceUseCase, MaintenanceSubmissionUseCase submissionUseCase) {
+        this.maintenanceUseCase = maintenanceUseCase;
+        this.submissionUseCase = submissionUseCase;
+    }
 
     public MaintenanceApiController(MaintenanceUseCase maintenanceUseCase) {
-        this.maintenanceUseCase = maintenanceUseCase;
+        this(maintenanceUseCase, null);
     }
 
     @GetMapping("/properties/{propertyId}/maintenance")
@@ -47,6 +60,29 @@ public class MaintenanceApiController {
             request.priority() != null ? request.priority() : MaintenancePriority.MEDIUM,
             request.setRoomMaintenance()
         ));
+        MaintenanceTicketResponse response = MaintenanceTicketResponse.from(ticket);
+        return ResponseEntity.created(URI.create("/api/maintenance/" + response.id())).body(response);
+    }
+
+    @PostMapping(value = "/maintenance", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<MaintenanceTicketResponse> createTicketWithAttachments(
+        @RequestParam UUID roomId,
+        @RequestParam String title,
+        @RequestParam String description,
+        @RequestParam(required = false) MaintenancePriority priority,
+        @RequestParam(defaultValue = "false") boolean setRoomMaintenance,
+        @RequestParam(name = "files", required = false) List<MultipartFile> files
+    ) throws IOException {
+        List<MaintenanceAttachmentUseCase.AttachmentFile> uploads = new java.util.ArrayList<>();
+        if (files != null) {
+            for (MultipartFile file : files) {
+                if (file != null && !file.isEmpty()) {
+                    uploads.add(new MaintenanceAttachmentUseCase.AttachmentFile(file.getContentType(), file.getBytes()));
+                }
+            }
+        }
+        MaintenanceTicket ticket = submissionUseCase.createTicketWithAttachments(new MaintenanceUseCase.CreateMaintenanceTicketCommand(
+            roomId, title, description, priority != null ? priority : MaintenancePriority.MEDIUM, setRoomMaintenance), uploads);
         MaintenanceTicketResponse response = MaintenanceTicketResponse.from(ticket);
         return ResponseEntity.created(URI.create("/api/maintenance/" + response.id())).body(response);
     }

@@ -113,6 +113,7 @@ public class ContractUiController {
     public String newContractForm(
         @RequestParam(required = false) UUID propertyId,
         @RequestParam(required = false) UUID roomId,
+        @RequestParam(required = false) UUID tenantProfileId,
         Model model,
         RedirectAttributes redirectAttributes
     ) {
@@ -148,9 +149,13 @@ public class ContractUiController {
         model.addAttribute("rooms", rooms);
         model.addAttribute("selectedPropertyId", propertyId);
         model.addAttribute("selectedRoomId", roomId);
-        model.addAttribute("tenantAccounts", tenantAccountsForProperty(propertyId, currentUser));
         model.addAttribute("defaultStartDate", LocalDate.now());
         model.addAttribute("defaultEndDate", LocalDate.now().plusYears(1));
+        java.util.Set<UUID> busyTenantIds = new java.util.HashSet<>();
+        List<Tenant> availableTenantProfiles = availableTenantProfiles(properties, busyTenantIds);
+        model.addAttribute("tenantChoices",
+            TenantChoice.merge(availableTenantProfiles, busyTenantIds, activeTenantAccounts(availableTenantProfiles)));
+        model.addAttribute("selectedTenantProfileId", tenantProfileId);
 
         return "contracts/new";
     }
@@ -160,10 +165,12 @@ public class ContractUiController {
         @RequestParam UUID propertyId,
         @RequestParam UUID roomId,
         @RequestParam String primaryTenantFullName,
-        @RequestParam String primaryTenantIdCard,
+        @RequestParam(required = false) String primaryTenantIdCard,
         @RequestParam String primaryTenantPhone,
         @RequestParam(required = false) String primaryTenantEmail,
+        @RequestParam(required = false) UUID primaryTenantProfileId,
         @RequestParam(required = false) UUID primaryTenantUserId,
+        @RequestParam(defaultValue = "false") boolean createPrimaryTenantAccount,
         @RequestParam BigDecimal depositAmount,
         @RequestParam BigDecimal rentAmount,
         @RequestParam LocalDate startDate,
@@ -172,7 +179,8 @@ public class ContractUiController {
         RedirectAttributes redirectAttributes
     ) {
         try {
-            Contract contract = contractUseCase.createContract(new ContractUseCase.CreateContractCommand(
+            ContractUseCase.CreateContractResult result = contractUseCase.createContractWithDetails(
+                new ContractUseCase.CreateContractCommand(
                 propertyId,
                 roomId,
                 primaryTenantFullName,
@@ -184,14 +192,50 @@ public class ContractUiController {
                 rentAmount,
                 startDate,
                 endDate,
-                paymentDay
+                paymentDay,
+                primaryTenantProfileId,
+                createPrimaryTenantAccount
             ));
+            Contract contract = result.contract();
             redirectAttributes.addFlashAttribute("successMessage", "Đã tạo hợp đồng ở trạng thái bản nháp. Bạn có thể kích hoạt hợp đồng.");
+            if (result.temporaryPassword() != null) {
+                redirectAttributes.addFlashAttribute("successMessage", "Đã tạo hợp đồng nháp và tài khoản TENANT "
+                    + result.accountUsername() + " với mật khẩu tạm " + result.temporaryPassword()
+                    + " (chỉ hiển thị một lần, hãy gửi cho người thuê).");
+            } else if (result.accountUsername() != null) {
+                redirectAttributes.addFlashAttribute("successMessage", "Đã tạo hợp đồng nháp và liên kết tài khoản TENANT "
+                    + result.accountUsername() + ".");
+            }
             return "redirect:/contracts/" + contract.getId();
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
             return "redirect:/contracts/new?propertyId=" + propertyId + "&roomId=" + roomId;
         }
+    }
+
+    /** Hồ sơ người thuê của các nhà trọ; người đang có hợp đồng mở được ghi vào {@code busyTenantIds} để khóa trên form. */
+    private List<Tenant> availableTenantProfiles(List<Property> properties, java.util.Set<UUID> busyTenantIds) {
+        java.util.Map<UUID, Tenant> profiles = new java.util.LinkedHashMap<>();
+        for (Property property : properties) {
+            for (TenantUseCase.PropertyTenantView view : tenantUseCase.listTenants(property.id(), null, false, 0, 50).items()) {
+                profiles.putIfAbsent(view.tenant().id(), view.tenant());
+                if (view.hasActiveContract()) {
+                    busyTenantIds.add(view.tenant().id());
+                }
+            }
+        }
+        return profiles.values().stream().toList();
+    }
+
+    private List<User> activeTenantAccounts(List<Tenant> profiles) {
+        java.util.Set<UUID> availableLinkedUsers = profiles.stream().map(Tenant::userId)
+            .filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+        return userRepository.findByRole(UserRole.TENANT).stream()
+            .filter(user -> user.status() == User.UserStatus.ACTIVE)
+            .filter(user -> tenantRepository.findByUserId(user.id()).isEmpty()
+                || availableLinkedUsers.contains(user.id()))
+            .sorted(java.util.Comparator.comparing(User::fullName, String.CASE_INSENSITIVE_ORDER))
+            .toList();
     }
 
     @GetMapping("/{id}")
@@ -202,6 +246,8 @@ public class ContractUiController {
             Property property = propertyUseCase.getProperty(contract.getPropertyId());
             Room room = roomUseCase.getRoom(contract.getRoomId());
             Tenant primaryTenant = tenantRepository.findById(contract.getPrimaryTenantId()).orElse(null);
+            // Cùng một hàm đếm chỗ với tầng service, nên "Còn N chỗ" luôn khớp với việc chặn khi thêm người
+            long currentOccupantCount = contract.residingOccupantCount(LocalDate.now());
 
             java.util.Map<UUID, Tenant> occupantTenants = new java.util.HashMap<>();
             if (contract.getOccupants() != null) {
@@ -218,8 +264,7 @@ public class ContractUiController {
             if (canManageOccupants) {
                 try {
                     availableOccupants = contractUseCase.listAvailableOccupants(contract.getId());
-                    long residingCount = countResidingOccupants(contract, LocalDate.now());
-                    remainingOccupantSlots = Math.max(0, room.getMaxOccupants() - (int) residingCount);
+                    remainingOccupantSlots = Math.max(0, room.getMaxOccupants() - (int) currentOccupantCount);
                 } catch (DomainException ex) {
                     // Hide the quick picker when the contract or property is no longer eligible.
                 }
@@ -229,10 +274,31 @@ public class ContractUiController {
             model.addAttribute("contract", contract);
             model.addAttribute("property", property);
             model.addAttribute("room", room);
+            model.addAttribute("currentOccupantCount", currentOccupantCount);
+            model.addAttribute("remainingCapacity", Math.max(0, room.getMaxOccupants() - (int) currentOccupantCount));
             model.addAttribute("primaryTenant", primaryTenant);
             model.addAttribute("occupantTenants", occupantTenants);
             model.addAttribute("availableOccupants", availableOccupants);
             model.addAttribute("remainingOccupantSlots", remainingOccupantSlots);
+            List<Tenant> propertyTenantProfiles = new ArrayList<>();
+            java.util.Set<UUID> busyTenantIds = new java.util.HashSet<>();
+            boolean canAddOccupants = currentUser.role() == UserRole.ADMIN
+                || (currentUser.role() == UserRole.OWNER && currentUser.id().equals(property.ownerId()));
+            if (canAddOccupants) {
+                for (TenantUseCase.PropertyTenantView view
+                    : tenantUseCase.listTenants(contract.getPropertyId(), null, false, 0, 50).items()) {
+                    UUID profileId = view.tenant().id();
+                    if (contract.getOccupants().stream().noneMatch(occupant -> occupant.tenantId().equals(profileId))) {
+                        propertyTenantProfiles.add(view.tenant());
+                        if (view.hasActiveContract()) {
+                            busyTenantIds.add(profileId);
+                        }
+                    }
+                }
+            }
+            model.addAttribute("tenantChoices", canAddOccupants
+                ? TenantChoice.merge(propertyTenantProfiles, busyTenantIds, activeTenantAccounts(propertyTenantProfiles))
+                : List.<TenantChoice>of());
             // Hóa đơn và thanh toán là số liệu tiền của nhà trọ: quản trị viên, kỹ thuật viên và nhân viên không có
             // quyền thu tiền/quản lý hợp đồng không xem (#163); trang hợp đồng vẫn hiện, chỉ ẩn phần thanh toán.
             if (currentUser.role() != UserRole.ADMIN && currentUser.role() != UserRole.TECHNICIAN) {
@@ -321,52 +387,6 @@ public class ContractUiController {
             : null);
     }
 
-    private List<User> tenantAccountsForProperty(UUID propertyId, CurrentUser currentUser) {
-        if (propertyId == null || userRepository == null || currentUser == null) {
-            return List.of();
-        }
-
-        List<User> accounts;
-        if (currentUser.role() == UserRole.ADMIN) {
-            accounts = userRepository.findByRole(UserRole.TENANT);
-        } else {
-            Set<UUID> linkedTenantIds = tenantRepository.findLinks(propertyId).stream()
-                .filter(link -> link.hiddenAt() == null)
-                .map(TenantRepositoryPort.PropertyLink::tenantId)
-                .collect(java.util.stream.Collectors.toSet());
-            List<Tenant> tenants = tenantRepository.findAll();
-            Set<UUID> linkedUserIds = tenants.stream()
-                .filter(tenant -> linkedTenantIds.contains(tenant.id()))
-                .map(Tenant::userId)
-                .filter(java.util.Objects::nonNull)
-                .collect(java.util.stream.Collectors.toSet());
-            Set<UUID> alreadyLinkedUserIds = tenants.stream()
-                .map(Tenant::userId)
-                .filter(java.util.Objects::nonNull)
-                .collect(java.util.stream.Collectors.toSet());
-            accounts = userRepository.findByRole(UserRole.TENANT).stream()
-                .filter(user -> !alreadyLinkedUserIds.contains(user.id()) || linkedUserIds.contains(user.id()))
-                .toList();
-        }
-
-        return accounts.stream()
-            .filter(user -> user.role() == UserRole.TENANT && user.status() == User.UserStatus.ACTIVE)
-            .filter(user -> contractUseCase.getActiveContractForTenant(user.id()).isEmpty())
-            .distinct()
-            .sorted(Comparator.comparing(User::fullName, String.CASE_INSENSITIVE_ORDER))
-            .toList();
-    }
-
-    private long countResidingOccupants(Contract contract, LocalDate today) {
-        long count = contract.getOccupants().stream()
-            .filter(occupant -> occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(today))
-            .count();
-        boolean primaryCounted = contract.getOccupants().stream()
-            .anyMatch(occupant -> occupant.isPrimary() && occupant.tenantId().equals(contract.getPrimaryTenantId())
-                && (occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(today)));
-        return contract.isResiding() && !primaryCounted ? count + 1 : count;
-    }
-
     @PostMapping("/{id}/occupants")
     public String addOccupant(
         @PathVariable UUID id,
@@ -377,6 +397,8 @@ public class ContractUiController {
         @RequestParam(required = false) String permanentAddress,
         @RequestParam(required = false) LocalDate checkInDate,
         @RequestParam(defaultValue = "false") boolean createAccount,
+        @RequestParam(required = false) UUID tenantProfileId,
+        @RequestParam(required = false) UUID tenantUserId,
         RedirectAttributes redirectAttributes
     ) {
         try {
@@ -388,7 +410,9 @@ public class ContractUiController {
                 email,
                 permanentAddress,
                 checkInDate != null ? checkInDate : LocalDate.now(),
-                createAccount
+                createAccount,
+                tenantProfileId,
+                tenantUserId
             ));
             String message = "Thêm người thuê vào phòng thành công.";
             if (result.temporaryPassword() != null) {
@@ -421,6 +445,47 @@ public class ContractUiController {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }
         return "redirect:/contracts/" + id;
+    }
+
+    @PostMapping("/{id}/occupants/batch")
+    public String addOccupantsBatch(
+        @PathVariable UUID id,
+        @RequestParam(name = "fullNames", required = false) List<String> fullNames,
+        @RequestParam(name = "identityCardNumbers", required = false) List<String> identityCardNumbers,
+        @RequestParam(name = "phones", required = false) List<String> phones,
+        @RequestParam(name = "emails", required = false) List<String> emails,
+        @RequestParam(name = "permanentAddresses", required = false) List<String> permanentAddresses,
+        @RequestParam(name = "tenantProfileIds", required = false) List<String> tenantProfileIds,
+        @RequestParam(name = "tenantUserIds", required = false) List<String> tenantUserIds,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            // Spring biến một giá trị rỗng đơn lẻ thành danh sách rỗng (một dòng chọn hồ sơ có CCCD để trống), nên đọc từng
+            // cột theo vị trí thay vì so kích thước; thiếu thông tin thì AddOccupantCommand báo đúng trường còn thiếu
+            int rows = fullNames == null ? 0 : fullNames.size();
+            List<ContractUseCase.AddOccupantCommand> occupants = new ArrayList<>();
+            for (int index = 0; index < rows; index++) {
+                occupants.add(new ContractUseCase.AddOccupantCommand(id,
+                    fullNames.get(index), valueAt(identityCardNumbers, index), valueAt(phones, index),
+                    valueAt(emails, index), valueAt(permanentAddresses, index), LocalDate.now(), false,
+                    parseOptionalUuid(valueAt(tenantProfileIds, index)), parseOptionalUuid(valueAt(tenantUserIds, index))));
+            }
+            ContractUseCase.AddOccupantsResult result = contractUseCase.addOccupants(
+                new ContractUseCase.AddOccupantsCommand(id, occupants));
+            redirectAttributes.addFlashAttribute("successMessage", "Đã thêm " + result.results().size()
+                + " hồ sơ người thuê vào hợp đồng.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
+    }
+
+    private static String valueAt(List<String> values, int index) {
+        return values != null && index < values.size() ? values.get(index) : null;
+    }
+
+    private static UUID parseOptionalUuid(String value) {
+        return value == null || value.isBlank() ? null : UUID.fromString(value);
     }
 
     @PostMapping("/{id}/activate")

@@ -201,28 +201,56 @@
     <div class="card" style="margin-bottom: 20px;">
         <h2>Ảnh và video đính kèm</h2>
         <p th:if="${attachments.isEmpty()}" style="color: var(--text-secondary); font-size: 13px;">Chưa có tệp đính kèm.</p>
-        <ul th:if="${!attachments.isEmpty()}" style="list-style: none; padding: 0; margin: 0 0 12px 0;">
-            <li th:each="a : ${attachments}" style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
-                <a th:href="@{'/maintenance/' + ${ticket.getId()} + '/attachments/' + ${a.id()}}" target="_blank" rel="noopener noreferrer"
-                   th:text="${a.kind().name() == 'VIDEO' ? 'Video' : 'Ảnh'} + ' · ' + ${#numbers.formatDecimal(a.sizeBytes() / 1024.0, 0, 0)} + ' KB · ' + ${#temporals.format(a.createdAt(), 'dd/MM/yyyy HH:mm')}">Ảnh</a>
-                <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/attachments/' + ${a.id()} + '/delete'}" method="post"
-                      style="margin: 0;" onsubmit="return confirm('Xóa tệp này?');">
-                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <button type="submit" class="btn btn-sm btn-danger"
-                            th:if="${currentUser.role().name() != 'TECHNICIAN' and (currentUser.id() == a.uploadedBy() or currentUser.role().name() != 'TENANT')}">Xóa</button>
-                </form>
-            </li>
-        </ul>
+        <div th:if="${!attachments.isEmpty()}" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 14px;">
+            <div th:each="a : ${attachments}" style="border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; min-width: 0;">
+                <a th:if="${a.kind().name() == 'IMAGE'}"
+                   th:href="@{'/maintenance/' + ${ticket.getId()} + '/attachments/' + ${a.id()}}"
+                   class="maintenance-image-preview" style="display: block; cursor: zoom-in;">
+                    <img th:src="@{'/maintenance/' + ${ticket.getId()} + '/attachments/' + ${a.id()}}"
+                         th:alt="${'Ảnh đính kèm phiếu ' + ticket.getTitle()}"
+                         style="width: 100%; height: 120px; object-fit: cover; border-radius: 5px;">
+                </a>
+                <video th:if="${a.kind().name() == 'VIDEO'}" controls preload="metadata"
+                       style="width: 100%; height: 120px; background: #111; border-radius: 5px;">
+                    <source th:src="@{'/maintenance/' + ${ticket.getId()} + '/attachments/' + ${a.id()}}" th:type="${a.contentType()}">
+                    Trình duyệt không hỗ trợ phát video này.
+                </video>
+                <div style="display: flex; justify-content: space-between; gap: 6px; align-items: center; margin-top: 6px;">
+                    <small style="color: var(--text-secondary);"
+                           th:text="${a.kind().name() == 'VIDEO' ? 'Video' : 'Ảnh'} + ' · ' + ${#numbers.formatDecimal(a.sizeBytes() / 1024.0, 0, 0)} + ' KB'">Ảnh</small>
+                    <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/attachments/' + ${a.id()} + '/delete'}" method="post"
+                          style="margin: 0;" onsubmit="return confirm('Xóa tệp này?');">
+                        <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                        <button type="submit" class="btn btn-sm btn-danger"
+                                th:if="${currentUser.role().name() != 'TECHNICIAN' and (currentUser.id() == a.uploadedBy() or currentUser.role().name() != 'TENANT')}">Xóa</button>
+                    </form>
+                </div>
+            </div>
+        </div>
         <form th:if="${currentUser.role().name() != 'TECHNICIAN' and !ticket.isWorkFinished()}"
-              th:action="@{'/maintenance/' + ${ticket.getId()} + '/attachments'}" method="post" enctype="multipart/form-data"
-              style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+              th:action="@{'/maintenance/' + ${ticket.getId()} + '/attachments'}" method="post" enctype="multipart/form-data">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-            <input type="file" name="file" class="form-control" style="max-width: 320px;" required
-                   accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime">
-            <button type="submit" class="btn btn-secondary">Đính kèm</button>
-            <span style="font-size: 12px; color: var(--text-secondary);">Tối đa 5 ảnh và 1 video ngắn (≤ 10 MB mỗi tệp).</span>
+            <div th:replace="~{fragments/attachment-picker :: attachmentPicker(
+                    ${#lists.size(attachments.?[kind().name() == 'IMAGE'])},
+                    ${#lists.size(attachments.?[kind().name() == 'VIDEO'])}, true)}"></div>
+            <button type="submit" class="btn btn-secondary" style="margin-top: 10px;">Đính kèm</button>
         </form>
     </div>
+    <dialog id="maintenanceImageZoom" style="max-width: 92vw; max-height: 92vh; padding: 12px; border: 0; border-radius: 8px;">
+        <button type="button" class="btn btn-sm btn-secondary" style="float: right;" onclick="document.getElementById('maintenanceImageZoom').close()">Đóng</button>
+        <img id="maintenanceImageZoomTarget" alt="Ảnh đính kèm phóng to" style="display: block; max-width: 88vw; max-height: 82vh; object-fit: contain; margin-top: 8px;">
+    </dialog>
+    <script>
+        const imageZoomDialog = document.getElementById('maintenanceImageZoom');
+        const imageZoomTarget = document.getElementById('maintenanceImageZoomTarget');
+        document.querySelectorAll('.maintenance-image-preview img').forEach(image => {
+            image.addEventListener('click', event => {
+                event.preventDefault();
+                imageZoomTarget.src = image.src;
+                imageZoomDialog.showModal();
+            });
+        });
+    </script>
 
     <!-- Owner/staff: giao kỹ thuật viên hoặc từ chối phiếu chưa xử lý -->
     <div th:if="${(currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN') and (ticket.getStatus().name() == 'REPORTED' or ticket.getStatus().name() == 'ASSIGNED')}" class="card" style="margin-bottom: 20px;">
