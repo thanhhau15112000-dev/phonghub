@@ -2,6 +2,7 @@ package com.phonghub.application;
 
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
@@ -19,6 +20,8 @@ import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
 import com.phonghub.domain.model.ContractStatus;
+import com.phonghub.domain.model.Handover;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
@@ -43,6 +46,7 @@ class ContractServiceCheckOutOccupantUnitTest {
     private InMemoryPropertyRepository propertyRepo;
     private InMemoryRoomRepository roomRepo;
     private InMemoryContractRepository contractRepo;
+    private InMemoryHandoverRepository handoverRepo;
     private InMemoryTenantRepository tenantRepo;
     private InMemoryUserRepository userRepo;
     private InMemoryStaffPropertyAssignmentRepository assignmentRepo;
@@ -64,6 +68,7 @@ class ContractServiceCheckOutOccupantUnitTest {
         propertyRepo = new InMemoryPropertyRepository();
         roomRepo = new InMemoryRoomRepository();
         contractRepo = new InMemoryContractRepository();
+        handoverRepo = new InMemoryHandoverRepository();
         tenantRepo = new InMemoryTenantRepository();
         userRepo = new InMemoryUserRepository();
         assignmentRepo = new InMemoryStaffPropertyAssignmentRepository();
@@ -85,7 +90,9 @@ class ContractServiceCheckOutOccupantUnitTest {
             null,
             authAdapter,
             authService,
-            auditPort
+            auditPort,
+            handoverRepo,
+            null
         );
 
         property = propertyRepo.save(new Property(
@@ -136,7 +143,7 @@ class ContractServiceCheckOutOccupantUnitTest {
             LocalDate.now().plusMonths(6),
             5
         ));
-        contractService.activateContract(activeContract.getId());
+        activateWithApprovedCheckIn(activeContract.getId());
 
         // Add co-tenant
         coTenant = tenantRepo.save(Tenant.create(
@@ -159,6 +166,14 @@ class ContractServiceCheckOutOccupantUnitTest {
             false
         )).occupant();
         activeContract = contractRepo.findById(activeContract.getId()).orElseThrow();
+    }
+
+    private void activateWithApprovedCheckIn(UUID contractId) {
+        UUID actorId = authAdapter.getCurrentUser().id();
+        Handover draft = Handover.draft(contractId, HandoverType.CHECK_IN, BigDecimal.ZERO, BigDecimal.ZERO,
+            "Phòng đã kiểm tra", null, actorId);
+        handoverRepo.save(draft.send("terms-hash", null, null, actorId).tenantConfirm(actorId).approve(actorId));
+        contractService.activateContract(contractId);
     }
 
     @Test

@@ -2,16 +2,20 @@ package com.phonghub.adapter.in.web;
 
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.InvoiceUseCase;
+import com.phonghub.application.port.in.HandoverUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.in.TenantUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
+import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.config.SepayProperties;
 import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.exception.PropertyNotFoundException;
+import com.phonghub.domain.exception.RoomNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
@@ -49,35 +53,41 @@ public class ContractUiController {
     private final PropertyUseCase propertyUseCase;
     private final RoomUseCase roomUseCase;
     private final RoomRepositoryPort roomRepository;
+    private final PropertyRepositoryPort propertyRepository;
     private final TenantRepositoryPort tenantRepository;
     private final UserRepositoryPort userRepository;
     private final CurrentUserPort currentUserPort;
     private final TenantUseCase tenantUseCase;
     private final InvoiceUseCase invoiceUseCase;
     private final SepayProperties sepayProperties;
+    private final HandoverUseCase handoverUseCase;
 
     public ContractUiController(
         ContractUseCase contractUseCase,
         PropertyUseCase propertyUseCase,
         RoomUseCase roomUseCase,
         RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
         TenantRepositoryPort tenantRepository,
         UserRepositoryPort userRepository,
         CurrentUserPort currentUserPort,
         TenantUseCase tenantUseCase,
         InvoiceUseCase invoiceUseCase,
-        SepayProperties sepayProperties
+        SepayProperties sepayProperties,
+        HandoverUseCase handoverUseCase
     ) {
         this.contractUseCase = contractUseCase;
         this.propertyUseCase = propertyUseCase;
         this.roomUseCase = roomUseCase;
         this.roomRepository = roomRepository;
+        this.propertyRepository = propertyRepository;
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
         this.currentUserPort = currentUserPort;
         this.tenantUseCase = tenantUseCase;
         this.invoiceUseCase = invoiceUseCase;
         this.sepayProperties = sepayProperties;
+        this.handoverUseCase = handoverUseCase;
     }
 
     @GetMapping
@@ -199,9 +209,27 @@ public class ContractUiController {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         try {
             Contract contract = contractUseCase.getContract(id);
-            Property property = propertyUseCase.getProperty(contract.getPropertyId());
-            Room room = roomUseCase.getRoom(contract.getRoomId());
+            // getContract has already checked that a tenant is the primary tenant or a linked occupant.
+            // A DRAFT contract is not a residing contract, so the usual property/room read use cases reject
+            // its tenant even though they need to review the check-in before activation.
+            Property property = currentUser.role() == UserRole.TENANT
+                ? propertyRepository.findById(contract.getPropertyId())
+                    .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + contract.getPropertyId()))
+                : propertyUseCase.getProperty(contract.getPropertyId());
+            Room room = currentUser.role() == UserRole.TENANT
+                ? roomRepository.findById(contract.getRoomId())
+                    .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + contract.getRoomId()))
+                : roomUseCase.getRoom(contract.getRoomId());
             Tenant primaryTenant = tenantRepository.findById(contract.getPrimaryTenantId()).orElse(null);
+
+            com.phonghub.application.port.in.HandoverUseCase.HandoverDetails checkIn = null;
+            try {
+                checkIn = handoverUseCase.get(com.phonghub.domain.model.HandoverType.CHECK_IN, id);
+            } catch (com.phonghub.domain.exception.HandoverNotFoundException ignored) {
+                // Hợp đồng mới chưa có biên bản check-in.
+            } catch (UnauthorizedPropertyAccessException ignored) {
+                // Người ở cùng có thể xem hợp đồng nhưng không xem bước xác nhận của người thuê chính.
+            }
 
             java.util.Map<UUID, Tenant> occupantTenants = new java.util.HashMap<>();
             if (contract.getOccupants() != null) {
@@ -227,6 +255,7 @@ public class ContractUiController {
 
             model.addAttribute("currentUser", currentUser);
             model.addAttribute("contract", contract);
+            model.addAttribute("checkIn", checkIn);
             model.addAttribute("property", property);
             model.addAttribute("room", room);
             model.addAttribute("primaryTenant", primaryTenant);
@@ -426,8 +455,9 @@ public class ContractUiController {
     @PostMapping("/{id}/activate")
     public String activateContract(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
         try {
-            contractUseCase.activateContract(id);
-            redirectAttributes.addFlashAttribute("successMessage", "Đã kích hoạt hợp đồng. Phòng hiện ở trạng thái đang thuê.");
+            handoverUseCase.prepareCheckIn(id);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã mở biên bản check-in. Hợp đồng chỉ có hiệu lực sau khi người thuê xác nhận và người quản lý duyệt.");
+            return "redirect:/contracts/" + id + "/handover";
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }

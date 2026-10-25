@@ -31,6 +31,11 @@ public class InMemoryHandoverRepository implements HandoverRepositoryPort {
         return Optional.ofNullable(store.get(new Key(contractId, type)));
     }
 
+    @Override
+    public synchronized void delete(UUID handoverId) {
+        store.entrySet().removeIf(entry -> entry.getValue().id().equals(handoverId));
+    }
+
     public void clear() {
         store.clear();
     }

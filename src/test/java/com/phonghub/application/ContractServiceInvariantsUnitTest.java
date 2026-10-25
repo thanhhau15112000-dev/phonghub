@@ -3,6 +3,7 @@ package com.phonghub.application;
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
@@ -16,8 +17,11 @@ import com.phonghub.application.service.RoomService;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
 import com.phonghub.domain.exception.InvalidRoomStateException;
+import com.phonghub.domain.exception.InvalidContractStateException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
+import com.phonghub.domain.model.Handover;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.Property;
@@ -41,6 +45,7 @@ class ContractServiceInvariantsUnitTest {
     private InMemoryContractRepository contractRepo;
     private InMemoryTenantRepository tenantRepo;
     private InMemoryMaintenanceTicketRepository ticketRepo;
+    private InMemoryHandoverRepository handoverRepo;
     private InMemoryStaffPropertyAssignmentRepository assignmentRepo;
     private LocalDemoAuthenticationAdapter authAdapter;
     private AuthorizationService authService;
@@ -59,6 +64,7 @@ class ContractServiceInvariantsUnitTest {
         contractRepo = new InMemoryContractRepository();
         tenantRepo = new InMemoryTenantRepository();
         ticketRepo = new InMemoryMaintenanceTicketRepository();
+        handoverRepo = new InMemoryHandoverRepository();
         assignmentRepo = new InMemoryStaffPropertyAssignmentRepository();
 
         authAdapter = new LocalDemoAuthenticationAdapter();
@@ -66,12 +72,20 @@ class ContractServiceInvariantsUnitTest {
 
         authService = new AuthorizationService(assignmentRepo, propertyRepo, tenantRepo, contractRepo);
 
-        contractService = new ContractService(contractRepo, roomRepo, propertyRepo, tenantRepo, authAdapter, authService);
+        contractService = new ContractService(contractRepo, roomRepo, propertyRepo, tenantRepo, authAdapter, authService, handoverRepo);
         maintenanceService = new MaintenanceService(ticketRepo, roomRepo, tenantRepo, authAdapter, authService);
         roomService = new RoomService(roomRepo, propertyRepo, ticketRepo, contractRepo, tenantRepo, authAdapter, authService);
 
         property = propertyRepo.save(new Property(UUID.randomUUID(), "Test Prop", "Test Addr", "", 5, Instant.now()));
         room = roomRepo.save(Room.create(property.id(), "R101", 1, new BigDecimal("25.0"), new BigDecimal("3000000"), 2));
+    }
+
+    private Contract activateWithApprovedCheckIn(UUID contractId) {
+        Handover draft = Handover.draft(contractId, HandoverType.CHECK_IN, BigDecimal.ZERO, BigDecimal.ZERO,
+            "Phòng đã kiểm tra", null, authAdapter.getCurrentUser().id());
+        handoverRepo.save(draft.send("terms-hash", null, null, authAdapter.getCurrentUser().id())
+            .tenantConfirm(authAdapter.getCurrentUser().id()).approve(authAdapter.getCurrentUser().id()));
+        return contractService.activateContract(contractId);
     }
 
     @Test
@@ -88,13 +102,22 @@ class ContractServiceInvariantsUnitTest {
         assertEquals(ContractStatus.DRAFT, contract.getStatus());
         assertEquals(RoomStatus.AVAILABLE, roomRepo.findById(room.getId()).get().getStatus());
 
-        contractService.activateContract(contract.getId());
+        activateWithApprovedCheckIn(contract.getId());
 
         Contract updatedContract = contractRepo.findById(contract.getId()).get();
         assertEquals(ContractStatus.ACTIVE, updatedContract.getStatus());
 
         Room updatedRoom = roomRepo.findById(room.getId()).get();
         assertEquals(RoomStatus.OCCUPIED, updatedRoom.getStatus());
+    }
+
+    @Test
+    void activationRequiresTenantConfirmedAndApprovedCheckIn() {
+        Contract contract = draft(room, "NO-CHECKIN");
+
+        assertThrows(InvalidContractStateException.class, () -> contractService.activateContract(contract.getId()));
+        assertEquals(ContractStatus.DRAFT, contractRepo.findById(contract.getId()).orElseThrow().getStatus());
+        assertEquals(RoomStatus.AVAILABLE, roomRepo.findById(room.getId()).orElseThrow().getStatus());
     }
 
     @Test
@@ -105,7 +128,7 @@ class ContractServiceInvariantsUnitTest {
             new BigDecimal("3000000"), new BigDecimal("3000000"),
             LocalDate.now(), LocalDate.now().plusMonths(6), 5
         ));
-        contractService.activateContract(contract1.getId());
+        activateWithApprovedCheckIn(contract1.getId());
 
         // Creating another contract for this room must fail
         assertThrows(DuplicateActiveContractException.class, () ->
@@ -125,7 +148,7 @@ class ContractServiceInvariantsUnitTest {
             new BigDecimal("3000000"), new BigDecimal("3000000"),
             LocalDate.now(), LocalDate.now().plusMonths(6), 5
         ));
-        contractService.activateContract(contract.getId());
+        activateWithApprovedCheckIn(contract.getId());
 
         contractService.terminateContract(contract.getId(), false);
 
@@ -151,10 +174,10 @@ class ContractServiceInvariantsUnitTest {
         Contract first = draft(room, "ID1");
         Room secondRoom = anotherRoom();
         Contract second = draft(secondRoom, "ID1");
-        contractService.activateContract(first.getId());
+        activateWithApprovedCheckIn(first.getId());
 
         assertThrows(DuplicateActiveContractException.class,
-            () -> contractService.activateContract(second.getId()));
+            () -> activateWithApprovedCheckIn(second.getId()));
         assertEquals(ContractStatus.DRAFT, contractRepo.findById(second.getId()).orElseThrow().getStatus());
         assertEquals(RoomStatus.AVAILABLE, roomRepo.findById(secondRoom.getId()).orElseThrow().getStatus());
     }
@@ -163,12 +186,12 @@ class ContractServiceInvariantsUnitTest {
     void activationRejectsPrimaryTenantAlreadyResidingAsCoOccupant() {
         Contract first = draft(room, "ID1");
         Contract second = draft(anotherRoom(), "ID2");
-        first = contractService.activateContract(first.getId());
+        first = activateWithApprovedCheckIn(first.getId());
         first.addOccupant(second.getPrimaryTenantId(), false, LocalDate.now());
         contractRepo.save(first);
 
         assertThrows(DuplicateActiveContractException.class,
-            () -> contractService.activateContract(second.getId()));
+            () -> activateWithApprovedCheckIn(second.getId()));
         assertEquals(ContractStatus.DRAFT, contractRepo.findById(second.getId()).orElseThrow().getStatus());
     }
 
@@ -176,10 +199,10 @@ class ContractServiceInvariantsUnitTest {
     void terminatedContractDoesNotPreventActivationForSameTenant() {
         Contract first = draft(room, "ID1");
         Contract second = draft(anotherRoom(), "ID1");
-        contractService.activateContract(first.getId());
+        activateWithApprovedCheckIn(first.getId());
         contractService.terminateContract(first.getId(), false);
 
-        Contract activated = contractService.activateContract(second.getId());
+        Contract activated = activateWithApprovedCheckIn(second.getId());
         assertEquals(ContractStatus.ACTIVE, activated.getStatus());
     }
 
@@ -187,12 +210,12 @@ class ContractServiceInvariantsUnitTest {
     void checkedOutCoOccupantCanActivateAnotherContract() {
         Contract first = draft(room, "ID1");
         Contract second = draft(anotherRoom(), "ID2");
-        first = contractService.activateContract(first.getId());
+        first = activateWithApprovedCheckIn(first.getId());
         first.addOccupant(second.getPrimaryTenantId(), false, LocalDate.now());
         first.checkOutOccupant(second.getPrimaryTenantId(), LocalDate.now());
         contractRepo.save(first);
 
-        Contract activated = contractService.activateContract(second.getId());
+        Contract activated = activateWithApprovedCheckIn(second.getId());
         assertEquals(ContractStatus.ACTIVE, activated.getStatus());
     }
 
@@ -204,7 +227,7 @@ class ContractServiceInvariantsUnitTest {
             new BigDecimal("3000000"), new BigDecimal("3000000"),
             LocalDate.now(), LocalDate.now().plusMonths(6), 5
         ));
-        contractService.activateContract(contract.getId());
+        activateWithApprovedCheckIn(contract.getId());
 
         contractService.terminateContract(contract.getId(), true);
 

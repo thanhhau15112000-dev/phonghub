@@ -33,10 +33,10 @@
 
             <!-- Các nút thao tác -->
             <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" class="inline-actions">
-                <!-- Nút kích hoạt khi ở trạng thái bản nháp -->
+            <!-- Bắt đầu quy trình check-in; hợp đồng chỉ có hiệu lực sau khi duyệt biên bản. -->
                 <form th:if="${contract.getStatus().name() == 'DRAFT'}" th:action="@{'/contracts/' + ${contract.getId()} + '/activate'}" method="post">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <button type="submit" class="btn btn-primary">Kích hoạt hợp đồng (chuyển phòng sang đang thuê)</button>
+                    <button type="submit" class="btn btn-primary" th:text="${checkIn == null} ? 'Lập biên bản check-in' : 'Mở biên bản check-in'">Lập biên bản check-in</button>
                 </form>
 
                 <!-- Hợp đồng nháp sửa / hủy được (#89); hủy giữ lại bản ghi với trạng thái "Đã hủy" -->
@@ -56,6 +56,14 @@
                         onclick="document.getElementById('terminateModal').showModal()">Chấm dứt ngay…</button>
             </div>
         </div>
+        <section th:if="${contract.getStatus().name() == 'DRAFT'}" style="margin-top: 14px;">
+            <h2 style="font-size: 16px; margin-bottom: 8px;">Tiến độ nhận phòng</h2>
+            <p th:if="${checkIn == null}" style="margin: 0;">Chưa lập biên bản check-in.</p>
+            <p th:if="${checkIn != null and checkIn.handover().status().name() == 'DRAFT' or checkIn != null and checkIn.handover().status().name() == 'REJECTED'}" style="margin: 0;">Bước hiện tại: hoàn thiện biên bản check-in và gửi người thuê.</p>
+            <p th:if="${checkIn != null and checkIn.handover().status().name() == 'PENDING_TENANT'}" style="margin: 0;">Bước hiện tại: chờ người thuê chính xác nhận.</p>
+            <p th:if="${checkIn != null and checkIn.handover().status().name() == 'PENDING_APPROVAL'}" style="margin: 0;">Bước hiện tại: chờ người quản lý duyệt.</p>
+            <a th:if="${checkIn != null}" th:href="@{'/contracts/' + ${contract.getId()} + '/handover'}" class="btn btn-sm btn-secondary" style="margin-top: 8px;">Mở biên bản</a>
+        </section>
     </div>
 
     <!-- Thông tin hợp đồng -->

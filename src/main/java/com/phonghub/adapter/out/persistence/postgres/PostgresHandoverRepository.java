@@ -119,6 +119,11 @@ public class PostgresHandoverRepository implements HandoverRepositoryPort {
     }
 
     @Override
+    public void delete(UUID handoverId) {
+        jdbcTemplate.update("DELETE FROM handovers WHERE id = :id", Map.of("id", handoverId));
+    }
+
+    @Override
     public Optional<Handover> find(UUID contractId, HandoverType type) {
         List<Handover> rows = jdbcTemplate.query(
             "SELECT * FROM handovers WHERE contract_id = :contractId AND type = :type",

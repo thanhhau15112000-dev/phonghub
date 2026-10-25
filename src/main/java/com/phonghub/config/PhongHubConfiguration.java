@@ -246,12 +246,13 @@ public class PhongHubConfiguration {
         AuditPort auditPort,
         StorageProperties storageProperties,
         NotificationDispatcher notificationDispatcher,
-        RoomConditionRepositoryPort roomConditionRepository
+        RoomConditionRepositoryPort roomConditionRepository,
+        com.phonghub.application.port.in.RoomAssetUseCase roomAssetUseCase
     ) {
         HandoverService service = new HandoverService(
             handoverRepo, photoRepo, itemRepo, rulesRepo, contractRepo, assetRepo, tenantRepo, documentRepo,
             contractUseCase, fileStoragePort, currentUserPort, authorizationService, auditPort, storageProperties.getMaxFileSizeBytes(),
-            notificationDispatcher, roomConditionRepository
+            notificationDispatcher, roomConditionRepository, roomAssetUseCase
         );
         return new TransactionalHandoverUseCase(service);
     }
@@ -390,12 +391,26 @@ public class PhongHubConfiguration {
         IdentityProviderPort identityProviderPort,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
-        AuditPort auditPort
+        AuditPort auditPort,
+        HandoverRepositoryPort handoverRepo,
+        com.phonghub.application.port.out.DraftHandoverCleanupPort draftHandoverCleanupPort
     ) {
         ContractService service = new ContractService(
-            contractRepo, roomRepo, propertyRepo, tenantRepo, userRepo, identityProviderPort, currentUserPort, authorizationService, auditPort
+            contractRepo, roomRepo, propertyRepo, tenantRepo, userRepo, identityProviderPort, currentUserPort, authorizationService,
+            auditPort, handoverRepo, draftHandoverCleanupPort
         );
         return new TransactionalContractUseCase(service);
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.DraftHandoverCleanupPort draftHandoverCleanupPort(
+        HandoverRepositoryPort handoverRepo,
+        HandoverPhotoRepositoryPort photoRepo,
+        HandoverItemRepositoryPort itemRepo,
+        FileStoragePort fileStoragePort
+    ) {
+        return new com.phonghub.application.service.HandoverDraftCleanupService(
+            handoverRepo, photoRepo, itemRepo, fileStoragePort);
     }
 
     @Bean

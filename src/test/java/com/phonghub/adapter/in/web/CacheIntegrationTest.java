@@ -13,7 +13,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.jayway.jsonpath.JsonPath;
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.config.PhongHubCaches;
+import com.phonghub.domain.model.Handover;
+import com.phonghub.domain.model.HandoverType;
 import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,6 +37,7 @@ class CacheIntegrationTest extends SeededWebTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private PhongHubCaches caches;
+    @Autowired private InMemoryHandoverRepository handovers;
 
     /** Dữ liệu mẫu được nạp lại thẳng vào repository (không qua service) nên phải xóa cache giữa các test. */
     @BeforeEach
@@ -111,7 +115,13 @@ class CacheIntegrationTest extends SeededWebTest {
                     """.formatted(DataSeeder.PROP_1_ID, DataSeeder.ROOM_104_ID, LocalDate.now(),
                     LocalDate.now().plusMonths(6))))
             .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-        mockMvc.perform(post("/api/contracts/" + JsonPath.read(created, "$.id") + "/activate")
+        java.util.UUID contractId = java.util.UUID.fromString(JsonPath.read(created, "$.id"));
+        Handover checkIn = Handover.draft(contractId, HandoverType.CHECK_IN, java.math.BigDecimal.ZERO,
+            java.math.BigDecimal.ZERO, "Phòng đã kiểm tra", null, java.util.UUID.fromString(OWNER_1))
+            .send("terms-hash", null, null, java.util.UUID.fromString(OWNER_1))
+            .tenantConfirm(java.util.UUID.fromString(OWNER_1)).approve(java.util.UUID.fromString(OWNER_1));
+        handovers.save(checkIn);
+        mockMvc.perform(post("/api/contracts/" + contractId + "/activate")
                 .header("X-User-Id", OWNER_1))
             .andExpect(status().isOk());
 

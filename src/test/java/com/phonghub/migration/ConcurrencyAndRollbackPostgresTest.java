@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPaymentRepository;
@@ -19,6 +20,7 @@ import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.application.port.in.SepayWebhookUseCase.SepayWebhookCommand;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.DemoFixturePort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.application.port.out.TenantDataProtectionPort;
 import com.phonghub.application.service.AuthorizationService;
@@ -30,6 +32,8 @@ import com.phonghub.domain.exception.InvalidRoomStateException;
 import com.phonghub.domain.exception.OptimisticLockConflictException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
+import com.phonghub.domain.model.Handover;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.InvoiceStatus;
 import com.phonghub.domain.model.InvoiceType;
@@ -230,11 +234,14 @@ class ConcurrencyAndRollbackPostgresTest {
         Tenant b = tenants.save(Tenant.create(null, "Người Thuê B", "079201007772", "0907770002", null, null));
         Contract first = contracts.save(draft(room, a));
         Contract second = contracts.save(draft(room, b));
+        PostgresHandoverRepository handovers = new PostgresHandoverRepository(jdbc);
+        handovers.save(approvedCheckIn(first.getId()));
+        handovers.save(approvedCheckIn(second.getId()));
 
         CurrentUserPort currentUser = mock(CurrentUserPort.class);
         when(currentUser.getCurrentUser()).thenReturn(new CurrentUser(UUID.randomUUID(), "admin@x", "Admin", UserRole.ADMIN));
         ContractService service = new ContractService(contracts, rooms, new PostgresPropertyRepository(jdbc), tenants,
-            null, null, currentUser, mock(AuthorizationService.class), event -> { });
+            null, null, currentUser, mock(AuthorizationService.class), event -> { }, handovers);
 
         List<Object> results = runConcurrently(List.of(
             () -> tx.execute(s -> service.activateContract(first.getId())),
@@ -256,6 +263,15 @@ class ConcurrencyAndRollbackPostgresTest {
     private Contract draft(Room room, Tenant tenant) {
         return Contract.create(room.getPropertyId(), room.getId(), tenant.id(), new BigDecimal("1000000"),
             new BigDecimal("3000000"), LocalDate.now(), LocalDate.now().plusMonths(6), 5);
+    }
+
+    private static Handover approvedCheckIn(UUID contractId) {
+        UUID actor = DemoFixturePort.ADMIN_ID;
+        return Handover.draft(contractId, HandoverType.CHECK_IN, BigDecimal.ZERO, BigDecimal.ZERO,
+            "Tình trạng đã ghi nhận", null, actor)
+            .send("terms", null, null, actor)
+            .tenantConfirm(actor)
+            .approve(actor);
     }
 
     /**

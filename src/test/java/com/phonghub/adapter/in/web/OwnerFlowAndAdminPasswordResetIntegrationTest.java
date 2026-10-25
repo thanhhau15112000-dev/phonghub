@@ -3,6 +3,7 @@ package com.phonghub.adapter.in.web;
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
@@ -11,6 +12,7 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
@@ -64,6 +66,9 @@ class OwnerFlowAndAdminPasswordResetIntegrationTest {
     private InMemoryContractRepository contractRepository;
 
     @Autowired
+    private InMemoryHandoverRepository handoverRepository;
+
+    @Autowired
     private InMemoryMaintenanceTicketRepository ticketRepository;
 
     @BeforeEach
@@ -74,6 +79,7 @@ class OwnerFlowAndAdminPasswordResetIntegrationTest {
         roomRepository.clear();
         tenantRepository.clear();
         contractRepository.clear();
+        handoverRepository.clear();
         ticketRepository.clear();
 
         DataSeeder.seedAll(
@@ -210,7 +216,7 @@ class OwnerFlowAndAdminPasswordResetIntegrationTest {
     }
 
     @Test
-    @DisplayName("Owner can execute full contract lifecycle: Create (draft) -> Activate -> Terminate")
+    @DisplayName("Owner starts check-in from a draft contract and cancelling it removes the draft handover")
     void testOwnerContractLifecycleEndToEnd() throws Exception {
         // 1. Create contract on Room 104 as Owner 1
         mockMvc.perform(post("/contracts")
@@ -238,37 +244,37 @@ class OwnerFlowAndAdminPasswordResetIntegrationTest {
 
         assertEquals(ContractStatus.DRAFT, createdContract.getStatus());
 
-        // 2. View draft contract page as Owner 1, verify "Kích hoạt hợp đồng" button
+        // 2. View draft contract page as Owner 1, verify the check-in action.
         mockMvc.perform(get("/contracts/" + createdContract.getId())
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Kích hoạt hợp đồng")));
+            .andExpect(content().string(containsString("Lập biên bản check-in")));
 
-        // 3. Activate contract as Owner 1
+        // 3. Start check-in as Owner 1; the contract remains DRAFT.
         mockMvc.perform(post("/contracts/" + createdContract.getId() + "/activate")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().is3xxRedirection())
-            .andExpect(redirectedUrl("/contracts/" + createdContract.getId()))
+            .andExpect(redirectedUrl("/contracts/" + createdContract.getId() + "/handover"))
             .andExpect(flash().attributeExists("successMessage"));
 
-        Contract activatedContract = contractRepository.findById(createdContract.getId()).orElseThrow();
-        assertEquals(ContractStatus.ACTIVE, activatedContract.getStatus());
-        Room roomAfterActivation = roomRepository.findById(DataSeeder.ROOM_104_ID).orElseThrow();
-        assertEquals(RoomStatus.OCCUPIED, roomAfterActivation.getStatus());
+        Contract awaitingCheckIn = contractRepository.findById(createdContract.getId()).orElseThrow();
+        assertEquals(ContractStatus.DRAFT, awaitingCheckIn.getStatus());
+        assertEquals(HandoverType.CHECK_IN, handoverRepository.find(createdContract.getId(), HandoverType.CHECK_IN)
+            .orElseThrow().type());
+        Room roomWhilePending = roomRepository.findById(DataSeeder.ROOM_104_ID).orElseThrow();
+        assertEquals(RoomStatus.AVAILABLE, roomWhilePending.getStatus());
 
-        // 4. Terminate contract as Owner 1
-        mockMvc.perform(post("/contracts/" + createdContract.getId() + "/terminate")
+        // 4. Cancelling a draft contract also removes its unsubmitted handover.
+        mockMvc.perform(post("/contracts/" + createdContract.getId() + "/cancel")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
-                .param("requiresMaintenance", "false")
-                .param("reason", "Người thuê chuyển đi trước hạn"))
+        )
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/contracts/" + createdContract.getId()))
             .andExpect(flash().attributeExists("successMessage"));
 
-        Contract terminatedContract = contractRepository.findById(createdContract.getId()).orElseThrow();
-        assertEquals(ContractStatus.TERMINATED, terminatedContract.getStatus());
-        Room roomAfterTermination = roomRepository.findById(DataSeeder.ROOM_104_ID).orElseThrow();
-        assertEquals(RoomStatus.AVAILABLE, roomAfterTermination.getStatus());
+        Contract cancelledContract = contractRepository.findById(createdContract.getId()).orElseThrow();
+        assertEquals(ContractStatus.CANCELLED, cancelledContract.getStatus());
+        org.junit.jupiter.api.Assertions.assertTrue(handoverRepository.find(createdContract.getId(), HandoverType.CHECK_IN).isEmpty());
     }
 
     @Test

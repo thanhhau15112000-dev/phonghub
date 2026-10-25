@@ -13,13 +13,19 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Biên bản bàn giao của hợp đồng. Check-in diễn ra sau khi hợp đồng đã ACTIVE và duyệt không đổi trạng thái hợp đồng.
+ * Biên bản bàn giao của hợp đồng. Check-in được lập từ hợp đồng nháp; duyệt check-in sẽ kích hoạt hợp đồng.
  * Check-out cần check-in đã duyệt; duyệt check-out (owner chốt khấu trừ) kết thúc hợp đồng và trả phòng trong cùng
  * một transaction.
  */
 public interface HandoverUseCase {
 
+    /** Chuẩn bị biên bản check-in từ hiện trạng gần nhất; gọi lại sẽ trả biên bản đang có. */
+    Handover prepareCheckIn(UUID contractId);
+
     Handover create(HandoverType type, HandoverCommand command);
+
+    /** Thêm tài sản vào kho phòng và bản chụp check-in đang nháp. */
+    HandoverItem addCheckInAsset(UUID contractId, NewAssetCommand command);
 
     Handover update(HandoverType type, HandoverCommand command);
 
@@ -53,6 +59,9 @@ public interface HandoverUseCase {
 
     PropertyHouseRules getHouseRules(UUID propertyId);
 
+    /** Read house rules through a contract already visible to the current tenant, including a DRAFT check-in. */
+    PropertyHouseRules getHouseRulesForContract(UUID contractId);
+
     PropertyHouseRules saveHouseRules(UUID propertyId, String content);
 
     record HandoverCommand(
@@ -64,6 +73,8 @@ public interface HandoverUseCase {
     ) {}
 
     record ItemCommand(AssetStatus status, String conditionNote, BigDecimal deductionAmount) {}
+
+    record NewAssetCommand(String name, int quantity, AssetStatus status, String note, BigDecimal estimatedValue) {}
 
     record PhotoFile(String contentType, byte[] content) {}
 
