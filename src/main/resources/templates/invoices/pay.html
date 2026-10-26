@@ -58,6 +58,10 @@
                         <td style="font-weight: 600;">Tổng cộng</td>
                         <td style="text-align: right; font-weight: 600;" th:text="${#numbers.formatDecimal(invoice.getTotalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     </tr>
+                    <tr th:if="${invoice.getSettlementCreditAmount().signum() > 0}">
+                        <td>Tiền hoàn/đối trừ từ chu kỳ đã thu</td>
+                        <td style="text-align: right;" th:text="${#numbers.formatDecimal(invoice.getSettlementCreditAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
@@ -74,6 +78,10 @@
                         <tr th:if="${invoice.getPaidAmount().signum() > 0}">
                             <td style="color: var(--text-secondary);">Đã thanh toán:</td>
                             <td th:text="${#numbers.formatDecimal(invoice.getPaidAmount(), 0, 'POINT', 0, 'COMMA') + ' / ' + #numbers.formatDecimal(invoice.getTotalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 / 250,000 đ</td>
+                        </tr>
+                        <tr th:if="${invoice.getDepositPaidAmount().signum() > 0}">
+                            <td style="color: var(--text-secondary);">Đã trừ từ tiền cọc:</td>
+                            <td th:text="${#numbers.formatDecimal(invoice.getDepositPaidAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</td>
                         </tr>
                         <tr>
                             <td style="color: var(--text-secondary);">Hạn thanh toán:</td>
@@ -113,6 +121,81 @@
             </div>
         </div>
     </div>
+
+    <!-- Thanh toán ngoài cổng (#205): người thuê báo đã thanh toán, chủ trọ/nhân viên thu tiền xác nhận hoặc ghi nhận -->
+    <div th:if="${invoice.isPayable() and currentUser.role().name() == 'TENANT'}" class="card" id="claim-card" style="margin-top: 20px;">
+        <h2>Đã thanh toán ngoài hệ thống?</h2>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+            Nếu bạn đã nộp tiền mặt hoặc chuyển khoản mà hóa đơn chưa cập nhật, hãy báo để chủ trọ/nhân viên thu tiền xác nhận.
+        </p>
+        <form th:action="@{'/invoices/' + ${invoice.getId()} + '/claim'}" method="post"
+              style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="claimAmount">Số tiền (VND)</label>
+                <input type="number" id="claimAmount" name="amount" class="form-control" min="1" required
+                       th:max="${invoice.remainingAmount()}" th:value="${invoice.remainingAmount().toBigInteger()}">
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="claimMethod">Hình thức</label>
+                <select id="claimMethod" name="method" class="form-control">
+                    <option value="CASH">Tiền mặt</option>
+                    <option value="BANK_TRANSFER">Chuyển khoản</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin: 0; flex: 1; min-width: 200px;">
+                <label class="form-label" for="claimNote">Ghi chú</label>
+                <input type="text" id="claimNote" name="note" class="form-control" maxlength="1000">
+            </div>
+            <button type="submit" class="btn btn-primary">Gửi yêu cầu xác nhận</button>
+        </form>
+    </div>
+
+    <div th:if="${invoice.isPayable() and (currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF')}"
+         class="card" id="record-card" style="margin-top: 20px;">
+        <h2>Ghi nhận khoản thu</h2>
+        <form th:action="@{'/invoices/' + ${invoice.getId()} + '/record-payment'}" method="post"
+              style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="recordAmount">Số tiền đã thu (VND)</label>
+                <input type="number" id="recordAmount" name="amount" class="form-control" min="1" required
+                       th:max="${invoice.remainingAmount()}" th:value="${invoice.remainingAmount().toBigInteger()}">
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="recordMethod">Hình thức</label>
+                <select id="recordMethod" name="method" class="form-control">
+                    <option value="CASH">Tiền mặt</option>
+                    <option value="BANK_TRANSFER">Chuyển khoản</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin: 0; flex: 1; min-width: 200px;">
+                <label class="form-label" for="recordNote">Ghi chú</label>
+                <input type="text" id="recordNote" name="note" class="form-control" maxlength="1000">
+            </div>
+            <button type="submit" class="btn btn-primary">Ghi nhận</button>
+        </form>
+    </div>
+
+    <div th:if="${!claims.isEmpty()}" class="card" id="claim-history" style="margin-top: 20px;">
+        <h2>Lịch sử xác nhận thanh toán</h2>
+        <table class="data-table" style="font-size: 13px;">
+            <thead><tr><th>Thời gian</th><th>Số tiền</th><th>Hình thức</th><th>Nguồn</th><th>Trạng thái</th></tr></thead>
+            <tbody>
+                <tr th:each="c : ${claims}">
+                    <td th:text="${#temporals.format(c.createdAt(), 'dd/MM/yyyy HH:mm')}">01/10/2026 10:00</td>
+                    <td th:text="${#numbers.formatDecimal(c.amount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">500,000 đ</td>
+                    <td th:text="${c.method().name() == 'CASH' ? 'Tiền mặt' : 'Chuyển khoản'}">Tiền mặt</td>
+                    <td th:text="${c.source().name() == 'TENANT_CLAIM' ? 'Người thuê báo' : 'Ghi nhận trực tiếp'}">Người thuê báo</td>
+                    <td>
+                        <span th:text="${c.status().name() == 'CONFIRMED' ? 'Đã xác nhận' : c.status().name() == 'REJECTED' ? 'Bị từ chối' : 'Chờ xác nhận'}">Chờ xác nhận</span>
+                        <span th:if="${c.rejectReason() != null}" style="color: var(--text-secondary);" th:text="'— ' + ${c.rejectReason()}">lý do</span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
     <script th:if="${invoice.isPayable()}" th:inline="javascript">
         (function () {
             var statusUrl = /*[[@{'/invoices/' + ${invoice.getId()} + '/status'}]]*/ '';

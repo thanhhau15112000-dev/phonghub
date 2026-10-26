@@ -360,7 +360,11 @@ class PhongHubUiIntegrationTest {
                 .param("floor", "2")
                 .param("areaSqm", "28.0")
                 .param("basePrice", "4000000")
-                .param("maxOccupants", "2"))
+                .param("maxOccupants", "2")
+                .param("electricMeter", "0")
+                .param("waterMeter", "0")
+                .param("conditionNote", "Hiện trạng ban đầu")
+                .param("noAssets", "true"))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/properties/" + DataSeeder.PROP_1_ID))
             .andExpect(flash().attributeExists("successMessage"));
@@ -375,7 +379,11 @@ class PhongHubUiIntegrationTest {
                 .param("floor", "2")
                 .param("areaSqm", "28.0")
                 .param("basePrice", "4000000")
-                .param("maxOccupants", "2"))
+                .param("maxOccupants", "2")
+                .param("electricMeter", "0")
+                .param("waterMeter", "0")
+                .param("conditionNote", "Hiện trạng ban đầu")
+                .param("noAssets", "true"))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/properties/" + DataSeeder.PROP_2_ID))
             .andExpect(flash().attributeExists("errorMessage"));
@@ -390,7 +398,11 @@ class PhongHubUiIntegrationTest {
                 .param("floor", "1")
                 .param("areaSqm", "20.0")
                 .param("basePrice", "3500000")
-                .param("maxOccupants", "2"))
+                .param("maxOccupants", "2")
+                .param("electricMeter", "0")
+                .param("waterMeter", "0")
+                .param("conditionNote", "Hiện trạng ban đầu")
+                .param("noAssets", "true"))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/properties/" + DataSeeder.PROP_1_ID))
             .andExpect(flash().attributeExists("errorMessage"));
@@ -403,13 +415,13 @@ class PhongHubUiIntegrationTest {
         mockMvc.perform(get("/properties/" + DataSeeder.PROP_1_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Thêm phòng vào nhà trọ")));
+            .andExpect(content().string(containsString("Thêm phòng kèm biên bản hiện trạng")));
 
         // Pending property -> does not see form, sees warning
         mockMvc.perform(get("/properties/" + DataSeeder.PROP_2_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(not(containsString("Thêm phòng vào nhà trọ"))))
+            .andExpect(content().string(not(containsString("Thêm phòng kèm biên bản hiện trạng"))))
             .andExpect(content().string(containsString("Chức năng thêm phòng chỉ khả dụng khi nhà trọ đã được Quản trị viên duyệt")));
     }
 
@@ -504,13 +516,13 @@ class PhongHubUiIntegrationTest {
     }
 
     @Test
-    @DisplayName("STAFF does not see add occupant button or modal on contract detail page")
-    void testStaffDoesNotSeeAddOccupantButtonOrModal() throws Exception {
+    @DisplayName("Assigned STAFF with contract permission sees the add occupant flow")
+    void testAssignedStaffSeesAddOccupantButtonAndModal() throws Exception {
         mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(not(containsString("id=\"addOccupantBtn\""))))
-            .andExpect(content().string(not(containsString("id=\"addOccupantModal\""))));
+            .andExpect(content().string(containsString("id=\"addOccupantBtn\"")))
+            .andExpect(content().string(containsString("id=\"addOccupantModal\"")));
     }
 
     @Test

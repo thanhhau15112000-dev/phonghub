@@ -53,11 +53,13 @@ public class PropertyStaffUiController {
         @RequestParam(defaultValue = "false") boolean canCollectPayment,
         @RequestParam(defaultValue = "false") boolean canManageContracts,
         @RequestParam(defaultValue = "false") boolean canViewDocuments,
+        @RequestParam(defaultValue = "false") boolean canManageRoomsAndAssets,
         RedirectAttributes redirectAttributes
     ) {
         try {
             staffUseCase.assign(new PropertyStaffUseCase.AssignCommand(
-                propertyId, usernameOrEmail, canCollectPayment, canManageContracts, canViewDocuments));
+                propertyId, usernameOrEmail, canCollectPayment, canManageContracts, canViewDocuments,
+                canManageRoomsAndAssets));
             redirectAttributes.addFlashAttribute("successMessage", "Đã phân công nhân sự vào nhà trọ.");
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
@@ -72,10 +74,12 @@ public class PropertyStaffUiController {
         @RequestParam(defaultValue = "false") boolean canCollectPayment,
         @RequestParam(defaultValue = "false") boolean canManageContracts,
         @RequestParam(defaultValue = "false") boolean canViewDocuments,
+        @RequestParam(defaultValue = "false") boolean canManageRoomsAndAssets,
         RedirectAttributes redirectAttributes
     ) {
         try {
-            staffUseCase.updatePermissions(propertyId, userId, canCollectPayment, canManageContracts, canViewDocuments);
+            staffUseCase.updatePermissions(propertyId, userId, canCollectPayment, canManageContracts,
+                canViewDocuments, canManageRoomsAndAssets);
             redirectAttributes.addFlashAttribute("successMessage", "Đã cập nhật quyền.");
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());

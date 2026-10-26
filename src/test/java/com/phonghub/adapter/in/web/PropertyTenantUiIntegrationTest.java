@@ -40,7 +40,8 @@ class PropertyTenantUiIntegrationTest extends SeededWebTest {
         mockMvc.perform(get(BASE + "/new").header("X-User-Id", OWNER_1))
             .andExpect(status().isOk()).andExpect(view().name("tenants/form"));
         mockMvc.perform(post(BASE).header("X-User-Id", OWNER_1)
-                .param("fullName", "Khách UI").param("identityCardNumber", "079300000009").param("phone", "0912345690"))
+                .param("fullName", "Khách UI").param("identityCardNumber", "079300000009")
+                .param("phone", "0912345690").param("email", "khach-ui@example.test"))
             .andExpect(status().is3xxRedirection());
         assertTrue(mockMvc.perform(get(BASE).header("X-User-Id", OWNER_1)).andReturn().getResponse()
             .getContentAsString().contains("Khách UI"));
@@ -48,7 +49,8 @@ class PropertyTenantUiIntegrationTest extends SeededWebTest {
         // Staff nhà trọ khác và tenant không vào được trang quản lý.
         mockMvc.perform(get(BASE).header("X-User-Id", STAFF_2)).andExpect(status().is3xxRedirection());
         mockMvc.perform(post(BASE).header("X-User-Id", STAFF_2)
-                .param("fullName", "Kẻ Lạ").param("identityCardNumber", "079300000010").param("phone", "0912345691"))
+                .param("fullName", "Kẻ Lạ").param("identityCardNumber", "079300000010")
+                .param("phone", "0912345691").param("email", "ke-la@example.test"))
             .andExpect(status().is3xxRedirection());
         assertFalse(mockMvc.perform(get(BASE).header("X-User-Id", OWNER_1)).andReturn().getResponse()
             .getContentAsString().contains("Kẻ Lạ"));

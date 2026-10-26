@@ -76,6 +76,7 @@ class MaintenanceSlaIntegrationTest extends SeededWebTest {
     @DisplayName("Timeline records each status change with its actor, and is limited to those who can see the ticket")
     void timeline() throws Exception {
         String id = JsonPath.read(report("MEDIUM"), "$.id");
+        MaintenanceTestFlow.wearReady(mockMvc, id, OWNER_1);
         mockMvc.perform(post("/api/maintenance/" + id + "/assign").header("X-User-Id", OWNER_1)
             .contentType(MediaType.APPLICATION_JSON).content("{\"technicianId\":\"" + TECH_1 + "\"}"))
             .andExpect(status().isOk());
@@ -87,13 +88,16 @@ class MaintenanceSlaIntegrationTest extends SeededWebTest {
 
         mockMvc.perform(get("/api/maintenance/" + id + "/timeline").header("X-User-Id", OWNER_1))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(4))
+            .andExpect(jsonPath("$.length()").value(6))
             .andExpect(jsonPath("$[0].to").value("REPORTED"))
             .andExpect(jsonPath("$[0].actorId").value(TENANT_1))
-            .andExpect(jsonPath("$[1].to").value("ASSIGNED"))
+            .andExpect(jsonPath("$[1].to").value("PENDING_OWNER_APPROVAL"))
             .andExpect(jsonPath("$[1].actorId").value(OWNER_1))
-            .andExpect(jsonPath("$[2].to").value("IN_PROGRESS"))
-            .andExpect(jsonPath("$[3].to").value("RESOLVED"));
+            .andExpect(jsonPath("$[2].to").value("REPORTED"))
+            .andExpect(jsonPath("$[3].to").value("ASSIGNED"))
+            .andExpect(jsonPath("$[3].actorId").value(OWNER_1))
+            .andExpect(jsonPath("$[4].to").value("IN_PROGRESS"))
+            .andExpect(jsonPath("$[5].to").value("RESOLVED"));
         mockMvc.perform(get("/api/maintenance/" + id + "/timeline").header("X-User-Id", TENANT_1))
             .andExpect(status().isOk());
         mockMvc.perform(get("/api/maintenance/" + id + "/timeline").header("X-User-Id", TECH_1))

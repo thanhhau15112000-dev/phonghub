@@ -7,9 +7,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Chính sách phạt trả trễ của một nhà trọ (#80). Phạt là một khoản duy nhất cho mỗi hóa đơn tiền thuê, bắt đầu
- * tính khi quá hạn hơn {@code graceDays} ngày: theo phần trăm tiền hóa đơn hoặc số tiền cố định, không vượt
- * {@code capAmount} nếu có đặt trần.
+ * Chính sách phạt trả trễ của một nhà trọ. Mức cấu hình được tính cho mỗi ngày sau {@code graceDays}; tổng phạt
+ * không vượt {@code capAmount} nếu có đặt trần.
  */
 public record LateFeePolicy(
     UUID propertyId,
@@ -27,6 +26,7 @@ public record LateFeePolicy(
         FIXED
     }
 
+    public static final int MIN_GRACE_DAYS = 7;
     public static final int MAX_GRACE_DAYS = 365;
 
     public LateFeePolicy {
@@ -45,8 +45,8 @@ public record LateFeePolicy(
         if (feeType == FeeType.PERCENT && feeValue.compareTo(BigDecimal.valueOf(100)) > 0) {
             throw new DomainException("Phạt theo phần trăm không được vượt quá 100%.");
         }
-        if (graceDays < 0 || graceDays > MAX_GRACE_DAYS) {
-            throw new DomainException("Số ngày ân hạn phải từ 0 đến " + MAX_GRACE_DAYS + ".");
+        if (graceDays < MIN_GRACE_DAYS || graceDays > MAX_GRACE_DAYS) {
+            throw new DomainException("Số ngày ân hạn phải từ " + MIN_GRACE_DAYS + " đến " + MAX_GRACE_DAYS + ".");
         }
         if (capAmount != null && capAmount.signum() < 0) {
             throw new DomainException("Mức phạt tối đa không được âm.");
@@ -60,7 +60,7 @@ public record LateFeePolicy(
     }
 
     public static LateFeePolicy disabled(UUID propertyId) {
-        return new LateFeePolicy(propertyId, false, FeeType.PERCENT, BigDecimal.ZERO, 0, null, Instant.now(), null);
+        return new LateFeePolicy(propertyId, false, FeeType.PERCENT, BigDecimal.ZERO, MIN_GRACE_DAYS, null, Instant.now(), null);
     }
 
     /**
@@ -68,12 +68,22 @@ public record LateFeePolicy(
      * hoặc chưa quá ngày ân hạn. Làm tròn đến đồng.
      */
     public BigDecimal feeFor(BigDecimal principal, long daysOverdue) {
-        if (!enabled || principal == null || principal.signum() <= 0 || daysOverdue <= graceDays) {
+        return feeForDays(principal, daysOverdue);
+    }
+
+    public long penaltyDays(long daysOverdue) {
+        return Math.max(0, daysOverdue - graceDays);
+    }
+
+    public BigDecimal feeForDays(BigDecimal principal, long daysOverdue) {
+        long days = penaltyDays(daysOverdue);
+        if (!enabled || principal == null || principal.signum() <= 0 || days == 0) {
             return BigDecimal.ZERO;
         }
-        BigDecimal fee = feeType == FeeType.PERCENT
+        BigDecimal dailyFee = feeType == FeeType.PERCENT
             ? principal.multiply(feeValue).divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
             : feeValue.setScale(0, RoundingMode.HALF_UP);
+        BigDecimal fee = dailyFee.multiply(BigDecimal.valueOf(days));
         if (capAmount != null && fee.compareTo(capAmount) > 0) {
             fee = capAmount.setScale(0, RoundingMode.HALF_UP);
         }

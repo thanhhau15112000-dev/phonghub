@@ -97,7 +97,24 @@ class MaintenanceFeeFlowIntegrationTest {
             .orElseThrow();
     }
 
+    /**
+     * Phiếu do người thuê báo phải qua bước chốt nhánh (#202, #203) rồi mới sửa được: nguyên nhân khai là lỗi do người
+     * thuê thì chốt nhánh B (báo giá 1.000.000 đ, người thuê phê duyệt), ngược lại chốt nhánh A (chủ trọ duyệt).
+     */
+    private void prepareForWork(UUID ticketId) throws Exception {
+        MaintenanceTicket ticket = reload(ticketId);
+        if (ticket.getRequestedByTenantId() == null) {
+            return;
+        }
+        if (ticket.getCauseCategory() == com.phonghub.domain.model.MaintenanceCause.TENANT_USAGE) {
+            MaintenanceTestFlow.tenantFaultReady(mockMvc, ticketId.toString(), ADMIN, TENANT, 1_000_000);
+        } else {
+            MaintenanceTestFlow.wearReady(mockMvc, ticketId.toString(), ADMIN);
+        }
+    }
+
     private void accept(UUID ticketId) throws Exception {
+        prepareForWork(ticketId);
         mockMvc.perform(asUser(post("/maintenance/" + ticketId + "/accept"), ADMIN));
     }
 
@@ -183,11 +200,12 @@ class MaintenanceFeeFlowIntegrationTest {
     }
 
     @Test
-    @DisplayName("Technician/admin can override the reported cause: liable party is changed and a fee is issued")
+    @DisplayName("Staff can reclassify the reported cause to tenant fault: after the tenant approves the quote, a fee is issued")
     void liablePartyOverrideIssuesFee() throws Exception {
         MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Hỏng ổ khóa", "NATURAL_WEAR");
-        accept(ticket.getId());
-        resolve(ticket.getId(), "300000", "TENANT");
+        MaintenanceTestFlow.tenantFaultReady(mockMvc, ticket.getId().toString(), ADMIN, TENANT, 1_000_000);
+        mockMvc.perform(asUser(post("/maintenance/" + ticket.getId() + "/accept"), ADMIN));
+        resolve(ticket.getId(), "300000", null);
 
         MaintenanceTicket awaiting = reload(ticket.getId());
         assertEquals(MaintenanceStatus.AWAITING_PAYMENT, awaiting.getStatus());
@@ -196,22 +214,21 @@ class MaintenanceFeeFlowIntegrationTest {
     }
 
     @Test
-    @DisplayName("Unknown cause with a cost is rejected until the liable party is decided; nothing is changed")
+    @DisplayName("Unknown cause cannot be worked on until staff confirm the branch; nothing is changed")
     void unknownCauseNeedsDecision() throws Exception {
         MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Ổ cắm chập", "UNKNOWN");
         assertEquals(LiableParty.UNDETERMINED, ticket.getLiableParty());
-        accept(ticket.getId());
 
-        mockMvc.perform(asUser(post("/maintenance/" + ticket.getId() + "/resolve"), ADMIN)
-                .param("resolutionNotes", "Đã sửa")
-                .param("repairCost", "120000")
-                .param("releaseRoomToAvailable", "false"))
+        mockMvc.perform(asUser(post("/maintenance/" + ticket.getId() + "/accept"), ADMIN))
             .andExpect(flash().attributeExists("errorMessage"));
-        assertEquals(MaintenanceStatus.IN_PROGRESS, reload(ticket.getId()).getStatus());
+        assertEquals(MaintenanceStatus.REPORTED, reload(ticket.getId()).getStatus());
         assertTrue(invoiceRepository.findActiveByTicketId(ticket.getId()).isEmpty());
 
-        resolve(ticket.getId(), "120000", "OWNER");
+        MaintenanceTestFlow.wearReady(mockMvc, ticket.getId().toString(), ADMIN);
+        mockMvc.perform(asUser(post("/maintenance/" + ticket.getId() + "/accept"), ADMIN));
+        resolve(ticket.getId(), "120000", null);
         assertEquals(MaintenanceStatus.RESOLVED, reload(ticket.getId()).getStatus());
+        assertEquals(LiableParty.OWNER, reload(ticket.getId()).getLiableParty());
     }
 
     @Test

@@ -15,6 +15,7 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverItemRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoicePaymentRecordRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryMeterReadingRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
@@ -75,6 +76,7 @@ class CheckOutSettlementIntegrationTest {
     @Autowired private InMemoryContractRepository contractRepository;
     @Autowired private InMemoryMaintenanceTicketRepository ticketRepository;
     @Autowired private InMemoryInvoiceRepository invoiceRepository;
+    @Autowired private InMemoryInvoicePaymentRecordRepository paymentRecordRepository;
     @Autowired private InMemoryHandoverRepository handoverRepository;
     @Autowired private InMemoryHandoverItemRepository itemRepository;
     @Autowired private InMemoryMeterReadingRepository readingRepository;
@@ -90,6 +92,7 @@ class CheckOutSettlementIntegrationTest {
         contractRepository.clear();
         ticketRepository.clear();
         invoiceRepository.clear();
+        paymentRecordRepository.clear();
         handoverRepository.clear();
         itemRepository.clear();
         readingRepository.clear();

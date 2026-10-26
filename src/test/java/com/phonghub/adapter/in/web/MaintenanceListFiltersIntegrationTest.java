@@ -93,6 +93,8 @@ class MaintenanceListFiltersIntegrationTest {
     }
 
     private void resolve(UUID ticketId, String cost) throws Exception {
+        // Lỗi do người thuê: chốt nhánh, báo giá và người thuê phê duyệt trước khi sửa (#203).
+        MaintenanceTestFlow.tenantFaultReady(mockMvc, ticketId.toString(), ADMIN, TENANT, 1_000_000);
         mockMvc.perform(as(post("/maintenance/" + ticketId + "/accept"), ADMIN));
         mockMvc.perform(as(post("/maintenance/" + ticketId + "/resolve"), ADMIN)
             .param("resolutionNotes", "Đã sửa")

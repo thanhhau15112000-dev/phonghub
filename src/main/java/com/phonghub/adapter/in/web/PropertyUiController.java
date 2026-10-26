@@ -1,23 +1,35 @@
 package com.phonghub.adapter.in.web;
 
+import com.phonghub.application.port.in.FileStorageUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
+import com.phonghub.application.port.in.RoomSetupUseCase;
+import com.phonghub.application.port.in.TenantUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.ContractRepositoryPort;
+import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.model.AssetStatus;
+import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Property;
+import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomPage;
 import com.phonghub.domain.model.RoomSearchCriteria;
 import com.phonghub.domain.model.RoomStatus;
-import com.phonghub.domain.model.PropertyApprovalStatus;
+import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,15 +44,33 @@ public class PropertyUiController {
     private final PropertyUseCase propertyUseCase;
     private final RoomUseCase roomUseCase;
     private final CurrentUserPort currentUserPort;
+    private final RoomSetupUseCase roomSetupUseCase;
+    private final FileStorageUseCase fileStorageUseCase;
+    private final AuthorizationService authorizationService;
+    private final ContractRepositoryPort contractRepository;
+    private final TenantRepositoryPort tenantRepository;
+    private final TenantUseCase tenantUseCase;
 
     public PropertyUiController(
         PropertyUseCase propertyUseCase,
         RoomUseCase roomUseCase,
-        CurrentUserPort currentUserPort
+        CurrentUserPort currentUserPort,
+        RoomSetupUseCase roomSetupUseCase,
+        FileStorageUseCase fileStorageUseCase,
+        AuthorizationService authorizationService,
+        ContractRepositoryPort contractRepository,
+        TenantRepositoryPort tenantRepository,
+        TenantUseCase tenantUseCase
     ) {
         this.propertyUseCase = propertyUseCase;
         this.roomUseCase = roomUseCase;
         this.currentUserPort = currentUserPort;
+        this.roomSetupUseCase = roomSetupUseCase;
+        this.fileStorageUseCase = fileStorageUseCase;
+        this.authorizationService = authorizationService;
+        this.contractRepository = contractRepository;
+        this.tenantRepository = tenantRepository;
+        this.tenantUseCase = tenantUseCase;
     }
 
     @GetMapping
@@ -183,8 +213,39 @@ public class PropertyUiController {
 
             model.addAttribute("currentUser", currentUser);
             model.addAttribute("property", property);
+            model.addAttribute("canManageRoomsAndAssets", authorizationService.canManageRoomsAndAssets(currentUser, id));
             model.addAttribute("rooms", roomPage.items());
             model.addAttribute("roomPage", roomPage);
+            Map<UUID, Long> roomOccupantCounts = new java.util.HashMap<>();
+            Map<UUID, Integer> roomAvailableSlots = new java.util.HashMap<>();
+            Map<UUID, List<String>> roomOccupantNames = new java.util.HashMap<>();
+            for (Room room : roomPage.items()) {
+                List<String> occupantNames = new java.util.ArrayList<>();
+                long count = contractRepository.findActiveByRoomId(room.getId())
+                    .map(Contract::getOccupants).orElse(List.of()).stream()
+                    .filter(occupant -> occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(LocalDate.now()))
+                    .peek(occupant -> tenantRepository.findById(occupant.tenantId())
+                        .map(com.phonghub.domain.model.Tenant::fullName).ifPresent(occupantNames::add))
+                    .count();
+                roomOccupantCounts.put(room.getId(), count);
+                roomAvailableSlots.put(room.getId(), Math.max(0, room.getMaxOccupants() - (int) count));
+                roomOccupantNames.put(room.getId(), List.copyOf(occupantNames));
+            }
+            model.addAttribute("roomOccupantCounts", roomOccupantCounts);
+            model.addAttribute("roomAvailableSlots", roomAvailableSlots);
+            model.addAttribute("roomOccupantNames", roomOccupantNames);
+            List<Tenant> tenantsWithoutRoom = List.of();
+            if (currentUser.role() != UserRole.TENANT && currentUser.role() != UserRole.TECHNICIAN) {
+                try {
+                    tenantsWithoutRoom = tenantUseCase.listTenants(id, null, false, 0, 50).items().stream()
+                        .filter(view -> !view.hasActiveContract())
+                        .map(TenantUseCase.PropertyTenantView::tenant)
+                        .toList();
+                } catch (DomainException ignored) {
+                    // Người không quản lý nhà trọ này thì không xem danh sách người thuê
+                }
+            }
+            model.addAttribute("tenantsWithoutRoom", tenantsWithoutRoom);
             model.addAttribute("roomStatuses", RoomStatus.values());
             model.addAttribute("filterStatus", status);
             model.addAttribute("filterMinPrice", minPrice);
@@ -274,16 +335,155 @@ public class PropertyUiController {
         @RequestParam(required = false) BigDecimal areaSqm,
         @RequestParam BigDecimal basePrice,
         @RequestParam(defaultValue = "2") int maxOccupants,
+        @RequestParam BigDecimal electricMeter,
+        @RequestParam BigDecimal waterMeter,
+        @RequestParam String conditionNote,
+        @RequestParam(defaultValue = "false") boolean noAssets,
+        @RequestParam(required = false) String assetTemplate,
+        @RequestParam(required = false) List<String> assetName,
+        @RequestParam(required = false) List<String> assetQuantity,
+        @RequestParam(required = false) List<String> assetStatus,
+        @RequestParam(required = false) List<String> assetNote,
+        @RequestParam(required = false) List<String> assetValue,
+        @RequestParam(required = false) MultipartFile electricMeterPhoto,
+        @RequestParam(required = false) MultipartFile waterMeterPhoto,
+        RedirectAttributes redirectAttributes
+    ) {
+        String electricPhotoKey = null;
+        String waterPhotoKey = null;
+        try {
+            List<RoomSetupUseCase.AssetInput> assets = parseAssetInputs(assetName, assetQuantity, assetStatus, assetNote, assetValue);
+            electricPhotoKey = uploadConditionPhoto(id, electricMeterPhoto);
+            waterPhotoKey = uploadConditionPhoto(id, waterMeterPhoto);
+            var created = roomSetupUseCase.createRoom(new RoomSetupUseCase.CreateRoomCommand(
+                id, roomNumber, floor, areaSqm, basePrice, maxOccupants, electricMeter, waterMeter, conditionNote,
+                noAssets, assetTemplate, assets, electricPhotoKey, waterPhotoKey));
+            redirectAttributes.addFlashAttribute("successMessage", "Đã tạo phòng '" + created.room().getRoomNumber() + "' kèm biên bản hiện trạng.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            discardConditionPhoto(id, electricPhotoKey);
+            discardConditionPhoto(id, waterPhotoKey);
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        } catch (RuntimeException ex) {
+            discardConditionPhoto(id, electricPhotoKey);
+            discardConditionPhoto(id, waterPhotoKey);
+            throw ex;
+        }
+        return "redirect:/properties/" + id;
+    }
+
+    @PostMapping("/{id}/rooms/batch")
+    public String createRoomsBatch(
+        @PathVariable UUID id,
+        @RequestParam String roomNumbers,
+        @RequestParam(defaultValue = "1") int floor,
+        @RequestParam(required = false) BigDecimal areaSqm,
+        @RequestParam BigDecimal basePrice,
+        @RequestParam(defaultValue = "2") int maxOccupants,
+        @RequestParam String conditionNote,
+        @RequestParam String assetTemplate,
+        @RequestParam(required = false) List<String> electricMeters,
+        @RequestParam(required = false) List<String> waterMeters,
         RedirectAttributes redirectAttributes
     ) {
         try {
-            Room room = roomUseCase.createRoom(new RoomUseCase.CreateRoomCommand(
-                id, roomNumber, floor, areaSqm, basePrice, maxOccupants
-            ));
-            redirectAttributes.addFlashAttribute("successMessage", "Đã tạo phòng '" + room.getRoomNumber() + "'.");
+            List<String> roomNames = expandRoomNumbers(roomNumbers);
+            if (electricMeters == null || electricMeters.size() != roomNames.size()
+                || waterMeters == null || waterMeters.size() != roomNames.size()) {
+                throw new IllegalArgumentException("Cần nhập chỉ số điện và nước cho từng phòng trong danh sách.");
+            }
+            List<RoomSetupUseCase.RoomReadingInput> readings = new java.util.ArrayList<>();
+            for (int i = 0; i < roomNames.size(); i++) {
+                readings.add(new RoomSetupUseCase.RoomReadingInput(roomNames.get(i),
+                    parseMeter(electricMeters.get(i), i + 1, "điện"), parseMeter(waterMeters.get(i), i + 1, "nước")));
+            }
+            var created = roomSetupUseCase.createRooms(new RoomSetupUseCase.BulkCreateCommand(
+                id, floor, areaSqm, basePrice, maxOccupants, conditionNote, assetTemplate, readings));
+            redirectAttributes.addFlashAttribute("successMessage", "Đã tạo " + created.size()
+                + " phòng cùng biên bản hiện trạng.");
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }
         return "redirect:/properties/" + id;
+    }
+
+    private String uploadConditionPhoto(UUID propertyId, MultipartFile file) {
+        if (file == null || file.isEmpty()) return null;
+        try {
+            return fileStorageUseCase.upload(new FileStorageUseCase.UploadFileCommand(propertyId, "room-condition",
+                file.getOriginalFilename(), file.getContentType(), file.getBytes())).objectKey();
+        } catch (java.io.IOException ex) {
+            throw new IllegalArgumentException("Không đọc được ảnh đồng hồ.", ex);
+        }
+    }
+
+    private void discardConditionPhoto(UUID propertyId, String objectKey) {
+        if (objectKey == null) return;
+        try { fileStorageUseCase.delete(propertyId, objectKey); } catch (RuntimeException ignored) { }
+    }
+
+    private static List<RoomSetupUseCase.AssetInput> parseAssetInputs(List<String> names, List<String> quantities,
+            List<String> statuses, List<String> notes, List<String> values) {
+        List<RoomSetupUseCase.AssetInput> assets = new java.util.ArrayList<>();
+        if (names == null) return assets;
+        for (int i = 0; i < names.size(); i++) {
+            String name = names.get(i);
+            if (name == null || name.isBlank()) continue;
+            int quantity;
+            BigDecimal value = null;
+            AssetStatus status;
+            try {
+                quantity = Integer.parseInt(valueAt(quantities, i, "1"));
+                String valueText = valueAt(values, i, "");
+                if (!valueText.isBlank()) value = new BigDecimal(valueText.trim());
+                status = AssetStatus.valueOf(valueAt(statuses, i, "GOOD"));
+            } catch (RuntimeException ex) {
+                throw new IllegalArgumentException("Thông tin tài sản ở dòng " + (i + 1) + " không hợp lệ.");
+            }
+            assets.add(new RoomSetupUseCase.AssetInput(name.trim(), quantity, status,
+                blankToNull(valueAt(notes, i, "")), value));
+        }
+        return assets;
+    }
+
+    private static String valueAt(List<String> values, int index, String fallback) {
+        return values == null || index >= values.size() || values.get(index) == null ? fallback : values.get(index).trim();
+    }
+
+    private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+
+    private static BigDecimal parseMeter(String raw, int row, String kind) {
+        try {
+            BigDecimal value = new BigDecimal(raw.trim());
+            if (value.signum() < 0) throw new NumberFormatException();
+            return value;
+        } catch (RuntimeException ex) {
+            throw new IllegalArgumentException("Chỉ số " + kind + " của phòng thứ " + row + " không hợp lệ.");
+        }
+    }
+
+    private static List<String> expandRoomNumbers(String input) {
+        if (input == null || input.isBlank()) throw new IllegalArgumentException("Cần nhập danh sách số phòng.");
+        List<String> result = new java.util.ArrayList<>();
+        for (String token : input.trim().split("[,;\\s]+")) {
+            if (token.isBlank()) continue;
+            java.util.regex.Matcher range = java.util.regex.Pattern.compile("^(.+?)(\\d+)[-–](?:(.+?))?(\\d+)$").matcher(token);
+            if (!range.matches()) { result.add(token); continue; }
+            String prefix = range.group(1);
+            String endPrefix = range.group(3);
+            if (endPrefix != null && !endPrefix.equalsIgnoreCase(prefix)) {
+                throw new IllegalArgumentException("Khoảng số phòng phải cùng tiền tố.");
+            }
+            int from = Integer.parseInt(range.group(2));
+            int to = Integer.parseInt(range.group(4));
+            if (to < from || to - from + 1 > RoomSetupUseCase.BulkCreateCommand.MAX_ROOMS) {
+                throw new IllegalArgumentException("Khoảng số phòng không hợp lệ hoặc vượt quá 50 phòng.");
+            }
+            int width = Math.max(range.group(2).length(), range.group(4).length());
+            for (int n = from; n <= to; n++) result.add(prefix + String.format("%0" + width + "d", n));
+        }
+        if (result.isEmpty() || result.size() > RoomSetupUseCase.BulkCreateCommand.MAX_ROOMS) {
+            throw new IllegalArgumentException("Mỗi lần tạo từ 1 đến 50 phòng.");
+        }
+        return List.copyOf(result);
     }
 }

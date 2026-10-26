@@ -5,9 +5,11 @@ import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.domain.model.LiableParty;
 import com.phonghub.domain.model.MaintenanceCause;
 import com.phonghub.domain.model.MaintenancePriority;
+import com.phonghub.domain.model.MaintenanceQuoteVersion;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.MaintenanceTicketEvent;
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -61,6 +63,24 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
             ticket.restoreQuote(new MaintenanceTicket.Quote(quoteAmount, rs.getString("quote_note"),
                 quotedBy != null ? UUID.fromString(quotedBy) : null, nullableInstant(rs.getTimestamp("quoted_at"))));
         }
+        ticket.restoreAssignmentTimeoutState(nullableInstant(rs.getTimestamp("assigned_at")),
+            nullableInstant(rs.getTimestamp("understaffed_notified_at")));
+        String resume = rs.getString("resume_status");
+        BigDecimal approvedTotal = rs.getBigDecimal("approved_quote_total");
+        ticket.restoreApprovalState(new MaintenanceTicket.ApprovalState(
+            nullableInstant(rs.getTimestamp("branch_confirmed_at")),
+            rs.getObject("branch_confirmed_by", UUID.class),
+            nullableInstant(rs.getTimestamp("approval_due_at")),
+            nullableInstant(rs.getTimestamp("owner_approved_at")),
+            nullableInstant(rs.getTimestamp("approval_escalated_at")),
+            nullableInstant(rs.getTimestamp("quote_due_at")),
+            nullableInstant(rs.getTimestamp("quote_approved_at")),
+            approvedTotal,
+            rs.getInt("negotiation_rounds"),
+            rs.getInt("quote_version"),
+            resume == null ? null : MaintenanceStatus.valueOf(resume),
+            nullableInstant(rs.getTimestamp("approval_reminder_sent_at")),
+            rs.getBoolean("requote_requested")));
         ticket.restoreVersion(rs.getLong("version"));
         return ticket;
     };
@@ -76,8 +96,8 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
     @Override
     public MaintenanceTicket save(MaintenanceTicket ticket) {
         String sql = """
-            INSERT INTO maintenance_tickets (id, room_id, requested_by_tenant_id, assigned_technician_id, title, description, priority, status, repair_cost, resolution_notes, cause_category, liable_party, reject_reason, due_at, sla_notified_at, quote_amount, quote_note, quoted_by, quoted_at, created_at, updated_at, version)
-            VALUES (:id, :roomId, :tenantId, :technicianId, :title, :description, :priority, :status, :repairCost, :resolutionNotes, :causeCategory, :liableParty, :rejectReason, :dueAt, :slaNotifiedAt, :quoteAmount, :quoteNote, :quotedBy, :quotedAt, :createdAt, :updatedAt, :version)
+            INSERT INTO maintenance_tickets (id, room_id, requested_by_tenant_id, assigned_technician_id, title, description, priority, status, repair_cost, resolution_notes, cause_category, liable_party, reject_reason, due_at, sla_notified_at, assigned_at, understaffed_notified_at, quote_amount, quote_note, quoted_by, quoted_at, branch_confirmed_at, branch_confirmed_by, approval_due_at, owner_approved_at, approval_escalated_at, quote_due_at, quote_approved_at, approved_quote_total, negotiation_rounds, quote_version, resume_status, approval_reminder_sent_at, requote_requested, created_at, updated_at, version)
+            VALUES (:id, :roomId, :tenantId, :technicianId, :title, :description, :priority, :status, :repairCost, :resolutionNotes, :causeCategory, :liableParty, :rejectReason, :dueAt, :slaNotifiedAt, :assignedAt, :understaffedNotifiedAt, :quoteAmount, :quoteNote, :quotedBy, :quotedAt, :branchConfirmedAt, :branchConfirmedBy, :approvalDueAt, :ownerApprovedAt, :approvalEscalatedAt, :quoteDueAt, :quoteApprovedAt, :approvedQuoteTotal, :negotiationRounds, :quoteVersion, :resumeStatus, :reminderSentAt, :requoteRequested, :createdAt, :updatedAt, :version)
             ON CONFLICT (id) DO UPDATE SET
                 assigned_technician_id = EXCLUDED.assigned_technician_id,
                 title = EXCLUDED.title,
@@ -90,10 +110,25 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
                 reject_reason = EXCLUDED.reject_reason,
                 due_at = EXCLUDED.due_at,
                 sla_notified_at = EXCLUDED.sla_notified_at,
+                assigned_at = EXCLUDED.assigned_at,
+                understaffed_notified_at = EXCLUDED.understaffed_notified_at,
                 quote_amount = EXCLUDED.quote_amount,
                 quote_note = EXCLUDED.quote_note,
                 quoted_by = EXCLUDED.quoted_by,
                 quoted_at = EXCLUDED.quoted_at,
+                branch_confirmed_at = EXCLUDED.branch_confirmed_at,
+                branch_confirmed_by = EXCLUDED.branch_confirmed_by,
+                approval_due_at = EXCLUDED.approval_due_at,
+                owner_approved_at = EXCLUDED.owner_approved_at,
+                approval_escalated_at = EXCLUDED.approval_escalated_at,
+                quote_due_at = EXCLUDED.quote_due_at,
+                quote_approved_at = EXCLUDED.quote_approved_at,
+                approved_quote_total = EXCLUDED.approved_quote_total,
+                negotiation_rounds = EXCLUDED.negotiation_rounds,
+                quote_version = EXCLUDED.quote_version,
+                resume_status = EXCLUDED.resume_status,
+                approval_reminder_sent_at = EXCLUDED.approval_reminder_sent_at,
+                requote_requested = EXCLUDED.requote_requested,
                 updated_at = EXCLUDED.updated_at,
                 version = maintenance_tickets.version + 1
             WHERE maintenance_tickets.version = :version
@@ -117,6 +152,9 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
             .addValue("rejectReason", ticket.getRejectionReason())
             .addValue("dueAt", ticket.getDueAt() == null ? null : Timestamp.from(ticket.getDueAt()))
             .addValue("slaNotifiedAt", ticket.getSlaNotifiedAt() == null ? null : Timestamp.from(ticket.getSlaNotifiedAt()))
+            .addValue("assignedAt", ticket.getAssignedAt() == null ? null : Timestamp.from(ticket.getAssignedAt()))
+            .addValue("understaffedNotifiedAt", ticket.getUnderstaffedNotifiedAt() == null ? null
+                : Timestamp.from(ticket.getUnderstaffedNotifiedAt()))
             .addValue("quoteAmount", ticket.getQuote() == null ? null : ticket.getQuote().amount())
             .addValue("quoteNote", ticket.getQuote() == null ? null : ticket.getQuote().note())
             .addValue("quotedBy", ticket.getQuote() == null ? null : ticket.getQuote().quotedBy())
@@ -124,6 +162,20 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
                 : Timestamp.from(ticket.getQuote().quotedAt()))
             .addValue("createdAt", Timestamp.from(ticket.getCreatedAt()))
             .addValue("updatedAt", Timestamp.from(ticket.getUpdatedAt()));
+        MaintenanceTicket.ApprovalState approval = ticket.approvalState();
+        params.addValue("branchConfirmedAt", ts(approval.branchConfirmedAt()))
+            .addValue("branchConfirmedBy", approval.branchConfirmedBy())
+            .addValue("approvalDueAt", ts(approval.approvalDueAt()))
+            .addValue("ownerApprovedAt", ts(approval.ownerApprovedAt()))
+            .addValue("approvalEscalatedAt", ts(approval.approvalEscalatedAt()))
+            .addValue("quoteDueAt", ts(approval.quoteDueAt()))
+            .addValue("quoteApprovedAt", ts(approval.quoteApprovedAt()))
+            .addValue("approvedQuoteTotal", approval.approvedQuoteTotal())
+            .addValue("negotiationRounds", approval.negotiationRounds())
+            .addValue("quoteVersion", approval.quoteVersion())
+            .addValue("resumeStatus", approval.resumeStatus() == null ? null : approval.resumeStatus().name())
+            .addValue("reminderSentAt", ts(approval.reminderSentAt()))
+            .addValue("requoteRequested", approval.requoteRequested());
 
         List<Long> versions = jdbcTemplate.queryForList(sql, params, Long.class);
         if (versions.isEmpty()) {
@@ -143,6 +195,73 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
                 .addValue("at", Timestamp.from(event.at())));
         }
         return ticket;
+    }
+
+    private static Timestamp ts(Instant instant) {
+        return instant == null ? null : Timestamp.from(instant);
+    }
+
+    @Override
+    public MaintenanceQuoteVersion saveQuoteVersion(MaintenanceQuoteVersion version) {
+        jdbcTemplate.update("""
+            INSERT INTO maintenance_quote_versions (id, ticket_id, version, labor_amount, total_amount, note, quoted_by,
+                quoted_at, status, tenant_note, decided_at)
+            VALUES (:id, :ticketId, :version, :labor, :total, :note, :quotedBy, :quotedAt, :status, :tenantNote, :decidedAt)
+            ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, tenant_note = EXCLUDED.tenant_note,
+                decided_at = EXCLUDED.decided_at
+            """, new MapSqlParameterSource()
+            .addValue("id", version.id())
+            .addValue("ticketId", version.ticketId())
+            .addValue("version", version.version())
+            .addValue("labor", version.laborAmount())
+            .addValue("total", version.totalAmount())
+            .addValue("note", version.note())
+            .addValue("quotedBy", version.quotedBy())
+            .addValue("quotedAt", Timestamp.from(version.quotedAt()))
+            .addValue("status", version.status().name())
+            .addValue("tenantNote", version.tenantNote())
+            .addValue("decidedAt", ts(version.decidedAt())));
+        Integer existingLines = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM maintenance_quote_lines WHERE quote_id = :id", Map.of("id", version.id()),
+            Integer.class);
+        if (existingLines != null && existingLines == 0) {
+            int position = 0;
+            for (MaintenanceQuoteVersion.Line line : version.lines()) {
+                jdbcTemplate.update("""
+                    INSERT INTO maintenance_quote_lines (quote_id, position, name, quantity, unit_price)
+                    VALUES (:quoteId, :position, :name, :quantity, :unitPrice)
+                    """, new MapSqlParameterSource()
+                    .addValue("quoteId", version.id())
+                    .addValue("position", position++)
+                    .addValue("name", line.name())
+                    .addValue("quantity", line.quantity())
+                    .addValue("unitPrice", line.unitPrice()));
+            }
+        }
+        return version;
+    }
+
+    @Override
+    public List<MaintenanceQuoteVersion> findQuoteVersions(UUID ticketId) {
+        List<MaintenanceQuoteVersion> headers = jdbcTemplate.query("""
+            SELECT * FROM maintenance_quote_versions WHERE ticket_id = :ticketId ORDER BY version
+            """, Map.of("ticketId", ticketId), (rs, rowNum) -> new MaintenanceQuoteVersion(
+            rs.getObject("id", UUID.class), rs.getObject("ticket_id", UUID.class), rs.getInt("version"),
+            List.of(), rs.getBigDecimal("labor_amount"), rs.getBigDecimal("total_amount"), rs.getString("note"),
+            rs.getObject("quoted_by", UUID.class), rs.getTimestamp("quoted_at").toInstant(),
+            MaintenanceQuoteVersion.Status.valueOf(rs.getString("status")), rs.getString("tenant_note"),
+            nullableInstant(rs.getTimestamp("decided_at"))));
+        List<MaintenanceQuoteVersion> result = new java.util.ArrayList<>();
+        for (MaintenanceQuoteVersion header : headers) {
+            List<MaintenanceQuoteVersion.Line> lines = jdbcTemplate.query("""
+                SELECT name, quantity, unit_price FROM maintenance_quote_lines WHERE quote_id = :id ORDER BY position
+                """, Map.of("id", header.id()), (rs, rowNum) -> new MaintenanceQuoteVersion.Line(
+                rs.getString("name"), rs.getInt("quantity"), rs.getBigDecimal("unit_price")));
+            result.add(new MaintenanceQuoteVersion(header.id(), header.ticketId(), header.version(), lines,
+                header.laborAmount(), header.totalAmount(), header.note(), header.quotedBy(), header.quotedAt(),
+                header.status(), header.tenantNote(), header.decidedAt()));
+        }
+        return result;
     }
 
     @Override

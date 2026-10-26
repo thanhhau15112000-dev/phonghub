@@ -52,6 +52,19 @@ public record InvoiceItem(
         return rateId != null;
     }
 
+    private static final String CHECK_OUT_CHARGE_MARKER = " chốt check-out (";
+
+    public static InvoiceItem checkOutCharge(String name, BigDecimal quantity, BigDecimal unitPrice,
+                                             String unit, UUID rateId) {
+        return charge(name + CHECK_OUT_CHARGE_MARKER + quantity.stripTrailingZeros().toPlainString()
+            + " " + unit + ")", quantity, unitPrice, null, rateId);
+    }
+
+    /** Recognizes final-meter lines, including invoices issued before checkout revisions were supported. */
+    public boolean isCheckOutCharge() {
+        return isUtilityCharge() && readingId == null && name.contains(CHECK_OUT_CHARGE_MARKER);
+    }
+
     public static final String LATE_FEE_NAME = "Phạt trả trễ";
 
     /** Dòng phạt trả trễ (#80): một dòng riêng, không gắn chỉ số, đơn giá hay hóa đơn nguồn. */
@@ -59,8 +72,14 @@ public record InvoiceItem(
         return new InvoiceItem(null, LATE_FEE_NAME, BigDecimal.ONE, amount, amount, null, null, null);
     }
 
+    public static InvoiceItem lateFee(BigDecimal amount, long days) {
+        String name = days > 0 ? LATE_FEE_NAME + " (" + days + " ngày)" : LATE_FEE_NAME;
+        return new InvoiceItem(null, name, BigDecimal.ONE, amount, amount, null, null, null);
+    }
+
     public boolean isLateFee() {
-        return LATE_FEE_NAME.equals(name) && rateId == null && readingId == null && sourceInvoiceId == null;
+        return (LATE_FEE_NAME.equals(name) || name.startsWith(LATE_FEE_NAME + " ("))
+            && rateId == null && readingId == null && sourceInvoiceId == null;
     }
 
     public static InvoiceItem of(String name, BigDecimal amount, UUID sourceInvoiceId) {

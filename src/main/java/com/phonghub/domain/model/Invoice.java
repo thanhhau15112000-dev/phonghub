@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -22,15 +23,20 @@ public class Invoice {
     private final UUID tenantId;
     private final int month;
     private final int year;
-    private final BigDecimal rentAmount;
+    private BigDecimal rentAmount;
     private BigDecimal totalAmount;
     private BigDecimal paidAmount;
-    private final LocalDate dueDate;
+    private LocalDate dueDate;
     private InvoiceStatus status;
     private final String paymentCode;
-    private final InvoiceType type;
+    private InvoiceType type;
     private final UUID ticketId;
     private UUID consolidatedIntoInvoiceId;
+    private LocalDate cycleStartDate;
+    private LocalDate cycleEndDate;
+    private int cycleNumber;
+    private BigDecimal depositPaidAmount;
+    private BigDecimal settlementCreditAmount;
     private final List<InvoiceItem> items = new ArrayList<>();
     private Instant paidAt;
     private final Instant createdAt;
@@ -57,7 +63,7 @@ public class Invoice {
         Instant updatedAt
     ) {
         this(id, contractId, roomId, tenantId, month, year, rentAmount, totalAmount, paidAmount, dueDate, status,
-            paymentCode, type, ticketId, null, List.of(), paidAt, createdAt, updatedAt);
+            paymentCode, type, ticketId, null, List.of(), paidAt, createdAt, updatedAt, null, null, 0, BigDecimal.ZERO);
     }
 
     public Invoice(
@@ -80,6 +86,67 @@ public class Invoice {
         Instant paidAt,
         Instant createdAt,
         Instant updatedAt
+    ) {
+        this(id, contractId, roomId, tenantId, month, year, rentAmount, totalAmount, paidAmount, dueDate, status,
+            paymentCode, type, ticketId, consolidatedIntoInvoiceId, items, paidAt, createdAt, updatedAt,
+            null, null, 0, BigDecimal.ZERO);
+    }
+
+    public Invoice(
+        UUID id,
+        UUID contractId,
+        UUID roomId,
+        UUID tenantId,
+        int month,
+        int year,
+        BigDecimal rentAmount,
+        BigDecimal totalAmount,
+        BigDecimal paidAmount,
+        LocalDate dueDate,
+        InvoiceStatus status,
+        String paymentCode,
+        InvoiceType type,
+        UUID ticketId,
+        UUID consolidatedIntoInvoiceId,
+        List<InvoiceItem> items,
+        Instant paidAt,
+        Instant createdAt,
+        Instant updatedAt,
+        LocalDate cycleStartDate,
+        LocalDate cycleEndDate,
+        int cycleNumber,
+        BigDecimal depositPaidAmount
+    ) {
+        this(id, contractId, roomId, tenantId, month, year, rentAmount, totalAmount, paidAmount, dueDate, status,
+            paymentCode, type, ticketId, consolidatedIntoInvoiceId, items, paidAt, createdAt, updatedAt,
+            cycleStartDate, cycleEndDate, cycleNumber, depositPaidAmount, BigDecimal.ZERO);
+    }
+
+    public Invoice(
+        UUID id,
+        UUID contractId,
+        UUID roomId,
+        UUID tenantId,
+        int month,
+        int year,
+        BigDecimal rentAmount,
+        BigDecimal totalAmount,
+        BigDecimal paidAmount,
+        LocalDate dueDate,
+        InvoiceStatus status,
+        String paymentCode,
+        InvoiceType type,
+        UUID ticketId,
+        UUID consolidatedIntoInvoiceId,
+        List<InvoiceItem> items,
+        Instant paidAt,
+        Instant createdAt,
+        Instant updatedAt,
+        LocalDate cycleStartDate,
+        LocalDate cycleEndDate,
+        int cycleNumber,
+        BigDecimal depositPaidAmount,
+        BigDecimal settlementCreditAmount
     ) {
         if (id == null || contractId == null || roomId == null || tenantId == null) {
             throw new IllegalArgumentException("Invoice id, contract, room and tenant cannot be null");
@@ -108,6 +175,17 @@ public class Invoice {
         this.type = type != null ? type : InvoiceType.RENT;
         this.ticketId = ticketId;
         this.consolidatedIntoInvoiceId = consolidatedIntoInvoiceId;
+        YearMonth invoicePeriod = YearMonth.of(year, month);
+        this.cycleStartDate = cycleStartDate != null ? cycleStartDate
+            : (this.type == InvoiceType.RENT ? invoicePeriod.atDay(1) : null);
+        this.cycleEndDate = cycleEndDate != null ? cycleEndDate
+            : (this.type == InvoiceType.RENT ? invoicePeriod.atEndOfMonth() : null);
+        this.cycleNumber = cycleNumber;
+        this.depositPaidAmount = depositPaidAmount != null ? depositPaidAmount : BigDecimal.ZERO;
+        this.settlementCreditAmount = settlementCreditAmount != null ? settlementCreditAmount : BigDecimal.ZERO;
+        if (this.depositPaidAmount.signum() < 0 || this.settlementCreditAmount.signum() < 0) {
+            throw new IllegalArgumentException("Số tiền cọc và tiền hoàn/đối trừ không được âm.");
+        }
         if (items != null) {
             this.items.addAll(items);
         }
@@ -120,9 +198,8 @@ public class Invoice {
     }
 
     /**
-     * Phát hành kỳ thanh toán tiền thuê cho tháng {@code period} của hợp đồng đang hiệu lực.
-     * Hạn thanh toán = ngày thanh toán của hợp đồng, kẹp về ngày cuối tháng nếu tháng ngắn hơn, và không sớm hơn
-     * ngày bắt đầu hợp đồng.
+     * Phát hành kỳ thanh toán tiền thuê có ngày bắt đầu trong tháng {@code period} của hợp đồng đang ở.
+     * Hạn thanh toán là ngày bắt đầu kỳ cộng 7 ngày, nhưng không sớm hơn ngày tạo hóa đơn cộng 3 ngày.
      */
     public static Invoice issueMonthlyRent(Contract contract, YearMonth period, String paymentCode) {
         return issueMonthlyRent(contract, period, paymentCode, List.of());
@@ -131,7 +208,7 @@ public class Invoice {
     /** Khoản phí sửa chữa chưa trả được gộp vào hóa đơn tháng, kèm tên phiếu để ghi dòng chi tiết. */
     public record RolledFee(Invoice fee, String ticketTitle) {}
 
-    /** Số ngày tối thiểu người thuê có để thanh toán, tính từ ngày tạo hóa đơn tiền thuê (#208). */
+    /** Mức sàn số ngày tối thiểu người thuê có để thanh toán, tính từ ngày tạo hóa đơn tiền thuê. */
     public static final int MIN_DAYS_TO_PAY = 3;
 
     /**
@@ -146,10 +223,8 @@ public class Invoice {
     }
 
     /**
-     * Như {@link #issueMonthlyRent(Contract, YearMonth, String, List)}, phát hành vào ngày {@code issuedOn}: hạn
-     * thanh toán không sớm hơn {@code issuedOn} + {@link #MIN_DAYS_TO_PAY} ngày, để kỳ tạo sau ngày thanh toán
-     * (nhập hợp đồng của khách đã ở từ trước, job chạy bù) không bị quá hạn ngay khi tạo (#208).
-     * {@code issuedOn} null thì chỉ xét ngày thanh toán và ngày bắt đầu hợp đồng.
+     * Như {@link #issueMonthlyRent(Contract, YearMonth, String, List)}, phát hành vào ngày {@code issuedOn}.
+     * Hạn thanh toán là ngày bắt đầu kỳ + 7 ngày, tối thiểu {@link #MIN_DAYS_TO_PAY} ngày sau khi tạo.
      */
     public static Invoice issueMonthlyRent(
         Contract contract, YearMonth period, String paymentCode, List<RolledFee> rolledFees, LocalDate issuedOn
@@ -161,9 +236,8 @@ public class Invoice {
         if (!contract.isResiding()) {
             throw new DomainException("Chỉ có thể tạo kỳ thanh toán cho hợp đồng đang hiệu lực hoặc chưa trả phòng.");
         }
-        YearMonth firstPeriod = YearMonth.from(contract.getStartDate());
-        YearMonth lastPeriod = YearMonth.from(contract.getEndDate());
-        if (period.isBefore(firstPeriod) || period.isAfter(lastPeriod)) {
+        BillingCycle cycle = contract.billingCycle(period).orElse(null);
+        if (cycle == null) {
             throw new DomainException(String.format(
                 "Kỳ %02d/%d nằm ngoài thời hạn hợp đồng (%s - %s).",
                 period.getMonthValue(), period.getYear(), contract.getStartDate(), contract.getEndDate()
@@ -172,12 +246,7 @@ public class Invoice {
         if (paymentCode == null || paymentCode.isBlank()) {
             throw new IllegalArgumentException("Payment code is required");
         }
-        int dueDay = Math.min(contract.getPaymentDay(), period.lengthOfMonth());
-        LocalDate dueDate = period.atDay(dueDay);
-        // A first-month invoice must not be overdue before the rent obligation begins.
-        if (dueDate.isBefore(contract.getStartDate())) {
-            dueDate = contract.getStartDate();
-        }
+        LocalDate dueDate = cycle.startDate().plusDays(7);
         if (issuedOn != null && dueDate.isBefore(issuedOn.plusDays(MIN_DAYS_TO_PAY))) {
             dueDate = issuedOn.plusDays(MIN_DAYS_TO_PAY);
         }
@@ -186,7 +255,7 @@ public class Invoice {
 
         List<InvoiceItem> lines = new ArrayList<>();
         lines.add(InvoiceItem.of(
-            String.format("Tiền thuê phòng tháng %02d/%d", period.getMonthValue(), period.getYear()),
+            cycleLabel("Tiền thuê", cycle),
             contract.getRentAmount(), null
         ));
         BigDecimal total = contract.getRentAmount();
@@ -220,12 +289,139 @@ public class Invoice {
             lines,
             null,
             now,
-            now
+            now,
+            cycle.startDate(),
+            cycle.endDate(),
+            cycle.number(),
+            BigDecimal.ZERO
         );
         if (rolledFees != null) {
             rolledFees.forEach(rolled -> rolled.fee().consolidateInto(invoiceId));
         }
         return invoice;
+    }
+
+    /** Hóa đơn thay thế kỳ thuê khi hủy sớm; tiền thuê đã trả trước được khấu trừ vào khoản phí mới. */
+    public static Invoice issueCancellationFee(
+        Contract contract, BillingCycle cycle, BigDecimal rentFee, List<InvoiceItem> utilityCharges,
+        String paymentCode, LocalDate issuedOn
+    ) {
+        if (contract == null || cycle == null || issuedOn == null) {
+            throw new IllegalArgumentException("Contract, cycle and issue date are required");
+        }
+        if (paymentCode == null || paymentCode.isBlank()) {
+            throw new IllegalArgumentException("Payment code is required");
+        }
+        if (rentFee == null || rentFee.signum() < 0) {
+            throw new IllegalArgumentException("Phí thuê hủy hợp đồng không được âm.");
+        }
+        List<InvoiceItem> lines = new ArrayList<>();
+        lines.add(InvoiceItem.of(cycleLabel("Phí hủy hợp đồng", cycle), rentFee, null));
+        if (utilityCharges != null) {
+            lines.addAll(utilityCharges);
+        }
+        BigDecimal total = lines.stream().map(InvoiceItem::totalAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        Instant now = Instant.now();
+        return new Invoice(UUID.randomUUID(), contract.getId(), contract.getRoomId(), contract.getPrimaryTenantId(),
+            cycle.period().getMonthValue(), cycle.period().getYear(), rentFee, total, BigDecimal.ZERO,
+            issuedOn.plusDays(7), InvoiceStatus.ISSUED, paymentCode, InvoiceType.CANCELLATION, null, null, lines,
+            null, now, now, cycle.startDate(), cycle.endDate(), cycle.number(), BigDecimal.ZERO);
+    }
+
+    /** Reclassifies the current rent invoice as the cancellation invoice and returns any refundable overpayment. */
+    public BigDecimal replaceWithCancellationFee(
+        BillingCycle cycle, BigDecimal rentFee, List<InvoiceItem> utilityCharges, LocalDate issuedOn
+    ) {
+        if (type != InvoiceType.RENT || status == InvoiceStatus.VOIDED || status == InvoiceStatus.DRAFT
+            || cycle == null || issuedOn == null || rentFee == null || rentFee.signum() < 0) {
+            throw new DomainException("Hóa đơn tiền thuê không thể thay bằng phí hủy hợp đồng.");
+        }
+        BigDecimal previouslyPaid = paidAmount;
+        List<InvoiceItem> preserved = items.stream()
+            .filter(item -> item.isUtilityCharge() || item.sourceInvoiceId() != null || item.isLateFee())
+            .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        if (utilityCharges != null) {
+            for (InvoiceItem charge : utilityCharges) {
+                boolean duplicate = preserved.stream().anyMatch(item -> item.readingId() != null
+                    && item.readingId().equals(charge.readingId()) && item.rateId().equals(charge.rateId()));
+                if (!duplicate) {
+                    preserved.add(charge);
+                }
+            }
+        }
+        items.clear();
+        items.add(InvoiceItem.of(cycleLabel("Phí hủy hợp đồng", cycle), rentFee, null));
+        items.addAll(preserved);
+        rentAmount = rentFee;
+        totalAmount = items.stream().map(InvoiceItem::totalAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal overpayment = previouslyPaid.subtract(totalAmount).max(BigDecimal.ZERO);
+        settlementCreditAmount = overpayment;
+        paidAmount = previouslyPaid.min(totalAmount);
+        depositPaidAmount = depositPaidAmount.min(paidAmount);
+        type = InvoiceType.CANCELLATION;
+        dueDate = issuedOn.plusDays(7);
+        cycleStartDate = cycle.startDate();
+        cycleEndDate = cycle.endDate();
+        cycleNumber = cycle.number();
+        if (paidAmount.signum() == 0) {
+            status = InvoiceStatus.ISSUED;
+            paidAt = null;
+        } else if (paidAmount.compareTo(totalAmount) >= 0) {
+            status = InvoiceStatus.PAID;
+        } else {
+            status = InvoiceStatus.PARTIALLY_PAID;
+            paidAt = null;
+        }
+        updatedAt = Instant.now();
+        return overpayment;
+    }
+
+    /** Replace final-meter lines after the tenant confirms a corrected checkout; preserve all receipts. */
+    public void reviseCheckOutUtilities(List<InvoiceItem> charges) {
+        if ((type != InvoiceType.CANCELLATION && type != InvoiceType.CHECK_OUT)
+            || status == InvoiceStatus.VOIDED || status == InvoiceStatus.DRAFT || depositPaidAmount.signum() > 0) {
+            throw new DomainException("Không thể điều chỉnh điện nước trên hóa đơn đã hủy hoặc đã cấn trừ cọc.");
+        }
+        if (charges == null || charges.stream().anyMatch(charge -> charge == null || !charge.isCheckOutCharge())) {
+            throw new IllegalArgumentException("Cần cung cấp các khoản điện nước chốt check-out hợp lệ.");
+        }
+        // paidAmount may have been capped at the previous total; its credit is still part of the original receipts.
+        BigDecimal received = paidAmount.add(settlementCreditAmount);
+        if (type == InvoiceType.CHECK_OUT) {
+            items.clear();
+        } else {
+            items.removeIf(InvoiceItem::isCheckOutCharge);
+        }
+        items.addAll(charges);
+        totalAmount = items.stream().map(InvoiceItem::totalAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        settlementCreditAmount = received.subtract(totalAmount).max(BigDecimal.ZERO);
+        paidAmount = received.min(totalAmount);
+        if (paidAmount.compareTo(totalAmount) >= 0) {
+            status = InvoiceStatus.PAID;
+            if (paidAt == null) paidAt = Instant.now();
+        } else {
+            status = paidAmount.signum() > 0 ? InvoiceStatus.PARTIALLY_PAID : InvoiceStatus.ISSUED;
+            paidAt = null;
+        }
+        updatedAt = Instant.now();
+    }
+
+    /** Voids future rent when a contract ends; prior receipts remain as a settlement credit. */
+    public BigDecimal voidForEarlyTermination() {
+        if (type != InvoiceType.RENT || status == InvoiceStatus.VOIDED || status == InvoiceStatus.DRAFT) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal refundable = paidAmount;
+        settlementCreditAmount = refundable;
+        status = InvoiceStatus.VOIDED;
+        updatedAt = Instant.now();
+        return refundable;
+    }
+
+    private static String cycleLabel(String prefix, BillingCycle cycle) {
+        DateTimeFormatter date = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        return String.format("%s kỳ %d (%s – %s)", prefix, cycle.number(),
+            cycle.startDate().format(date), cycle.endDate().format(date));
     }
 
     /**
@@ -288,18 +484,23 @@ public class Invoice {
      * Trả về true nếu hóa đơn thực sự thay đổi.
      */
     public boolean applyLateFee(BigDecimal fee) {
+        return applyLateFee(fee, 0);
+    }
+
+    public boolean applyLateFee(BigDecimal fee, long penaltyDays) {
         if (fee == null || fee.signum() <= 0 || type != InvoiceType.RENT || !isPayable()) {
             return false;
         }
         java.util.Optional<InvoiceItem> existing = lateFeeItem();
-        if (existing.isPresent() && existing.get().totalAmount().compareTo(fee) == 0) {
+        if (existing.isPresent() && existing.get().totalAmount().compareTo(fee) == 0
+            && existing.get().name().equals(InvoiceItem.lateFee(fee, penaltyDays).name())) {
             return false;
         }
         existing.ifPresent(item -> {
             items.remove(item);
             totalAmount = totalAmount.subtract(item.totalAmount());
         });
-        items.add(InvoiceItem.lateFee(fee));
+        items.add(InvoiceItem.lateFee(fee, penaltyDays));
         totalAmount = totalAmount.add(fee);
         this.updatedAt = Instant.now();
         return true;
@@ -372,6 +573,23 @@ public class Invoice {
         );
     }
 
+    /** Hóa đơn chốt điện/nước từ chỉ số cuối đã người thuê xác nhận trong biên bản check-out. */
+    public static Invoice issueCheckOutUtilities(
+        Contract contract, YearMonth period, String paymentCode, LocalDate dueDate, List<InvoiceItem> charges
+    ) {
+        if (contract == null || period == null || dueDate == null || charges == null || charges.isEmpty()) {
+            throw new IllegalArgumentException("Contract, period, due date and utility charges are required");
+        }
+        BigDecimal total = charges.stream().map(InvoiceItem::totalAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (total.signum() <= 0) {
+            throw new IllegalArgumentException("Checkout utility invoice must be greater than zero");
+        }
+        Instant now = Instant.now();
+        return new Invoice(UUID.randomUUID(), contract.getId(), contract.getRoomId(), contract.getPrimaryTenantId(),
+            period.getMonthValue(), period.getYear(), BigDecimal.ZERO, total, BigDecimal.ZERO, dueDate,
+            InvoiceStatus.ISSUED, paymentCode, InvoiceType.CHECK_OUT, null, null, charges, null, now, now);
+    }
+
     /** Hủy hóa đơn chưa có tiền nào được ghi nhận. */
     public void voidInvoice() {
         if (!isPayable() && status != InvoiceStatus.DRAFT) {
@@ -414,6 +632,12 @@ public class Invoice {
         this.updatedAt = at;
     }
 
+    /** Cọc được thanh toán như một khoản tiền vào hóa đơn, có nguồn riêng để hiện trong biên lai. */
+    public void applyPaymentFromDeposit(BigDecimal amount, Instant receivedAt) {
+        applyPayment(amount, receivedAt);
+        depositPaidAmount = depositPaidAmount.add(amount);
+    }
+
     public BigDecimal remainingAmount() {
         BigDecimal remaining = totalAmount.subtract(paidAmount);
         return remaining.signum() > 0 ? remaining : BigDecimal.ZERO;
@@ -443,6 +667,11 @@ public class Invoice {
     public InvoiceType getType() { return type; }
     public UUID getTicketId() { return ticketId; }
     public UUID getConsolidatedIntoInvoiceId() { return consolidatedIntoInvoiceId; }
+    public LocalDate getCycleStartDate() { return cycleStartDate; }
+    public LocalDate getCycleEndDate() { return cycleEndDate; }
+    public int getCycleNumber() { return cycleNumber; }
+    public BigDecimal getDepositPaidAmount() { return depositPaidAmount; }
+    public BigDecimal getSettlementCreditAmount() { return settlementCreditAmount; }
     public List<InvoiceItem> getItems() { return Collections.unmodifiableList(items); }
 
     /** Dùng khi nạp từ cơ sở dữ liệu. */

@@ -68,6 +68,12 @@ public class PrivateFileStorageService implements FileStorageUseCase {
             + UUID.randomUUID() + "." + extension;
     }
 
+    /** Khóa đối tượng của riêng một người thuê, chưa gắn nhà trọ (giấy tờ tải ở Hồ sơ cá nhân, #244). */
+    public static String tenantObjectKey(UUID tenantId, String category, String extension) {
+        return "tenants/" + tenantId + "/" + normalizeCategory(category) + "/"
+            + UUID.randomUUID() + "." + extension;
+    }
+
     private void assertObjectAccess(UUID propertyId, String objectKey) {
         if (propertyId == null || objectKey == null || objectKey.isBlank()) {
             throw new IllegalArgumentException("Property and object key are required");

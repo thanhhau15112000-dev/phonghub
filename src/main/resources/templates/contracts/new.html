@@ -39,52 +39,34 @@
                         <option value="">-- Chọn phòng --</option>
                         <option th:each="r : ${rooms}"
                                 th:value="${r.getId()}"
-                                th:text="${r.getRoomNumber() + ' (' + uiText.roomStatus(r.getStatus()) + ' - ' + #numbers.formatDecimal(r.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ)'}"
+                                th:disabled="${r.getStatus().name() == 'OCCUPIED' or r.getStatus().name() == 'MAINTENANCE'}"
+                                th:text="${r.getRoomNumber() + ' (' + uiText.roomStatus(r.getStatus()) + ' - ' + #numbers.formatDecimal(r.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ)' + ((r.getStatus().name() == 'OCCUPIED' or r.getStatus().name() == 'MAINTENANCE') ? ' — không nhận hợp đồng mới' : '')}"
                                 th:selected="${selectedRoomId != null and selectedRoomId.equals(r.getId())}">
                         </option>
                     </select>
                 </div>
             </div>
 
-            <h2 style="margin-top: 16px; margin-bottom: 12px;">2. Liên kết tài khoản người thuê (không bắt buộc)</h2>
+            <h2 style="margin-top: 16px; margin-bottom: 12px;">2. Người thuê chính</h2>
             <div class="form-group">
-                <label class="form-label" for="primaryTenantAccount">Tài khoản người thuê đã tạo</label>
-                <select id="primaryTenantAccount" name="primaryTenantUserId" class="form-control">
-                    <option value="">Nhập hồ sơ người thuê mới hoặc bỏ qua liên kết tài khoản</option>
-                    <option th:each="account : ${tenantAccounts}"
-                            th:value="${account.id()}"
-                            th:text="${account.fullName() + ' · ' + account.email()}"
-                            th:attr="data-full-name=${account.fullName()},data-phone=${account.phone() != null ? account.phone() : ''},data-email=${account.email()}">
+                <label class="form-label" for="tenantSearch">Tìm theo tên hoặc CCCD</label>
+                <input id="tenantSearch" type="search" class="form-control" placeholder="Nhập tên hoặc 4 số cuối CCCD" autocomplete="off">
+                <label class="form-label" for="primaryTenantId" style="margin-top: 8px;">Chọn người thuê *</label>
+                <select id="primaryTenantId" name="primaryTenantId" class="form-control" required>
+                    <option value="">-- Chọn người thuê đã có tài khoản --</option>
+                    <option th:each="tenant : ${tenantAccounts}"
+                            th:value="${tenant.id()}"
+                            th:selected="${selectedTenantId != null and selectedTenantId.equals(tenant.id())}"
+                            th:text="${tenant.fullName() + ' · ' + tenant.maskedIdentityCardNumber() + ' · ' + (tenant.phone() == null ? '' : '****' + #strings.substring(tenant.phone(), 6))}"
+                            th:attr="data-search=${#strings.toLowerCase(tenant.fullName() + ' ' + tenant.maskedIdentityCardNumber() + ' ' + (tenant.phone() == null ? '' : '****' + #strings.substring(tenant.phone(), 6)))}">
                     </option>
                 </select>
                 <p style="color: var(--text-secondary); font-size: 12px; margin: 6px 0 0;">
-                    Chọn tài khoản TENANT đã tạo để liên kết với hợp đồng. Tên, số điện thoại và email sẽ được điền sẵn; cần nhập CCCD để tạo hoặc khớp hồ sơ người thuê.
+                    Chỉ hiện người thuê có tài khoản đang hoạt động và có thể được gắn với nhà trọ này. CCCD và số điện thoại được che.
+                    <a th:if="${selectedPropertyId != null}" th:href="@{'/properties/' + ${selectedPropertyId} + '/tenants/new'}">Chưa có? Thêm người thuê kèm tài khoản</a>
                 </p>
             </div>
-
-            <h2 style="margin-top: 16px; margin-bottom: 16px;">3. Thông tin người thuê chính</h2>
-            <div class="form-row">
-                <div class="form-group" style="flex: 2;">
-                    <label class="form-label">Họ và tên *</label>
-                    <input type="text" name="primaryTenantFullName" class="form-control" placeholder="Ví dụ: Trần Thị B" required>
-                </div>
-                <div class="form-group" style="flex: 1;">
-                    <label class="form-label">CCCD *</label>
-                    <input type="text" name="primaryTenantIdCard" class="form-control" placeholder="Ví dụ: 079201002222" required>
-                </div>
-            </div>
-            <div class="form-row">
-                <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Số điện thoại *</label>
-                    <input type="text" name="primaryTenantPhone" class="form-control" placeholder="Ví dụ: 0909876543" required>
-                </div>
-                <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Email</label>
-                    <input type="email" name="primaryTenantEmail" class="form-control" placeholder="Ví dụ: tenantb@example.com">
-                </div>
-            </div>
-
-            <h2 style="margin-top: 16px; margin-bottom: 16px;">4. Tài chính và thời hạn hợp đồng</h2>
+            <h2 style="margin-top: 16px; margin-bottom: 16px;">3. Tài chính và thời hạn hợp đồng</h2>
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label">Tiền thuê hàng tháng (VND) *</label>
@@ -94,11 +76,11 @@
                     <label class="form-label">Tiền đặt cọc (VND) *</label>
                     <input type="number" name="depositAmount" class="form-control" value="3500000" min="0" required>
                 </div>
-                <div class="form-group" style="flex: 1;">
-                    <label class="form-label">Ngày thanh toán trong tháng</label>
-                    <input type="number" name="paymentDay" class="form-control" value="5" min="1" max="31" required>
-                </div>
+                <input type="hidden" name="paymentDay" value="5">
             </div>
+            <p style="color: var(--text-secondary); font-size: 12px; margin-top: -4px;">
+                Hạn thanh toán được tính 7 ngày sau ngày bắt đầu của từng chu kỳ.
+            </p>
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label">Ngày bắt đầu *</label>
@@ -121,32 +103,17 @@
 <footer th:replace="~{fragments/layout :: footer}"></footer>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const accountSelect = document.getElementById('primaryTenantAccount');
-        if (!accountSelect) return;
-
-        const fields = {
-            fullName: document.querySelector('[name="primaryTenantFullName"]'),
-            phone: document.querySelector('[name="primaryTenantPhone"]'),
-            email: document.querySelector('[name="primaryTenantEmail"]')
-        };
-        let lastAutofilled = null;
-
-        accountSelect.addEventListener('change', () => {
-            if (lastAutofilled) {
-                Object.entries(fields).forEach(([key, field]) => {
-                    if (field.value === lastAutofilled[key]) field.value = '';
-                });
-            }
-            const option = accountSelect.selectedOptions[0];
-            lastAutofilled = null;
-            if (!option || !option.value) return;
-
-            lastAutofilled = {
-                fullName: option.dataset.fullName || '',
-                phone: option.dataset.phone || '',
-                email: option.dataset.email || ''
-            };
-            Object.entries(fields).forEach(([key, field]) => { field.value = lastAutofilled[key]; });
+        const search = document.getElementById('tenantSearch');
+        const select = document.getElementById('primaryTenantId');
+        if (!search || !select) return;
+        const options = Array.from(select.options).slice(1);
+        search.addEventListener('input', () => {
+            const query = search.value.trim().toLocaleLowerCase();
+            options.forEach(option => {
+                const text = (option.dataset.search || '').toLocaleLowerCase();
+                option.hidden = query !== '' && !text.includes(query);
+            });
+            if (select.selectedOptions[0]?.hidden) select.value = '';
         });
     });
 </script>

@@ -106,8 +106,9 @@ class PropertyArchiveServiceUnitTest {
     @DisplayName("Hợp đồng đã kết thúc nhưng còn hóa đơn chưa thu -> 409; thu đủ thì ẩn được")
     void unpaidInvoiceBlocksArchive() {
         Contract ended = contract();
-        ended.activate();
-        Invoice invoice = invoices.save(Invoice.issueMonthlyRent(ended, YearMonth.of(2026, 3), "PH000001"));
+        ended.activate(Instant.parse("2026-01-01T00:00:00Z"));
+        YearMonth activePeriod = YearMonth.from(ended.billingAnchorDate());
+        Invoice invoice = invoices.save(Invoice.issueMonthlyRent(ended, activePeriod, "PH000001"));
         ended.terminate();
         contracts.save(ended);
 

@@ -21,6 +21,7 @@ import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
+import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.application.service.AuthService;
 import com.phonghub.application.service.AuthorizationService;
@@ -33,8 +34,10 @@ import com.phonghub.domain.exception.InvalidCredentialsException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
+import com.phonghub.domain.model.Tenant;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,6 +49,7 @@ class AuthServiceUnitTest {
     private CurrentUserPort currentUserPort;
     private AuthorizationService authorizationService;
     private AuditPort auditPort;
+    private TenantRepositoryPort tenantRepository;
     private AuthService authService;
 
     @BeforeEach
@@ -55,7 +59,9 @@ class AuthServiceUnitTest {
         currentUserPort = mock(CurrentUserPort.class);
         authorizationService = mock(AuthorizationService.class);
         auditPort = mock(AuditPort.class);
-        authService = new AuthService(userRepository, identityProviderPort, currentUserPort, authorizationService, auditPort);
+        tenantRepository = mock(TenantRepositoryPort.class);
+        authService = new AuthService(userRepository, identityProviderPort, currentUserPort, authorizationService,
+            auditPort, tenantRepository);
     }
 
     @Test
@@ -412,6 +418,151 @@ class AuthServiceUnitTest {
         );
 
         verify(identityProviderPort, never()).adminCreateUser(any(), any());
+    }
+
+    @Test
+    void adminCreateTenantCreatesCccdProfileLinkedToTheNewAccount() {
+        CurrentUser adminActor = new CurrentUser(UUID.randomUUID(), "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+        when(userRepository.findByEmail("tenant@phonghub.local")).thenReturn(Optional.empty());
+        when(userRepository.findByUsername("tenant1")).thenReturn(Optional.empty());
+        when(userRepository.findAll()).thenReturn(List.of());
+        when(tenantRepository.findByIdentityCardNumber("123456789")).thenReturn(Optional.empty());
+        UUID identityId = UUID.randomUUID();
+        when(identityProviderPort.adminCreateUser(eq("tenant@phonghub.local"), any())).thenReturn(identityId);
+        when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
+        when(tenantRepository.save(any(Tenant.class))).thenAnswer(call -> call.getArgument(0));
+
+        AuthUseCase.AdminCreateUserResult result = authService.adminCreateUser(new AuthUseCase.CreateUserCommand(
+            "tenant1", "tenant@phonghub.local", "Tenant One", "0911223344", UserRole.TENANT, "123456789"));
+
+        assertEquals(identityId, result.id());
+        verify(tenantRepository).save(argThat(tenant -> tenant.userId().equals(identityId)
+            && tenant.identityCardNumber().equals("123456789")
+            && tenant.phone().equals("0911223344")
+            && tenant.email().equals("tenant@phonghub.local")));
+    }
+
+    @Test
+    void adminCreateTenantRejectsMissingCccdBeforeCreatingExternalIdentity() {
+        when(currentUserPort.getCurrentUser()).thenReturn(
+            new CurrentUser(UUID.randomUUID(), "admin@phonghub.local", "Admin", UserRole.ADMIN));
+
+        assertThrows(IllegalArgumentException.class, () -> authService.adminCreateUser(new AuthUseCase.CreateUserCommand(
+            "tenant1", "tenant@phonghub.local", "Tenant One", "0911223344", UserRole.TENANT)));
+
+        verify(identityProviderPort, never()).adminCreateUser(any(), any());
+    }
+
+    @Test
+    void adminCreateTenantCompensatesExternalIdentityWhenProfileSaveFails() {
+        when(currentUserPort.getCurrentUser()).thenReturn(
+            new CurrentUser(UUID.randomUUID(), "admin@phonghub.local", "Admin", UserRole.ADMIN));
+        when(userRepository.findByEmail("tenant@phonghub.local")).thenReturn(Optional.empty());
+        when(userRepository.findByUsername("tenant1")).thenReturn(Optional.empty());
+        when(userRepository.findAll()).thenReturn(List.of());
+        when(tenantRepository.findByIdentityCardNumber("123456789")).thenReturn(Optional.empty());
+        UUID identityId = UUID.randomUUID();
+        when(identityProviderPort.adminCreateUser(eq("tenant@phonghub.local"), any())).thenReturn(identityId);
+        when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
+        when(tenantRepository.save(any(Tenant.class))).thenThrow(new RuntimeException("database unavailable"));
+
+        assertThrows(DomainException.class, () -> authService.adminCreateUser(new AuthUseCase.CreateUserCommand(
+            "tenant1", "tenant@phonghub.local", "Tenant One", "0911223344", UserRole.TENANT, "123456789")));
+
+        verify(userRepository).deleteById(identityId);
+        verify(identityProviderPort).adminDeleteUser(identityId);
+    }
+
+    @Test
+    void adminCreateTenantCanAttachAnExistingUnlinkedProfile() {
+        CurrentUser adminActor = new CurrentUser(UUID.randomUUID(), "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        UUID tenantId = UUID.randomUUID();
+        Tenant unlinked = Tenant.create(null, "Existing Tenant", "123456789", "0901111222", null, "Address");
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+        when(userRepository.findByEmail("tenant@phonghub.local")).thenReturn(Optional.empty());
+        when(userRepository.findByUsername("tenant1")).thenReturn(Optional.empty());
+        when(userRepository.findAll()).thenReturn(List.of());
+        when(tenantRepository.findByIdentityCardNumber("123456789")).thenReturn(Optional.of(unlinked));
+        when(identityProviderPort.adminCreateUser(eq("tenant@phonghub.local"), any())).thenReturn(tenantId);
+        when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
+        when(tenantRepository.save(any(Tenant.class))).thenAnswer(call -> call.getArgument(0));
+
+        authService.adminCreateUser(new AuthUseCase.CreateUserCommand(
+            "tenant1", "tenant@phonghub.local", "Updated Name", "0911223344", UserRole.TENANT, "123456789"));
+
+        verify(tenantRepository).save(argThat(saved -> saved.id().equals(unlinked.id())
+            && saved.userId().equals(tenantId) && saved.identityCardNumber().equals("123456789")));
+    }
+
+    @Test
+    void adminCreateTenantRejectsCccdAlreadyLinkedToAnotherAccount() {
+        when(currentUserPort.getCurrentUser()).thenReturn(
+            new CurrentUser(UUID.randomUUID(), "admin@phonghub.local", "Admin", UserRole.ADMIN));
+        when(userRepository.findByEmail("tenant@phonghub.local")).thenReturn(Optional.empty());
+        when(userRepository.findByUsername("tenant1")).thenReturn(Optional.empty());
+        when(userRepository.findAll()).thenReturn(List.of());
+        Tenant linked = Tenant.create(UUID.randomUUID(), "Other Tenant", "123456789", "0901111222", null, null);
+        when(tenantRepository.findByIdentityCardNumber("123456789")).thenReturn(Optional.of(linked));
+
+        assertThrows(com.phonghub.domain.exception.DuplicateIdentityCardException.class,
+            () -> authService.adminCreateUser(new AuthUseCase.CreateUserCommand(
+                "tenant1", "tenant@phonghub.local", "Tenant One", "0911223344", UserRole.TENANT, "123456789")));
+
+        verify(identityProviderPort, never()).adminCreateUser(any(), any());
+    }
+
+    @Test
+    void legacyTenantAccountCanBeLinkedToProfileWithCccd() {
+        UUID targetId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(UUID.randomUUID(), "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        User legacyUser = new User(targetId, "legacytenant", "legacy@phonghub.local", "Legacy Tenant", null,
+            UserRole.TENANT, User.UserStatus.ACTIVE, true, Instant.now());
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+        when(userRepository.findById(targetId)).thenReturn(Optional.of(legacyUser));
+        when(userRepository.findAll()).thenReturn(List.of(legacyUser));
+        when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
+        when(tenantRepository.findByUserId(targetId)).thenReturn(Optional.empty());
+        when(tenantRepository.findByIdentityCardNumber("123456789")).thenReturn(Optional.empty());
+        when(tenantRepository.save(any(Tenant.class))).thenAnswer(call -> call.getArgument(0));
+
+        authService.adminAttachTenantProfile(targetId, "123456789", "0911223344");
+
+        verify(userRepository).save(argThat(user -> user.id().equals(targetId) && user.phone().equals("0911223344")));
+        verify(tenantRepository).save(argThat(tenant -> tenant.userId().equals(targetId)
+            && tenant.identityCardNumber().equals("123456789")
+            && tenant.phone().equals("0911223344")));
+    }
+
+    @Test
+    void tenantAccountsWithoutProfilesAreReturnedOnlyToAdmin() {
+        UUID tenantId = UUID.randomUUID();
+        CurrentUser adminActor = new CurrentUser(UUID.randomUUID(), "admin@phonghub.local", "Admin", UserRole.ADMIN);
+        User tenant = new User(tenantId, "tenant", "tenant@phonghub.local", "Tenant", "0911223344",
+            UserRole.TENANT, User.UserStatus.ACTIVE, false, Instant.now());
+        when(currentUserPort.getCurrentUser()).thenReturn(adminActor);
+        when(userRepository.findByRole(UserRole.TENANT)).thenReturn(List.of(tenant));
+        when(tenantRepository.findByUserId(tenantId)).thenReturn(Optional.empty());
+
+        assertEquals(List.of(tenant), authService.listTenantAccountsMissingProfiles());
+
+        org.mockito.Mockito.doThrow(new UnauthorizedPropertyAccessException("admin only"))
+            .when(authorizationService).assertAdmin(null);
+        when(currentUserPort.getCurrentUser()).thenReturn(null);
+        assertThrows(UnauthorizedPropertyAccessException.class, authService::listTenantAccountsMissingProfiles);
+    }
+
+    @Test
+    void nonAdminCannotAttachTenantProfile() {
+        CurrentUser owner = new CurrentUser(UUID.randomUUID(), "owner@phonghub.local", "Owner", UserRole.OWNER);
+        when(currentUserPort.getCurrentUser()).thenReturn(owner);
+        org.mockito.Mockito.doThrow(new UnauthorizedPropertyAccessException("admin only"))
+            .when(authorizationService).assertAdmin(owner);
+
+        assertThrows(UnauthorizedPropertyAccessException.class,
+            () -> authService.adminAttachTenantProfile(UUID.randomUUID(), "123456789", "0911223344"));
+
+        verify(tenantRepository, never()).save(any(Tenant.class));
     }
 
     @Test

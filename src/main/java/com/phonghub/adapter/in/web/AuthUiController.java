@@ -30,7 +30,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import com.phonghub.application.port.in.DemoActorPort;
 import com.phonghub.application.port.in.NotificationUseCase;
+import com.phonghub.application.port.in.TenantDocumentUseCase;
 import com.phonghub.application.port.in.UserUseCase;
+import com.phonghub.domain.model.DocumentType;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
@@ -44,6 +46,7 @@ public class AuthUiController {
     private final CurrentUserPort currentUserPort;
     private final Optional<DemoActorPort> demoActorPort;
     private final Optional<NotificationUseCase> notificationUseCase;
+    private final TenantDocumentUseCase tenantDocumentUseCase;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
     public AuthUiController(
@@ -52,7 +55,8 @@ public class AuthUiController {
         UserUseCase userUseCase,
         CurrentUserPort currentUserPort,
         Optional<DemoActorPort> demoActorPort,
-        Optional<NotificationUseCase> notificationUseCase
+        Optional<NotificationUseCase> notificationUseCase,
+        TenantDocumentUseCase tenantDocumentUseCase
     ) {
         this.authUseCase = authUseCase;
         this.userRepository = userRepository;
@@ -60,6 +64,7 @@ public class AuthUiController {
         this.currentUserPort = currentUserPort;
         this.demoActorPort = demoActorPort;
         this.notificationUseCase = notificationUseCase;
+        this.tenantDocumentUseCase = tenantDocumentUseCase;
     }
 
     private static final String SESSION_LOGIN_FAILED_ATTEMPTS = "LOGIN_FAILED_ATTEMPTS";
@@ -249,6 +254,13 @@ public class AuthUiController {
         User user = userUseCase.getUser(current.id());
         model.addAttribute("currentUser", current);
         model.addAttribute("user", user);
+        if (current.isTenant()) {
+            // Ảnh CCCD tải ở đây được dùng cho mọi hợp đồng và biên bản check-in của người thuê (#244).
+            TenantDocumentUseCase.OwnDocuments own = tenantDocumentUseCase.ownDocuments();
+            model.addAttribute("ownDocuments", own);
+            model.addAttribute("identityCard", own.documents().stream()
+                .filter(document -> document.type() == DocumentType.CCCD).findFirst().orElse(null));
+        }
         return "account/profile";
     }
 

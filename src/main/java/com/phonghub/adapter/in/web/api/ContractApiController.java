@@ -50,11 +50,7 @@ public class ContractApiController {
         Contract contract = contractUseCase.createContract(new ContractUseCase.CreateContractCommand(
             request.propertyId(),
             request.roomId(),
-            request.primaryTenantFullName(),
-            request.primaryTenantIdCard(),
-            request.primaryTenantPhone(),
-            request.primaryTenantEmail(),
-            request.primaryTenantUserId(),
+            request.primaryTenantId(),
             request.depositAmount(),
             request.rentAmount(),
             request.startDate(),
@@ -167,8 +163,7 @@ public class ContractApiController {
             request.phone(),
             request.email(),
             request.permanentAddress(),
-            request.checkInDate() != null ? request.checkInDate() : LocalDate.now(),
-            request.createAccount()
+            request.checkInDate() != null ? request.checkInDate() : LocalDate.now()
         ));
         ContractResponse.OccupantAddedResponse response = ContractResponse.OccupantAddedResponse.from(
             result.occupant(), result.accountUsername(), result.temporaryPassword());
@@ -189,9 +184,7 @@ public class ContractApiController {
 
         String permanentAddress,
 
-        LocalDate checkInDate,
-
-        boolean createAccount
+        LocalDate checkInDate
     ) {}
 
     @PostMapping("/contracts/{contractId}/occupants/{tenantId}/check-out")
@@ -221,18 +214,8 @@ public class ContractApiController {
         @NotNull(message = "Room ID is required")
         UUID roomId,
 
-        @NotBlank(message = "Primary tenant name is required")
-        String primaryTenantFullName,
-
-        @NotBlank(message = "Primary tenant ID card is required")
-        String primaryTenantIdCard,
-
-        @NotBlank(message = "Primary tenant phone is required")
-        String primaryTenantPhone,
-
-        String primaryTenantEmail,
-
-        UUID primaryTenantUserId,
+        @NotNull(message = "Primary tenant profile is required")
+        UUID primaryTenantId,
 
         @NotNull(message = "Deposit amount is required")
         @DecimalMin(value = "0.0", message = "Deposit cannot be negative")

@@ -4,8 +4,10 @@ import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.TenantDocumentUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.model.DocumentType;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.Tenant;
@@ -37,17 +39,20 @@ public class TenantDocumentUiController {
 
     private final TenantDocumentUseCase documentUseCase;
     private final PropertyUseCase propertyUseCase;
+    private final PropertyRepositoryPort propertyRepository;
     private final TenantRepositoryPort tenantRepository;
     private final CurrentUserPort currentUserPort;
 
     public TenantDocumentUiController(
         TenantDocumentUseCase documentUseCase,
         PropertyUseCase propertyUseCase,
+        PropertyRepositoryPort propertyRepository,
         TenantRepositoryPort tenantRepository,
         CurrentUserPort currentUserPort
     ) {
         this.documentUseCase = documentUseCase;
         this.propertyUseCase = propertyUseCase;
+        this.propertyRepository = propertyRepository;
         this.tenantRepository = tenantRepository;
         this.currentUserPort = currentUserPort;
     }
@@ -134,7 +139,12 @@ public class TenantDocumentUiController {
         try {
             List<TenantDocumentUseCase.DocumentSummary> documents = documentUseCase.list(propertyId, tenantId);
             Tenant tenant = tenantRepository.findById(tenantId).orElseThrow();
-            Property property = propertyUseCase.getProperty(propertyId);
+            // Quyền xem giấy tờ đã được kiểm tra ở trên và chấp nhận người thuê của hợp đồng DRAFT. getProperty chỉ cho
+            // người thuê đang ở, nên người thuê cần tải CCCD trước khi xác nhận check-in sẽ bị chặn nếu dùng nó.
+            Property property = user != null && user.role() == UserRole.TENANT
+                ? propertyRepository.findById(propertyId)
+                    .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + propertyId))
+                : propertyUseCase.getProperty(propertyId);
 
             response.setHeader("Cache-Control", "no-store");
             model.addAttribute("currentUser", user);
@@ -154,7 +164,7 @@ public class TenantDocumentUiController {
         }
     }
 
-    private static TenantDocumentUseCase.DocumentFile toFile(MultipartFile file) throws IOException {
+    static TenantDocumentUseCase.DocumentFile toFile(MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
             return null;
         }

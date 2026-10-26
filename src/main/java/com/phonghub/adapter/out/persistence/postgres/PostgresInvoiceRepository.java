@@ -25,7 +25,8 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
     private static final String COLUMNS = """
         id, contract_id, room_id, tenant_id, month, year, rent_amount, total_amount,
         paid_amount, due_date, status, payment_code, invoice_type, ticket_id, consolidated_into_invoice_id,
-        paid_at, created_at, updated_at, version
+        paid_at, created_at, updated_at, cycle_start_date, cycle_end_date, cycle_number, deposit_paid_amount,
+        settlement_credit_amount, version
         """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -57,7 +58,12 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
             List.of(),
             paidAt != null ? paidAt.toInstant() : null,
             rs.getTimestamp("created_at").toInstant(),
-            rs.getTimestamp("updated_at").toInstant()
+            rs.getTimestamp("updated_at").toInstant(),
+            rs.getDate("cycle_start_date") != null ? rs.getDate("cycle_start_date").toLocalDate() : null,
+            rs.getDate("cycle_end_date") != null ? rs.getDate("cycle_end_date").toLocalDate() : null,
+            rs.getInt("cycle_number"),
+            rs.getBigDecimal("deposit_paid_amount"),
+            rs.getBigDecimal("settlement_credit_amount")
         );
         invoice.restoreVersion(rs.getLong("version"));
         return invoice;
@@ -69,20 +75,30 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
             INSERT INTO invoices (
                 id, contract_id, room_id, tenant_id, month, year, rent_amount, utility_amount,
                 other_amount, total_amount, paid_amount, due_date, status, payment_code,
-                invoice_type, ticket_id, consolidated_into_invoice_id, paid_at, created_at, updated_at, version
+                invoice_type, ticket_id, consolidated_into_invoice_id, paid_at, created_at, updated_at,
+                cycle_start_date, cycle_end_date, cycle_number, deposit_paid_amount, settlement_credit_amount, version
             ) VALUES (
                 :id, :contractId, :roomId, :tenantId, :month, :year, :rentAmount, :utilityAmount,
                 :otherAmount, :totalAmount, :paidAmount, :dueDate, :status, :paymentCode,
-                :invoiceType, :ticketId, :consolidatedInto, :paidAt, :createdAt, :updatedAt, :version
+                :invoiceType, :ticketId, :consolidatedInto, :paidAt, :createdAt, :updatedAt,
+                :cycleStartDate, :cycleEndDate, :cycleNumber, :depositPaidAmount, :settlementCreditAmount, :version
             )
             ON CONFLICT (id) DO UPDATE SET
+                rent_amount = EXCLUDED.rent_amount,
                 utility_amount = EXCLUDED.utility_amount,
                 other_amount = EXCLUDED.other_amount,
                 total_amount = EXCLUDED.total_amount,
                 paid_amount = EXCLUDED.paid_amount,
+                due_date = EXCLUDED.due_date,
                 status = EXCLUDED.status,
+                invoice_type = EXCLUDED.invoice_type,
                 paid_at = EXCLUDED.paid_at,
                 consolidated_into_invoice_id = EXCLUDED.consolidated_into_invoice_id,
+                cycle_start_date = EXCLUDED.cycle_start_date,
+                cycle_end_date = EXCLUDED.cycle_end_date,
+                cycle_number = EXCLUDED.cycle_number,
+                deposit_paid_amount = EXCLUDED.deposit_paid_amount,
+                settlement_credit_amount = EXCLUDED.settlement_credit_amount,
                 updated_at = EXCLUDED.updated_at,
                 version = invoices.version + 1
             WHERE invoices.version = :version
@@ -111,7 +127,12 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
             .addValue("paymentCode", invoice.getPaymentCode())
             .addValue("paidAt", invoice.getPaidAt() != null ? Timestamp.from(invoice.getPaidAt()) : null)
             .addValue("createdAt", Timestamp.from(invoice.getCreatedAt()))
-            .addValue("updatedAt", Timestamp.from(invoice.getUpdatedAt()));
+            .addValue("updatedAt", Timestamp.from(invoice.getUpdatedAt()))
+            .addValue("cycleStartDate", invoice.getCycleStartDate() != null ? Date.valueOf(invoice.getCycleStartDate()) : null)
+            .addValue("cycleEndDate", invoice.getCycleEndDate() != null ? Date.valueOf(invoice.getCycleEndDate()) : null)
+            .addValue("cycleNumber", invoice.getCycleNumber())
+            .addValue("depositPaidAmount", invoice.getDepositPaidAmount());
+        params.addValue("settlementCreditAmount", invoice.getSettlementCreditAmount());
 
         List<Long> versions = jdbcTemplate.queryForList(sql, params, Long.class);
         if (versions.isEmpty()) {
@@ -122,9 +143,9 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
         return invoice;
     }
 
-    /** Ghi lại toàn bộ dòng chi tiết của hóa đơn (hóa đơn không có dòng nào thì giữ nguyên dữ liệu cũ). */
+    /** Replace invoice lines; a corrected checkout may legitimately remove every final-meter charge. */
     private void saveItems(Invoice invoice) {
-        if (invoice.getItems().isEmpty()) {
+        if (invoice.getItems().isEmpty() && invoice.getType() != InvoiceType.CHECK_OUT) {
             return;
         }
         jdbcTemplate.update("DELETE FROM invoice_items WHERE invoice_id = :invoiceId", Map.of("invoiceId", invoice.getId()));
@@ -227,6 +248,14 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
     public Optional<Invoice> findByIdForUpdate(UUID id) {
         String sql = "SELECT " + COLUMNS + " FROM invoices WHERE id = :id FOR UPDATE";
         return hydrate(jdbcTemplate.query(sql, Map.of("id", id), this::mapRow)).stream().findFirst();
+    }
+
+    @Override
+    public List<Invoice> findPayableByContractIdForUpdate(UUID contractId) {
+        String sql = "SELECT " + COLUMNS + " FROM invoices WHERE contract_id = :contractId"
+            + " AND status IN ('ISSUED', 'PARTIALLY_PAID', 'OVERDUE') AND consolidated_into_invoice_id IS NULL"
+            + " ORDER BY id FOR UPDATE";
+        return hydrate(jdbcTemplate.query(sql, Map.of("contractId", contractId), this::mapRow));
     }
 
     @Override

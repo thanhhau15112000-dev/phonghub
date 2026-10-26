@@ -52,6 +52,14 @@ public class InMemoryTenantRepository implements TenantRepositoryPort {
     }
 
     @Override
+    public List<Tenant> findAccountProfilesWithoutPropertyLinks() {
+        return store.values().stream()
+            .filter(tenant -> tenant.userId() != null)
+            .filter(tenant -> links.getOrDefault(tenant.id(), Map.of()).isEmpty())
+            .toList();
+    }
+
+    @Override
     public void linkToProperty(UUID tenantId, UUID propertyId, UUID actorId) {
         links.computeIfAbsent(tenantId, id -> new ConcurrentHashMap<>()).putIfAbsent(propertyId, Optional.empty());
     }

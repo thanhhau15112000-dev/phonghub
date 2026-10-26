@@ -9,6 +9,8 @@ public interface HandoverRepositoryPort {
 
     Handover save(Handover handover);
 
+    void delete(UUID handoverId);
+
     Optional<Handover> find(UUID contractId, HandoverType type);
 
     /** Khóa dòng biên bản trong transaction để hai lần duyệt cùng lúc không cùng thành công. */

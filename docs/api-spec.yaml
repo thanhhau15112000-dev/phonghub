@@ -1657,7 +1657,8 @@ paths:
           format: uuid
     post:
       tags: [Contracts]
-      summary: Chấm dứt hợp đồng sớm trước hạn
+      summary: Từ chối chấm dứt hợp đồng đã kích hoạt trực tiếp
+      description: Hợp đồng đã kích hoạt phải được kết thúc qua check-out. Endpoint này trả 409 cho hợp đồng đang ở; giao diện web mở biên bản check-out sớm và lưu lý do.
       requestBody:
         required: true
         content:
@@ -1672,21 +1673,12 @@ paths:
                 reason:
                   type: string
       responses:
-        '200':
-          description: Hợp đồng đã chuyển trạng thái TERMINATED
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: Đã chấm dứt hợp đồng.
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /api/contracts/{contractId}/occupants:
     parameters:
@@ -2373,9 +2365,9 @@ paths:
           format: uuid
     post:
       tags: [Contracts]
-      summary: Duyệt check-out - chỉ owner hoặc admin
+      summary: Duyệt check-out - owner, admin hoặc staff có quyền quản lý hợp đồng
       description: >
-        Owner chốt khoản khấu trừ (mặc định bằng tổng đề xuất). Trong một transaction: biên bản APPROVED, hợp đồng TERMINATED và phòng chuyển AVAILABLE, hoặc MAINTENANCE nếu có tài sản hỏng hoặc mất. Lỗi bất kỳ thì hoàn tác tất cả.
+        Người quản lý chốt khoản khấu trừ (mặc định bằng tổng đề xuất) và chọn hóa đơn còn nợ cần cấn trừ từ tiền cọc sau khấu trừ tài sản. Tất cả hóa đơn còn nợ phải thanh toán hoặc được cấn trừ đủ; cọc không đủ thì trả 409 kèm số thiếu. Hóa đơn bị khóa khi kiểm tra để không tranh chấp với giao dịch thanh toán đồng thời. Trong một transaction: giao dịch cấn trừ, hóa đơn, biên bản APPROVED, hợp đồng TERMINATED và trạng thái phòng được cập nhật nguyên tử.
       requestBody:
         required: false
         content:
@@ -2386,6 +2378,13 @@ paths:
                 finalDeduction:
                   type: number
                   minimum: 0
+                depositOffsetInvoiceIds:
+                  type: array
+                  uniqueItems: true
+                  items:
+                    type: string
+                    format: uuid
+                  description: Hóa đơn đang nợ được chọn cấn trừ đủ bằng tiền cọc khả dụng.
       responses:
         '200':
           description: Biên bản check-out sau khi chuyển trạng thái
@@ -4889,7 +4888,14 @@ components:
         finalDeduction:
           type: number
           nullable: true
-          description: Khoản khấu trừ owner chốt khi duyệt check-out
+          description: Khoản khấu trừ người quản lý chốt khi duyệt check-out
+        earlyTermination:
+          type: boolean
+          description: Hợp đồng được yêu cầu kết thúc sớm qua check-out
+        terminationReason:
+          type: string
+          nullable: true
+          description: Lý do kết thúc sớm
         photos:
           type: array
           items:

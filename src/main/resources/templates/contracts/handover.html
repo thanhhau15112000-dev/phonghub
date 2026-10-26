@@ -10,9 +10,12 @@
     <div class="page-title-row">
         <div>
             <h1 th:text="${checkOut} ? 'Biên bản check-out (trả phòng)' : 'Biên bản check-in'">Biên bản check-in</h1>
+            <p th:if="${checkOut and details != null and details.handover().earlyTermination()}"
+               style="margin: 4px 0 0; color: var(--text-secondary);">
+                Kết thúc sớm — lý do: <strong th:text="${details.handover().terminationReason()}">Lý do</strong>
+            </p>
             <p th:unless="${checkOut}" style="color: var(--text-secondary); font-size: 13px;">
-                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Check-in thực hiện sau khi hợp đồng đã hiệu lực;
-                duyệt biên bản không thay đổi trạng thái hợp đồng hay phòng.
+                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Hợp đồng chỉ có hiệu lực và phòng chuyển sang đang thuê sau khi người thuê chính xác nhận, người quản lý duyệt biên bản.
             </p>
             <p th:if="${checkOut}" style="color: var(--text-secondary); font-size: 13px;">
                 Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Check-out cần biên bản check-in đã duyệt.
@@ -30,24 +33,48 @@
     <div class="card" th:if="${details == null}">
         <h2 th:text="${checkOut} ? 'Chưa có biên bản check-out' : 'Chưa có biên bản check-in'">Chưa có biên bản</h2>
         <div th:if="${!canManage}" class="empty-state"><p>Chủ trọ hoặc nhân viên sẽ tạo biên bản khi bàn giao phòng.</p></div>
-        <p th:if="${canManage and contract.getStatus().name() != 'ACTIVE' and !(checkOut and contract.getStatus().name() == 'EXPIRED')}" style="color: var(--danger-color, #dc2626);">
-            Chỉ lập biên bản cho hợp đồng đang hiệu lực (ACTIVE); riêng check-out được lập cả khi hợp đồng đã hết hạn.
+        <p th:if="${canManage and contract.getStatus().name() != 'ACTIVE' and contract.getStatus().name() != 'DRAFT' and !(checkOut and contract.getStatus().name() == 'EXPIRED')}" style="color: var(--danger-color, #dc2626);">
+            Chỉ lập biên bản check-in cho hợp đồng nháp hoặc đang hiệu lực; riêng check-out được lập cả khi hợp đồng đã hết hạn.
         </p>
-        <form th:if="${canManage and (contract.getStatus().name() == 'ACTIVE' or (checkOut and contract.getStatus().name() == 'EXPIRED'))}" th:action="@{${base}}" method="post">
+        <form th:if="${canManage and (contract.getStatus().name() == 'ACTIVE' or (!checkOut and contract.getStatus().name() == 'DRAFT') or (checkOut and contract.getStatus().name() == 'EXPIRED'))}" th:action="@{${base}}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 520px;">
                 <div class="form-group">
                     <label class="form-label">Chỉ số điện đầu kỳ *</label>
-                    <input type="number" step="0.01" min="0" name="initialElectricMeter" class="form-control" required>
+                    <input type="number" step="0.01" min="0" name="initialElectricMeter" class="form-control"
+                           th:value="${conditionPrefill != null and conditionPrefill.snapshot() != null ? conditionPrefill.snapshot().electricMeter() : null}" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Chỉ số nước đầu kỳ *</label>
-                    <input type="number" step="0.01" min="0" name="initialWaterMeter" class="form-control" required>
+                    <input type="number" step="0.01" min="0" name="initialWaterMeter" class="form-control"
+                           th:value="${conditionPrefill != null and conditionPrefill.snapshot() != null ? conditionPrefill.snapshot().waterMeter() : null}" required>
                 </div>
             </div>
             <div class="form-group" style="max-width: 520px;">
                 <label class="form-label">Tình trạng phòng *</label>
-                <textarea name="roomCondition" class="form-control" rows="3" required></textarea>
+                <textarea name="roomCondition" class="form-control" rows="3" required
+                          th:text="${conditionPrefill != null and conditionPrefill.snapshot() != null ? conditionPrefill.snapshot().conditionNote() : null}"></textarea>
+            </div>
+            <p th:if="${conditionPrefill != null and conditionPrefill.snapshot() != null}" style="font-size: 12px; color: var(--text-secondary);">
+                Chỉ số, ghi chú và tài sản được lấy từ biên bản hiện trạng gần nhất; khi gửi, danh sách tài sản này sẽ được chụp vào biên bản check-in.
+            </p>
+            <div th:if="${conditionPrefill != null and conditionPrefill.snapshot() != null}" style="margin: 12px 0;">
+                <h3>Tài sản hiện trạng được điền sẵn</h3>
+                <p th:if="${#lists.isEmpty(conditionPrefill.items())}" class="empty-state">
+                    Biên bản hiện trạng ghi nhận phòng không có tài sản.
+                </p>
+                <table th:if="${!#lists.isEmpty(conditionPrefill.items())}" class="data-table">
+                    <thead><tr><th>Tài sản</th><th>Số lượng</th><th>Tình trạng</th><th>Ghi chú</th><th>Giá trị ước tính</th></tr></thead>
+                    <tbody>
+                    <tr th:each="item : ${conditionPrefill.items()}">
+                        <td th:text="${item.name()}">Giường</td>
+                        <td th:text="${item.quantity()}">1</td>
+                        <td th:text="${uiText.assetStatus(item.status())}">Tốt</td>
+                        <td th:text="${item.note() != null ? item.note() : '—'}">—</td>
+                        <td th:text="${#numbers.formatDecimal(item.estimatedValue(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</td>
+                    </tr>
+                    </tbody>
+                </table>
             </div>
             <div class="form-group" style="max-width: 520px;">
                 <label class="form-label">Chìa khóa, thẻ bàn giao</label>
@@ -66,7 +93,7 @@
             </div>
             <ol style="font-size: 13px; color: var(--text-secondary); padding-left: 18px;">
                 <li>Nháp: chủ trọ nhập chỉ số, tình trạng phòng và ảnh.</li>
-                <li>Chờ khách: khách xem và xác nhận (cần đã tải CCCD).</li>
+                <li>Chờ khách: khách xem và xác nhận (cần đã có ảnh CCCD, tải ở Hồ sơ cá nhân).</li>
                 <li>Chờ duyệt: chủ trọ hoặc nhân viên duyệt hoặc từ chối.</li>
             </ol>
             <div th:if="${details.handover().status().name() == 'REJECTED'}" style="margin-top: 8px;">
@@ -85,13 +112,26 @@
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <button type="submit" class="btn btn-primary">Tôi xác nhận biên bản</button>
                 </form>
-                <a th:if="${primaryTenant and details.handover().status().name() == 'PENDING_TENANT'}"
+                <a th:if="${primaryTenant and checkOut and details.handover().status().name() == 'PENDING_TENANT'}"
                    th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${contract.getPrimaryTenantId()} + '/documents'}"
                    class="btn btn-secondary">Tải giấy tờ</a>
-                <form th:if="${(checkOut ? ownerOrAdmin : canManage) and details.handover().status().name() == 'PENDING_APPROVAL'}" th:action="@{${base} + '/approve'}" method="post" style="display: flex; gap: 6px; margin: 0;">
+                <th:block th:if="${primaryTenant and !checkOut and details.handover().status().name() == 'PENDING_TENANT'}">
+                    <span th:if="${identityCardOnFile}" class="badge badge-ACTIVE" style="align-self: center;">Đã có ảnh CCCD trong Hồ sơ cá nhân</span>
+                    <a th:unless="${identityCardOnFile}" th:href="@{/account/profile#cccd}" class="btn btn-secondary">Tải ảnh CCCD ở Hồ sơ cá nhân</a>
+                </th:block>
+                <form th:if="${canManage and details.handover().status().name() == 'PENDING_APPROVAL'}" th:action="@{${base} + '/approve'}" method="post" style="display: flex; gap: 6px; margin: 0; flex-wrap: wrap;">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <input th:if="${checkOut}" type="number" min="0" step="1000" name="finalDeduction" class="form-control"
                            th:value="${details.proposedDeduction()}" title="Khoản khấu trừ chốt" style="width: 150px;">
+                    <div th:if="${checkOut and settlement != null and !#lists.isEmpty(settlement.openInvoices())}"
+                         style="flex-basis: 100%; padding: 8px 10px; border: 1px solid var(--border-color);">
+                        <strong>Công nợ cần xử lý trước khi duyệt</strong>
+                        <p style="margin: 4px 0; font-size: 12px;">Chọn từng hóa đơn để cấn trừ toàn bộ số còn nợ vào phần tiền cọc còn lại sau khấu trừ tài sản. Nếu cọc thiếu, thanh toán phần thiếu rồi tải lại trang.</p>
+                        <label th:each="debt : ${settlement.openInvoices()}" style="display: block; font-size: 13px; margin-top: 4px;">
+                            <input type="checkbox" name="depositOffsetInvoiceIds" th:value="${debt.id()}">
+                            <span th:text="${(debt.type().name() == 'CHECK_OUT' ? 'Chốt điện/nước ' : (debt.type().name() == 'MAINTENANCE' ? 'Phí sửa chữa ' : 'Hóa đơn ')) + #numbers.formatInteger(debt.month(), 2) + '/' + debt.year() + ' · còn ' + #numbers.formatDecimal(debt.remainingAmount(), 0, 'POINT', 0, 'COMMA') + ' đ · hạn ' + #temporals.format(debt.dueDate(), 'dd/MM/yyyy')}">Khoản còn nợ</span>
+                        </label>
+                    </div>
                     <button type="submit" class="btn btn-primary">Duyệt</button>
                 </form>
                 <form th:if="${canManage and details.handover().status().name() == 'PENDING_APPROVAL'}" th:action="@{${base} + '/reject'}" method="post" style="display: flex; gap: 6px; margin: 0;">
@@ -192,7 +232,7 @@
         <div class="card">
             <h2 th:text="${checkOut} ? 'Tình trạng tài sản khi trả phòng' : 'Tài sản bàn giao'">Tài sản bàn giao</h2>
             <p th:if="${#lists.isEmpty(details.items())}" style="font-size: 13px; color: var(--text-secondary);"
-               th:text="${checkOut} ? 'Biên bản check-in không có tài sản nào.' : 'Danh sách tài sản được chụp lại từ trang phòng khi gửi biên bản cho khách.'">
+               th:text="${checkOut} ? 'Biên bản check-in không có tài sản nào.' : 'Phòng không có tài sản bàn giao.'">
                 Danh sách tài sản
             </p>
             <table th:if="${!#lists.isEmpty(details.items())}" class="data-table">
@@ -226,6 +266,37 @@
                     </tr>
                 </tbody>
             </table>
+            <form th:if="${!checkOut and canManage and contract.getStatus().name() == 'DRAFT' and details.handover().status().name() == 'DRAFT'}"
+                  th:action="@{${base} + '/assets'}" method="post"
+                  style="display: flex; gap: 8px; align-items: end; flex-wrap: wrap; margin-top: 12px;">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <div class="form-group" style="margin: 0; min-width: 180px;">
+                    <label class="form-label">Tên tài sản *</label>
+                    <input name="name" class="form-control" maxlength="120" required>
+                </div>
+                <div class="form-group" style="margin: 0; width: 100px;">
+                    <label class="form-label">Số lượng *</label>
+                    <input type="number" name="quantity" min="1" value="1" class="form-control" required>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label">Tình trạng *</label>
+                    <select name="status" class="form-control">
+                        <option th:each="st : ${assetStatuses}" th:value="${st}" th:text="${uiText.assetStatus(st)}"></option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin: 0; min-width: 180px;">
+                    <label class="form-label">Ghi chú</label>
+                    <input name="note" maxlength="500" class="form-control">
+                </div>
+                <div class="form-group" style="margin: 0; width: 160px;">
+                    <label class="form-label">Giá trị ước tính</label>
+                    <input type="number" name="estimatedValue" min="0" step="1000" class="form-control">
+                </div>
+                <button type="submit" class="btn btn-sm btn-secondary">Thêm vào phòng và biên bản</button>
+            </form>
+            <p th:if="${!checkOut and contract.getStatus().name() == 'DRAFT'}" style="font-size: 11px; color: var(--text-secondary);">
+                Tài sản mới được ghi vào danh sách tài sản của phòng và chụp vào biên bản check-in.
+            </p>
             <div th:if="${checkOut}" style="margin-top: 8px; font-size: 13px;">
                 Tổng khấu trừ đề xuất: <strong th:text="${#numbers.formatDecimal(details.proposedDeduction(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</strong>
                 <span th:if="${details.handover().finalDeduction() != null}">
@@ -243,12 +314,20 @@
                         <td>Tiền cọc</td>
                         <td class="col-number" th:text="${#numbers.formatDecimal(settlement.deposit(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     </tr>
+                    <tr th:if="${settlement.depositApplied().signum() > 0}">
+                        <td>Đã dùng tiền cọc thanh toán hóa đơn</td>
+                        <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(settlement.depositApplied(), 0, 'POINT', 0, 'COMMA') + ' đ'}">− 0 đ</td>
+                    </tr>
+                    <tr th:if="${settlement.settlementCredit().signum() > 0}">
+                        <td>Tiền hoàn/đối trừ cho người thuê</td>
+                        <td class="col-number" th:text="${'+ ' + #numbers.formatDecimal(settlement.settlementCredit(), 0, 'POINT', 0, 'COMMA') + ' đ'}">+ 0 đ</td>
+                    </tr>
                     <tr>
                         <td th:text="${settlement.deductionFinal() ? 'Khấu trừ tài sản (chủ trọ đã chốt)' : 'Khấu trừ tài sản (đề xuất)'}">Khấu trừ tài sản</td>
                         <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(settlement.deduction(), 0, 'POINT', 0, 'COMMA') + ' đ'}">− 0 đ</td>
                     </tr>
                     <tr>
-                        <td th:text="${'Hóa đơn chưa thu (' + settlement.unpaidInvoices() + ' hóa đơn)'}">Hóa đơn chưa thu</td>
+                        <td th:text="${'Công nợ chưa thanh toán (' + settlement.unpaidInvoices() + ' hóa đơn)'}">Công nợ chưa thanh toán</td>
                         <td class="col-number" th:text="${'− ' + #numbers.formatDecimal(settlement.outstanding(), 0, 'POINT', 0, 'COMMA') + ' đ'}">− 0 đ</td>
                     </tr>
                     <tr th:each="u : ${settlement.utilities()}">
@@ -268,9 +347,9 @@
                     </tr>
                 </tbody>
             </table>
-            <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 0;">
-                Tiền điện/nước tính từ lần ghi chỉ số gần nhất tới chỉ số trong biên bản này theo đơn giá hiện tại (ước tính,
-                chưa lập hóa đơn). Hóa đơn chưa thu vẫn giữ để đối chiếu sau khi trả phòng.
+            <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 0;"
+               th:text="${details.handover().confirmedByTenant() and settlement.utilities().isEmpty() ? 'Hóa đơn chốt điện/nước đã được tạo nếu có tiêu thụ và đơn giá; công nợ được xử lý trước khi duyệt.' : 'Tiền điện/nước đang là ước tính theo chỉ số và đơn giá hiện tại; hóa đơn chốt được tạo khi người thuê xác nhận biên bản.'}">
+                Hóa đơn chốt điện/nước được tạo khi người thuê xác nhận biên bản.
             </p>
         </div>
 

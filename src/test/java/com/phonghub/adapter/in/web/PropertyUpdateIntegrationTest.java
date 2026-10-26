@@ -74,7 +74,8 @@ class PropertyUpdateIntegrationTest extends SeededWebTest {
             .andExpect(jsonPath("$.name").value("Nhà trọ đổi tên"))
             .andExpect(jsonPath("$.approvalStatus").value("VERIFIED"));
         mockMvc.perform(post(ROOMS).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"roomNumber\":\"P899\",\"floor\":1,\"basePrice\":1000000,\"maxOccupants\":2}"))
+                .content("{\"roomNumber\":\"P899\",\"floor\":1,\"basePrice\":1000000,\"maxOccupants\":2,"
+                    + "\"electricMeter\":0,\"waterMeter\":0,\"conditionNote\":\"Hiện trạng ban đầu\",\"noAssets\":true}"))
             .andExpect(status().isCreated());
 
         mockMvc.perform(patch(URL).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
@@ -83,13 +84,15 @@ class PropertyUpdateIntegrationTest extends SeededWebTest {
             .andExpect(jsonPath("$.approvalStatus").value("PENDING"));
 
         mockMvc.perform(post(ROOMS).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"roomNumber\":\"P900\",\"floor\":1,\"basePrice\":1000000,\"maxOccupants\":2}"))
+                .content("{\"roomNumber\":\"P900\",\"floor\":1,\"basePrice\":1000000,\"maxOccupants\":2,"
+                    + "\"electricMeter\":0,\"waterMeter\":0,\"conditionNote\":\"Hiện trạng ban đầu\",\"noAssets\":true}"))
             .andExpect(status().isConflict());
 
         mockMvc.perform(post("/api/admin/properties/" + DataSeeder.PROP_1_ID + "/verify").header("X-User-Id", ADMIN))
             .andExpect(status().isOk());
         mockMvc.perform(post(ROOMS).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"roomNumber\":\"P901\",\"floor\":1,\"basePrice\":1000000,\"maxOccupants\":2}"))
+                .content("{\"roomNumber\":\"P901\",\"floor\":1,\"basePrice\":1000000,\"maxOccupants\":2,"
+                    + "\"electricMeter\":0,\"waterMeter\":0,\"conditionNote\":\"Hiện trạng ban đầu\",\"noAssets\":true}"))
             .andExpect(status().isCreated());
     }
 

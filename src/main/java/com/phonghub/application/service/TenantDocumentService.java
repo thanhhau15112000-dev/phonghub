@@ -15,6 +15,7 @@ import com.phonghub.domain.exception.InvalidCredentialsException;
 import com.phonghub.domain.exception.TenantDocumentNotFoundException;
 import com.phonghub.domain.exception.TenantNotFoundException;
 import com.phonghub.domain.exception.TooManyRevealAttemptsException;
+import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.DocumentType;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.TenantDocument;
@@ -124,27 +125,76 @@ public class TenantDocumentService implements TenantDocumentUseCase {
         assertNotLocked(command.tenantId());
         Tenant tenant = findTenant(command.tenantId());
 
-        Prepared front = prepareImage(command.front(), true);
-        Prepared back = prepareImage(command.back(), false);
-        TenantDataProtectionPort.ProtectedValue number = protectNumber(command, tenant);
-
         TenantDocument previous = documentRepository.findByTenantIdAndType(command.tenantId(), command.type())
             .orElse(null);
-        String frontKey = store(command.propertyId(), front);
-        String backKey = back == null ? null : store(command.propertyId(), back);
+        TenantDocument saved = saveDocument(command.propertyId(), tenant, command.type(), command.number(),
+            command.front(), command.back(), previous, user);
+        audit("TENANT_DOCUMENT_UPLOADED", user, command.propertyId(), command.tenantId(),
+            Map.of("type", command.type().name(), "replaced", previous != null));
+        return summarize(saved, tenant);
+    }
+
+    @Override
+    public OwnDocuments ownDocuments() {
+        CurrentUser user = requireTenantUser();
+        Tenant tenant = tenantRepository.findByUserId(user.id()).orElse(null);
+        if (tenant == null) {
+            return new OwnDocuments(false, List.of());
+        }
+        // Người thuê xem bản tóm tắt đã che số của chính mình: không ghi audit như khi người quản lý xem.
+        List<DocumentSummary> documents = documentRepository.findByTenantId(tenant.id()).stream()
+            .sorted(Comparator.comparing(TenantDocument::type))
+            .map(document -> summarize(document, tenant))
+            .toList();
+        return new OwnDocuments(true, documents);
+    }
+
+    @Override
+    public DocumentSummary uploadOwnIdentityCard(DocumentFile front, DocumentFile back) {
+        CurrentUser user = requireTenantUser();
+        Tenant tenant = tenantRepository.findByUserId(user.id()).orElseThrow(() -> new IllegalArgumentException(
+            "Tài khoản chưa gắn hồ sơ người thuê có CCCD. Vui lòng liên hệ chủ trọ hoặc quản trị viên để bổ sung."));
+        assertNotLocked(tenant.id());
+        TenantDocument previous = documentRepository.findByTenantIdAndType(tenant.id(), DocumentType.CCCD)
+            .orElse(null);
+        // CCCD từng được tải ở trang của một nhà trọ thì giữ nhà trọ đó; tải lần đầu ở hồ sơ thì không gắn nhà trọ.
+        UUID propertyId = previous == null ? null : previous.propertyId();
+        TenantDocument saved = saveDocument(propertyId, tenant, DocumentType.CCCD, null, front, back, previous, user);
+        audit("TENANT_DOCUMENT_UPLOADED", user, propertyId, tenant.id(),
+            Map.of("type", DocumentType.CCCD.name(), "replaced", previous != null, "source", "PROFILE"));
+        return summarize(saved, tenant);
+    }
+
+    /** Kiểm tra, mã hóa và lưu ảnh rồi ghi hoặc thay bản ghi giấy tờ; ảnh cũ chỉ bị xóa sau khi lưu thành công. */
+    private TenantDocument saveDocument(
+        UUID propertyId,
+        Tenant tenant,
+        DocumentType type,
+        String number,
+        DocumentFile frontFile,
+        DocumentFile backFile,
+        TenantDocument previous,
+        CurrentUser user
+    ) {
+        Prepared front = prepareImage(frontFile, true);
+        Prepared back = prepareImage(backFile, false);
+        TenantDataProtectionPort.ProtectedValue protectedNumber = protectNumber(type, number, tenant);
+
+        String frontKey = store(propertyId, tenant.id(), front);
+        String backKey = back == null ? null : store(propertyId, tenant.id(), back);
         Instant now = clock.instant();
         TenantDocument saved;
         try {
             saved = documentRepository.save(new TenantDocument(
                 previous != null ? previous.id() : UUID.randomUUID(),
-                command.tenantId(),
-                command.propertyId(),
-                command.type(),
-                number == null ? null : number.ciphertext(),
-                number == null ? null : number.nonce(),
-                number == null ? null : number.fingerprint(),
-                number == null ? null : number.keyId(),
-                lastFour(command, tenant),
+                tenant.id(),
+                propertyId,
+                type,
+                protectedNumber == null ? null : protectedNumber.ciphertext(),
+                protectedNumber == null ? null : protectedNumber.nonce(),
+                protectedNumber == null ? null : protectedNumber.fingerprint(),
+                protectedNumber == null ? null : protectedNumber.keyId(),
+                lastFour(type, number, tenant),
                 frontKey,
                 front.contentType(),
                 backKey,
@@ -163,9 +213,15 @@ public class TenantDocumentService implements TenantDocumentUseCase {
             deleteQuietly(previous.frontImageKey());
             deleteQuietly(previous.backImageKey());
         }
-        audit("TENANT_DOCUMENT_UPLOADED", user, command.propertyId(), command.tenantId(),
-            Map.of("type", command.type().name(), "replaced", previous != null));
-        return summarize(saved, tenant);
+        return saved;
+    }
+
+    private CurrentUser requireTenantUser() {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        if (user == null || !user.isTenant()) {
+            throw new UnauthorizedPropertyAccessException("Chỉ tài khoản người thuê tự tải giấy tờ ở Hồ sơ cá nhân.");
+        }
+        return user;
     }
 
     @Override
@@ -263,30 +319,32 @@ public class TenantDocumentService implements TenantDocumentUseCase {
         return new Prepared(sanitized.contentType(), sanitized.content());
     }
 
-    private TenantDataProtectionPort.ProtectedValue protectNumber(UploadDocumentCommand command, Tenant tenant) {
-        if (command.type() == DocumentType.CCCD) {
+    private TenantDataProtectionPort.ProtectedValue protectNumber(DocumentType type, String number, Tenant tenant) {
+        if (type == DocumentType.CCCD) {
             return null;
         }
-        if (command.number() == null || command.number().isBlank()) {
+        if (number == null || number.isBlank()) {
             throw new IllegalArgumentException("Cần nhập số giấy phép lái xe.");
         }
-        TenantDataProtectionPort.ProtectedValue value = protector.protect(command.number());
-        if (documentRepository.existsByTypeAndNumberHmacForOtherTenant(
-            command.type(), value.fingerprint(), tenant.id())) {
+        TenantDataProtectionPort.ProtectedValue value = protector.protect(number);
+        if (documentRepository.existsByTypeAndNumberHmacForOtherTenant(type, value.fingerprint(), tenant.id())) {
             throw new DuplicateDocumentNumberException();
         }
         return value;
     }
 
-    private String lastFour(UploadDocumentCommand command, Tenant tenant) {
-        String number = command.type() == DocumentType.CCCD
+    private String lastFour(DocumentType type, String number, Tenant tenant) {
+        String value = type == DocumentType.CCCD
             ? tenant.identityCardNumber()
-            : command.number().trim().replaceAll("\\s+", "");
-        return number.length() <= 4 ? number : number.substring(number.length() - 4);
+            : number.trim().replaceAll("\\s+", "");
+        return value.length() <= 4 ? value : value.substring(value.length() - 4);
     }
 
-    private String store(UUID propertyId, Prepared image) {
-        String key = PrivateFileStorageService.objectKey(propertyId, "tenant-documents", "enc");
+    /** Giấy tờ chưa gắn nhà trọ (tải ở Hồ sơ cá nhân) nằm trong thư mục riêng của người thuê. */
+    private String store(UUID propertyId, UUID tenantId, Prepared image) {
+        String key = propertyId != null
+            ? PrivateFileStorageService.objectKey(propertyId, "tenant-documents", "enc")
+            : PrivateFileStorageService.tenantObjectKey(tenantId, "tenant-documents", "enc");
         storagePort.put(key, ENCRYPTED_CONTENT_TYPE, protector.encryptBytes(image.content()));
         return key;
     }

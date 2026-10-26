@@ -445,6 +445,8 @@ h2 {
 .badge-EXPIRED,
 .badge-REPORTED,
 .badge-AWAITING_PAYMENT,
+.badge-PENDING_OWNER_APPROVAL,
+.badge-PENDING_TENANT_APPROVAL,
 .badge-PENDING {
   background-color: #fffbeb;
   color: #b45309;
@@ -454,6 +456,8 @@ h2 {
 .badge-EXPIRED::before,
 .badge-REPORTED::before,
 .badge-AWAITING_PAYMENT::before,
+.badge-PENDING_OWNER_APPROVAL::before,
+.badge-PENDING_TENANT_APPROVAL::before,
 .badge-PENDING::before {
   background-color: #f59e0b;
 }

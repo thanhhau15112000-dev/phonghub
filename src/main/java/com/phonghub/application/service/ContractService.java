@@ -1,11 +1,14 @@
 package com.phonghub.application.service;
 
 import com.phonghub.application.port.in.ContractUseCase;
+import com.phonghub.application.port.in.MonthlyInvoiceUseCase;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
+import com.phonghub.application.port.out.HandoverRepositoryPort;
+import com.phonghub.application.port.out.DraftHandoverCleanupPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
@@ -22,6 +25,9 @@ import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
 import com.phonghub.domain.model.ContractStatus;
+import com.phonghub.domain.model.HandoverStatus;
+import com.phonghub.domain.model.Handover;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
@@ -29,14 +35,16 @@ import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
-import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 public class ContractService implements ContractUseCase {
@@ -46,10 +54,13 @@ public class ContractService implements ContractUseCase {
     private final PropertyRepositoryPort propertyRepository;
     private final TenantRepositoryPort tenantRepository;
     private final UserRepositoryPort userRepository;
-    private final IdentityProviderPort identityProviderPort;
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
     private final AuditPort auditPort;
+    private final TenantAccountLinker accountLinker;
+    private final HandoverRepositoryPort handoverRepository;
+    private final DraftHandoverCleanupPort draftHandoverCleanupPort;
+    private final MonthlyInvoiceUseCase monthlyInvoiceUseCase;
 
     public ContractService(
         ContractRepositoryPort contractRepository,
@@ -62,15 +73,69 @@ public class ContractService implements ContractUseCase {
         AuthorizationService authorizationService,
         AuditPort auditPort
     ) {
+        this(contractRepository, roomRepository, propertyRepository, tenantRepository, userRepository, identityProviderPort,
+            currentUserPort, authorizationService, auditPort, null, null, null);
+    }
+
+    public ContractService(
+        ContractRepositoryPort contractRepository,
+        RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
+        TenantRepositoryPort tenantRepository,
+        UserRepositoryPort userRepository,
+        IdentityProviderPort identityProviderPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        HandoverRepositoryPort handoverRepository
+    ) {
+        this(contractRepository, roomRepository, propertyRepository, tenantRepository, userRepository, identityProviderPort,
+            currentUserPort, authorizationService, auditPort, handoverRepository, null, null);
+    }
+
+    public ContractService(
+        ContractRepositoryPort contractRepository,
+        RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
+        TenantRepositoryPort tenantRepository,
+        UserRepositoryPort userRepository,
+        IdentityProviderPort identityProviderPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        HandoverRepositoryPort handoverRepository,
+        DraftHandoverCleanupPort draftHandoverCleanupPort
+    ) {
+        this(contractRepository, roomRepository, propertyRepository, tenantRepository, userRepository, identityProviderPort,
+            currentUserPort, authorizationService, auditPort, handoverRepository, draftHandoverCleanupPort, null);
+    }
+
+    public ContractService(
+        ContractRepositoryPort contractRepository,
+        RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
+        TenantRepositoryPort tenantRepository,
+        UserRepositoryPort userRepository,
+        IdentityProviderPort identityProviderPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        HandoverRepositoryPort handoverRepository,
+        DraftHandoverCleanupPort draftHandoverCleanupPort,
+        MonthlyInvoiceUseCase monthlyInvoiceUseCase
+    ) {
         this.contractRepository = contractRepository;
         this.roomRepository = roomRepository;
         this.propertyRepository = propertyRepository;
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
-        this.identityProviderPort = identityProviderPort;
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
         this.auditPort = auditPort;
+        this.accountLinker = new TenantAccountLinker(tenantRepository, userRepository, identityProviderPort, auditPort);
+        this.handoverRepository = handoverRepository;
+        this.draftHandoverCleanupPort = draftHandoverCleanupPort;
+        this.monthlyInvoiceUseCase = monthlyInvoiceUseCase;
     }
 
     public ContractService(
@@ -95,6 +160,19 @@ public class ContractService implements ContractUseCase {
         AuthorizationService authorizationService
     ) {
         this(contractRepository, roomRepository, propertyRepository, tenantRepository, null, null, currentUserPort, authorizationService, null);
+    }
+
+    public ContractService(
+        ContractRepositoryPort contractRepository,
+        RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
+        TenantRepositoryPort tenantRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        HandoverRepositoryPort handoverRepository
+    ) {
+        this(contractRepository, roomRepository, propertyRepository, tenantRepository, null, null, currentUserPort,
+            authorizationService, null, handoverRepository, null);
     }
 
     @Override
@@ -137,35 +215,11 @@ public class ContractService implements ContractUseCase {
             ));
         }
 
-        // Resolve or create the primary tenant, then bind the selected TENANT account to that profile.
-        User primaryTenantUser = resolvePrimaryTenantUser(command.primaryTenantUserId());
-        Tenant tenant = tenantRepository.findByIdentityCardNumber(command.primaryTenantIdCard().trim())
-            .orElse(null);
-        Optional<Tenant> userTenant = primaryTenantUser == null
-            ? Optional.empty()
-            : tenantRepository.findByUserId(primaryTenantUser.id());
-        if (userTenant.isPresent() && (tenant == null || !userTenant.get().id().equals(tenant.id()))) {
-            throw new DomainException("Tài khoản này đã được liên kết với hồ sơ người thuê khác.");
-        }
-        if (tenant == null) {
-            tenant = tenantRepository.save(Tenant.create(
-                primaryTenantUser == null ? null : primaryTenantUser.id(),
-                command.primaryTenantFullName().trim(),
-                command.primaryTenantIdCard().trim(),
-                command.primaryTenantPhone().trim(),
-                command.primaryTenantEmail(),
-                null
-            ));
-        } else if (primaryTenantUser != null) {
-            if (tenant.userId() != null && !tenant.userId().equals(primaryTenantUser.id())) {
-                throw new DomainException("Hồ sơ CCCD này đã được liên kết với một tài khoản khác.");
-            }
-            if (tenant.userId() == null) {
-                tenant = tenantRepository.save(new Tenant(
-                    tenant.id(), primaryTenantUser.id(), tenant.fullName(), tenant.identityCardNumber(), tenant.phone(),
-                    tenant.email(), tenant.permanentAddress(), tenant.createdAt()));
-            }
-        }
+        // Contracts bind to an existing, account-backed tenant profile; they never create personal profiles inline.
+        Tenant tenant = listAvailablePrimaryTenants(command.propertyId(), null).stream()
+            .filter(candidate -> candidate.id().equals(command.primaryTenantId()))
+            .findFirst()
+            .orElseThrow(() -> new DomainException("Người thuê không khả dụng trong nhà trọ này hoặc chưa có tài khoản."));
         tenantRepository.linkToProperty(tenant.id(), property.id(), currentUser.id());
 
         Contract contract = Contract.create(
@@ -203,6 +257,14 @@ public class ContractService implements ContractUseCase {
             ));
         }
 
+        boolean checkInApproved = handoverRepository != null
+            && handoverRepository.find(contractId, HandoverType.CHECK_IN)
+                .filter(handover -> handover.status() == HandoverStatus.APPROVED && handover.confirmedByTenant())
+                .isPresent();
+        if (!checkInApproved) {
+            throw new InvalidContractStateException("Cần có biên bản check-in được người thuê xác nhận và duyệt trước khi kích hoạt hợp đồng.");
+        }
+
         // Invariant: Do not allow two active contracts for one room
         Optional<Contract> activeContract = contractRepository.findActiveByRoomId(room.getId());
         if (activeContract.isPresent() && !activeContract.get().getId().equals(contract.getId())) {
@@ -218,6 +280,7 @@ public class ContractService implements ContractUseCase {
                     .filter(o -> o.checkOutDate() == null || o.checkOutDate().isAfter(today))
                     .map(ContractOccupant::tenantId))
             .distinct().sorted().toList();
+        residingTenantIds.forEach(this::assertTenantHasActiveAccount);
         // A stable lock order avoids deadlocks when two drafts share multiple tenants.
         residingTenantIds.forEach(tenantRepository::findByIdForUpdate);
         residingTenantIds.forEach(tenantId -> assertTenantHasNoActiveContract(tenantId, today));
@@ -228,6 +291,14 @@ public class ContractService implements ContractUseCase {
 
         roomRepository.save(room);
         Contract saved = contractRepository.save(contract);
+        if (monthlyInvoiceUseCase != null) {
+            LocalDate activationDate = saved.billingAnchorDate();
+            boolean issued = monthlyInvoiceUseCase.issueForContract(saved.getId(),
+                java.time.YearMonth.from(activationDate), activationDate);
+            if (!issued) {
+                throw new DomainException("Không tạo được hóa đơn tiền thuê kỳ đầu khi kích hoạt hợp đồng.");
+            }
+        }
         audit("CONTRACT_ACTIVATED", currentUser, saved, Map.of(
             "oldStatus", ContractStatus.DRAFT.name(), "newStatus", saved.getStatus().name()));
         return saved;
@@ -240,7 +311,14 @@ public class ContractService implements ContractUseCase {
             .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
 
         Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
+        authorizationService.assertCanManageContracts(currentUser, contract.getPropertyId());
         assertResiding(contract);
+        Handover checkOut = handoverRepository == null ? null
+            : handoverRepository.find(contractId, HandoverType.CHECK_OUT).orElse(null);
+        if (checkOut == null || checkOut.status() != HandoverStatus.APPROVED || !checkOut.confirmedByTenant()) {
+            throw new com.phonghub.domain.exception.ConflictException(
+                "Hợp đồng chỉ được kết thúc sau khi biên bản check-out đã được người thuê xác nhận và duyệt.");
+        }
         return terminate(currentUser, contract, room, requiresMaintenance, Map.of());
     }
 
@@ -249,9 +327,8 @@ public class ContractService implements ContractUseCase {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         Contract contract = contractRepository.findById(contractId)
             .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
-        // Bỏ qua biên bản check-out (vốn chỉ chủ trọ/admin duyệt) nên cũng chỉ chủ trọ/admin được làm
         Room room = validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
-        authorizationService.assertOwnerOrAdmin(currentUser, contract.getPropertyId());
+        authorizationService.assertCanManageContracts(currentUser, contract.getPropertyId());
         assertResiding(contract);
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("Cần nhập lý do chấm dứt hợp đồng.");
@@ -260,7 +337,8 @@ public class ContractService implements ContractUseCase {
         if (trimmed.length() > 500) {
             throw new IllegalArgumentException("Lý do chấm dứt tối đa 500 ký tự.");
         }
-        return terminate(currentUser, contract, room, requiresMaintenance, Map.of("reason", trimmed, "early", true));
+        throw new com.phonghub.domain.exception.ConflictException(
+            "Hợp đồng không thể chấm dứt trực tiếp. Hãy hoàn tất biên bản check-out với lý do: " + trimmed);
     }
 
     private static void assertResiding(Contract contract) {
@@ -347,6 +425,13 @@ public class ContractService implements ContractUseCase {
             .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
         validateOwnershipOfRoom(currentUser, contract.getPropertyId(), contract.getRoomId());
 
+        if (contract.getStatus() != ContractStatus.DRAFT) {
+            throw new InvalidContractStateException("Chỉ có thể hủy hợp đồng ở trạng thái DRAFT.");
+        }
+        if (draftHandoverCleanupPort != null) {
+            draftHandoverCleanupPort.cancelDraftCheckIn(contractId, currentUser == null ? null : currentUser.id());
+        }
+
         contract.cancelDraft();
         Contract saved = contractRepository.save(contract);
         audit("CONTRACT_CANCELLED", currentUser, saved, Map.of(
@@ -409,6 +494,105 @@ public class ContractService implements ContractUseCase {
     }
 
     @Override
+    public List<Tenant> listAvailablePrimaryTenants(UUID propertyId, String query) {
+        CurrentUser actor = currentUserPort.getCurrentUser();
+        authorizationService.assertCanManageContracts(actor, propertyId);
+        if (userRepository == null) {
+            return List.of();
+        }
+
+        String q = query == null ? "" : query.trim();
+        String digits = q.replaceAll("\\D", "");
+        String foldedQuery = foldTenantSearch(q);
+        List<TenantRepositoryPort.PropertyLink> links = tenantRepository.findLinks(propertyId);
+        Set<UUID> visibleLinkedIds = links.stream()
+            .filter(link -> link.hiddenAt() == null)
+            .map(TenantRepositoryPort.PropertyLink::tenantId)
+            .collect(java.util.stream.Collectors.toSet());
+        Set<UUID> hiddenLinkedIds = links.stream()
+            .filter(link -> link.hiddenAt() != null)
+            .map(TenantRepositoryPort.PropertyLink::tenantId)
+            .collect(java.util.stream.Collectors.toSet());
+        Set<UUID> localProfileIds = new java.util.HashSet<>(visibleLinkedIds);
+        contractRepository.findByPropertyId(propertyId).forEach(contract -> {
+            localProfileIds.add(contract.getPrimaryTenantId());
+            contract.getOccupants().forEach(occupant -> localProfileIds.add(occupant.tenantId()));
+        });
+
+        List<Tenant> candidates;
+        boolean exactCardSearch = digits.matches("\\d{9}|\\d{12}");
+        if (exactCardSearch) {
+            candidates = tenantRepository.findByIdentityCardNumber(digits).stream().toList();
+        } else {
+            List<Tenant> localCandidates = tenantRepository.findAllByIds(localProfileIds);
+            boolean suffixSearch = q.matches("\\d+") && digits.length() >= 3;
+            if (suffixSearch) {
+                candidates = localCandidates;
+            } else {
+                candidates = java.util.stream.Stream.concat(localCandidates.stream(),
+                        tenantRepository.findAccountProfilesWithoutPropertyLinks().stream())
+                    .collect(java.util.stream.Collectors.toMap(Tenant::id, tenant -> tenant, (first, ignored) -> first))
+                    .values().stream().toList();
+            }
+        }
+
+        return candidates.stream()
+            .filter(tenant -> tenant.userId() != null)
+            .filter(tenant -> userRepository.findById(tenant.userId())
+                .filter(user -> user.role() == UserRole.TENANT && user.status() == User.UserStatus.ACTIVE).isPresent())
+            .filter(tenant -> isTenantSelectableForProperty(tenant, propertyId, visibleLinkedIds, hiddenLinkedIds))
+            .filter(tenant -> !tenantResidesAnywhere(tenant.id()))
+            .filter(tenant -> tenantMatchesQuery(tenant, q, digits, foldedQuery, localProfileIds.contains(tenant.id())))
+            .sorted(java.util.Comparator.comparing((Tenant tenant) -> foldTenantSearch(tenant.fullName()))
+                .thenComparing(Tenant::id))
+            .toList();
+    }
+
+    private boolean isTenantSelectableForProperty(Tenant tenant, UUID propertyId, Set<UUID> visibleLinkedIds,
+                                                  Set<UUID> hiddenLinkedIds) {
+        if (hiddenLinkedIds.contains(tenant.id())) return false;
+        if (visibleLinkedIds.contains(tenant.id())) return true;
+        boolean hasDirectLinks = !tenantRepository.findLinkedPropertyIds(tenant.id()).isEmpty();
+        boolean hasContractHistory = tenantHasContractHistory(tenant.id());
+        if (hasDirectLinks || hasContractHistory) {
+            return contractRepository.findByPrimaryTenantId(tenant.id()).stream()
+                .anyMatch(contract -> contract.getPropertyId().equals(propertyId))
+                || contractRepository.findByOccupantTenantId(tenant.id()).stream()
+                    .anyMatch(contract -> contract.getPropertyId().equals(propertyId));
+        }
+        // Admin-created accounts with no property link or contract may be selected by any property.
+        return true;
+    }
+
+    private boolean tenantHasContractHistory(UUID tenantId) {
+        return !contractRepository.findByPrimaryTenantId(tenantId).isEmpty()
+            || !contractRepository.findByOccupantTenantId(tenantId).isEmpty();
+    }
+
+    private boolean tenantResidesAnywhere(UUID tenantId) {
+        return contractRepository.findByPrimaryTenantId(tenantId).stream().anyMatch(Contract::isResiding)
+            || contractRepository.findByOccupantTenantId(tenantId).stream()
+                .filter(Contract::isResiding)
+                .anyMatch(contract -> contract.getOccupants().stream()
+                    .anyMatch(occupant -> occupant.tenantId().equals(tenantId)
+                        && (occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(LocalDate.now()))));
+    }
+
+    private boolean tenantMatchesQuery(Tenant tenant, String q, String digits, String foldedQuery, boolean linkedHere) {
+        if (q.isEmpty()) return true;
+        if (foldTenantSearch(tenant.fullName()).contains(foldedQuery)) return true;
+        if (digits.matches("\\d{9}|\\d{12}")) return tenant.identityCardNumber().equals(digits);
+        return linkedHere && digits.length() >= 3 && tenant.identityCardNumber().endsWith(digits);
+    }
+
+    private static String foldTenantSearch(String text) {
+        if (text == null) return "";
+        String decomposed = java.text.Normalizer.normalize(text.trim(), java.text.Normalizer.Form.NFD);
+        return decomposed.replaceAll("\\p{M}", "").replace('đ', 'd').replace('Đ', 'D')
+            .toLowerCase(java.util.Locale.ROOT);
+    }
+
+    @Override
     public Optional<Contract> getActiveContractForTenant(UUID tenantUserId) {
         Optional<Tenant> tenantOpt = tenantRepository.findByUserId(tenantUserId);
         if (tenantOpt.isEmpty()) {
@@ -450,59 +634,190 @@ public class ContractService implements ContractUseCase {
 
     @Override
     public AddOccupantResult addOccupant(AddOccupantCommand command) {
-        Contract contract = contractRepository.findById(command.contractId())
-            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + command.contractId()));
-
         CurrentUser currentUser = currentUserPort.getCurrentUser();
-        authorizationService.assertOwnerOrAdmin(currentUser, contract.getPropertyId());
+        LocalDate today = LocalDate.now();
+        OccupantContext context = loadOccupantContext(command.contractId(), currentUser);
+        assertRoomHasSlots(context, 1, today);
+        PreparedOccupant prepared = prepareOccupant(context, command, currentUser, today);
+
+        List<TenantAccountLinker.Result> createdAccounts = new ArrayList<>();
+        try {
+            AddOccupantResult result = applyOccupant(context, prepared, currentUser, createdAccounts);
+            contractRepository.save(context.contract());
+            return result;
+        } catch (RuntimeException ex) {
+            createdAccounts.forEach(account -> accountLinker.deleteCreatedIdentityUser(account, ex));
+            throw ex;
+        }
+    }
+
+    /**
+     * Thêm nhiều người một lượt: kiểm tra TOÀN BỘ trước (chỗ trống, trùng, đang ở nơi khác, tài khoản), chỉ khi tất cả hợp lệ
+     * mới ghi, nên một người lỗi thì không có gì bị ghi dở.
+     */
+    @Override
+    public AddOccupantsResult addOccupants(AddOccupantsCommand command) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        LocalDate today = LocalDate.now();
+        OccupantContext context = loadOccupantContext(command.contractId(), currentUser);
+        assertRoomHasSlots(context, command.occupants().size(), today);
+
+        Set<UUID> profileIds = new HashSet<>();
+        Set<String> identityCards = new HashSet<>();
+        for (AddOccupantCommand occupant : command.occupants()) {
+            if (occupant.tenantProfileId() != null && !profileIds.add(occupant.tenantProfileId())) {
+                throw new DomainException("Không thể chọn trùng một hồ sơ người thuê trong cùng lượt thêm.");
+            }
+            if (occupant.identityCardNumber() != null && !occupant.identityCardNumber().isBlank()
+                && !identityCards.add(occupant.identityCardNumber().trim())) {
+                throw new DomainException("Danh sách có số CCCD bị trùng.");
+            }
+        }
+
+        // Bước 1: kiểm tra hết, chưa ghi gì
+        List<PreparedOccupant> prepared = new ArrayList<>();
+        Set<UUID> tenantIds = new HashSet<>();
+        for (AddOccupantCommand occupant : command.occupants()) {
+            PreparedOccupant row = prepareOccupant(context, occupant, currentUser, today);
+            if (row.existing() != null && !tenantIds.add(row.existing().id())) {
+                throw new DomainException(row.existing().fullName() + " bị chọn trùng trong cùng lượt thêm.");
+            }
+            prepared.add(row);
+        }
+        if (prepared.size() > 1 && prepared.stream().anyMatch(this::needsNewAccount)) {
+            throw new DomainException("Không thể tạo tài khoản đăng nhập mới cho nhiều người cùng lúc; hãy thêm từng người nếu cần cấp tài khoản.");
+        }
+
+        // Bước 2: ghi, lưu hợp đồng một lần
+        List<TenantAccountLinker.Result> createdAccounts = new ArrayList<>();
+        try {
+            List<AddOccupantResult> results = new ArrayList<>();
+            for (PreparedOccupant row : prepared) {
+                results.add(applyOccupant(context, row, currentUser, createdAccounts));
+            }
+            contractRepository.save(context.contract());
+            return new AddOccupantsResult(results);
+        } catch (RuntimeException ex) {
+            createdAccounts.forEach(account -> accountLinker.deleteCreatedIdentityUser(account, ex));
+            throw ex;
+        }
+    }
+
+    /** Hợp đồng, nhà trọ và phòng của lượt thêm người, đã kiểm tra quyền và trạng thái. */
+    private record OccupantContext(Contract contract, Property property, Room room) {}
+
+    /** Một người đã qua kiểm tra, chưa ghi gì. {@code existing} là hồ sơ có sẵn, null nghĩa là người mới. */
+    private record PreparedOccupant(AddOccupantCommand command, Tenant existing, User selectedUser) {}
+
+    private OccupantContext loadOccupantContext(UUID contractId, CurrentUser currentUser) {
+        Contract contract = contractRepository.findById(contractId)
+            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
+        authorizationService.assertCanManageContracts(currentUser, contract.getPropertyId());
 
         Property property = propertyRepository.findById(contract.getPropertyId())
             .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + contract.getPropertyId()));
-
         if (property.approvalStatus() != PropertyApprovalStatus.VERIFIED) {
             throw new InvalidPropertyStatusException(String.format(
                 "Chỉ có thể thêm người thuê cho nhà trọ đã được duyệt (VERIFIED). Trạng thái hiện tại: '%s'.",
                 property.approvalStatus()
             ));
         }
-
         if (!contract.isActive()) {
             throw new DomainException(String.format(
                 "Chỉ có thể thêm người thuê vào hợp đồng đang có hiệu lực (ACTIVE). Trạng thái hợp đồng hiện tại: '%s'.",
                 contract.getStatus()
             ));
         }
-
         Room room = roomRepository.findById(contract.getRoomId())
             .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + contract.getRoomId()));
+        return new OccupantContext(contract, property, room);
+    }
 
-        LocalDate today = LocalDate.now();
-        long residingCount = (contract.getOccupants() == null || contract.getOccupants().isEmpty())
-            ? 1
-            : contract.getOccupants().stream()
-                .filter(o -> o.checkOutDate() == null || o.checkOutDate().isAfter(today))
-                .count();
-
-        if (residingCount + 1 > room.getMaxOccupants()) {
+    /** Chỗ trống tính bằng một hàm duy nhất ({@link Contract#residingOccupantCount}) cho mọi đường thêm người. */
+    private void assertRoomHasSlots(OccupantContext context, int adding, LocalDate today) {
+        int max = context.room().getMaxOccupants();
+        long residing = context.contract().residingOccupantCount(today);
+        if (residing + adding > max) {
             throw new InvalidRoomCapacityException(String.format(
-                "Số lượng người ở vượt quá sức chứa tối đa của phòng '%s' (tối đa: %d người, hiện có: %d người).",
-                room.getRoomNumber(), room.getMaxOccupants(), residingCount
-            ));
+                "Chỉ còn %d chỗ trống trong phòng '%s' (sức chứa tối đa: %d người); không thể thêm %d người.",
+                Math.max(0, max - residing), context.room().getRoomNumber(), max, adding));
         }
+    }
 
-        String cleanIdCard = command.identityCardNumber().trim();
-        Tenant tenant = tenantRepository.findByIdentityCardNumber(cleanIdCard)
-            .orElseGet(() -> {
-                Tenant newTenant = Tenant.create(
-                    null,
-                    command.fullName().trim(),
-                    cleanIdCard,
-                    command.phone().trim(),
-                    command.email() != null && !command.email().isBlank() ? command.email().trim() : null,
-                    command.permanentAddress() != null && !command.permanentAddress().isBlank() ? command.permanentAddress().trim() : null
-                );
-                return tenantRepository.save(newTenant);
-            });
+    /**
+     * Một người chỉ vào được phòng khi chưa có trong hợp đồng này và không đang ở theo hợp đồng khác. Dùng chung cho thêm
+     * một người, thêm theo lô và tích chọn hồ sơ có sẵn; thông báo nêu tên người vi phạm.
+     */
+    private void assertCanJoin(Contract contract, Tenant tenant, LocalDate today) {
+        if (tenantRepository.findByIdForUpdate(tenant.id()).isEmpty()) {
+            throw new DomainException(tenant.fullName() + " không còn tồn tại trong hệ thống.");
+        }
+        UUID tenantId = tenant.id();
+        if (tenantId.equals(contract.getPrimaryTenantId())
+            || contract.getOccupants().stream().anyMatch(occupant -> occupant.tenantId().equals(tenantId))) {
+            // 409 như trước: người này đã ở theo chính hợp đồng này
+            throw new DuplicateActiveContractException(tenant.fullName() + " đã có trong danh sách người ở của hợp đồng.");
+        }
+        if (tenantResidesElsewhere(tenantId, contract.getId(), today)) {
+            throw new DuplicateActiveContractException(tenant.fullName()
+                + " hiện đang ở theo một hợp đồng khác (còn hiệu lực hoặc đã hết hạn nhưng chưa trả phòng).");
+        }
+    }
+
+    /** Tìm hồ sơ và kiểm tra một người sẽ được thêm. Không ghi gì. */
+    private PreparedOccupant prepareOccupant(OccupantContext context, AddOccupantCommand command,
+                                             CurrentUser currentUser, LocalDate today) {
+        User selectedUser = resolvePrimaryTenantUser(command.tenantUserId());
+        Tenant existing;
+        if (command.tenantProfileId() != null) {
+            existing = tenantRepository.findById(command.tenantProfileId())
+                .orElseThrow(() -> new DomainException("Không tìm thấy hồ sơ người thuê đã chọn."));
+            authorizationService.assertCanAccessTenant(currentUser, existing.id());
+            if (command.identityCardNumber() != null && !command.identityCardNumber().isBlank()
+                && !existing.identityCardNumber().equals(command.identityCardNumber().trim())) {
+                throw new DomainException("CCCD không khớp với hồ sơ người thuê đã chọn.");
+            }
+        } else {
+            existing = tenantRepository.findByIdentityCardNumber(command.identityCardNumber().trim()).orElse(null);
+        }
+        if (existing != null) {
+            if (selectedUser != null) {
+                accountLinker.assertCanLink(existing, selectedUser);
+            }
+            assertCanJoin(context.contract(), existing, today);
+        } else if (selectedUser != null && tenantRepository.findByUserId(selectedUser.id()).isPresent()) {
+            throw new DomainException("Tài khoản này đã được liên kết với hồ sơ người thuê khác.");
+        }
+        PreparedOccupant prepared = new PreparedOccupant(command, existing, selectedUser);
+        if (needsNewAccount(prepared) && (command.email() == null || command.email().isBlank())) {
+            String name = existing != null ? existing.fullName() : command.fullName();
+            throw new IllegalArgumentException(
+                "Người ở cùng phải có tài khoản; nhập email để cấp tài khoản cho " + name + ".");
+        }
+        return prepared;
+    }
+
+    /** Người này chưa có tài khoản và không chọn tài khoản sẵn có, nên phải tạo hoặc gắn theo email. */
+    private boolean needsNewAccount(PreparedOccupant row) {
+        boolean hasAccount = row.selectedUser() != null || (row.existing() != null && row.existing().userId() != null);
+        return !hasAccount;
+    }
+
+    /** Ghi một người đã qua kiểm tra vào hợp đồng (chưa lưu hợp đồng, người gọi lưu một lần). */
+    private AddOccupantResult applyOccupant(OccupantContext context, PreparedOccupant prepared, CurrentUser currentUser,
+                                            List<TenantAccountLinker.Result> createdAccounts) {
+        AddOccupantCommand command = prepared.command();
+        User selectedUser = prepared.selectedUser();
+        Tenant tenant = prepared.existing();
+        if (tenant == null) {
+            tenant = tenantRepository.save(Tenant.create(selectedUser == null ? null : selectedUser.id(),
+                command.fullName().trim(), command.identityCardNumber().trim(), command.phone().trim(),
+                selectedUser != null ? selectedUser.email() : cleanEmail(command.email()),
+                cleanAddress(command.permanentAddress())));
+        } else if (!tenantRepository.findLinkedPropertyIds(tenant.id()).contains(context.property().id())) {
+            // Hồ sơ đến từ nhà trọ khác: gắn vào nhà trọ này để người ở luôn thuộc danh sách người thuê của nhà trọ
+            tenantRepository.linkToProperty(tenant.id(), context.property().id(), currentUser.id());
+        }
 
         // Cập nhật thông tin bổ sung nếu tenant đã tồn tại nhưng chưa có email/địa chỉ
         String updateEmail = command.email() != null && !command.email().isBlank()
@@ -512,39 +827,28 @@ public class ContractService implements ContractUseCase {
             ? command.permanentAddress().trim()
             : tenant.permanentAddress();
         if (!Objects.equals(updateEmail, tenant.email()) || !Objects.equals(updateAddress, tenant.permanentAddress())) {
-            tenant = new Tenant(
-                tenant.id(),
-                tenant.userId(),
-                tenant.fullName(),
-                tenant.identityCardNumber(),
-                tenant.phone(),
-                updateEmail,
-                updateAddress,
-                tenant.createdAt()
-            );
-            tenant = tenantRepository.save(tenant);
+            tenant = tenantRepository.save(new Tenant(
+                tenant.id(), tenant.userId(), tenant.fullName(), tenant.identityCardNumber(), tenant.phone(),
+                updateEmail, updateAddress, tenant.createdAt()));
         }
 
-        // Một người không được ở đồng thời ở 2 hợp đồng đang hiệu lực -> 409
-        tenantRepository.findByIdForUpdate(tenant.id());
-        assertTenantHasNoActiveContract(tenant.id(), today);
-        UUID tenantId = tenant.id();
-        if (contract.getOccupants().stream().anyMatch(o -> o.tenantId().equals(tenantId))) {
-            throw new DomainException("Người này đã có trong danh sách người ở của hợp đồng.");
-        }
-
-        // Tùy chọn: tạo (hoặc liên kết) tài khoản TENANT cho người ở cùng. Làm sau mọi kiểm tra để không tạo tài khoản
-        // đăng nhập thừa khi thêm người bị từ chối.
-        AccountLink account = null;
-        if (command.createAccount()) {
-            account = linkTenantAccount(currentUser, tenant, command.email());
+        // Mọi người ở cùng phải có tài khoản (#219): hồ sơ đã có tài khoản thì dùng, chưa có thì gắn hoặc tạo theo email.
+        // Làm sau mọi kiểm tra để không tạo tài khoản đăng nhập thừa khi thêm người bị từ chối.
+        TenantAccountLinker.Result account;
+        if (tenant.userId() != null) {
+            User linkedUser = assertTenantHasActiveAccount(tenant.id());
+            account = new TenantAccountLinker.Result(tenant, linkedUser.username(), null, null);
+        } else if (selectedUser != null) {
+            tenant = accountLinker.linkUser(tenant, selectedUser);
+            account = new TenantAccountLinker.Result(tenant, selectedUser.username(), null, null);
+        } else {
+            account = accountLinker.linkOrCreate(currentUser, tenant, command.email(), "OCCUPANT_ACCOUNT_CREATED");
+            createdAccounts.add(account);
             tenant = account.tenant();
         }
 
-        ContractOccupant occupant = contract.addOccupant(tenant.id(), false, command.checkInDate());
-        contractRepository.save(contract);
-        return account == null ? AddOccupantResult.withoutAccount(occupant)
-            : new AddOccupantResult(occupant, account.username(), account.temporaryPassword());
+        ContractOccupant occupant = context.contract().addOccupant(tenant.id(), false, command.checkInDate());
+        return new AddOccupantResult(occupant, account.username(), account.temporaryPassword());
     }
 
     @Override
@@ -552,7 +856,7 @@ public class ContractService implements ContractUseCase {
         Contract contract = contractRepository.findById(contractId)
             .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
         CurrentUser currentUser = currentUserPort.getCurrentUser();
-        authorizationService.assertOwnerOrAdmin(currentUser, contract.getPropertyId());
+        authorizationService.assertCanManageContracts(currentUser, contract.getPropertyId());
         if (!contract.isActive()) {
             throw new DomainException("Chỉ có thể chọn người thuê cho hợp đồng đang hiệu lực.");
         }
@@ -565,7 +869,7 @@ public class ContractService implements ContractUseCase {
         Room room = roomRepository.findById(contract.getRoomId())
             .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + contract.getRoomId()));
         LocalDate today = LocalDate.now();
-        if (room.getMaxOccupants() <= countResidingOccupants(contract, today)) {
+        if (room.getMaxOccupants() <= contract.residingOccupantCount(today)) {
             return List.of();
         }
 
@@ -578,6 +882,9 @@ public class ContractService implements ContractUseCase {
             .filter(id -> !unavailableIds.contains(id))
             .toList();
         return tenantRepository.findAllByIds(linkedIds).stream()
+            .filter(tenant -> tenant.userId() != null)
+            .filter(tenant -> userRepository != null && userRepository.findById(tenant.userId())
+                .filter(user -> user.role() == UserRole.TENANT && user.status() == User.UserStatus.ACTIVE).isPresent())
             .filter(tenant -> !tenantResidesElsewhere(tenant.id(), contract.getId(), today))
             .sorted(java.util.Comparator.comparing(Tenant::fullName, String.CASE_INSENSITIVE_ORDER))
             .toList();
@@ -585,33 +892,13 @@ public class ContractService implements ContractUseCase {
 
     @Override
     public List<ContractOccupant> addExistingOccupants(AddExistingOccupantsCommand command) {
-        Contract contract = contractRepository.findById(command.contractId())
-            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + command.contractId()));
         CurrentUser currentUser = currentUserPort.getCurrentUser();
-        authorizationService.assertOwnerOrAdmin(currentUser, contract.getPropertyId());
-
-        Property property = propertyRepository.findById(contract.getPropertyId())
-            .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + contract.getPropertyId()));
-        if (property.approvalStatus() != PropertyApprovalStatus.VERIFIED) {
-            throw new InvalidPropertyStatusException(String.format(
-                "Chỉ có thể thêm người thuê cho nhà trọ đã được duyệt (VERIFIED). Trạng thái hiện tại: '%s'.",
-                property.approvalStatus()));
-        }
-        if (!contract.isActive()) {
-            throw new DomainException("Chỉ có thể thêm người thuê vào hợp đồng đang có hiệu lực.");
-        }
-
-        Room room = roomRepository.findById(contract.getRoomId())
-            .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + contract.getRoomId()));
         LocalDate today = LocalDate.now();
-        long residingCount = countResidingOccupants(contract, today);
-        if (residingCount + command.tenantIds().size() > room.getMaxOccupants()) {
-            throw new InvalidRoomCapacityException(String.format(
-                "Chỉ còn %d chỗ trống trong phòng '%s' (sức chứa tối đa: %d người).",
-                Math.max(0, room.getMaxOccupants() - residingCount), room.getRoomNumber(), room.getMaxOccupants()));
-        }
+        OccupantContext context = loadOccupantContext(command.contractId(), currentUser);
+        Contract contract = context.contract();
+        assertRoomHasSlots(context, command.tenantIds().size(), today);
 
-        java.util.Set<UUID> visiblePropertyTenantIds = tenantRepository.findLinks(property.id()).stream()
+        java.util.Set<UUID> visiblePropertyTenantIds = tenantRepository.findLinks(context.property().id()).stream()
             .filter(link -> link.hiddenAt() == null)
             .map(TenantRepositoryPort.PropertyLink::tenantId)
             .collect(java.util.stream.Collectors.toSet());
@@ -626,18 +913,15 @@ public class ContractService implements ContractUseCase {
             throw new DomainException("Một hoặc nhiều hồ sơ người thuê không còn tồn tại.");
         }
 
+        if (tenants.stream().anyMatch(tenant -> tenant.userId() == null || userRepository == null
+            || userRepository.findById(tenant.userId())
+                .filter(user -> user.role() == UserRole.TENANT && user.status() == User.UserStatus.ACTIVE).isEmpty())) {
+            throw new DomainException("Người ở cùng phải có tài khoản người thuê đang hoạt động.");
+        }
+
+        // Kiểm tra hết trước khi ghi; lỗi nêu tên người vi phạm
         for (UUID tenantId : command.tenantIds()) {
-            if (tenantId.equals(contract.getPrimaryTenantId())
-                || contract.getOccupants().stream().anyMatch(occupant -> occupant.tenantId().equals(tenantId))) {
-                throw new DomainException("Một hoặc nhiều người đã có trong danh sách người ở của hợp đồng.");
-            }
-            if (tenantRepository.findByIdForUpdate(tenantId).isEmpty()) {
-                throw new DomainException("Một hoặc nhiều hồ sơ người thuê không còn tồn tại.");
-            }
-            if (tenantResidesElsewhere(tenantId, contract.getId(), today)) {
-                throw new DuplicateActiveContractException(
-                    "Một hoặc nhiều người thuê hiện đang ở theo hợp đồng khác.");
-            }
+            assertCanJoin(contract, tenantsById.get(tenantId), today);
         }
 
         List<ContractOccupant> added = command.tenantIds().stream()
@@ -645,6 +929,20 @@ public class ContractService implements ContractUseCase {
             .toList();
         contractRepository.save(contract);
         return added;
+    }
+
+    private User assertTenantHasActiveAccount(UUID tenantId) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+            .orElseThrow(() -> new DomainException("Hồ sơ người thuê của hợp đồng không còn tồn tại."));
+        if (tenant.userId() == null || userRepository == null) {
+            throw new DomainException("Người thuê chính và người ở cùng phải có tài khoản người thuê đang hoạt động.");
+        }
+        User user = userRepository.findById(tenant.userId())
+            .orElseThrow(() -> new DomainException("Tài khoản người thuê của hợp đồng không còn tồn tại."));
+        if (user.role() != UserRole.TENANT || user.status() != User.UserStatus.ACTIVE) {
+            throw new DomainException("Người thuê chính và người ở cùng phải có tài khoản người thuê đang hoạt động.");
+        }
+        return user;
     }
 
     private User resolvePrimaryTenantUser(UUID userId) {
@@ -662,16 +960,6 @@ public class ContractService implements ContractUseCase {
         return user;
     }
 
-    private long countResidingOccupants(Contract contract, LocalDate today) {
-        long count = contract.getOccupants().stream()
-            .filter(occupant -> occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(today))
-            .count();
-        boolean primaryCounted = contract.getOccupants().stream()
-            .anyMatch(occupant -> occupant.isPrimary() && occupant.tenantId().equals(contract.getPrimaryTenantId())
-                && (occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(today)));
-        return contract.isResiding() && !primaryCounted ? count + 1 : count;
-    }
-
     private boolean tenantResidesElsewhere(UUID tenantId, UUID contractId, LocalDate today) {
         boolean primary = contractRepository.findByPrimaryTenantId(tenantId).stream()
             .anyMatch(contract -> !contract.getId().equals(contractId) && contract.isResiding());
@@ -684,80 +972,13 @@ public class ContractService implements ContractUseCase {
                 && (occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(today))));
     }
 
-    private record AccountLink(Tenant tenant, String username, String temporaryPassword) {}
 
-    /**
-     * Gắn hồ sơ người thuê với tài khoản đăng nhập theo email: dùng tài khoản người thuê có sẵn (chưa gắn hồ sơ khác),
-     * hoặc tạo tài khoản mới với mật khẩu tạm trả về một lần. Email của tài khoản vai trò khác bị từ chối.
-     */
-    private AccountLink linkTenantAccount(CurrentUser actor, Tenant tenant, String email) {
-        if (email == null || email.isBlank()) {
-            throw new IllegalArgumentException("Cần cung cấp email để tạo tài khoản người dùng");
-        }
-        String normalizedEmail = email.trim().toLowerCase();
-        if (!normalizedEmail.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
-            throw new IllegalArgumentException("Định dạng email không hợp lệ: " + email);
-        }
-        if (tenant.userId() != null || userRepository == null) {
-            // Hồ sơ đã có tài khoản: không tạo thêm
-            return new AccountLink(tenant, null, null);
-        }
-
-        Optional<User> existingUser = userRepository.findByEmail(normalizedEmail);
-        if (existingUser.isPresent()) {
-            User user = existingUser.get();
-            if (user.role() != UserRole.TENANT) {
-                throw new DomainException(
-                    "Email này thuộc một tài khoản không phải người thuê; hãy dùng email khác hoặc bỏ chọn tạo tài khoản.");
-            }
-            Optional<Tenant> linked = tenantRepository.findByUserId(user.id());
-            if (linked.isPresent() && !linked.get().id().equals(tenant.id())) {
-                throw new DomainException(
-                    "Tài khoản của email này đã gắn với hồ sơ người thuê khác; hãy dùng email khác.");
-            }
-            return new AccountLink(saveLink(tenant, user.id(), normalizedEmail), user.username(), null);
-        }
-        if (identityProviderPort == null) {
-            return new AccountLink(tenant, null, null);
-        }
-
-        String baseUsername = normalizedEmail.split("@")[0].toLowerCase().replaceAll("[^a-z0-9._-]", "");
-        if (baseUsername.length() < 3) {
-            baseUsername = "tenant_" + baseUsername;
-        }
-        String username = baseUsername;
-        int counter = 1;
-        while (userRepository.findByUsername(username).isPresent()) {
-            username = baseUsername + counter++;
-        }
-
-        String temporaryPassword = AuthService.generateSecureTemporaryPassword(16);
-        UUID authUserId = identityProviderPort.adminCreateUser(normalizedEmail, temporaryPassword);
-        User savedUser;
-        try {
-            savedUser = userRepository.save(new User(authUserId, username, normalizedEmail, tenant.fullName(),
-                tenant.phone(), UserRole.TENANT, User.UserStatus.ACTIVE, true, Instant.now()));
-        } catch (RuntimeException ex) {
-            // Không để lại tài khoản đăng nhập mồ côi khi ghi DB thất bại
-            try {
-                identityProviderPort.adminDeleteUser(authUserId);
-            } catch (RuntimeException ignored) {
-                // đã báo lỗi gốc
-            }
-            throw ex;
-        }
-        if (auditPort != null) {
-            auditPort.recordEvent(AuditPort.AuditEvent.of("OCCUPANT_ACCOUNT_CREATED", actor == null ? null : actor.id(),
-                "USER", savedUser.id().toString(), Map.of("userId", savedUser.id().toString(), "role", "TENANT",
-                    "tenantId", tenant.id().toString())));
-        }
-        return new AccountLink(saveLink(tenant, savedUser.id(), normalizedEmail), savedUser.username(),
-            temporaryPassword);
+    private static String cleanEmail(String email) {
+        return email == null || email.isBlank() ? null : email.trim();
     }
 
-    private Tenant saveLink(Tenant tenant, UUID userId, String email) {
-        return tenantRepository.save(new Tenant(tenant.id(), userId, tenant.fullName(), tenant.identityCardNumber(),
-            tenant.phone(), email, tenant.permanentAddress(), tenant.createdAt()));
+    private static String cleanAddress(String address) {
+        return address == null || address.isBlank() ? null : address.trim();
     }
 
     /** Một người không ở đồng thời theo hai hợp đồng (kể cả hợp đồng đã hết hạn nhưng chưa trả phòng, #87). */

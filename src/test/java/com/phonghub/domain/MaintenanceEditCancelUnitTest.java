@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 class MaintenanceEditCancelUnitTest {
 
     private static MaintenanceTicket reported() {
-        MaintenanceTicket ticket = MaintenanceTicket.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+        MaintenanceTicket ticket = MaintenanceTicket.create(UUID.randomUUID(), UUID.randomUUID(), null,
             "Vòi nước rỉ", "Rỉ ở bồn rửa", MaintenancePriority.LOW, null, Duration.ofHours(72));
         ticket.drainEvents();
         return ticket;
