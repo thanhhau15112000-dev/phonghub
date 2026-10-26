@@ -370,6 +370,14 @@ public class AuthorizationService {
         }
     }
 
+    /**
+     * Người được chọn người thuê của mọi nhà trọ khi lập hợp đồng. Chủ nhà trọ và nhân viên chỉ chọn trong phạm vi
+     * nhà trọ của mình để không lộ người thuê của chủ khác; quản trị viên không bị giới hạn đó.
+     */
+    public boolean canSelectTenantsAcrossProperties(CurrentUser user) {
+        return user != null && user.role() == UserRole.ADMIN;
+    }
+
     public boolean canManageContracts(CurrentUser user, UUID propertyId) {
         try {
             assertCanManageContracts(user, propertyId);
