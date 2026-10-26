@@ -20,6 +20,18 @@ public interface TenantDocumentUseCase {
 
     void delete(UUID propertyId, UUID tenantId, DocumentType type);
 
+    /** Giấy tờ của người thuê đang đăng nhập, cho Hồ sơ cá nhân (#244); không cần hợp đồng hay nhà trọ. */
+    OwnDocuments ownDocuments();
+
+    /**
+     * Người thuê tự tải hoặc thay ảnh CCCD của mình ở Hồ sơ cá nhân (#244). Giấy tờ tra theo người thuê nên dùng
+     * chung cho mọi nhà trọ và hợp đồng của họ, kể cả hợp đồng lập sau này.
+     */
+    DocumentSummary uploadOwnIdentityCard(DocumentFile front, DocumentFile back);
+
+    /** {@code profileLinked} false: tài khoản người thuê chưa gắn hồ sơ có CCCD nên chưa tải được giấy tờ. */
+    record OwnDocuments(boolean profileLinked, List<DocumentSummary> documents) {}
+
     record DocumentFile(String contentType, byte[] content) {}
 
     record UploadDocumentCommand(

@@ -75,6 +75,57 @@
             </div>
         </form>
     </div>
+
+    <!-- #244: người thuê tải CCCD một lần ở hồ sơ; hợp đồng và biên bản check-in dùng luôn ảnh này -->
+    <div class="card" id="cccd" th:if="${ownDocuments != null}">
+        <h2 style="margin: 0 0 4px;">Ảnh CCCD</h2>
+        <p style="color: var(--text-secondary); font-size: 13px; margin: 0 0 16px;">
+            Tải ảnh căn cước công dân một lần ở đây. Khi chủ trọ lập hợp đồng cho bạn, ảnh được dùng luôn cho hợp đồng
+            và biên bản check-in, không cần tải lại.
+        </p>
+
+        <div th:if="${identityCardSuccessMessage != null}" class="inline-alert inline-alert-success" style="margin-bottom: 16px;">
+            <span th:text="${identityCardSuccessMessage}">Đã lưu ảnh CCCD.</span>
+        </div>
+        <div th:if="${identityCardErrorMessage != null}" class="inline-alert inline-alert-danger" style="margin-bottom: 16px;">
+            <span th:text="${identityCardErrorMessage}">Không lưu được ảnh CCCD.</span>
+        </div>
+
+        <div th:if="${!ownDocuments.profileLinked()}" class="inline-alert inline-alert-danger" style="margin-bottom: 0;">
+            <span>Tài khoản chưa gắn hồ sơ người thuê có CCCD. Vui lòng liên hệ chủ trọ hoặc quản trị viên để bổ sung.</span>
+        </div>
+
+        <th:block th:if="${ownDocuments.profileLinked()}">
+            <div style="background: var(--bg-surface-subtle, rgba(0,0,0,0.02)); border: 1px solid var(--border-color, #e5e7eb); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px;">
+                <th:block th:if="${identityCard != null}">
+                    <strong>Đã có ảnh CCCD</strong>
+                    <span th:text="${' · số ' + identityCard.maskedNumber()}"> · số ****1234</span>
+                    <span th:text="${identityCard.hasBackImage() ? ' · mặt trước và mặt sau' : ' · mặt trước'}"> · mặt trước</span>
+                    <span th:text="${' · cập nhật ' + #temporals.format(identityCard.updatedAt(), 'dd/MM/yyyy HH:mm')}"> · cập nhật 01/01/2026 10:00</span>
+                </th:block>
+                <span th:if="${identityCard == null}">Chưa có ảnh CCCD.</span>
+            </div>
+
+            <form th:action="@{/account/profile/identity-card}" method="post" enctype="multipart/form-data">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <div class="form-group">
+                        <label class="form-label" for="cccdFront">Ảnh mặt trước *</label>
+                        <input id="cccdFront" type="file" name="front" class="form-control" accept="image/jpeg,image/png,image/webp" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="cccdBack">Ảnh mặt sau</label>
+                        <input id="cccdBack" type="file" name="back" class="form-control" accept="image/jpeg,image/png,image/webp">
+                    </div>
+                </div>
+                <small style="display: block; margin-bottom: 12px; color: var(--text-secondary); font-size: 12px;">
+                    Chỉ nhận ảnh JPEG, PNG, WebP. Ảnh được xóa dữ liệu vị trí rồi mã hóa trước khi lưu.
+                </small>
+                <button type="submit" class="btn btn-primary"
+                        th:text="${identityCard != null ? 'Thay ảnh CCCD' : 'Lưu ảnh CCCD'}">Lưu ảnh CCCD</button>
+            </form>
+        </th:block>
+    </div>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>

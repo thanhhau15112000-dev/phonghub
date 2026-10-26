@@ -99,7 +99,7 @@
             </div>
             <ol style="font-size: 13px; color: var(--text-secondary); padding-left: 18px;">
                 <li>Nháp: chủ trọ nhập chỉ số, tình trạng phòng và ảnh.</li>
-                <li>Chờ khách: khách xem và xác nhận (cần đã tải CCCD).</li>
+                <li>Chờ khách: khách xem và xác nhận (cần đã có ảnh CCCD, tải ở Hồ sơ cá nhân).</li>
                 <li>Chờ duyệt: chủ trọ hoặc nhân viên duyệt hoặc từ chối.</li>
             </ol>
             <div th:if="${details.handover().status().name() == 'REJECTED'}" style="margin-top: 8px;">
@@ -118,9 +118,13 @@
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <button type="submit" class="btn btn-primary">Tôi xác nhận biên bản</button>
                 </form>
-                <a th:if="${primaryTenant and details.handover().status().name() == 'PENDING_TENANT'}"
+                <a th:if="${primaryTenant and checkOut and details.handover().status().name() == 'PENDING_TENANT'}"
                    th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${contract.getPrimaryTenantId()} + '/documents'}"
                    class="btn btn-secondary">Tải giấy tờ</a>
+                <th:block th:if="${primaryTenant and !checkOut and details.handover().status().name() == 'PENDING_TENANT'}">
+                    <span th:if="${identityCardOnFile}" class="badge badge-ACTIVE" style="align-self: center;">Đã có ảnh CCCD trong Hồ sơ cá nhân</span>
+                    <a th:unless="${identityCardOnFile}" th:href="@{/account/profile#cccd}" class="btn btn-secondary">Tải ảnh CCCD ở Hồ sơ cá nhân</a>
+                </th:block>
                 <form th:if="${canManage and details.handover().status().name() == 'PENDING_APPROVAL'}" th:action="@{${base} + '/approve'}" method="post" style="display: flex; gap: 6px; margin: 0; flex-wrap: wrap;">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                     <input th:if="${checkOut}" type="number" min="0" step="1000" name="finalDeduction" class="form-control"

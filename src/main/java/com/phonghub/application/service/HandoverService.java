@@ -575,7 +575,7 @@ public class HandoverService implements HandoverUseCase {
         }
         if (type == HandoverType.CHECK_IN
             && documentRepository.findByTenantIdAndType(tenant.id(), DocumentType.CCCD).isEmpty()) {
-            throw new IllegalArgumentException("Vui lòng tải ảnh CCCD trước khi xác nhận biên bản");
+            throw new IllegalArgumentException("Vui lòng tải ảnh CCCD ở Hồ sơ cá nhân trước khi xác nhận biên bản");
         }
         Handover saved = handoverRepository.save(handover.tenantConfirm(user.id()));
         afterTenantConfirmation(type, contract, saved, user);
