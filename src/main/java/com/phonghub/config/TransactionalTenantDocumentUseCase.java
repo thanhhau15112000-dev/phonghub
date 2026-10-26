@@ -46,4 +46,16 @@ public class TransactionalTenantDocumentUseCase implements TenantDocumentUseCase
     public void delete(UUID propertyId, UUID tenantId, DocumentType type) {
         delegate.delete(propertyId, tenantId, type);
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public OwnDocuments ownDocuments() {
+        return delegate.ownDocuments();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public DocumentSummary uploadOwnIdentityCard(DocumentFile front, DocumentFile back) {
+        return delegate.uploadOwnIdentityCard(front, back);
+    }
 }
