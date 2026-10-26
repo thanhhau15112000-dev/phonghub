@@ -73,25 +73,29 @@ class MonthlyInvoiceAutomationUnitTest {
     }
 
     @Test
-    @DisplayName("On the last day, next month's invoice is created for ACTIVE contracts; running again creates nothing")
-    void lastDayCreatesNextMonthOnce() {
+    @DisplayName("An invoice is created when its anchored cycle starts, with duplicate runs ignored")
+    void invoicesFollowCycleStartDates() {
         Contract active = contract(ContractStatus.ACTIVE, LocalDate.of(2026, 8, 1), LocalDate.of(2027, 8, 1));
         Contract draft = contract(ContractStatus.DRAFT, LocalDate.of(2026, 8, 1), LocalDate.of(2027, 8, 1));
         Contract ended = contract(ContractStatus.TERMINATED, LocalDate.of(2026, 8, 1), LocalDate.of(2027, 8, 1));
         LocalDate lastDay = LocalDate.of(2026, 10, 31);
 
-        // tháng hiện tại (10) và tháng sau (11) cho hợp đồng ACTIVE
-        assertEquals(2, scheduler.run(lastDay));
-        assertEquals(2, rentInvoices(active).size());
+        // Chu kỳ tháng 10 đã bắt đầu; chu kỳ tháng 11 bắt đầu 01/11 nên chưa phát hành ngày 31/10.
+        assertEquals(1, scheduler.run(lastDay));
+        assertEquals(1, rentInvoices(active).size());
         assertTrue(rentInvoices(draft).isEmpty());
         assertTrue(rentInvoices(ended).isEmpty());
-        assertTrue(rentInvoices(active).stream().anyMatch(i -> i.getMonth() == 11 && i.getYear() == 2026
-            && i.getStatus() == InvoiceStatus.ISSUED
-            && i.getDueDate().equals(LocalDate.of(2026, 11, 5))));
+        Invoice october = rentInvoices(active).getFirst();
+        assertEquals(10, october.getMonth());
+        assertEquals(LocalDate.of(2026, 11, 3), october.getDueDate(), "backfill retains the three-day floor");
 
         assertEquals(0, scheduler.run(lastDay), "idempotent: nothing new on a second run");
-        assertEquals(0, scheduler.run(LocalDate.of(2026, 10, 31)));
+        assertEquals(1, scheduler.run(LocalDate.of(2026, 11, 1)));
         assertEquals(2, rentInvoices(active).size());
+        Invoice november = rentInvoices(active).stream().filter(i -> i.getMonth() == 11).findFirst().orElseThrow();
+        assertEquals(InvoiceStatus.ISSUED, november.getStatus());
+        assertEquals(LocalDate.of(2026, 11, 8), november.getDueDate());
+        assertEquals(0, scheduler.run(LocalDate.of(2026, 11, 1)));
     }
 
     @Test
@@ -104,16 +108,30 @@ class MonthlyInvoiceAutomationUnitTest {
     }
 
     @Test
-    @DisplayName("The first month of a contract and months beyond its term are not auto-issued")
-    void firstMonthAndTermBoundaries() {
+    @DisplayName("#208: a backfilled invoice created after the payment day is due three days later, not overdue")
+    void backfillAfterPaymentDayIsNotOverdue() {
+        Contract active = contract(ContractStatus.ACTIVE, LocalDate.of(2026, 8, 1), LocalDate.of(2027, 8, 1));
+        LocalDate lateRun = LocalDate.of(2026, 10, 15); // job bị lỡ (instance ngủ) tới sau ngày thanh toán 5
+
+        scheduler.run(lateRun);
+
+        Invoice october = rentInvoices(active).getFirst();
+        assertEquals(LocalDate.of(2026, 10, 18), october.getDueDate());
+        assertFalse(october.isOverdue(lateRun));
+    }
+
+    @Test
+    @DisplayName("The first cycle is auto-issued, while future and out-of-term cycles are not")
+    void firstCycleAndTermBoundaries() {
         Contract startsThisMonth = contract(ContractStatus.ACTIVE, LocalDate.of(2026, 10, 10), LocalDate.of(2027, 10, 10));
         Contract endsThisMonth = contract(ContractStatus.ACTIVE, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 10, 20));
 
         scheduler.run(LocalDate.of(2026, 10, 31));
 
-        assertTrue(rentInvoices(startsThisMonth).stream().noneMatch(i -> i.getMonth() == 10),
-            "first month is left to the manager");
-        assertEquals(1, rentInvoices(startsThisMonth).size(), "second month is created");
+        assertEquals(1, rentInvoices(startsThisMonth).size(), "the current first cycle is created");
+        assertEquals(LocalDate.of(2026, 10, 10), rentInvoices(startsThisMonth).getFirst().getCycleStartDate());
+        assertTrue(rentInvoices(startsThisMonth).stream().noneMatch(i -> i.getMonth() == 11),
+            "the next cycle has not started yet");
         assertEquals(1, rentInvoices(endsThisMonth).size(), "last month of the term is created");
         assertTrue(rentInvoices(endsThisMonth).stream().noneMatch(i -> i.getMonth() == 11), "nothing past the term");
     }
@@ -129,7 +147,7 @@ class MonthlyInvoiceAutomationUnitTest {
         Invoice fee = Invoice.issueMaintenanceFee(c, ticket.getId(), new BigDecimal("450000"), "PHAAAA2222", LocalDate.of(2026, 10, 20));
         invoiceRepo.save(fee);
 
-        scheduler.run(LocalDate.of(2026, 10, 31));
+        scheduler.run(LocalDate.of(2026, 11, 1));
 
         Invoice november = rentInvoices(c).stream().filter(i -> i.getMonth() == 11).findFirst().orElseThrow();
         assertEquals(0, new BigDecimal("3950000").compareTo(november.getTotalAmount()));
@@ -154,11 +172,11 @@ class MonthlyInvoiceAutomationUnitTest {
             }
 
             @Override
-            public boolean issueForContract(UUID contractId, YearMonth period) {
+            public boolean issueForContract(UUID contractId, YearMonth period, LocalDate today) {
                 if (contractId.equals(bad.getId())) {
                     throw new IllegalStateException("boom");
                 }
-                return service.issueForContract(contractId, period);
+                return service.issueForContract(contractId, period, today);
             }
 
             @Override

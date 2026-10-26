@@ -13,7 +13,7 @@ spring:
   servlet:
     multipart:
       max-file-size: ${STORAGE_MAX_FILE_SIZE_BYTES:10485760}
-      max-request-size: ${STORAGE_MAX_FILE_SIZE_BYTES:10485760}
+      max-request-size: ${STORAGE_MAX_REQUEST_SIZE_BYTES:67108864}
   thymeleaf:
     cache: false
     mode: HTML
@@ -24,6 +24,10 @@ server:
   address: 0.0.0.0
   error:
     include-message: always
+  tomcat:
+    # Tệp vượt giới hạn upload: Tomcat phải đọc hết phần còn lại của request mới trả được trang báo lỗi;
+    # mặc định chỉ đọc 2MB rồi cắt kết nối và trình duyệt hiện "Không thể truy cập trang web này" (#200).
+    max-swallow-size: 100MB
 
 management:
   endpoints:
@@ -70,5 +74,3 @@ phonghub:
     merchant-id: ${SEPAY_MERCHANT_ID:}
     secret-key: ${SEPAY_SECRET_KEY:}
     public-base-url: ${SEPAY_PUBLIC_BASE_URL:}
-  chat:
-    supabase-bucket: ${SUPABASE_CHAT_BUCKET:chat-media}

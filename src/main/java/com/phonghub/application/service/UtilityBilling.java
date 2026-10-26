@@ -12,6 +12,7 @@ import com.phonghub.domain.model.MeterReading;
 import com.phonghub.domain.model.MeterType;
 import com.phonghub.domain.model.ServiceRate;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,6 +67,48 @@ class UtilityBilling {
             }
         }
         return charges;
+    }
+
+    /** Unbilled meter consumption captured at early termination; fixed monthly services are not repeated. */
+    List<InvoiceItem> cancellationCharges(Contract contract, LocalDate finalReadingDate, List<Invoice> invoices) {
+        List<InvoiceItem> charges = new ArrayList<>();
+        if (disabled() || finalReadingDate == null) {
+            return charges;
+        }
+        List<ServiceRate> rates = rateRepository.findByPropertyId(contract.getPropertyId());
+        cancellationMeterCharges(contract, finalReadingDate, invoices, MeterType.ELECTRIC, ChargeType.PER_KWH,
+            "kWh", rates, charges);
+        cancellationMeterCharges(contract, finalReadingDate, invoices, MeterType.WATER, ChargeType.PER_M3,
+            "m3", rates, charges);
+        return charges;
+    }
+
+    private void cancellationMeterCharges(
+        Contract contract, LocalDate finalReadingDate, List<Invoice> invoices, MeterType meterType,
+        ChargeType chargeType, String unit, List<ServiceRate> rates, List<InvoiceItem> out
+    ) {
+        Optional<MeterReading> reading = readingRepository.findLatest(contract.getRoomId(), meterType)
+            .filter(found -> found.contractId() == null || found.contractId().equals(contract.getId()))
+            .filter(found -> !found.readingDate().isBefore(contract.billingAnchorDate())
+                && !found.readingDate().isAfter(finalReadingDate))
+            .filter(found -> found.consumption().signum() > 0);
+        if (reading.isEmpty()) {
+            return;
+        }
+        MeterReading meter = reading.get();
+        for (ServiceRate rate : rates) {
+            if (rate.chargeType() != chargeType || rate.pricePerUnit().signum() <= 0) {
+                continue;
+            }
+            boolean alreadyBilled = invoices.stream().flatMap(invoice -> invoice.getItems().stream())
+                .anyMatch(item -> meter.id().equals(item.readingId()) && rate.id().equals(item.rateId()));
+            if (!alreadyBilled) {
+                String name = String.format("%s đến %s (%s %s)", rate.serviceName(),
+                    finalReadingDate.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                    meter.consumption().stripTrailingZeros().toPlainString(), unit);
+                out.add(InvoiceItem.charge(name, meter.consumption(), rate.pricePerUnit(), meter.id(), rate.id()));
+            }
+        }
     }
 
     private void meterCharge(

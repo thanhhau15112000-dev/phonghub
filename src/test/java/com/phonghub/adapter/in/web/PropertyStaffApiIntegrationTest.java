@@ -12,6 +12,7 @@ import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,9 +48,16 @@ class PropertyStaffApiIntegrationTest extends SeededWebTest {
     }
 
     private int createContractAs(String user) throws Exception {
+        String suffix = String.format("%08d", Math.floorMod(UUID.randomUUID().hashCode(), 100_000_000));
+        String tenantResponse = mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_1_ID + "/tenants")
+                .header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fullName\":\"Pham Van C\",\"identityCardNumber\":\"0792" + suffix
+                    + "\",\"phone\":\"09" + suffix + "\",\"email\":\"staff-flow-" + suffix + "@example.test\"}"))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        UUID tenantId = UUID.fromString(objectMapper.readTree(tenantResponse).get("id").asText());
         ContractApiController.CreateContractRequest req = new ContractApiController.CreateContractRequest(
-            DataSeeder.PROP_1_ID, DataSeeder.ROOM_104_ID, "Pham Van C", "079201003333", "0909112233", "c@local",
-            null, new BigDecimal("4000000"), new BigDecimal("4000000"), LocalDate.now(),
+            DataSeeder.PROP_1_ID, DataSeeder.ROOM_104_ID, tenantId,
+            new BigDecimal("4000000"), new BigDecimal("4000000"), LocalDate.now(),
             LocalDate.now().plusYears(1), 5);
         return mockMvc.perform(post("/api/contracts").header("X-User-Id", user)
                 .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(req)))

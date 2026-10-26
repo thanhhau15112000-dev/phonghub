@@ -103,10 +103,10 @@
         </p>
     </div>
 
-    <!-- Biểu mẫu thêm phòng (quản trị viên, nhân viên hoặc chủ trọ sở hữu khi nhà trọ đã duyệt) -->
-    <div th:if="${currentUser != null and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED' and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() != null and property.ownerId().equals(currentUser.id())))}" class="card">
-        <h2>Thêm phòng vào nhà trọ</h2>
-        <form th:action="@{'/properties/' + ${property.id()} + '/rooms'}" method="post">
+    <!-- Tạo phòng kèm hiện trạng ban đầu -->
+    <div th:if="${currentUser != null and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED' and canManageRoomsAndAssets}" class="card">
+        <h2>Thêm phòng kèm biên bản hiện trạng</h2>
+        <form th:action="@{'/properties/' + ${property.id()} + '/rooms'}" method="post" enctype="multipart/form-data">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
@@ -129,12 +129,137 @@
                     <label class="form-label">Số người tối đa</label>
                     <input type="number" name="maxOccupants" class="form-control" value="2" min="1">
                 </div>
-                <div class="form-group" style="display: flex; align-items: flex-end;">
-                    <button type="submit" class="btn btn-primary" style="margin-bottom: 0;">Thêm phòng</button>
-                </div>
             </div>
+            <h3>Hiện trạng ban đầu</h3>
+            <div class="form-row">
+                <div class="form-group"><label class="form-label">Chỉ số điện *</label><input type="number" name="electricMeter" class="form-control" min="0" step="0.01" required></div>
+                <div class="form-group"><label class="form-label">Chỉ số nước *</label><input type="number" name="waterMeter" class="form-control" min="0" step="0.01" required></div>
+                <div class="form-group"><label class="form-label">Ảnh đồng hồ điện</label><input type="file" name="electricMeterPhoto" accept="image/jpeg,image/png,image/webp"></div>
+                <div class="form-group"><label class="form-label">Ảnh đồng hồ nước</label><input type="file" name="waterMeterPhoto" accept="image/jpeg,image/png,image/webp"></div>
+            </div>
+            <div class="form-group"><label class="form-label">Ghi chú tình trạng phòng *</label><textarea name="conditionNote" class="form-control" maxlength="2000" required placeholder="Mô tả tường, sàn, cửa, thiết bị cố định..."></textarea></div>
+            <div class="form-group" style="max-width: 360px;">
+                <label class="form-label" for="initialAssetTemplate">Tài sản hiện trạng *</label>
+                <select id="initialAssetTemplate" name="assetTemplate" class="form-control">
+                    <option value="MANUAL">Tự nhập từng tài sản</option>
+                    <option value="BASIC">Mẫu cơ bản (5 món)</option>
+                    <option value="FULL">Mẫu đầy đủ (9 món)</option>
+                </select>
+                <small id="initialAssetTemplateHint" style="color: var(--text-secondary);">Nhập danh sách bên dưới hoặc chọn một mẫu.</small>
+            </div>
+            <label style="display: inline-flex; gap: 8px; align-items: center; margin-bottom: 12px;">
+                <input id="noRoomAssets" type="checkbox" name="noAssets" value="true"> Phòng không có tài sản cần ghi nhận
+            </label>
+            <div id="initialAssetFields">
+                <p style="margin: 0 0 8px; color: var(--text-secondary);">Nhập từng loại tài sản; nếu phòng trống tài sản, chọn ô xác nhận ở trên.</p>
+                <table class="data-table" id="initialAssetRows">
+                    <thead><tr><th>Tên tài sản</th><th>Số lượng</th><th>Tình trạng</th><th>Ghi chú</th><th>Giá trị ước tính</th></tr></thead>
+                    <tbody>
+                    <tr th:each="i : ${#numbers.sequence(1, 3)}">
+                        <td><input name="assetName" class="form-control" maxlength="150" placeholder="VD: Giường"></td>
+                        <td><input name="assetQuantity" type="number" class="form-control" min="1" value="1"></td>
+                        <td><select name="assetStatus" class="form-control"><option value="GOOD">Tốt</option><option value="DAMAGED">Hư hỏng</option><option value="LOST">Mất/thiếu</option></select></td>
+                        <td><input name="assetNote" class="form-control" maxlength="255"></td>
+                        <td><input name="assetValue" type="number" class="form-control" min="0" step="1000"></td>
+                    </tr>
+                    </tbody>
+                </table>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="addInitialAssetRow()">+ Thêm dòng tài sản</button>
+            </div>
+            <div style="margin-top: 16px;"><button type="submit" class="btn btn-primary">Tạo phòng và lưu hiện trạng</button></div>
         </form>
     </div>
+
+    <div th:if="${currentUser != null and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED' and canManageRoomsAndAssets}" class="card">
+        <h2>Tạo nhiều phòng</h2>
+        <form th:action="@{'/properties/' + ${property.id()} + '/rooms/batch'}" method="post" id="bulkRoomForm">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group">
+                <label class="form-label" for="bulkRoomNumbers">Số phòng hoặc khoảng số *</label>
+                <textarea id="bulkRoomNumbers" name="roomNumbers" class="form-control" required placeholder="P101-P110 hoặc P101, P102, P103"></textarea>
+                <small>Nhập danh sách hoặc khoảng cùng tiền tố; tối đa 50 phòng. Bảng dưới đây là phần xem trước để điền chỉ số riêng từng phòng.</small>
+            </div>
+            <div class="form-row">
+                <div class="form-group"><label class="form-label">Tầng *</label><input type="number" name="floor" class="form-control" min="1" value="1" required></div>
+                <div class="form-group"><label class="form-label">Diện tích (m²)</label><input type="number" name="areaSqm" class="form-control" min="0" step="0.1"></div>
+                <div class="form-group"><label class="form-label">Giá thuê cơ bản *</label><input type="number" name="basePrice" class="form-control" min="0" step="1000" required></div>
+                <div class="form-group"><label class="form-label">Số người tối đa *</label><input type="number" name="maxOccupants" class="form-control" min="1" value="2" required></div>
+                <div class="form-group"><label class="form-label">Mẫu tài sản *</label><select name="assetTemplate" class="form-control"><option value="NONE">Không có tài sản</option><option value="BASIC">Mẫu cơ bản</option><option value="FULL">Mẫu đầy đủ</option></select></div>
+            </div>
+            <div class="form-group"><label class="form-label">Ghi chú hiện trạng chung *</label><textarea name="conditionNote" class="form-control" maxlength="2000" required></textarea></div>
+            <div id="bulkRoomPreview" style="margin: 12px 0; overflow-x: auto;"></div>
+            <button type="submit" class="btn btn-primary">Xem trước và tạo phòng</button>
+        </form>
+    </div>
+    <script>
+        const noRoomAssets = document.getElementById('noRoomAssets');
+        const initialAssetTemplate = document.getElementById('initialAssetTemplate');
+        const initialAssetFields = document.getElementById('initialAssetFields');
+        const initialAssetTemplateHint = document.getElementById('initialAssetTemplateHint');
+        function updateInitialAssetMode() {
+            if (!noRoomAssets || !initialAssetTemplate || !initialAssetFields) return;
+            const useManualRows = !noRoomAssets.checked && initialAssetTemplate.value === 'MANUAL';
+            initialAssetTemplate.disabled = noRoomAssets.checked;
+            initialAssetFields.querySelectorAll('input,select').forEach(input => input.disabled = !useManualRows);
+            if (initialAssetTemplateHint) {
+                initialAssetTemplateHint.textContent = noRoomAssets.checked
+                    ? 'Tài sản sẽ được lưu là không có.'
+                    : initialAssetTemplate.value === 'MANUAL'
+                        ? 'Nhập danh sách bên dưới hoặc chọn một mẫu.'
+                        : 'Tài sản sẽ được tạo theo mẫu đã chọn.';
+            }
+        }
+        if (noRoomAssets) noRoomAssets.addEventListener('change', updateInitialAssetMode);
+        if (initialAssetTemplate) initialAssetTemplate.addEventListener('change', updateInitialAssetMode);
+        updateInitialAssetMode();
+        function addInitialAssetRow() {
+            const body = document.querySelector('#initialAssetRows tbody');
+            if (body.rows.length >= 30) return;
+            const row = body.rows[0].cloneNode(true);
+            row.querySelectorAll('input').forEach(input => input.value = input.name === 'assetQuantity' ? '1' : '');
+            row.querySelectorAll('select').forEach(select => select.value = 'GOOD');
+            body.appendChild(row);
+        }
+        const bulkRoomNumbers = document.getElementById('bulkRoomNumbers');
+        if (bulkRoomNumbers) {
+            const preview = document.getElementById('bulkRoomPreview');
+            const expand = raw => raw.trim().split(/[,;\s]+/).filter(Boolean).flatMap(token => {
+                const match = token.match(/^(.+?)(\d+)[-–](?:(.+?))?(\d+)$/);
+                if (!match) return [token];
+                if (match[3] && match[3].toLowerCase() !== match[1].toLowerCase()) throw new Error('Khoảng số phòng phải cùng tiền tố.');
+                const from = Number(match[2]), to = Number(match[4]);
+                if (to < from || to - from + 1 > 50) throw new Error('Khoảng số phòng tối đa 50 phòng.');
+                const width = Math.max(match[2].length, match[4].length);
+                return Array.from({length: to - from + 1}, (_, i) => match[1] + String(from + i).padStart(width, '0'));
+            });
+            const render = () => {
+                preview.replaceChildren();
+                let names;
+                try { names = expand(bulkRoomNumbers.value); } catch (error) {
+                    preview.textContent = error.message;
+                    return;
+                }
+                if (names.length === 0) return;
+                if (names.length > 50) { preview.textContent = 'Mỗi lần tạo tối đa 50 phòng.'; return; }
+                const table = document.createElement('table'); table.className = 'data-table';
+                const head = document.createElement('thead'); head.innerHTML = '<tr><th>Phòng</th><th>Chỉ số điện *</th><th>Chỉ số nước *</th></tr>';
+                const body = document.createElement('tbody');
+                names.forEach(name => {
+                    const row = document.createElement('tr');
+                    const label = document.createElement('td'); label.textContent = name; row.appendChild(label);
+                    ['electricMeters', 'waterMeters'].forEach(field => {
+                        const cell = document.createElement('td'); const input = document.createElement('input');
+                        input.type = 'number'; input.name = field; input.min = '0'; input.step = '0.01'; input.required = true; input.className = 'form-control';
+                        cell.appendChild(input); row.appendChild(cell);
+                    });
+                    body.appendChild(row);
+                });
+                table.append(head, body); preview.appendChild(table);
+            };
+            bulkRoomNumbers.addEventListener('input', render);
+            render();
+        }
+    </script>
 
     <!-- Danh sách phòng -->
     <div class="card">
@@ -184,6 +309,7 @@
                     <th>Diện tích</th>
                     <th>Giá cơ bản</th>
                     <th>Sức chứa</th>
+                    <th>Người ở / chỗ trống</th>
                     <th>Trạng thái</th>
                     <th class="col-actions">Thao tác</th>
                 </tr>
@@ -197,6 +323,15 @@
                     <td th:text="${r.getAreaSqm() != null ? r.getAreaSqm() + ' m²' : '—'}">25 m²</td>
                     <td style="font-weight: 500;" th:text="${#numbers.formatDecimal(r.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     <td th:text="${r.getMaxOccupants()} + ' người'">2 người</td>
+                    <td>
+                        <strong th:text="${roomOccupantCounts.get(r.getId()) + '/' + r.getMaxOccupants()}">0/2</strong>
+                        <small style="display: block; color: var(--text-secondary);"
+                               th:text="${roomOccupantNames.get(r.getId()).isEmpty() ? 'Chưa có người ở' : #strings.listJoin(roomOccupantNames.get(r.getId()), ', ')}">Chưa có người ở</small>
+                        <small th:if="${r.getStatus().name() == 'MAINTENANCE'}" style="display: block; color: var(--danger-color, #b91c1c);">Đang bảo trì, tạm không nhận người</small>
+                        <small th:if="${r.getStatus().name() == 'RESERVED'}" style="display: block; color: var(--text-secondary);">Đã giữ chỗ, chờ ký hợp đồng</small>
+                        <small th:unless="${r.getStatus().name() == 'MAINTENANCE' or r.getStatus().name() == 'RESERVED'}" style="display: block; color: var(--text-secondary);"
+                               th:text="${roomAvailableSlots.get(r.getId()) == 0 ? 'Đã đủ người' : 'Còn ' + roomAvailableSlots.get(r.getId()) + ' chỗ trống'}">Còn 2 chỗ trống</small>
+                    </td>
                     <td>
                         <span th:class="'badge badge-' + ${r.getStatus()}" th:text="${uiText.roomStatus(r.getStatus())}">Trống</span>
                     </td>
@@ -231,6 +366,25 @@
                   th:text="'Trang ' + ${roomPage.page() + 1} + '/' + ${roomPage.totalPages()} + ' · ' + ${roomPage.totalElements()} + ' phòng'">Trang 1/2</span>
             <a th:if="${roomPage.hasNext()}" class="btn btn-sm" style="text-decoration: none;"
                th:href="@{'/properties/' + ${property.id()}(status=${filterStatus}, minPrice=${filterMinPrice}, maxPrice=${filterMaxPrice}, floor=${filterFloor}, page=${roomPage.page() + 1})}">Trang sau &rarr;</a>
+        </div>
+
+        <!-- Người thuê đã gắn nhà trọ nhưng chưa có hợp đồng phòng (#198) -->
+        <div th:if="${!tenantsWithoutRoom.isEmpty()}" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+            <h3 style="font-size: 15px; margin: 0 0 8px;" th:text="'Người thuê chưa có phòng (' + ${tenantsWithoutRoom.size()} + ')'">Người thuê chưa có phòng</h3>
+            <ul style="list-style: none; margin: 0; padding: 0;">
+                <li th:each="t : ${tenantsWithoutRoom}"
+                    style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border-color);">
+                    <span>
+                        <strong th:text="${t.fullName()}">Nguyễn Văn A</strong>
+                        <small style="color: var(--text-secondary);"
+                               th:text="${' · ' + t.maskedIdentityCardNumber() + (t.userId() != null ? ' · có tài khoản app' : ' · chưa có tài khoản app')}"> · ****1111</small>
+                    </span>
+                    <a th:if="${property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED'
+                                and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                       th:href="@{/contracts/new(propertyId=${property.id()}, tenantProfileId=${t.id()})}"
+                       class="btn btn-sm btn-primary">Tạo hợp đồng</a>
+                </li>
+            </ul>
         </div>
 
         <!-- Phòng đã ngừng sử dụng (#89): không tính vào danh sách trên, chủ trọ / quản trị viên khôi phục tại đây -->

@@ -13,7 +13,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.jayway.jsonpath.JsonPath;
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.config.PhongHubCaches;
+import com.phonghub.domain.model.Handover;
+import com.phonghub.domain.model.HandoverType;
 import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,6 +37,7 @@ class CacheIntegrationTest extends SeededWebTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private PhongHubCaches caches;
+    @Autowired private InMemoryHandoverRepository handovers;
 
     /** Dữ liệu mẫu được nạp lại thẳng vào repository (không qua service) nên phải xóa cache giữa các test. */
     @BeforeEach
@@ -51,6 +55,16 @@ class CacheIntegrationTest extends SeededWebTest {
         String body = mockMvc.perform(get("/api/stats/owner/summary").header("X-User-Id", user))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         return JsonPath.read(body, "$.occupancy.occupied");
+    }
+
+    private String createAvailableTenant() throws Exception {
+        String suffix = String.format("%08d", java.util.concurrent.ThreadLocalRandom.current().nextInt(100_000_000));
+        String body = "{\"fullName\":\"Lê Mới\",\"identityCardNumber\":\"0792" + suffix
+            + "\",\"phone\":\"0901112223\",\"email\":\"cache-" + suffix + "@example.test\"}";
+        String response = mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_1_ID + "/tenants")
+                .header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        return JsonPath.read(response, "$.id");
     }
 
     @Test
@@ -85,7 +99,8 @@ class CacheIntegrationTest extends SeededWebTest {
         int before = JsonPath.<java.util.List<?>>read(mockMvc.perform(get(ROOMS).header("X-User-Id", OWNER_1))
             .andReturn().getResponse().getContentAsString(), "$").size();
         mockMvc.perform(post(ROOMS).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"roomNumber\":\"P999\",\"floor\":9,\"areaSqm\":20,\"basePrice\":3000000,\"maxOccupants\":2}"))
+                .content("{\"roomNumber\":\"P999\",\"floor\":9,\"areaSqm\":20,\"basePrice\":3000000,\"maxOccupants\":2,"
+                    + "\"electricMeter\":0,\"waterMeter\":0,\"conditionNote\":\"Hiện trạng ban đầu\",\"noAssets\":true}"))
             .andExpect(status().isCreated());
         mockMvc.perform(get(ROOMS).header("X-User-Id", OWNER_1))
             .andExpect(jsonPath("$.length()").value(before + 1));
@@ -94,6 +109,7 @@ class CacheIntegrationTest extends SeededWebTest {
     @Test
     @DisplayName("Kích hoạt hợp đồng (ghi trong transaction ở service khác) làm mới danh sách phòng và dashboard owner")
     void committedTransactionEvicts() throws Exception {
+        String tenantId = createAvailableTenant();
         assertEquals("AVAILABLE", roomStatus(OWNER_1, "P104"));
         int occupiedBefore = occupied(OWNER_1);
         assertEquals("AVAILABLE", roomStatus(OWNER_1, "P104"), "đọc lại từ cache");
@@ -103,14 +119,19 @@ class CacheIntegrationTest extends SeededWebTest {
         String created = mockMvc.perform(post("/api/contracts").header("X-User-Id", OWNER_1)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                    {"propertyId": "%s", "roomId": "%s", "primaryTenantFullName": "Lê Mới",
-                     "primaryTenantIdCard": "079201009999", "primaryTenantPhone": "0901112223",
+                    {"propertyId": "%s", "roomId": "%s", "primaryTenantId": "%s",
                      "depositAmount": 1000000, "rentAmount": 4000000, "startDate": "%s", "endDate": "%s",
                      "paymentDay": 5}
-                    """.formatted(DataSeeder.PROP_1_ID, DataSeeder.ROOM_104_ID, LocalDate.now(),
+                    """.formatted(DataSeeder.PROP_1_ID, DataSeeder.ROOM_104_ID, tenantId, LocalDate.now(),
                     LocalDate.now().plusMonths(6))))
             .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-        mockMvc.perform(post("/api/contracts/" + JsonPath.read(created, "$.id") + "/activate")
+        java.util.UUID contractId = java.util.UUID.fromString(JsonPath.read(created, "$.id"));
+        Handover checkIn = Handover.draft(contractId, HandoverType.CHECK_IN, java.math.BigDecimal.ZERO,
+            java.math.BigDecimal.ZERO, "Phòng đã kiểm tra", null, java.util.UUID.fromString(OWNER_1))
+            .send("terms-hash", null, null, java.util.UUID.fromString(OWNER_1))
+            .tenantConfirm(java.util.UUID.fromString(OWNER_1)).approve(java.util.UUID.fromString(OWNER_1));
+        handovers.save(checkIn);
+        mockMvc.perform(post("/api/contracts/" + contractId + "/activate")
                 .header("X-User-Id", OWNER_1))
             .andExpect(status().isOk());
 

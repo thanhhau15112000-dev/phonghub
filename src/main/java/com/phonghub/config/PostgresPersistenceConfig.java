@@ -16,6 +16,7 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverPhotoReposi
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyHouseRulesRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetRepository;
+import com.phonghub.adapter.out.persistence.postgres.PostgresRoomConditionRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantDocumentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresStaffPropertyAssignmentRepository;
@@ -41,6 +42,7 @@ import com.phonghub.application.port.out.HandoverPhotoRepositoryPort;
 import com.phonghub.application.port.out.HandoverRepositoryPort;
 import com.phonghub.application.port.out.PropertyHouseRulesRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetRepositoryPort;
+import com.phonghub.application.port.out.RoomConditionRepositoryPort;
 import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
@@ -194,6 +196,11 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
+    public RoomConditionRepositoryPort roomConditionRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        return new PostgresRoomConditionRepository(jdbcTemplate);
+    }
+
+    @Bean
     public RoomAssetEventRepositoryPort roomAssetEventRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         return new PostgresRoomAssetEventRepository(jdbcTemplate);
     }
@@ -246,6 +253,20 @@ public class PostgresPersistenceConfig {
         TenantDataProtectionPort tenantDataProtection
     ) {
         return new PostgresPaymentRepository(jdbcTemplate, tenantDataProtection);
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.PaymentClaimRepositoryPort paymentClaimRepository(
+        NamedParameterJdbcTemplate jdbcTemplate
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresPaymentClaimRepository(jdbcTemplate);
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.InvoicePaymentRecordRepositoryPort invoicePaymentRecordRepository(
+        NamedParameterJdbcTemplate jdbcTemplate
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresInvoicePaymentRecordRepository(jdbcTemplate);
     }
 
     @Bean

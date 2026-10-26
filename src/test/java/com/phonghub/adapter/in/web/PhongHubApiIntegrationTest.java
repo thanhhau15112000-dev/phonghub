@@ -4,6 +4,7 @@ import tools.jackson.databind.ObjectMapper;
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
@@ -17,6 +18,8 @@ import com.phonghub.adapter.in.web.api.PropertyApiController;
 import com.phonghub.adapter.in.web.api.RoomApiController;
 import com.phonghub.adapter.in.web.api.TenantApiController;
 import com.phonghub.domain.model.MaintenancePriority;
+import com.phonghub.domain.model.Handover;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
 import java.math.BigDecimal;
@@ -68,6 +71,9 @@ class PhongHubApiIntegrationTest {
     private InMemoryContractRepository contractRepository;
 
     @Autowired
+    private InMemoryHandoverRepository handoverRepository;
+
+    @Autowired
     private InMemoryMaintenanceTicketRepository ticketRepository;
 
     @BeforeEach
@@ -78,6 +84,7 @@ class PhongHubApiIntegrationTest {
         roomRepository.clear();
         tenantRepository.clear();
         contractRepository.clear();
+        handoverRepository.clear();
         ticketRepository.clear();
 
         DataSeeder.seedAll(
@@ -89,6 +96,17 @@ class PhongHubApiIntegrationTest {
             contractRepository,
             ticketRepository
         );
+    }
+
+    private UUID createAvailableTenant() throws Exception {
+        String suffix = String.format("%08d", java.util.concurrent.ThreadLocalRandom.current().nextInt(100_000_000));
+        String request = "{\"fullName\":\"Pham Van C\",\"identityCardNumber\":\"0792" + suffix
+            + "\",\"phone\":\"0909112233\",\"email\":\"tenant-" + suffix + "@example.test\"}";
+        String response = mockMvc.perform(post("/api/properties/" + DataSeeder.PROP_1_ID + "/tenants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON).content(request))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        return UUID.fromString(objectMapper.readTree(response).get("id").asText());
     }
 
     @Test
@@ -219,14 +237,11 @@ class PhongHubApiIntegrationTest {
     @Test
     @DisplayName("Create and activate contract on available room changes room to OCCUPIED")
     void testContractCreationAndActivation() throws Exception {
+        UUID tenantId = createAvailableTenant();
         ContractApiController.CreateContractRequest req = new ContractApiController.CreateContractRequest(
             DataSeeder.PROP_1_ID,
             DataSeeder.ROOM_104_ID, // Available room
-            "Pham Van C",
-            "079201003333",
-            "0909112233",
-            "c@local",
-            null,
+            tenantId,
             new BigDecimal("4000000"),
             new BigDecimal("4000000"),
             LocalDate.now(),
@@ -244,7 +259,17 @@ class PhongHubApiIntegrationTest {
 
         String contractId = objectMapper.readTree(response).get("id").asText();
 
-        // Activate contract
+        // API cannot activate without an approved check-in.
+        mockMvc.perform(post("/api/contracts/" + contractId + "/activate")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+            .andExpect(status().isConflict());
+
+        java.util.UUID actorId = LocalDemoAuthenticationAdapter.ADMIN_ID;
+        Handover checkIn = Handover.draft(java.util.UUID.fromString(contractId), HandoverType.CHECK_IN,
+            BigDecimal.ZERO, BigDecimal.ZERO, "Phòng đã kiểm tra", null, actorId)
+            .send("terms-hash", null, null, actorId).tenantConfirm(actorId).approve(actorId);
+        handoverRepository.save(checkIn);
+
         mockMvc.perform(post("/api/contracts/" + contractId + "/activate")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
@@ -264,11 +289,7 @@ class PhongHubApiIntegrationTest {
         ContractApiController.CreateContractRequest req = new ContractApiController.CreateContractRequest(
             DataSeeder.PROP_1_ID,
             DataSeeder.ROOM_101_ID,
-            "Le Van D",
-            "079201004444",
-            "0909444555",
-            "d@local",
-            null,
+            DataSeeder.TENANT_RECORD_ID,
             new BigDecimal("3500000"),
             new BigDecimal("3500000"),
             LocalDate.now(),
@@ -786,9 +807,7 @@ class PhongHubApiIntegrationTest {
             "0908888999",
             "lan@phonghub.local",
             "Bình Phước",
-            LocalDate.now(),
-            false
-        );
+            LocalDate.now());
 
         mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
@@ -802,24 +821,37 @@ class PhongHubApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("STAFF adding occupant to contract returns 403 Forbidden")
-    void testStaffAddsOccupantForbidden() throws Exception {
+    @DisplayName("Assigned STAFF with contract permission can add occupant and provision account")
+    void testAssignedStaffAddsOccupantSuccessfully() throws Exception {
         ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
             "Trần Thị Lan",
             "079200008888",
             "0908888999",
             "lan@phonghub.local",
             "Bình Phước",
-            LocalDate.now(),
-            false
-        );
+            LocalDate.now());
 
         mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.isPrimary", is(false)))
+            .andExpect(jsonPath("$.temporaryPassword", notNullValue()));
+    }
+
+    @Test
+    @DisplayName("STAFF assigned to another property cannot add an occupant")
+    void testStaffWithoutContractPermissionCannotAddOccupant() throws Exception {
+        ContractApiController.AddOccupantRequest req = new ContractApiController.AddOccupantRequest(
+            "Trần Thị Lan", "079200008889", "0908888998", "lan2@phonghub.local", "Bình Phước",
+            LocalDate.now());
+
+        mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_2_ID.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.title", is("Unauthorized Property Access")))
             .andExpect(jsonPath("$.status", is(403)));
     }
 
@@ -839,9 +871,7 @@ class PhongHubApiIntegrationTest {
             "0908888999",
             null,
             null,
-            LocalDate.now(),
-            false
-        );
+            LocalDate.now());
 
         mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
@@ -864,9 +894,7 @@ class PhongHubApiIntegrationTest {
             tenant1.phone(),
             tenant1.email(),
             null,
-            LocalDate.now(),
-            false
-        );
+            LocalDate.now());
 
         mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
@@ -886,9 +914,7 @@ class PhongHubApiIntegrationTest {
             "",
             null,
             null,
-            LocalDate.now(),
-            false
-        );
+            LocalDate.now());
 
         mockMvc.perform(post("/api/contracts/" + DataSeeder.CONTRACT_1_ID + "/occupants")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())

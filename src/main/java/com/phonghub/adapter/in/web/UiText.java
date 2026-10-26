@@ -147,9 +147,25 @@ public final class UiText {
         if (invoice.getType() == InvoiceType.MAINTENANCE) {
             return "Phí sửa chữa";
         }
+        if (invoice.getType() == InvoiceType.CANCELLATION) {
+            return invoice.getCycleNumber() > 0
+                ? cycleInvoiceLabel("Phí hủy hợp đồng", invoice)
+                : "Phí hủy hợp đồng";
+        }
+        if (invoice.getType() == InvoiceType.CHECK_OUT) {
+            return "Hóa đơn chốt điện/nước";
+        }
+        if (invoice.getCycleNumber() > 0) {
+            return cycleInvoiceLabel("Tiền thuê", invoice);
+        }
         boolean hasFees = invoice.getItems().stream().anyMatch(item -> item.sourceInvoiceId() != null);
         return String.format("Tiền thuê %02d/%d", invoice.getMonth(), invoice.getYear())
             + (hasFees ? " và phí sửa chữa" : "");
+    }
+
+    private String cycleInvoiceLabel(String prefix, Invoice invoice) {
+        return String.format("%s kỳ %d (%s – %s)", prefix, invoice.getCycleNumber(),
+            date(invoice.getCycleStartDate()), date(invoice.getCycleEndDate()));
     }
 
     public String maintenanceCause(MaintenanceCause cause) {
@@ -200,6 +216,8 @@ public final class UiText {
             case VERIFIED -> "Đã xác nhận";
             case REJECTED -> "Đã từ chối";
             case CANCELLED -> "Đã hủy";
+            case PENDING_OWNER_APPROVAL -> "Chờ chủ trọ duyệt";
+            case PENDING_TENANT_APPROVAL -> "Chờ người thuê duyệt báo giá";
         };
     }
 
@@ -332,6 +350,9 @@ public final class UiText {
         groups.put("Biên bản bàn giao", handover);
         groups.put("Bảo trì", labels(
             "MAINTENANCE_TECHNICIAN_ASSIGNED", "Phân công kỹ thuật viên",
+            "MAINTENANCE_TECHNICIAN_REASSIGNED", "Giao lại kỹ thuật viên",
+            "MAINTENANCE_TICKET_UNDERSTAFFED", "Báo thiếu nhân lực",
+            "MAINTENANCE_TICKET_AUTO_CANCELLED", "Tự hủy do thiếu nhân lực",
             "MAINTENANCE_TICKET_UPDATED", "Sửa phiếu bảo trì",
             "MAINTENANCE_TICKET_CANCELLED", "Hủy phiếu bảo trì",
             "MAINTENANCE_TICKET_REJECTED", "Từ chối phiếu bảo trì",

@@ -18,7 +18,10 @@ import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.UserRole;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -34,6 +37,10 @@ public class InvoiceService implements InvoiceUseCase {
     private final AuthorizationService authorizationService;
     private final UtilityBilling utilityBilling;
     private final AuditPort auditPort;
+    private final Clock clock;
+
+    /** Ngày tạo hóa đơn tính theo giờ Việt Nam, cùng múi giờ với các tác vụ tự động. */
+    private static final ZoneId BILLING_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     public InvoiceService(
         InvoiceRepositoryPort invoiceRepository,
@@ -68,6 +75,22 @@ public class InvoiceService implements InvoiceUseCase {
         ServiceRateRepositoryPort rateRepository,
         AuditPort auditPort
     ) {
+        this(invoiceRepository, ticketRepository, contractUseCase, currentUserPort, authorizationService,
+            readingRepository, rateRepository, auditPort, Clock.systemUTC());
+    }
+
+    public InvoiceService(
+        InvoiceRepositoryPort invoiceRepository,
+        MaintenanceTicketRepositoryPort ticketRepository,
+        ContractUseCase contractUseCase,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        MeterReadingRepositoryPort readingRepository,
+        ServiceRateRepositoryPort rateRepository,
+        AuditPort auditPort,
+        Clock clock
+    ) {
+        this.clock = clock;
         this.auditPort = auditPort != null ? auditPort : event -> {};
         this.invoiceRepository = invoiceRepository;
         this.utilityBilling = readingRepository == null || rateRepository == null
@@ -118,13 +141,20 @@ public class InvoiceService implements InvoiceUseCase {
         assertCanViewFinance();
         Contract contract = contractUseCase.getContract(contractId);
         authorizationService.assertCanManageContracts(currentUserPort.getCurrentUser(), contract.getPropertyId());
+        LocalDate today = LocalDate.ofInstant(clock.instant(), BILLING_ZONE);
+        com.phonghub.domain.model.BillingCycle cycle = contract.billingCycle(period).orElseThrow(() ->
+            new DomainException(String.format("Kỳ thanh toán %02d/%d không thuộc thời hạn hợp đồng.",
+                period.getMonthValue(), period.getYear())));
+        if (cycle.startDate().isAfter(today)) {
+            throw new DomainException("Chỉ có thể tạo hóa đơn cho chu kỳ đã bắt đầu khi hợp đồng còn hiệu lực.");
+        }
 
         if (issuer.exists(contract, period)) {
             throw new DomainException(String.format(
                 "Kỳ thanh toán %02d/%d đã tồn tại cho hợp đồng này.", period.getMonthValue(), period.getYear()
             ));
         }
-        return issuer.issue(contract, period);
+        return issuer.issue(contract, period, today);
     }
 
     @Override

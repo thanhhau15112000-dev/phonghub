@@ -18,6 +18,7 @@ import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.UserRole;
 import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -63,6 +64,14 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
 
     @Override
     public MaintenanceAttachment upload(UUID ticketId, String contentType, byte[] content) {
+        return uploadAll(ticketId, List.of(new AttachmentFile(contentType, content))).getFirst();
+    }
+
+    @Override
+    public List<MaintenanceAttachment> uploadAll(UUID ticketId, List<AttachmentFile> files) {
+        if (files == null || files.isEmpty()) {
+            throw new IllegalArgumentException("Cần chọn ít nhất một tệp để tải lên.");
+        }
         CurrentUser user = currentUserPort.getCurrentUser();
         MaintenanceTicket ticket = findTicket(ticketId);
         assertCanUpload(user, ticket);
@@ -70,36 +79,47 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
             throw new MaintenanceTicketException("Không đính kèm thêm được vào phiếu đã xử lý xong hoặc đã đóng");
         }
 
-        boolean video = FileSanitizer.isVideo(contentType);
-        if (!video && !FileSanitizer.isImage(contentType)) {
-            throw new IllegalArgumentException("Chỉ nhận ảnh jpeg/png/webp hoặc video mp4/webm/mov");
-        }
+        // Kiểm tra loại, số lượng và dung lượng của cả lượt trước khi ghi tệp nào vào kho
         List<MaintenanceAttachment> existing = attachmentRepository.findByTicketId(ticketId);
-        if (video) {
-            if (existing.stream().anyMatch(a -> a.kind() == MaintenanceAttachment.Kind.VIDEO)) {
+        long images = existing.stream().filter(a -> a.kind() == MaintenanceAttachment.Kind.IMAGE).count();
+        long videos = existing.stream().filter(a -> a.kind() == MaintenanceAttachment.Kind.VIDEO).count();
+        List<FileSanitizer.SanitizedFile> sanitized = new ArrayList<>();
+        List<MaintenanceAttachment.Kind> kinds = new ArrayList<>();
+        for (AttachmentFile upload : files) {
+            boolean video = FileSanitizer.isVideo(upload.contentType());
+            if (!video && !FileSanitizer.isImage(upload.contentType())) {
+                throw new IllegalArgumentException("Chỉ nhận ảnh jpeg/png/webp hoặc video mp4/webm/mov");
+            }
+            if (video && ++videos > 1) {
                 throw new AttachmentLimitException("Phiếu chỉ được đính kèm một video");
             }
-        } else if (existing.stream().filter(a -> a.kind() == MaintenanceAttachment.Kind.IMAGE).count() >= maxImages) {
-            throw new AttachmentLimitException("Mỗi phiếu chỉ được đính kèm tối đa " + maxImages + " ảnh");
+            if (!video && ++images > maxImages) {
+                throw new AttachmentLimitException("Mỗi phiếu chỉ được đính kèm tối đa " + maxImages + " ảnh");
+            }
+            sanitized.add(video
+                ? FileSanitizer.sanitizeVideo(upload.contentType(), upload.content(), maxVideoBytes)
+                : FileSanitizer.sanitize(upload.contentType(), upload.content(), maxImageBytes));
+            kinds.add(video ? MaintenanceAttachment.Kind.VIDEO : MaintenanceAttachment.Kind.IMAGE);
         }
 
-        FileSanitizer.SanitizedFile file = video
-            ? FileSanitizer.sanitizeVideo(contentType, content, maxVideoBytes)
-            : FileSanitizer.sanitize(contentType, content, maxImageBytes);
-        String key = PrivateFileStorageService.objectKey(ticket.getPropertyId(), "maintenance", file.extension());
-        storagePort.put(key, file.contentType(), file.content());
-        MaintenanceAttachment saved;
+        List<String> storedKeys = new ArrayList<>();
+        List<MaintenanceAttachment> saved = new ArrayList<>();
         try {
-            saved = attachmentRepository.save(new MaintenanceAttachment(UUID.randomUUID(), ticketId,
-                video ? MaintenanceAttachment.Kind.VIDEO : MaintenanceAttachment.Kind.IMAGE, key, file.contentType(),
-                file.content().length, user.id(), null));
+            for (int i = 0; i < sanitized.size(); i++) {
+                FileSanitizer.SanitizedFile file = sanitized.get(i);
+                String key = PrivateFileStorageService.objectKey(ticket.getPropertyId(), "maintenance", file.extension());
+                storagePort.put(key, file.contentType(), file.content());
+                storedKeys.add(key);
+                saved.add(attachmentRepository.save(new MaintenanceAttachment(UUID.randomUUID(), ticketId, kinds.get(i),
+                    key, file.contentType(), file.content().length, user.id(), null)));
+            }
         } catch (RuntimeException ex) {
-            deleteQuietly(key);
+            storedKeys.forEach(this::deleteQuietly);
             throw ex;
         }
-        auditPort.recordEvent(AuditPort.AuditEvent.of("MAINTENANCE_ATTACHMENT_ADDED", user.id(), "MAINTENANCE_TICKET",
-            ticketId.toString(), Map.of("kind", saved.kind().name(), "size", saved.sizeBytes())));
-        return saved;
+        saved.forEach(attachment -> auditPort.recordEvent(AuditPort.AuditEvent.of("MAINTENANCE_ATTACHMENT_ADDED", user.id(),
+            "MAINTENANCE_TICKET", ticketId.toString(), Map.of("kind", attachment.kind().name(), "size", attachment.sizeBytes()))));
+        return List.copyOf(saved);
     }
 
     @Override

@@ -19,6 +19,9 @@ tập trung vào các nghiệp vụ property, room, contract và maintenance tic
   (migration V10-V12).
 - Snapshot này không được gọi là release-ready. Việc deploy thật, CORS, URL
   runtime và dữ liệu Supabase cần được xác minh riêng.
+- Đặc tả use case (tác nhân, sơ đồ, luồng chính/phụ, ma trận phân quyền):
+  [docs/use-cases.md](docs/use-cases.md); sơ đồ UML dạng PlantUML ở
+  [docs/uml/phonghub-use-cases.puml](docs/uml/phonghub-use-cases.puml).
 
 ## Kiến trúc
 
@@ -210,6 +213,21 @@ staging hoặc production.
 > các row dữ liệu. Muốn môi trường deploy dùng dữ liệu thật, backend phải trỏ
 > tới database Supabase của môi trường đó bằng secret do môi trường quản lý.
 
+## Tài khoản người thuê và hợp đồng
+
+- `POST /api/admin/users` khi tạo role `TENANT` yêu cầu `identityCardNumber` và
+  số điện thoại; hệ thống tạo hoặc gắn hồ sơ người thuê cùng tài khoản.
+- `POST /api/properties/{propertyId}/tenants` tạo hoặc gắn hồ sơ với tài khoản
+  `TENANT`; yêu cầu họ tên, CCCD, số điện thoại và email. Mật khẩu tạm chỉ trả
+  về ở lần tạo tài khoản đầu tiên.
+- `POST /api/contracts` nhận `primaryTenantId` của hồ sơ đã có tài khoản
+  `TENANT` đang hoạt động. API không còn nhận thông tin CCCD/họ tên người thuê
+  tự nhập trong body hợp đồng.
+- Lập hợp đồng chỉ gợi ý hồ sơ đủ điều kiện trong nhà trọ; tìm một phần CCCD
+  giới hạn ở phạm vi nhà trọ, còn tra cứu CCCD đầy đủ dùng chỉ mục HMAC.
+- Tài khoản người thuê cũ chưa có hồ sơ được quản trị viên bổ sung CCCD và
+  số điện thoại tại `/admin/users`.
+
 ## Database migration và fixture
 
 Migration dùng chung:
@@ -303,18 +321,19 @@ dịch chuyển khoản thật tiếp tục được đối soát qua
 Chi tiết request/response được định nghĩa trong controller và DTO tương ứng.
 Frontend nên dùng API contract đó thay vì phụ thuộc vào fixture local.
 
-### Hệ thống Chat Real-time & Lưu trữ Media
+### Hệ thống Chat Real-time
+
+Chat chỉ gửi văn bản; chức năng gửi ảnh/video đã gỡ (#201). Tin cũ có tệp đính kèm vẫn hiển thị phần chữ, cột `media_url`/`media_type` trong `chat_messages` được giữ nguyên.
 
 Hệ thống trò chuyện được thiết kế theo chuẩn Hexagonal Architecture (Ports & Adapters):
 - **Inbound Port:** `ChatRoomUseCase`, `ChatMessageUseCase`
 - **Outbound Ports:**
   - `ChatMessageRepositoryPort`, `ChatRoomRepositoryPort` (PostgreSQL / In-Memory)
-  - `ChatEventPublisherPort` (SSE Broadcast)
-  - `MediaStoragePort` (Lưu trữ và phân phối hình ảnh/video qua CDN)
-- **Cơ chế lưu trữ Media (Images & Videos):**
-  - **Môi trường Production:** `SupabaseMediaStorageAdapter` tải tệp lên bucket Supabase Storage (`chat-media`) qua REST API và trả về URL CDN công khai (`/storage/v1/object/public/...`) giúp tối ưu tốc độ phân phối và bộ nhớ đệm.
-  - **Môi trường Local / Docker:** Tự động fallback sang `LocalMediaStorageAdapter` lưu trữ tại thư mục cục bộ `uploads/chat-media/` và phục vụ qua Spring Web MVC Resource Handler (`/uploads/**`), đảm bảo chạy mượt mà ngay cả khi ngắt mạng hoặc chưa cấu hình Supabase credentials.
-  - **Giới hạn & Định dạng:** Hỗ trợ kích thước tệp tối đa 25MB. Hỗ trợ ảnh (`.jpg, .png, .webp, .gif`) và video (`.mp4, .webm, .mov`). Hiển thị trực quan với thumbnail phóng to và trình phát video HTML5 tích hợp ngay trong bong bóng chat.
+  - `ChatEventPublisherPort` (SSE qua `GET /api/chat/stream`)
+- **Realtime (SSE):**
+  - Sự kiện `new_message` và `message_seen` chỉ gửi cho người được đọc phòng: phòng 1-1 chỉ hai thành viên, Kênh Chung mọi người đã đăng nhập.
+  - Server gửi heartbeat mỗi 25 giây để proxy (Cloudflare, Render) không cắt kết nối im lặng; header `Cache-Control: no-cache, no-transform` và `X-Accel-Buffering: no` để proxy không gom dữ liệu.
+  - Widget tự kết nối lại (kể cả khi proxy trả trang lỗi làm trình duyệt bỏ luồng SSE) và tải lại tin của phòng đang mở cùng số tin chưa đọc sau khi kết nối lại.
 
 ## Cấu hình production
 
@@ -432,13 +451,18 @@ docker build -t phonghub:local .
 - Tạo riêng hai khóa 32 byte bằng `openssl rand -base64 32`, rồi đặt `TENANT_DATA_ENCRYPTION_KEY` và `TENANT_DATA_HMAC_KEY`.
 - Đặt `TENANT_DATA_KEY_ID` (ví dụ `v1`). Không đổi hoặc xóa khóa đang dùng trước khi re-encrypt dữ liệu sang key id mới.
 - Migration `V14` mã hóa CCCD cũ bằng AES-256-GCM, tạo HMAC để kiểm tra trùng, rồi xóa cột plaintext. Thiếu key sẽ làm migration dừng an toàn.
-- Tệp vượt giới hạn trả `400`. Ảnh JPEG/PNG được mã hóa lại và WebP bị bỏ EXIF/XMP để xóa dữ liệu vị trí; PDF được lưu nguyên, không xóa metadata.
+- Tệp vượt giới hạn: API trả `400`, form giao diện quay lại trang trước kèm thông báo. Ảnh JPEG/PNG được mã hóa lại và WebP bị bỏ EXIF/XMP để xóa dữ liệu vị trí; PDF được lưu nguyên, không xóa metadata.
+- Kho lưu trữ lỗi (bucket sai, khóa sai, mất mạng) khi tải ảnh biên bản bàn giao: API trả `503`, giao diện báo lỗi tiếng Việt; không tạo bản ghi ảnh, lỗi gốc chỉ ghi log.
+- Profile `docker` (và `test`) dùng kho tệp trong bộ nhớ thay cho Supabase: ảnh biên bản bàn giao được trả thẳng qua endpoint kiểm tra quyền thay vì signed URL. Tệp mất khi khởi động lại ứng dụng nhưng bản ghi vẫn còn trong database, nên mở ảnh tải trước lần khởi động lại sẽ báo không mở được ảnh. Ảnh ở các chức năng khác (phiếu bảo trì, chỉ số điện nước, giấy tờ) vẫn trả URL `memory://` và không xem được trên trình duyệt ở profile này.
 - Endpoint: `POST /api/properties/{propertyId}/files`, `GET .../files/signed-url`, `DELETE .../files` (chi tiết trong `docs/api-spec.yaml`).
 
 ## Tài sản trong phòng
 
 - Migration `V15` mở rộng `room_assets` (mã tài sản duy nhất, trạng thái GOOD/DAMAGED/LOST/RETIRED, xóa mềm, cột kiểm toán `created_by/updated_at/updated_by`) và thêm `room_asset_events` để lưu lịch sử hư hỏng, sửa chữa, thay mới kèm chi phí.
-- Owner và staff của nhà trọ thêm, sửa, xóa mềm, thêm hàng loạt từ mẫu `BASIC` (5 món) hoặc `FULL` (9 món) và ghi nhận sự kiện. Người thuê của phòng chỉ xem. Sự kiện có thể gắn phiếu bảo trì nhưng phiếu phải thuộc cùng phòng.
+- Migration `V51` thêm mốc hiện trạng phòng và quyền staff **Quản lý phòng và tài sản**. Khi tạo phòng, owner hoặc staff đã được cấp quyền phải lưu biên bản hiện trạng ban đầu gồm chỉ số điện/nước, ghi chú và tài sản (mẫu `BASIC`/`FULL` hoặc nhập thủ công; phòng không có tài sản thì xác nhận riêng); ảnh đồng hồ là tùy chọn. Biên bản được xem lại ở `/rooms/{id}`. Phòng cũ không có mốc này vẫn xem được và không bị buộc nhập bổ sung.
+- Có thể tạo nhiều phòng bằng danh sách hoặc khoảng số cùng tiền tố, với giá, diện tích, sức chứa và mẫu tài sản dùng chung; chỉ số điện/nước nhập riêng từng phòng. Danh sách được xem trước; phòng trùng hoặc vượt tổng số phòng khai báo thì cả lần tạo bị từ chối.
+- Owner và staff có quyền **Quản lý phòng và tài sản** thêm, sửa, xóa mềm, thêm hàng loạt từ mẫu `BASIC` (5 món) hoặc `FULL` (9 món), và ghi nhận sự kiện. Owner cấp quyền tại trang nhân sự; staff không có quyền chỉ xem, kỹ thuật viên không được cấp quyền này. Sự kiện có thể gắn phiếu bảo trì nhưng phiếu phải thuộc cùng phòng.
+- Khi gửi biên bản check-in đầu tiên, hệ thống chụp tài sản từ biên bản hiện trạng gần nhất; phòng cũ chưa có biên bản hiện trạng dùng danh sách tài sản đang gắn với phòng.
 - Ảnh tài sản có thể là liên kết ngoài hoặc tệp tải lên kho riêng tư; tệp chỉ được xem qua link ký có hạn.
 - Mã QR được sinh khi gọi (`GET /api/assets/{assetId}/qr` hoặc nút "Mã QR" ở trang phòng) và không được lưu; nội dung QR là đường dẫn trang phòng nên người quét phải đăng nhập.
 - Áp dụng mẫu hàng loạt hai lần sẽ tạo trùng tài sản; kiểm tra danh sách phòng trước khi áp dụng.
@@ -464,8 +488,9 @@ docker build -t phonghub:local .
 ## Biên bản check-in
 
 - Migration `V18` mở rộng `handovers` (trạng thái, mã băm điều khoản, bản chụp nội quy, người duyệt, cột kiểm toán), đổi ràng buộc duy nhất thành `(contract_id, type)` để mỗi hợp đồng chỉ có một biên bản check-in và còn chỗ cho check-out (#63), và thêm `handover_photos`, `handover_items`, `property_house_rules`. Dòng `handovers` có từ trước V18 được giữ ở trạng thái `APPROVED`.
-- **Thứ tự nghiệp vụ: kích hoạt hợp đồng trước, check-in sau.** Biên bản chỉ tạo được cho hợp đồng `ACTIVE`; duyệt biên bản không đổi trạng thái hợp đồng hay phòng, vì hai thứ đó đã đổi lúc kích hoạt.
-- Luồng: `DRAFT` (owner/staff nhập chỉ số điện nước, tình trạng phòng, chìa khóa, ảnh) -> `PENDING_TENANT` (đã gửi; hệ thống chụp danh sách tài sản của phòng, nội quy và mã băm điều khoản) -> `PENDING_APPROVAL` (người thuê chính xác nhận, cần đã tải CCCD) -> `APPROVED` hoặc `REJECTED` (từ chối phải có lý do; owner/staff mở lại về `DRAFT` để sửa và gửi lại, vẫn là một biên bản).
+- **Check-in hoàn tất trước khi hợp đồng có hiệu lực.** Bấm “Lập biên bản check-in” trên hợp đồng `DRAFT` tạo hoặc mở lại cùng biên bản nháp; không đổi trạng thái hợp đồng hoặc phòng. Khi người thuê chính xác nhận (đã tải CCCD) và chủ trọ/nhân viên duyệt, biên bản chuyển `APPROVED`, hợp đồng chuyển `ACTIVE`, phòng chuyển `OCCUPIED` trong cùng transaction. API kích hoạt trực tiếp trả `409` nếu check-in chưa được xác nhận và duyệt. Hợp đồng `ACTIVE` cũ không bị đổi.
+- Luồng: `DRAFT` (chỉ số, ghi chú và tài sản lấy từ mốc hiện trạng phòng hoặc check-out đã duyệt gần nhất; có thể thêm tài sản vào kho phòng và biên bản) -> `PENDING_TENANT` (đã gửi; ảnh bắt buộc, nội quy và mã băm điều khoản được chụp) -> `PENDING_APPROVAL` (người thuê chính xác nhận, cần đã tải CCCD) -> `APPROVED` (kích hoạt hợp đồng nháp và phòng) hoặc `REJECTED` (từ chối phải có lý do; owner/staff mở lại về `DRAFT` để sửa và gửi lại, vẫn là một biên bản).
+- Phòng không có tài sản vẫn có mục tài sản trên biên bản; trang ghi rõ “Phòng không có tài sản bàn giao”. Thêm tài sản từ biên bản sẽ cập nhật danh sách tài sản của phòng. Hủy hợp đồng `DRAFT` cũng xóa biên bản check-in còn `DRAFT`; không cho hủy hợp đồng nếu biên bản đã gửi cho người thuê.
 - Gửi biên bản cần ít nhất một ảnh phòng, một ảnh đồng hồ điện và một ảnh đồng hồ nước. Chỉ sửa nội dung và ảnh khi ở `DRAFT`. Duyệt khóa dòng trong cơ sở dữ liệu nên hai lần duyệt đồng thời chỉ một lần thành công, lần còn lại trả `409`; lỗi giữa chừng khi duyệt hoàn tác toàn bộ.
 - Nội quy chung lưu ở `property_house_rules` (`PUT /api/properties/{id}/house-rules` hoặc ô nhập ở trang biên bản); mỗi lần sửa tăng phiên bản, biên bản đã gửi giữ bản chụp và mã băm cũ.
 - Quyền: tạo, sửa, gửi, duyệt, từ chối, mở lại thuộc admin và owner/staff của nhà trọ; chỉ người thuê chính xác nhận; người thuê của hợp đồng được xem. Kỹ thuật viên, owner nhà khác và người thuê khác nhận `403`. Mỗi bước ghi một sự kiện audit không chứa dữ liệu cá nhân.
@@ -473,11 +498,12 @@ docker build -t phonghub:local .
 
 ## Biên bản check-out
 
-- Migration `V19` thêm `handovers.final_deduction` và `handover_items.deduction_amount`; check-out dùng chung bảng và luồng trạng thái với check-in (`type = CHECK_OUT`), nên một hợp đồng có tối đa một check-in và một check-out.
-- Chỉ lập check-out cho hợp đồng `ACTIVE` đã có biên bản check-in được duyệt. Danh sách tài sản khởi tạo từ bản chụp check-in; nhân viên cập nhật tình trạng lúc trả (`GOOD`, `DAMAGED`, `LOST`) và khoản khấu trừ đề xuất cho từng tài sản (tài sản còn tốt không được đề xuất khấu trừ). Chỉ số điện nước nhập là chỉ số cuối kỳ; cần đủ ảnh phòng và ảnh hai đồng hồ trước khi gửi.
-- **Duyệt check-out chỉ dành cho owner hoặc admin** (owner chốt khoản khấu trừ, mặc định bằng tổng đề xuất). Trong một transaction: biên bản `APPROVED`, hợp đồng `TERMINATED`, phòng về `AVAILABLE` hoặc `MAINTENANCE` nếu có tài sản hỏng hoặc mất. Nếu bất kỳ bước nào lỗi (kể cả ghi audit) thì hoàn tác toàn bộ; đã có test trên PostgreSQL thật.
-- API `/api/contracts/{id}/check-out...` và trang `/contracts/{id}/check-out`. Nút kết thúc hợp đồng trực tiếp (`/terminate`) vẫn còn cho các trường hợp không có biên bản.
-- Chưa làm: tính tiền cọc và quyết toán (ngoài phạm vi issue); so sánh check-in/check-out và xuất PDF thuộc #72.
+- Migration `V19` thêm `handovers.final_deduction` và `handover_items.deduction_amount`; migration `V52` lưu lý do kết thúc sớm và giao dịch cấn trừ từ cọc. Check-out dùng chung bảng/trạng thái với check-in (`type = CHECK_OUT`), mỗi hợp đồng tối đa có một biên bản mỗi loại.
+- Chỉ lập check-out cho hợp đồng đang ở (`ACTIVE` hoặc `EXPIRED`) đã có biên bản check-in được duyệt. Danh sách tài sản khởi tạo từ bản chụp check-in; nhân viên cập nhật tình trạng (`GOOD`, `DAMAGED`, `LOST`) và khoản khấu trừ đề xuất. Chỉ số nhập là số cuối; cần ảnh phòng và hai đồng hồ trước khi gửi.
+- Chấm dứt sớm mở biên bản check-out và lưu lý do; hợp đồng còn hiệu lực đến khi người thuê xác nhận và người quản lý duyệt. API chấm dứt trực tiếp trả `409` nếu chưa có check-out được xác nhận và duyệt. Hợp đồng nháp vẫn có thể hủy như trước.
+- Khi người thuê xác nhận, hệ thống phát hành hóa đơn chốt điện/nước theo chỉ số check-out so với lần ghi gần nhất của chính hợp đồng, nếu có tiêu thụ và đơn giá. Duyệt check-out cần xử lý hết hóa đơn còn nợ: thanh toán hoặc chọn cấn trừ từ cọc sau khi trừ khoản khấu trừ tài sản. Cọc không đủ thì từ chối và báo phần còn thiếu.
+- Owner, admin hoặc staff có quyền quản lý hợp đồng được duyệt. Trong cùng transaction, giao dịch cấn trừ được ghi vào lịch sử thanh toán, hóa đơn được cập nhật, biên bản `APPROVED`, hợp đồng `TERMINATED`, phòng về `AVAILABLE` hoặc `MAINTENANCE`. Lỗi ở bất kỳ bước nào sẽ hoàn tác toàn bộ.
+- API `/api/contracts/{id}/check-out...` và trang `/contracts/{id}/check-out`; số dư quyết toán hiển thị tiền cọc − khấu trừ − cấn trừ − công nợ còn lại − hóa đơn chốt chưa thanh toán. So sánh check-in/check-out và xuất PDF thuộc #72.
 
 ## Sửa thông tin nhà trọ
 
@@ -497,6 +523,7 @@ docker build -t phonghub:local .
 
 ## Điện, nước và dịch vụ trên hóa đơn tháng
 
+- **Hạn thanh toán** của hóa đơn tiền thuê là ngày muộn nhất trong ba mốc: ngày thanh toán của hợp đồng trong tháng của kỳ (kẹp về ngày cuối tháng), ngày bắt đầu hợp đồng, và ngày tạo hóa đơn theo giờ Việt Nam cộng 3 ngày. Tạo tay và scheduler dùng cùng quy tắc, nên kỳ tạo sau ngày thanh toán (nhập hợp đồng của khách đã ở từ trước, job chạy bù) không bị quá hạn hay bị tính phí trễ ngay khi tạo (#208).
 - Migration V21 thêm `reading_id`, `rate_id` vào `invoice_items` để biết mỗi dòng được tính từ chỉ số và đơn giá nào. `invoices.utility_amount` giờ ghi tổng các dòng này, `other_amount` là phần còn lại (phí sửa chữa).
 - **Điện/nước** tính theo chỉ số cùng kỳ với hóa đơn (kỳ ghi chỉ số = tháng của ngày ghi): tiêu thụ x đơn giá, làm tròn đến đồng; mỗi đơn giá `PER_KWH` / `PER_M3` của nhà trọ là một dòng. Tiêu thụ bằng 0 hoặc đơn giá 0 thì không có dòng. Chỉ số gắn với hợp đồng khác của cùng phòng (khách trước) bị bỏ qua.
 - **Dịch vụ cố định** (`PER_ROOM_FLAT`, `PER_PERSON` x số người đang ở, tối thiểu 1) chỉ tính lúc phát hành hóa đơn, nên đơn giá thêm sau đó không làm đổi hóa đơn người thuê đã nhận.

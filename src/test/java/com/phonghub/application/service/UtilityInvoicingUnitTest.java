@@ -71,7 +71,7 @@ class UtilityInvoicingUnitTest {
     }
 
     private Invoice issue() {
-        assertTrue(service.issueForContract(contract.getId(), PERIOD));
+        assertTrue(service.issueForContract(contract.getId(), PERIOD, PERIOD.atDay(1)));
         return invoices.findActiveRentByContractIdAndPeriod(contract.getId(), 2026, 10).orElseThrow();
     }
 

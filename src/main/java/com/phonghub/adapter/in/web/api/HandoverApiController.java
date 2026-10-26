@@ -135,7 +135,9 @@ public class HandoverApiController {
         @Valid @RequestBody(required = false) ApproveRequest request
     ) {
         BigDecimal deduction = request == null ? null : request.finalDeduction();
-        return response(typeOf(kind), contractId, useCase.approve(typeOf(kind), contractId, deduction));
+        List<UUID> offsetIds = request == null || request.depositOffsetInvoiceIds() == null
+            ? List.of() : request.depositOffsetInvoiceIds();
+        return response(typeOf(kind), contractId, useCase.approve(typeOf(kind), contractId, deduction, offsetIds));
     }
 
     @PostMapping(KIND + "/reject")
@@ -186,7 +188,7 @@ public class HandoverApiController {
 
     public record ItemRequest(@NotNull AssetStatus status, String conditionNote, @DecimalMin("0") BigDecimal deductionAmount) {}
 
-    public record ApproveRequest(@DecimalMin("0") BigDecimal finalDeduction) {}
+    public record ApproveRequest(@DecimalMin("0") BigDecimal finalDeduction, List<UUID> depositOffsetInvoiceIds) {}
 
     public record RejectRequest(@NotBlank String reason) {}
 
@@ -238,6 +240,8 @@ public class HandoverApiController {
         Instant approvedAt,
         BigDecimal proposedDeduction,
         BigDecimal finalDeduction,
+        boolean earlyTermination,
+        String terminationReason,
         List<PhotoResponse> photos,
         List<ItemResponse> items
     ) {
@@ -248,7 +252,8 @@ public class HandoverApiController {
                 handover.roomCondition(), handover.keysProvided(), handover.contractTermsHash(),
                 handover.houseRulesText(), handover.houseRulesHash(), handover.rejectionReason(),
                 handover.sentAt(), handover.confirmedByTenant(), handover.confirmedAt(), handover.approvedAt(),
-                details.proposedDeduction(), handover.finalDeduction(),
+                details.proposedDeduction(), handover.finalDeduction(), handover.earlyTermination(),
+                handover.terminationReason(),
                 details.photos().stream().map(PhotoResponse::from).toList(),
                 details.items().stream().map(ItemResponse::from).toList());
         }

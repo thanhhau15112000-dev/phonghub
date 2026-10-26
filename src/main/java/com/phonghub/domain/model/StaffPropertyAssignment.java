@@ -10,12 +10,19 @@ public record StaffPropertyAssignment(
     boolean canCollectPayment,
     boolean canManageContracts,
     boolean canViewDocuments,
+    boolean canManageRoomsAndAssets,
     Instant assignedAt
 ) {
+    /** Tương thích với các caller cũ; quyền quản lý phòng mặc định bị tắt. */
+    public StaffPropertyAssignment(UUID id, UUID staffUserId, UUID propertyId, boolean canCollectPayment,
+                                   boolean canManageContracts, boolean canViewDocuments, Instant assignedAt) {
+        this(id, staffUserId, propertyId, canCollectPayment, canManageContracts, canViewDocuments, false, assignedAt);
+    }
+
     /** Tương thích: quyền xem giấy tờ đi theo quyền hợp đồng (dùng cho dữ liệu mẫu và code cũ). */
     public StaffPropertyAssignment(UUID id, UUID staffUserId, UUID propertyId, boolean canCollectPayment,
                                    boolean canManageContracts, Instant assignedAt) {
-        this(id, staffUserId, propertyId, canCollectPayment, canManageContracts, canManageContracts, assignedAt);
+        this(id, staffUserId, propertyId, canCollectPayment, canManageContracts, canManageContracts, false, assignedAt);
     }
 
     public StaffPropertyAssignment {

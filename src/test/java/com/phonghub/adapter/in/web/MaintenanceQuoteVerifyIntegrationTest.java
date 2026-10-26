@@ -56,10 +56,17 @@ class MaintenanceQuoteVerifyIntegrationTest extends SeededWebTest {
     }
 
     private MaintenanceTicket tenantRoomTicket(MaintenanceStatus status, LiableParty liable) {
-        return tickets.save(new MaintenanceTicket(UUID.randomUUID(), DataSeeder.ROOM_101_ID, DataSeeder.PROP_1_ID,
+        MaintenanceTicket ticket = new MaintenanceTicket(UUID.randomUUID(), DataSeeder.ROOM_101_ID, DataSeeder.PROP_1_ID,
             DataSeeder.TENANT_RECORD_ID, LocalDemoAuthenticationAdapter.TECH_1_ID, "Khóa cửa kẹt", "Khó mở",
             MaintenancePriority.MEDIUM, status, BigDecimal.ZERO, null, null, liable, null, null, null, Instant.now(),
-            Instant.now()));
+            Instant.now());
+        if (status == MaintenanceStatus.ASSIGNED || status == MaintenanceStatus.IN_PROGRESS) {
+            // Phiếu đang sửa đã qua bước chốt nhánh và phê duyệt (#202, #203).
+            Instant now = Instant.now();
+            ticket.restoreApprovalState(new MaintenanceTicket.ApprovalState(now, null, null, null, null, null,
+                liable == LiableParty.TENANT ? now : null, null, 0, 0, null, null, false));
+        }
+        return tickets.save(ticket);
     }
 
     private static String quote(String amount) {
@@ -105,7 +112,8 @@ class MaintenanceQuoteVerifyIntegrationTest extends SeededWebTest {
     @DisplayName("người thuê chỉ thấy báo giá khi mình là bên chịu phí; người quản lý luôn thấy")
     void quoteVisibility() throws Exception {
         MaintenanceTicket ownerPays = tenantRoomTicket(MaintenanceStatus.IN_PROGRESS, LiableParty.OWNER);
-        MaintenanceTicket tenantPays = tenantRoomTicket(MaintenanceStatus.IN_PROGRESS, LiableParty.TENANT);
+        // Báo giá đơn giản (#83) chỉ dùng cho phiếu chưa chốt nhánh B; nhánh B có báo giá chi tiết riêng (#203).
+        MaintenanceTicket tenantPays = tenantRoomTicket(MaintenanceStatus.REPORTED, LiableParty.TENANT);
         for (MaintenanceTicket t : new MaintenanceTicket[] {ownerPays, tenantPays}) {
             mockMvc.perform(post("/api/maintenance/" + t.getId() + "/quote").header("X-User-Id", TECH_1)
                 .contentType(MediaType.APPLICATION_JSON).content(quote("300000"))).andExpect(status().isOk());

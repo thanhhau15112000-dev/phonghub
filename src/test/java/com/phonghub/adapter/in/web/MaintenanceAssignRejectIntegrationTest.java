@@ -53,6 +53,9 @@ class MaintenanceAssignRejectIntegrationTest extends SeededWebTest {
     @DisplayName("Owner/staff assign a ticket to a technician of that property; technician then sees and accepts it")
     void assignThenTechnicianWorks() throws Exception {
         String id = reportTicket();
+        // Phiếu của người thuê phải được chốt nhánh và (nhánh hao mòn) chủ trọ duyệt rồi mới giao việc được.
+        assign(id, TECH_1, OWNER_1).andExpect(status().isConflict());
+        MaintenanceTestFlow.wearReady(mockMvc, id, OWNER_1);
 
         assign(id, TECH_1, OWNER_1).andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("ASSIGNED"))

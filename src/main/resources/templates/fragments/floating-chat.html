@@ -140,6 +140,28 @@
             transform: translateY(-2px);
             box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2) !important;
         }
+        /*
+         * Điện thoại: khung chat rộng 348px đặt cách lề phải 86px (JS đặt lại khi đổi bố cục) tràn mép trái
+         * khi màn hình hẹp hơn khoảng 434px. Ở đây các khung chiếm gần hết chiều ngang; !important để thắng
+         * giá trị right do updateWindowsLayout() ghi trực tiếp vào style.
+         */
+        @media (max-width: 480px) {
+            #phonghubDockedMessengerBox,
+            #phonghubNewMessageModal {
+                left: 8px !important;
+                right: 8px !important;
+                width: auto !important;
+                max-height: calc(100vh - 16px);
+            }
+            #phonghubChatToastContainer {
+                left: 8px !important;
+                right: 8px !important;
+            }
+            .phonghub-chat-toast {
+                min-width: 0 !important;
+                max-width: none !important;
+            }
+        }
     </style>
 
     <!-- Cột bên phải (right: 20px) dành cho các nút tròn: Dưới cùng là nút Soạn tin nhắn, phía trên là các Avatar chat thu nhỏ -->
@@ -227,22 +249,7 @@
 
         <!-- Khung nhập văn bản bên dưới: Nền trắng, ô nhập xám nhạt có viền -->
         <div id="phonghubDockedFooter" style="padding: 8px 10px; background-color: #ffffff; border-top: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 4px;">
-            <!-- Thanh preview file đính kèm nếu đang chọn file -->
-            <div id="phonghubDockedMediaPreview" style="display: none; padding: 4px 8px; background-color: #f1f5f9; border-radius: 8px; align-items: center; justify-content: space-between; font-size: 11.5px; color: #334155; border: 1px dashed #cbd5e1;">
-                <span id="phonghubDockedMediaFileName" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; font-weight: 500;"></span>
-                <button type="button" id="phonghubDockedMediaCancelBtn" style="background: none; border: none; color: #ef4444; cursor: pointer; font-weight: 700; font-size: 13px; padding: 0 4px;" title="Hủy đính kèm">✕</button>
-            </div>
             <form id="phonghubDockedSendForm" style="width: 100%; display: flex; align-items: center; margin: 0; gap: 6px;">
-                <!-- Nút đính kèm Ảnh / Video -->
-                <button type="button" id="phonghubDockedAttachBtn" title="Gửi ảnh hoặc video" class="phonghub-icon-btn" style="color: #0084ff; flex-shrink: 0; width: 28px; height: 28px;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                        <circle cx="8.5" cy="8.5" r="1.5"/>
-                        <polyline points="21 15 16 10 5 21"/>
-                    </svg>
-                </button>
-                <input type="file" id="phonghubDockedFileInput" accept="image/*,video/*" style="display: none;">
-
                 <input type="text" id="phonghubDockedInput" placeholder="Aa" autocomplete="off"
                        style="flex: 1; background-color: #f1f5f9; color: #0f172a; border-radius: 20px; border: 1px solid #cbd5e1; padding: 7px 12px; font-size: 13.5px; outline: none; transition: border-color 0.15s ease;">
                 <!-- Nút Thích hoặc Nút Gửi -->
@@ -329,55 +336,11 @@
             const dockedInput = document.getElementById('phonghubDockedInput');
             const iconLike = document.getElementById('phonghubSendIconLike');
             const iconFly = document.getElementById('phonghubSendIconFly');
-            const attachBtn = document.getElementById('phonghubDockedAttachBtn');
-            const fileInput = document.getElementById('phonghubDockedFileInput');
-            const mediaPreview = document.getElementById('phonghubDockedMediaPreview');
-            const mediaFileName = document.getElementById('phonghubDockedMediaFileName');
-            const mediaCancelBtn = document.getElementById('phonghubDockedMediaCancelBtn');
-            let selectedMediaFile = null;
-
-            if (attachBtn && fileInput) {
-                attachBtn.addEventListener('click', () => {
-                    fileInput.click();
-                });
-
-                fileInput.addEventListener('change', () => {
-                    if (fileInput.files && fileInput.files[0]) {
-                        selectedMediaFile = fileInput.files[0];
-                        if (selectedMediaFile.size > 25 * 1024 * 1024) {
-                            alert('Kích thước tệp vượt quá giới hạn 25MB. Vui lòng chọn tệp nhỏ hơn.');
-                            selectedMediaFile = null;
-                            fileInput.value = '';
-                            return;
-                        }
-                        const isVideo = selectedMediaFile.type.startsWith('video/') || selectedMediaFile.name.toLowerCase().match(/\.(mp4|webm|mov)$/);
-                        mediaFileName.textContent = (isVideo ? '🎥 ' : '📷 ') + selectedMediaFile.name;
-                        mediaPreview.style.display = 'flex';
-                        if (iconLike && iconFly) {
-                            iconLike.style.display = 'none';
-                            iconFly.style.display = 'flex';
-                        }
-                    }
-                });
-            }
-
-            if (mediaCancelBtn) {
-                mediaCancelBtn.addEventListener('click', () => {
-                    selectedMediaFile = null;
-                    if (fileInput) fileInput.value = '';
-                    if (mediaPreview) mediaPreview.style.display = 'none';
-                    const hasText = dockedInput.value.trim().length > 0;
-                    if (iconLike && iconFly) {
-                        iconLike.style.display = hasText ? 'none' : 'flex';
-                        iconFly.style.display = hasText ? 'flex' : 'none';
-                    }
-                });
-            }
 
             // Chuyển đổi icon Thích 👍 sang icon Gửi ✈️ khi người dùng gõ văn bản
             if (dockedInput) {
                 dockedInput.addEventListener('input', () => {
-                    const hasText = dockedInput.value.trim().length > 0 || selectedMediaFile != null;
+                    const hasText = dockedInput.value.trim().length > 0;
                     if (iconLike && iconFly) {
                         iconLike.style.display = hasText ? 'none' : 'flex';
                         iconFly.style.display = hasText ? 'flex' : 'none';
@@ -462,52 +425,17 @@
                     e.preventDefault();
                     if (!activeFloatingRoomId) return;
 
-                    if (selectedMediaFile) {
-                        const fileToSend = selectedMediaFile;
-                        const caption = dockedInput.value.trim();
-                        selectedMediaFile = null;
-                        if (fileInput) fileInput.value = '';
-                        if (mediaPreview) mediaPreview.style.display = 'none';
-                        dockedInput.value = '';
-                        if (iconLike && iconFly) {
-                            iconLike.style.display = 'flex';
-                            iconFly.style.display = 'none';
-                        }
-                        await postMedia(fileToSend, caption);
-                    } else {
-                        let content = dockedInput.value.trim();
-                        if (!content) {
-                            content = '👍';
-                        }
-                        dockedInput.value = '';
-                        if (iconLike && iconFly) {
-                            iconLike.style.display = 'flex';
-                            iconFly.style.display = 'none';
-                        }
-                        await postMessage(content);
+                    let content = dockedInput.value.trim();
+                    if (!content) {
+                        content = '👍';
                     }
+                    dockedInput.value = '';
+                    if (iconLike && iconFly) {
+                        iconLike.style.display = 'flex';
+                        iconFly.style.display = 'none';
+                    }
+                    await postMessage(content);
                 });
-            }
-
-            async function postMedia(file, caption) {
-                try {
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    if (caption) formData.append('caption', caption);
-
-                    const res = await fetch(`/api/chat/rooms/${activeFloatingRoomId}/media`, {
-                        method: 'POST',
-                        body: formData
-                    });
-                    if (res.ok) {
-                        const saved = await res.json();
-                        appendDockedMessageUI(saved);
-                    } else {
-                        alert('Không thể gửi tệp tin media. Vui lòng kiểm tra định dạng hoặc kích thước (tối đa 25MB).');
-                    }
-                } catch (err) {
-                    console.error('Lỗi khi gửi tệp media:', err);
-                }
             }
 
             async function postMessage(content) {
@@ -664,11 +592,7 @@
             const avatarColor = isGlobal ? 'linear-gradient(135deg, #0084ff, #4f46e5)' : getAvatarColor(msg.senderName);
             const senderDisplayName = isGlobal ? `${msg.senderName} (Kênh chung)` : (msg.senderName || 'Tin nhắn mới');
 
-            let previewText = msg.content || '';
-            if (msg.mediaUrl) {
-                previewText = (msg.mediaType === 'VIDEO') ? '🎥 Đã gửi một video' : '📷 Đã gửi một hình ảnh';
-                if (msg.content) previewText += `: ${msg.content}`;
-            }
+            const previewText = msg.content || '';
 
             toast.innerHTML = `
                 <div style="width: 40px; height: 40px; border-radius: 50%; background: ${avatarColor}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
@@ -1055,7 +979,7 @@
                     const messages = await res.json();
                     messagesPane.innerHTML = '';
                     if (messages.length === 0) {
-                        messagesPane.innerHTML = '<div style="margin: auto; color: #64748b; font-size: 12.5px; text-align: center;">Chưa có tin nhắn nào.<br>Hãy gửi lời chào đầu tiên! 👋</div>';
+                        messagesPane.innerHTML = '<div class="phonghub-chat-empty" style="margin: auto; color: #64748b; font-size: 12.5px; text-align: center;">Chưa có tin nhắn nào.<br>Hãy gửi lời chào đầu tiên! 👋</div>';
                     } else {
                         messages.forEach(m => appendDockedMessageUI(m));
                     }
@@ -1076,6 +1000,8 @@
         function appendDockedMessageUI(msg) {
             const pane = document.getElementById('phonghubDockedMessagesPane');
             if (document.getElementById(`docked-msg-${msg.id}`)) return;
+            const emptyNotice = pane.querySelector('.phonghub-chat-empty');
+            if (emptyNotice) emptyNotice.remove();
 
             const isMe = msg.senderId === currentUserId;
             const msgWrapper = document.createElement('div');
@@ -1124,89 +1050,33 @@
                 row.appendChild(miniAvatar);
             }
 
-            const hasMedia = msg.mediaUrl && msg.mediaUrl.trim().length > 0;
-            const hasCaption = msg.content && msg.content.trim().length > 0;
+            const bubble = document.createElement('div');
+            bubble.style.padding = '8px 12px';
+            bubble.style.fontSize = '13.5px';
+            bubble.style.lineHeight = '1.4';
+            bubble.style.wordBreak = 'break-word';
 
-            if (hasMedia) {
-                const mediaContainer = document.createElement('div');
-                mediaContainer.style.display = 'flex';
-                mediaContainer.style.flexDirection = 'column';
-                mediaContainer.style.gap = '4px';
-                mediaContainer.style.maxWidth = '230px';
-
-                const isVideo = (msg.mediaType === 'VIDEO') || (msg.mediaUrl.match(/\.(mp4|webm|mov|mkv|avi)($|\?)/i));
-
-                if (isVideo) {
-                    const videoEl = document.createElement('video');
-                    videoEl.src = msg.mediaUrl;
-                    videoEl.controls = true;
-                    videoEl.preload = 'metadata';
-                    videoEl.style.maxWidth = '100%';
-                    videoEl.style.maxHeight = '240px';
-                    videoEl.style.borderRadius = hasCaption ? '12px 12px 4px 4px' : '14px';
-                    videoEl.style.backgroundColor = '#000000';
-                    videoEl.style.boxShadow = '0 2px 8px rgba(15, 23, 42, 0.12)';
-                    videoEl.style.display = 'block';
-                    mediaContainer.appendChild(videoEl);
-                } else {
-                    const imgEl = document.createElement('img');
-                    imgEl.src = msg.mediaUrl;
-                    imgEl.alt = 'Hình ảnh';
-                    imgEl.loading = 'lazy';
-                    imgEl.style.maxWidth = '100%';
-                    imgEl.style.maxHeight = '240px';
-                    imgEl.style.borderRadius = hasCaption ? '12px 12px 4px 4px' : '14px';
-                    imgEl.style.objectFit = 'cover';
-                    imgEl.style.cursor = 'pointer';
-                    imgEl.style.boxShadow = '0 2px 8px rgba(15, 23, 42, 0.12)';
-                    imgEl.style.border = isMe ? '1px solid #0072db' : '1px solid #cbd5e1';
-                    imgEl.style.display = 'block';
-                    imgEl.title = 'Bấm để xem ảnh kích thước đầy đủ';
-                    imgEl.addEventListener('click', () => {
-                        window.open(msg.mediaUrl, '_blank');
-                    });
-                    mediaContainer.appendChild(imgEl);
-                }
-
-                if (hasCaption) {
-                    const captionBubble = document.createElement('div');
-                    captionBubble.style.padding = '6px 12px';
-                    captionBubble.style.fontSize = '13px';
-                    captionBubble.style.lineHeight = '1.35';
-                    captionBubble.style.wordBreak = 'break-word';
-                    if (isMe) {
-                        captionBubble.style.borderRadius = '4px 4px 4px 14px';
-                        captionBubble.style.backgroundColor = '#0084ff';
-                        captionBubble.style.color = '#ffffff';
-                    } else {
-                        captionBubble.style.borderRadius = '4px 4px 14px 4px';
-                        captionBubble.style.backgroundColor = '#e2e8f0';
-                        captionBubble.style.color = '#0f172a';
-                    }
-                    captionBubble.textContent = msg.content;
-                    mediaContainer.appendChild(captionBubble);
-                }
-                row.appendChild(mediaContainer);
+            if (isMe) {
+                bubble.style.borderRadius = '18px 18px 4px 18px';
+                bubble.style.backgroundColor = '#0084ff';
+                bubble.style.color = '#ffffff';
+                bubble.style.boxShadow = '0 1px 3px rgba(0, 132, 255, 0.2)';
             } else {
-                const bubble = document.createElement('div');
-                bubble.style.padding = '8px 12px';
-                bubble.style.fontSize = '13.5px';
-                bubble.style.lineHeight = '1.4';
-                bubble.style.wordBreak = 'break-word';
-
-                if (isMe) {
-                    bubble.style.borderRadius = '18px 18px 4px 18px';
-                    bubble.style.backgroundColor = '#0084ff';
-                    bubble.style.color = '#ffffff';
-                    bubble.style.boxShadow = '0 1px 3px rgba(0, 132, 255, 0.2)';
-                } else {
-                    bubble.style.borderRadius = '18px 18px 18px 4px';
-                    bubble.style.backgroundColor = '#e2e8f0';
-                    bubble.style.color = '#0f172a';
-                }
-                bubble.textContent = msg.content;
-                row.appendChild(bubble);
+                bubble.style.borderRadius = '18px 18px 18px 4px';
+                bubble.style.backgroundColor = '#e2e8f0';
+                bubble.style.color = '#0f172a';
             }
+            bubble.textContent = msg.content || '';
+            // Chat chỉ còn văn bản: tin cũ có ảnh/video chỉ hiện chữ kèm ghi chú, không tải tệp
+            if (msg.mediaUrl) {
+                const note = document.createElement('div');
+                note.style.fontSize = '11.5px';
+                note.style.fontStyle = 'italic';
+                note.style.opacity = '0.8';
+                note.textContent = 'Tệp đính kèm không còn được hỗ trợ';
+                bubble.appendChild(note);
+            }
+            row.appendChild(bubble);
 
             msgWrapper.appendChild(row);
 
@@ -1303,10 +1173,63 @@
             } catch (e) {}
         }
 
+        let chatStream = null;
+        let chatStreamOpenedBefore = false;
+        let chatStreamRetryTimer = null;
+        let chatStreamRetryDelay = 2000;
+
         function initGlobalSse() {
             if (!window.EventSource) return;
+            connectChatStream();
+            window.addEventListener('online', reconnectChatStreamNow);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') reconnectChatStreamNow();
+            });
+        }
 
+        // Có mạng lại hoặc quay lại tab: kết nối ngay thay vì chờ hết thời gian giãn
+        function reconnectChatStreamNow() {
+            if (chatStream && chatStream.readyState !== EventSource.CLOSED) return;
+            clearTimeout(chatStreamRetryTimer);
+            connectChatStream();
+        }
+
+        // Lấy những gì đã lỡ trong lúc mất kết nối: số tin chưa đọc, danh sách phòng, tin của phòng đang mở
+        async function resyncAfterReconnect() {
+            refreshUnreadBadge();
+            loadAndRenderContacts();
+            const roomId = activeFloatingRoomId;
+            if (!roomId) return;
+            try {
+                const res = await fetch(`/api/chat/rooms/${roomId}/messages`);
+                if (!res.ok || roomId !== activeFloatingRoomId) return;
+                const peerLastReadHeader = res.headers.get('X-Peer-Last-Read-At');
+                const messages = await res.json();
+                messages.forEach(m => appendDockedMessageUI(m));
+                if (peerLastReadHeader) updateSeenStatusUI(peerLastReadHeader);
+            } catch (err) {
+                console.error('Lỗi đồng bộ tin nhắn sau khi kết nối lại:', err);
+            }
+        }
+
+        function connectChatStream() {
             const es = new EventSource('/api/chat/stream');
+            chatStream = es;
+
+            es.addEventListener('open', () => {
+                chatStreamRetryDelay = 2000;
+                if (chatStreamOpenedBefore) resyncAfterReconnect();
+                chatStreamOpenedBefore = true;
+            });
+
+            // Mạng chập chờn thì EventSource tự kết nối lại (readyState CONNECTING). Khi proxy trả trang lỗi
+            // thay cho luồng SSE (vd. Cloudflare 524) trình duyệt bỏ hẳn luồng (CLOSED), nên widget tự mở lại.
+            es.addEventListener('error', () => {
+                if (es !== chatStream || es.readyState !== EventSource.CLOSED) return;
+                clearTimeout(chatStreamRetryTimer);
+                chatStreamRetryTimer = setTimeout(connectChatStream, chatStreamRetryDelay);
+                chatStreamRetryDelay = Math.min(chatStreamRetryDelay * 2, 30000);
+            });
 
             es.addEventListener('new_message', async (e) => {
                 try {

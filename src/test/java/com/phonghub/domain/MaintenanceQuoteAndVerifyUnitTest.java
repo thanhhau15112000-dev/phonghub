@@ -24,7 +24,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 class MaintenanceQuoteAndVerifyUnitTest {
 
     private static MaintenanceTicket ticket(MaintenanceStatus status, UUID technicianId) {
-        return new MaintenanceTicket(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+        return new MaintenanceTicket(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), null,
             technicianId, "Vòi nước rỉ", "Bồn rửa", MaintenancePriority.MEDIUM, status, BigDecimal.ZERO, null, null,
             LiableParty.OWNER, null, null, null, Instant.now(), Instant.now());
     }

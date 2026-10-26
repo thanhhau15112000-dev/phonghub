@@ -2,6 +2,8 @@ package com.phonghub.config;
 
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.domain.model.Contract;
+import com.phonghub.domain.model.ContractOccupant;
+import com.phonghub.domain.model.Tenant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -68,6 +70,12 @@ public class TransactionalContractUseCase implements ContractUseCase {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<Tenant> listAvailablePrimaryTenants(UUID propertyId, String query) {
+        return delegate.listAvailablePrimaryTenants(propertyId, query);
+    }
+
+    @Override
     public Optional<Contract> getActiveContractForTenant(UUID tenantUserId) {
         return delegate.getActiveContractForTenant(tenantUserId);
     }
@@ -81,6 +89,24 @@ public class TransactionalContractUseCase implements ContractUseCase {
     @Transactional(rollbackFor = Exception.class)
     public AddOccupantResult addOccupant(AddOccupantCommand command) {
         return delegate.addOccupant(command);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Tenant> listAvailableOccupants(UUID contractId) {
+        return delegate.listAvailableOccupants(contractId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<ContractOccupant> addExistingOccupants(AddExistingOccupantsCommand command) {
+        return delegate.addExistingOccupants(command);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public AddOccupantsResult addOccupants(AddOccupantsCommand command) {
+        return delegate.addOccupants(command);
     }
 
     @Override

@@ -6,9 +6,11 @@ import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomAssetUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
+import com.phonghub.application.port.in.RoomSetupUseCase;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.AssetEventType;
@@ -50,6 +52,8 @@ public class RoomUiController {
     private final CurrentUserPort currentUserPort;
     private final RoomAssetUseCase roomAssetUseCase;
     private final FileStorageUseCase fileStorageUseCase;
+    private final RoomSetupUseCase roomSetupUseCase;
+    private final AuthorizationService authorizationService;
 
     public RoomUiController(
         RoomUseCase roomUseCase,
@@ -58,7 +62,9 @@ public class RoomUiController {
         MaintenanceUseCase maintenanceUseCase,
         CurrentUserPort currentUserPort,
         RoomAssetUseCase roomAssetUseCase,
-        FileStorageUseCase fileStorageUseCase
+        FileStorageUseCase fileStorageUseCase,
+        RoomSetupUseCase roomSetupUseCase,
+        AuthorizationService authorizationService
     ) {
         this.roomUseCase = roomUseCase;
         this.propertyUseCase = propertyUseCase;
@@ -67,6 +73,8 @@ public class RoomUiController {
         this.currentUserPort = currentUserPort;
         this.roomAssetUseCase = roomAssetUseCase;
         this.fileStorageUseCase = fileStorageUseCase;
+        this.roomSetupUseCase = roomSetupUseCase;
+        this.authorizationService = authorizationService;
     }
 
     @GetMapping("/{id}")
@@ -86,7 +94,15 @@ public class RoomUiController {
             model.addAttribute("activeContract", activeContract.orElse(null));
             model.addAttribute("tickets", tickets);
             model.addAttribute("manualStatuses", room.manualTargets(activeContract.isPresent()));
+            model.addAttribute("canManageRoomsAndAssets",
+                authorizationService.canManageRoomsAndAssets(currentUser, property.id()));
             addAssetAttributes(model, currentUser, property, id);
+            var condition = roomSetupUseCase.latestCondition(id);
+            model.addAttribute("initialCondition", condition);
+            model.addAttribute("conditionElectricPhoto", signedConditionPhoto(property, condition.snapshot() == null
+                ? null : condition.snapshot().electricMeterPhotoKey()));
+            model.addAttribute("conditionWaterPhoto", signedConditionPhoto(property, condition.snapshot() == null
+                ? null : condition.snapshot().waterMeterPhotoKey()));
 
             return "rooms/detail";
         } catch (DomainException ex) {
@@ -163,8 +179,7 @@ public class RoomUiController {
     }
 
     private void addAssetAttributes(Model model, CurrentUser user, Property property, UUID roomId) {
-        boolean canManage = user != null && (user.role() == UserRole.ADMIN || user.role() == UserRole.STAFF
-            || (user.role() == UserRole.OWNER && user.id().equals(property.ownerId())));
+        boolean canManage = authorizationService.canManageRoomsAndAssets(user, property.id());
         List<RoomAsset> assets;
         try {
             assets = roomAssetUseCase.list(roomId);
@@ -184,7 +199,19 @@ public class RoomUiController {
         model.addAttribute("batchOtherRooms", canManage
             ? roomUseCase.listRoomsForProperty(property.id()).stream().filter(r -> !r.getId().equals(roomId)).toList()
             : List.of());
+        model.addAttribute("batchRoomFloors", canManage
+            ? roomUseCase.listRoomsForProperty(property.id()).stream().filter(r -> !r.getId().equals(roomId))
+                .map(Room::getFloor).distinct().sorted().toList() : List.of());
         model.addAttribute("assetEventTypes", AssetEventType.values());
+    }
+
+    private java.net.URI signedConditionPhoto(Property property, String objectKey) {
+        if (objectKey == null || objectKey.isBlank()) return null;
+        try {
+            return fileStorageUseCase.createSignedUrl(property.id(), objectKey, java.time.Duration.ofMinutes(10));
+        } catch (RuntimeException ex) {
+            return null;
+        }
     }
 
     @PostMapping("/{id}/assets")

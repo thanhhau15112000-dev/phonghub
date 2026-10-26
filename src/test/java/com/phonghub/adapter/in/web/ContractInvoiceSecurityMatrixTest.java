@@ -115,11 +115,10 @@ class ContractInvoiceSecurityMatrixTest extends SeededWebTest {
     @DisplayName("hợp đồng: tạo mới bị 403 với người ngoài/không có quyền quản lý hợp đồng, 409 khi phòng đã có hợp đồng")
     void contractCreation() throws Exception {
         String body = """
-            {"propertyId": "%s", "roomId": "%s", "primaryTenantFullName": "Lê Mới", "primaryTenantIdCard": "079201009999",
-             "primaryTenantPhone": "0901112223", "depositAmount": 1000000, "rentAmount": 3000000,
+            {"propertyId": "%s", "roomId": "%s", "primaryTenantId": "%s", "depositAmount": 1000000, "rentAmount": 3000000,
              "startDate": "%s", "endDate": "%s", "paymentDay": 5}
             """;
-        String room104 = body.formatted(DataSeeder.PROP_1_ID, DataSeeder.ROOM_104_ID, LocalDate.now(),
+        String room104 = body.formatted(DataSeeder.PROP_1_ID, DataSeeder.ROOM_104_ID, DataSeeder.TENANT_RECORD_ID, LocalDate.now(),
             LocalDate.now().plusMonths(6));
         for (String user : OUTSIDERS) {
             mockMvc.perform(post("/api/contracts").header("X-User-Id", user)
@@ -129,7 +128,7 @@ class ContractInvoiceSecurityMatrixTest extends SeededWebTest {
         assertEquals(1, contracts.findByRoomId(DataSeeder.ROOM_101_ID).size());
         assertTrue(contracts.findByRoomId(DataSeeder.ROOM_104_ID).isEmpty(), "bị từ chối thì không tạo hợp đồng");
 
-        String room101 = body.formatted(DataSeeder.PROP_1_ID, DataSeeder.ROOM_101_ID, LocalDate.now(),
+        String room101 = body.formatted(DataSeeder.PROP_1_ID, DataSeeder.ROOM_101_ID, DataSeeder.TENANT_RECORD_ID, LocalDate.now(),
             LocalDate.now().plusMonths(6));
         mockMvc.perform(post("/api/contracts").header("X-User-Id", OWNER_1)
                 .contentType(MediaType.APPLICATION_JSON).content(room101))

@@ -149,17 +149,15 @@ class OwnerBypassAndAdminSecurityIntegrationTest {
             {
                 "propertyId": "%s",
                 "roomId": "%s",
-                "primaryTenantFullName": "Kẻ Đột Nhập",
-                "primaryTenantIdCard": "079201999999",
-                "primaryTenantPhone": "0988776655",
-                "primaryTenantEmail": "attacker@phonghub.local",
+                "primaryTenantId": "%s",
                 "depositAmount": 4000000,
                 "rentAmount": 4000000,
                 "startDate": "%s",
                 "endDate": "%s",
                 "paymentDay": 5
             }
-            """, owner2Property.id(), DataSeeder.ROOM_104_ID, LocalDate.now(), LocalDate.now().plusMonths(6));
+            """, owner2Property.id(), DataSeeder.ROOM_104_ID, DataSeeder.TENANT_RECORD_ID,
+            LocalDate.now(), LocalDate.now().plusMonths(6));
 
         mockMvc.perform(post("/api/contracts")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_2_ID.toString())
@@ -172,17 +170,15 @@ class OwnerBypassAndAdminSecurityIntegrationTest {
             {
                 "propertyId": "%s",
                 "roomId": "%s",
-                "primaryTenantFullName": "Kẻ Đột Nhập 2",
-                "primaryTenantIdCard": "079201999998",
-                "primaryTenantPhone": "0988776654",
-                "primaryTenantEmail": "attacker2@phonghub.local",
+                "primaryTenantId": "%s",
                 "depositAmount": 4000000,
                 "rentAmount": 4000000,
                 "startDate": "%s",
                 "endDate": "%s",
                 "paymentDay": 5
             }
-            """, DataSeeder.PROP_1_ID, DataSeeder.ROOM_104_ID, LocalDate.now(), LocalDate.now().plusMonths(6));
+            """, DataSeeder.PROP_1_ID, DataSeeder.ROOM_104_ID, DataSeeder.TENANT_RECORD_ID,
+            LocalDate.now(), LocalDate.now().plusMonths(6));
 
         mockMvc.perform(post("/api/contracts")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_2_ID.toString())

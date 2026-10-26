@@ -43,8 +43,8 @@ import org.junit.jupiter.api.Test;
 /** #86: nhắc hóa đơn sắp đến hạn cho người thuê, mỗi hạn thanh toán một lần. */
 class InvoiceDueReminderServiceUnitTest {
 
-    /** Hợp đồng có ngày thanh toán 5 nên hóa đơn kỳ 11/2026 hạn 05/11/2026. */
-    private static final LocalDate DUE = LocalDate.of(2026, 11, 5);
+    /** Hợp đồng bắt đầu ngày 01 nên hóa đơn kỳ 11/2026 hạn 08/11/2026. */
+    private static final LocalDate DUE = LocalDate.of(2026, 11, 8);
 
     private InMemoryInvoiceRepository invoices;
     private InMemoryNotificationRepository notifications;
@@ -125,7 +125,7 @@ class InvoiceDueReminderServiceUnitTest {
         assertEquals("Hóa đơn sắp đến hạn", sample.title());
         assertEquals("/invoices/" + invoice.getId() + "/pay", sample.link());
         assertTrue(sample.message().startsWith("Hóa đơn kỳ 11/2026 (phòng A101 - Nhà Một) còn "), sample.message());
-        assertTrue(sample.message().endsWith("hạn thanh toán 05/11/2026 (còn 3 ngày)."), sample.message());
+        assertTrue(sample.message().endsWith("hạn thanh toán 08/11/2026 (còn 3 ngày)."), sample.message());
     }
 
     @Test

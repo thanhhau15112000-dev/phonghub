@@ -30,7 +30,8 @@ class CrossFeatureBusinessRulesTest extends SeededWebTest {
 
     private String addAndHide(String cccd) throws Exception {
         String body = "{\"fullName\":\"Khách Quay Lại\",\"identityCardNumber\":\"" + cccd
-            + "\",\"phone\":\"0933000111\"}";
+            + "\",\"phone\":\"0933000111\",\"email\":\"tenant" + cccd.substring(cccd.length() - 4)
+            + "@example.test\"}";
         String response = mockMvc.perform(post(TENANTS).header("X-User-Id", OWNER_1)
                 .contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
@@ -39,12 +40,16 @@ class CrossFeatureBusinessRulesTest extends SeededWebTest {
         return id;
     }
 
-    private void createDraftContractFor(String cccd) throws Exception {
-        ContractApiController.CreateContractRequest req = new ContractApiController.CreateContractRequest(
-            DataSeeder.PROP_1_ID, DataSeeder.ROOM_104_ID, "Khách Quay Lại", cccd, "0933000111", null, null,
-            new BigDecimal("4000000"), new BigDecimal("4000000"), LocalDate.now(), LocalDate.now().plusYears(1), 5);
+    private void createDraftContractFor(String tenantId) throws Exception {
+        ContractApiController.CreateContractRequest req = contractRequest(tenantId);
         mockMvc.perform(post("/api/contracts").header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(req))).andExpect(status().isCreated());
+    }
+
+    private ContractApiController.CreateContractRequest contractRequest(String tenantId) {
+        return new ContractApiController.CreateContractRequest(
+            DataSeeder.PROP_1_ID, DataSeeder.ROOM_104_ID, java.util.UUID.fromString(tenantId),
+            new BigDecimal("4000000"), new BigDecimal("4000000"), LocalDate.now(), LocalDate.now().plusYears(1), 5);
     }
 
     @Test
@@ -54,7 +59,11 @@ class CrossFeatureBusinessRulesTest extends SeededWebTest {
         assertTrue(!mockMvc.perform(get(TENANTS).header("X-User-Id", OWNER_1)).andReturn().getResponse()
             .getContentAsString().contains("Khách Quay Lại"));
 
-        createDraftContractFor("079300000111");
+        mockMvc.perform(post("/api/contracts").header("X-User-Id", OWNER_1)
+                .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(contractRequest(id))))
+            .andExpect(status().isBadRequest());
+        mockMvc.perform(post(TENANTS + "/" + id + "/restore").header("X-User-Id", OWNER_1)).andExpect(status().isOk());
+        createDraftContractFor(id);
 
         mockMvc.perform(get(TENANTS + "/" + id).header("X-User-Id", OWNER_1))
             .andExpect(status().isOk())

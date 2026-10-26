@@ -4,6 +4,7 @@ import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Comparator;
 import java.util.List;
@@ -32,11 +33,16 @@ class MonthlyInvoiceIssuer {
     boolean exists(Contract contract, YearMonth period) {
         return invoiceRepository
             .findActiveRentByContractIdAndPeriod(contract.getId(), period.getYear(), period.getMonthValue())
-            .isPresent();
+            .isPresent() || invoiceRepository.findByContractId(contract.getId()).stream()
+                .anyMatch(invoice -> invoice.getType() == com.phonghub.domain.model.InvoiceType.CANCELLATION
+                    && invoice.getYear() == period.getYear() && invoice.getMonth() == period.getMonthValue()
+                    && invoice.getStatus() != com.phonghub.domain.model.InvoiceStatus.VOIDED);
     }
 
-    /** Người gọi đã kiểm tra quyền và kiểm tra hóa đơn tháng chưa tồn tại. */
-    Invoice issue(Contract contract, YearMonth period) {
+    /**
+     * Người gọi đã kiểm tra quyền và chu kỳ chưa tồn tại. {@code issuedOn} là ngày tạo theo giờ Việt Nam.
+     */
+    Invoice issue(Contract contract, YearMonth period, LocalDate issuedOn) {
         List<Invoice> rollable = invoiceRepository.findByContractId(contract.getId()).stream()
             .filter(Invoice::isRollableFee)
             .sorted(Comparator.comparing(Invoice::getCreatedAt))
@@ -45,7 +51,8 @@ class MonthlyInvoiceIssuer {
             .map(fee -> new Invoice.RolledFee(fee, ticketTitle(fee)))
             .toList();
 
-        Invoice invoice = Invoice.issueMonthlyRent(contract, period, invoiceRepository.newUniquePaymentCode(), rolledFees);
+        Invoice invoice = Invoice.issueMonthlyRent(
+            contract, period, invoiceRepository.newUniquePaymentCode(), rolledFees, issuedOn);
         // Chỉ số điện nước đã có của kỳ này. Thiếu thì vẫn phát hành tiền thuê; scheduler bổ sung khi chỉ số được ghi.
         invoice.addCharges(utilityBilling.chargesFor(contract, period, true));
         // Lưu hóa đơn tháng trước (các khoản phí tham chiếu tới nó), rồi cập nhật các khoản đã gộp

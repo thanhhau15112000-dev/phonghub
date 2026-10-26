@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.phonghub.application.port.in.MaintenanceUseCase;
+import com.phonghub.application.service.MaintenanceAssignmentTimeoutPolicy;
 import com.phonghub.domain.exception.InvalidMaintenanceStateException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.LiableParty;
@@ -33,7 +34,7 @@ class MaintenanceQuoteApiControllerTest {
     @BeforeEach
     void setUp() {
         useCase = mock(MaintenanceUseCase.class);
-        controller = new MaintenanceApiController(useCase);
+        controller = new MaintenanceApiController(useCase, MaintenanceAssignmentTimeoutPolicy.defaults());
     }
 
     private MaintenanceTicket ticket(MaintenanceStatus status) {

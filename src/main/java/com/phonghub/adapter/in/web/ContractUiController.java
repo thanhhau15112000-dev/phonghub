@@ -2,15 +2,22 @@ package com.phonghub.adapter.in.web;
 
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.InvoiceUseCase;
+import com.phonghub.application.port.in.ManualPaymentUseCase;
+import com.phonghub.application.port.in.HandoverUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.in.TenantUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
+import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.application.port.out.UserRepositoryPort;
+import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.config.SepayProperties;
 import com.phonghub.domain.exception.DomainException;
+import com.phonghub.domain.exception.PropertyNotFoundException;
+import com.phonghub.domain.exception.RoomNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
@@ -19,6 +26,7 @@ import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -28,6 +36,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -46,32 +55,44 @@ public class ContractUiController {
     private final PropertyUseCase propertyUseCase;
     private final RoomUseCase roomUseCase;
     private final RoomRepositoryPort roomRepository;
+    private final PropertyRepositoryPort propertyRepository;
     private final TenantRepositoryPort tenantRepository;
     private final CurrentUserPort currentUserPort;
     private final TenantUseCase tenantUseCase;
     private final InvoiceUseCase invoiceUseCase;
     private final SepayProperties sepayProperties;
+    private final HandoverUseCase handoverUseCase;
+    private final AuthorizationService authorizationService;
+    private final ManualPaymentUseCase manualPayments;
 
     public ContractUiController(
         ContractUseCase contractUseCase,
         PropertyUseCase propertyUseCase,
         RoomUseCase roomUseCase,
         RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
         TenantRepositoryPort tenantRepository,
         CurrentUserPort currentUserPort,
         TenantUseCase tenantUseCase,
         InvoiceUseCase invoiceUseCase,
-        SepayProperties sepayProperties
+        SepayProperties sepayProperties,
+        HandoverUseCase handoverUseCase,
+        AuthorizationService authorizationService,
+        ManualPaymentUseCase manualPayments
     ) {
+        this.manualPayments = manualPayments;
         this.contractUseCase = contractUseCase;
         this.propertyUseCase = propertyUseCase;
         this.roomUseCase = roomUseCase;
         this.roomRepository = roomRepository;
+        this.propertyRepository = propertyRepository;
         this.tenantRepository = tenantRepository;
         this.currentUserPort = currentUserPort;
         this.tenantUseCase = tenantUseCase;
         this.invoiceUseCase = invoiceUseCase;
         this.sepayProperties = sepayProperties;
+        this.handoverUseCase = handoverUseCase;
+        this.authorizationService = authorizationService;
     }
 
     @GetMapping
@@ -107,6 +128,7 @@ public class ContractUiController {
     public String newContractForm(
         @RequestParam(required = false) UUID propertyId,
         @RequestParam(required = false) UUID roomId,
+        @RequestParam(required = false) UUID tenantProfileId,
         Model model,
         RedirectAttributes redirectAttributes
     ) {
@@ -142,8 +164,11 @@ public class ContractUiController {
         model.addAttribute("rooms", rooms);
         model.addAttribute("selectedPropertyId", propertyId);
         model.addAttribute("selectedRoomId", roomId);
+        model.addAttribute("tenantAccounts", propertyId == null
+            ? List.of() : contractUseCase.listAvailablePrimaryTenants(propertyId, null));
         model.addAttribute("defaultStartDate", LocalDate.now());
         model.addAttribute("defaultEndDate", LocalDate.now().plusYears(1));
+        model.addAttribute("selectedTenantId", tenantProfileId);
 
         return "contracts/new";
     }
@@ -152,10 +177,7 @@ public class ContractUiController {
     public String createContract(
         @RequestParam UUID propertyId,
         @RequestParam UUID roomId,
-        @RequestParam String primaryTenantFullName,
-        @RequestParam String primaryTenantIdCard,
-        @RequestParam String primaryTenantPhone,
-        @RequestParam(required = false) String primaryTenantEmail,
+        @RequestParam UUID primaryTenantId,
         @RequestParam BigDecimal depositAmount,
         @RequestParam BigDecimal rentAmount,
         @RequestParam LocalDate startDate,
@@ -167,18 +189,14 @@ public class ContractUiController {
             Contract contract = contractUseCase.createContract(new ContractUseCase.CreateContractCommand(
                 propertyId,
                 roomId,
-                primaryTenantFullName,
-                primaryTenantIdCard,
-                primaryTenantPhone,
-                primaryTenantEmail,
-                null,
+                primaryTenantId,
                 depositAmount,
                 rentAmount,
                 startDate,
                 endDate,
                 paymentDay
             ));
-            redirectAttributes.addFlashAttribute("successMessage", "Đã tạo hợp đồng ở trạng thái bản nháp. Bạn có thể kích hoạt hợp đồng.");
+            redirectAttributes.addFlashAttribute("successMessage", "Đã tạo hợp đồng ở trạng thái bản nháp. Hãy lập biên bản check-in; hợp đồng được kích hoạt sau khi biên bản được duyệt.");
             return "redirect:/contracts/" + contract.getId();
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
@@ -191,9 +209,35 @@ public class ContractUiController {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         try {
             Contract contract = contractUseCase.getContract(id);
-            Property property = propertyUseCase.getProperty(contract.getPropertyId());
-            Room room = roomUseCase.getRoom(contract.getRoomId());
+            // getContract has already checked that a tenant is the primary tenant or a linked occupant.
+            // A DRAFT contract is not a residing contract, so the usual property/room read use cases reject
+            // its tenant even though they need to review the check-in before activation.
+            Property property = currentUser.role() == UserRole.TENANT
+                ? propertyRepository.findById(contract.getPropertyId())
+                    .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + contract.getPropertyId()))
+                : propertyUseCase.getProperty(contract.getPropertyId());
+            Room room = currentUser.role() == UserRole.TENANT
+                ? roomRepository.findById(contract.getRoomId())
+                    .orElseThrow(() -> new RoomNotFoundException("Không tìm thấy phòng: " + contract.getRoomId()))
+                : roomUseCase.getRoom(contract.getRoomId());
             Tenant primaryTenant = tenantRepository.findById(contract.getPrimaryTenantId()).orElse(null);
+            // Cùng một hàm đếm chỗ với tầng service, nên "Còn N chỗ" luôn khớp với việc chặn khi thêm người
+            long currentOccupantCount = contract.residingOccupantCount(LocalDate.now());
+
+            com.phonghub.application.port.in.HandoverUseCase.HandoverDetails checkIn = null;
+            try {
+                checkIn = handoverUseCase.get(com.phonghub.domain.model.HandoverType.CHECK_IN, id);
+            } catch (com.phonghub.domain.exception.HandoverNotFoundException ignored) {
+                // Hợp đồng mới chưa có biên bản check-in.
+            } catch (UnauthorizedPropertyAccessException ignored) {
+                // Người ở cùng có thể xem hợp đồng nhưng không xem bước xác nhận của người thuê chính.
+            }
+            com.phonghub.application.port.in.HandoverUseCase.HandoverDetails checkOut = null;
+            try {
+                checkOut = handoverUseCase.get(com.phonghub.domain.model.HandoverType.CHECK_OUT, id);
+            } catch (com.phonghub.domain.exception.HandoverNotFoundException | UnauthorizedPropertyAccessException ignored) {
+                // Chưa có check-out hoặc người xem không có quyền truy cập biên bản.
+            }
 
             java.util.Map<UUID, Tenant> occupantTenants = new java.util.HashMap<>();
             if (contract.getOccupants() != null) {
@@ -202,12 +246,51 @@ public class ContractUiController {
                 }
             }
 
+            List<Tenant> availableOccupants = List.of();
+            int remainingOccupantSlots = 0;
+            boolean canManageOccupants = false;
+            if (currentUser != null && contract.isActive()) {
+                try {
+                    availableOccupants = contractUseCase.listAvailableOccupants(contract.getId());
+                    remainingOccupantSlots = Math.max(0, room.getMaxOccupants() - (int) currentOccupantCount);
+                    canManageOccupants = true;
+                } catch (DomainException ex) {
+                    // Hide occupant controls unless the use case confirms the user's contract permission.
+                }
+            }
+
             model.addAttribute("currentUser", currentUser);
             model.addAttribute("contract", contract);
+            model.addAttribute("checkIn", checkIn);
+            model.addAttribute("billingCycles", contract.billingCycles());
+            model.addAttribute("checkOut", checkOut);
+            model.addAttribute("canManageContracts", authorizationService.canManageContracts(currentUser, contract.getPropertyId()));
             model.addAttribute("property", property);
             model.addAttribute("room", room);
+            model.addAttribute("currentOccupantCount", currentOccupantCount);
+            model.addAttribute("remainingCapacity", Math.max(0, room.getMaxOccupants() - (int) currentOccupantCount));
             model.addAttribute("primaryTenant", primaryTenant);
             model.addAttribute("occupantTenants", occupantTenants);
+            model.addAttribute("availableOccupants", availableOccupants);
+            model.addAttribute("remainingOccupantSlots", remainingOccupantSlots);
+            model.addAttribute("canManageOccupants", canManageOccupants);
+            List<Tenant> propertyTenantProfiles = new ArrayList<>();
+            java.util.Set<UUID> busyTenantIds = new java.util.HashSet<>();
+            if (canManageOccupants) {
+                for (TenantUseCase.PropertyTenantView view
+                    : tenantUseCase.listTenants(contract.getPropertyId(), null, false, 0, 50).items()) {
+                    UUID profileId = view.tenant().id();
+                    if (contract.getOccupants().stream().noneMatch(occupant -> occupant.tenantId().equals(profileId))) {
+                        propertyTenantProfiles.add(view.tenant());
+                        if (view.hasActiveContract()) {
+                            busyTenantIds.add(profileId);
+                        }
+                    }
+                }
+            }
+            model.addAttribute("tenantChoices", canManageOccupants
+                ? TenantChoice.merge(propertyTenantProfiles, busyTenantIds, List.of())
+                : List.<TenantChoice>of());
             // Hóa đơn và thanh toán là số liệu tiền của nhà trọ: quản trị viên, kỹ thuật viên và nhân viên không có
             // quyền thu tiền/quản lý hợp đồng không xem (#163); trang hợp đồng vẫn hiện, chỉ ẩn phần thanh toán.
             if (currentUser.role() != UserRole.ADMIN && currentUser.role() != UserRole.TECHNICIAN) {
@@ -265,7 +348,7 @@ public class ContractUiController {
 
     private void addPaymentAttributes(Model model, CurrentUser currentUser, Contract contract, Property property) {
         List<Invoice> invoices = invoiceUseCase.listInvoicesForContract(contract.getId());
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
         // Kỳ cũ nhất còn nợ được ưu tiên hiển thị hướng dẫn thanh toán.
         Invoice payableInvoice = invoices.stream()
             .filter(Invoice::isPayable)
@@ -278,6 +361,9 @@ public class ContractUiController {
         );
 
         model.addAttribute("invoices", invoices);
+        model.addAttribute("paymentClaims", manualPayments.listForContract(contract.getId()));
+        model.addAttribute("openInvoiceCount", invoices.stream().filter(Invoice::isPayable)
+            .filter(invoice -> invoice.remainingAmount().signum() > 0).count());
         model.addAttribute("invoiceWarnings", invoiceUseCase.utilityWarnings(contract.getId()));
         model.addAttribute("today", today);
         model.addAttribute("payableInvoice", payableInvoice);
@@ -286,7 +372,7 @@ public class ContractUiController {
         model.addAttribute("canVoidInvoice", currentUser != null && (
             currentUser.role() == UserRole.STAFF
                 || (currentUser.role() == UserRole.OWNER && currentUser.id().equals(property.ownerId()))));
-        model.addAttribute("defaultInvoicePeriod", YearMonth.now().toString());
+        model.addAttribute("defaultInvoicePeriod", YearMonth.from(today).toString());
         model.addAttribute("bankConfigured", sepayProperties.hasBankAccount());
         model.addAttribute("bankCode", sepayProperties.getBankCode());
         model.addAttribute("bankAccountNumber", sepayProperties.getBankAccountNumber());
@@ -305,7 +391,8 @@ public class ContractUiController {
         @RequestParam(required = false) String email,
         @RequestParam(required = false) String permanentAddress,
         @RequestParam(required = false) LocalDate checkInDate,
-        @RequestParam(defaultValue = "false") boolean createAccount,
+        @RequestParam(required = false) UUID tenantProfileId,
+        @RequestParam(required = false) UUID tenantUserId,
         RedirectAttributes redirectAttributes
     ) {
         try {
@@ -317,7 +404,8 @@ public class ContractUiController {
                 email,
                 permanentAddress,
                 checkInDate != null ? checkInDate : LocalDate.now(),
-                createAccount
+                tenantProfileId,
+                tenantUserId
             ));
             String message = "Thêm người thuê vào phòng thành công.";
             if (result.temporaryPassword() != null) {
@@ -334,11 +422,71 @@ public class ContractUiController {
         return "redirect:/contracts/" + id;
     }
 
+    @PostMapping("/{id}/occupants/bulk")
+    public String addExistingOccupants(
+        @PathVariable UUID id,
+        @RequestParam(required = false) List<UUID> tenantIds,
+        @RequestParam(required = false) LocalDate checkInDate,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            List<com.phonghub.domain.model.ContractOccupant> added = contractUseCase.addExistingOccupants(
+                new ContractUseCase.AddExistingOccupantsCommand(id, tenantIds, checkInDate));
+            redirectAttributes.addFlashAttribute("successMessage", String.format(
+                "Đã thêm %d người thuê vào phòng trong một lần xác nhận.", added.size()));
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
+    }
+
+    @PostMapping("/{id}/occupants/batch")
+    public String addOccupantsBatch(
+        @PathVariable UUID id,
+        @RequestParam(name = "fullNames", required = false) List<String> fullNames,
+        @RequestParam(name = "identityCardNumbers", required = false) List<String> identityCardNumbers,
+        @RequestParam(name = "phones", required = false) List<String> phones,
+        @RequestParam(name = "emails", required = false) List<String> emails,
+        @RequestParam(name = "permanentAddresses", required = false) List<String> permanentAddresses,
+        @RequestParam(name = "tenantProfileIds", required = false) List<String> tenantProfileIds,
+        @RequestParam(name = "tenantUserIds", required = false) List<String> tenantUserIds,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            // Spring biến một giá trị rỗng đơn lẻ thành danh sách rỗng (một dòng chọn hồ sơ có CCCD để trống), nên đọc từng
+            // cột theo vị trí thay vì so kích thước; thiếu thông tin thì AddOccupantCommand báo đúng trường còn thiếu
+            int rows = fullNames == null ? 0 : fullNames.size();
+            List<ContractUseCase.AddOccupantCommand> occupants = new ArrayList<>();
+            for (int index = 0; index < rows; index++) {
+                occupants.add(new ContractUseCase.AddOccupantCommand(id,
+                    fullNames.get(index), valueAt(identityCardNumbers, index), valueAt(phones, index),
+                    valueAt(emails, index), valueAt(permanentAddresses, index), LocalDate.now(),
+                    parseOptionalUuid(valueAt(tenantProfileIds, index)), parseOptionalUuid(valueAt(tenantUserIds, index))));
+            }
+            ContractUseCase.AddOccupantsResult result = contractUseCase.addOccupants(
+                new ContractUseCase.AddOccupantsCommand(id, occupants));
+            redirectAttributes.addFlashAttribute("successMessage", "Đã thêm " + result.results().size()
+                + " hồ sơ người thuê vào hợp đồng.");
+        } catch (DomainException | IllegalArgumentException ex) {
+            redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+        }
+        return "redirect:/contracts/" + id;
+    }
+
+    private static String valueAt(List<String> values, int index) {
+        return values != null && index < values.size() ? values.get(index) : null;
+    }
+
+    private static UUID parseOptionalUuid(String value) {
+        return value == null || value.isBlank() ? null : UUID.fromString(value);
+    }
+
     @PostMapping("/{id}/activate")
     public String activateContract(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
         try {
-            contractUseCase.activateContract(id);
-            redirectAttributes.addFlashAttribute("successMessage", "Đã kích hoạt hợp đồng. Phòng hiện ở trạng thái đang thuê.");
+            handoverUseCase.prepareCheckIn(id);
+            redirectAttributes.addFlashAttribute("successMessage", "Đã mở biên bản check-in. Hợp đồng chỉ có hiệu lực sau khi người thuê xác nhận và người quản lý duyệt.");
+            return "redirect:/contracts/" + id + "/handover";
         } catch (DomainException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }
@@ -404,18 +552,14 @@ public class ContractUiController {
         RedirectAttributes redirectAttributes
     ) {
         try {
-            Contract terminated = contractUseCase.terminateEarly(id, requiresMaintenance, reason);
-            // Lấy trạng thái thật: phòng đang sửa dở vẫn giữ Bảo trì dù không chọn "cần kiểm tra bảo trì"
-            RoomStatus roomStatus = roomRepository.findById(terminated.getRoomId()).map(Room::getStatus)
-                .orElse(requiresMaintenance ? RoomStatus.MAINTENANCE : RoomStatus.AVAILABLE);
-            redirectAttributes.addFlashAttribute(
-                "successMessage",
-                "Đã chấm dứt hợp đồng. Phòng hiện ở trạng thái " + UiText.INSTANCE.roomStatus(roomStatus) + "."
-            );
+            handoverUseCase.prepareEarlyTerminationCheckout(id, reason);
+            redirectAttributes.addFlashAttribute("successMessage",
+                "Đã tạo biên bản check-out kết thúc sớm. Hoàn thiện tài sản và chỉ số, rồi gửi người thuê xác nhận.");
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
+            return "redirect:/contracts/" + id;
         }
-        return "redirect:/contracts/" + id;
+        return "redirect:/contracts/" + id + "/check-out";
     }
 
     @PostMapping("/{contractId}/tenants/{tenantId}/edit")

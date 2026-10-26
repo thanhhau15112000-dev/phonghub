@@ -18,6 +18,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,7 +54,7 @@ class ChatServiceUnitTest {
     private InMemoryChatRoomRepository chatRoomRepo;
     private InMemoryChatMessageRepository chatMessageRepo;
     private InMemoryUserRepository userRepo;
-    private ChatEventPublisherPort eventPublisher;
+    private RecordingPublisher recorder;
     private ChatService chatService;
 
     private CurrentUser userA;
@@ -65,10 +66,9 @@ class ChatServiceUnitTest {
         chatRoomRepo = new InMemoryChatRoomRepository();
         chatMessageRepo = new InMemoryChatMessageRepository();
         userRepo = new InMemoryUserRepository();
-        eventPublisher = (roomId, message) -> {}; // no-op for unit test
+        recorder = new RecordingPublisher();
 
-        chatService = new ChatService(chatRoomRepo, chatMessageRepo, userRepo, eventPublisher,
-            new com.phonghub.adapter.out.storage.LocalMediaStorageAdapter(), new IncreasingClock());
+        chatService = new ChatService(chatRoomRepo, chatMessageRepo, userRepo, recorder, new IncreasingClock());
 
         UUID idA = UUID.randomUUID();
         UUID idB = UUID.randomUUID();
@@ -198,59 +198,64 @@ class ChatServiceUnitTest {
     }
 
     @Test
-    @DisplayName("Gửi hình ảnh và video thành công với MediaStoragePort")
-    void sendMediaMessageSuccess() {
+    @DisplayName("Tin nhắn cũ có ảnh/video (trước khi gỡ media khỏi chat) vẫn đọc được")
+    void legacyMediaMessageStillReadable() {
         ChatRoom room = chatService.getOrCreateDirectRoom(userA, userB.id());
+        chatMessageRepo.save(new ChatMessage(UUID.randomUUID(), room.id(), userA.id(), userA.fullName(),
+            "Ảnh phòng trọ", "https://example.invalid/chat-media/old.png", "IMAGE", Instant.now(), null));
 
-        byte[] fakeImage = new byte[] { 1, 2, 3, 4 };
-        ChatMessage imageMsg = chatService.sendMediaMessage(
-            userA, room.id(), "photo.png", "image/png", fakeImage, "Ảnh phòng trọ mới"
-        );
+        List<ChatMessage> messages = chatService.getMessages(userB, room.id(), null, 10);
+        assertEquals(1, messages.size());
+        assertEquals("Ảnh phòng trọ", messages.get(0).content());
 
-        assertNotNull(imageMsg);
-        assertTrue(imageMsg.hasMedia());
-        assertTrue(imageMsg.isImage());
-        assertFalse(imageMsg.isVideo());
-        assertEquals("IMAGE", imageMsg.mediaType());
-        assertNotNull(imageMsg.mediaUrl());
-        assertEquals("Ảnh phòng trọ mới", imageMsg.content());
-
-        byte[] fakeVideo = new byte[] { 5, 6, 7, 8 };
-        ChatMessage videoMsg = chatService.sendMediaMessage(
-            userA, room.id(), "tour.mp4", "video/mp4", fakeVideo, null
-        );
-
-        assertNotNull(videoMsg);
-        assertTrue(videoMsg.hasMedia());
-        assertTrue(videoMsg.isVideo());
-        assertEquals("VIDEO", videoMsg.mediaType());
-        assertNotNull(videoMsg.mediaUrl());
-
-        // Kiểm tra danh sách tóm tắt phòng hiển thị nhãn media
-        var rooms = chatService.getRoomsForUser(userA);
-        var targetRoomSummary = rooms.stream().filter(r -> r.id().equals(room.id())).findFirst().orElseThrow();
-        assertEquals("[Video]", targetRoomSummary.lastMessageContent());
+        var summary = chatService.getRoomsForUser(userB).stream()
+            .filter(r -> r.id().equals(room.id())).findFirst().orElseThrow();
+        assertEquals("[Hình ảnh] Ảnh phòng trọ", summary.lastMessageContent());
     }
 
     @Test
-    @DisplayName("Gửi media vượt quá 25MB phải ném IllegalArgumentException")
-    void sendMediaExceedsLimitThrows() {
+    @DisplayName("Tin mới phát sự kiện kèm phòng để chỉ thành viên phòng 1-1 nhận")
+    void newMessageEventCarriesRoomMembers() {
         ChatRoom room = chatService.getOrCreateDirectRoom(userA, userB.id());
-        byte[] largeBytes = new byte[26 * 1024 * 1024];
 
-        assertThrows(IllegalArgumentException.class, () -> {
-            chatService.sendMediaMessage(userA, room.id(), "big.mp4", "video/mp4", largeBytes, null);
-        });
+        ChatMessage sent = chatService.sendMessage(userA, room.id(), "Chào bạn");
+
+        assertEquals(1, recorder.messages.size());
+        ChatRoom eventRoom = recorder.messageRooms.get(0);
+        assertEquals(sent.id(), recorder.messages.get(0).id());
+        assertTrue(eventRoom.hasMember(userA.id()));
+        assertTrue(eventRoom.hasMember(userB.id()));
+        assertFalse(eventRoom.hasMember(userC.id()));
     }
 
     @Test
-    @DisplayName("Gửi tệp không hỗ trợ phải ném IllegalArgumentException")
-    void sendMediaUnsupportedFormatThrows() {
+    @DisplayName("Trạng thái đã xem chỉ phát cho phòng 1-1, người ngoài phòng đánh dấu đã đọc bị chặn")
+    void readReceiptOnlyForDirectRoomMembers() {
         ChatRoom room = chatService.getOrCreateDirectRoom(userA, userB.id());
-        byte[] docBytes = new byte[] { 1, 2, 3 };
 
-        assertThrows(IllegalArgumentException.class, () -> {
-            chatService.sendMediaMessage(userA, room.id(), "contract.pdf", "application/pdf", docBytes, null);
-        });
+        chatService.markAsRead(userB, room.id());
+        chatService.markAsRead(userB, ChatRoom.GLOBAL_ROOM_ID);
+
+        assertEquals(List.of(room.id()), recorder.receiptRooms.stream().map(ChatRoom::id).toList());
+        assertThrows(UnauthorizedChatAccessException.class, () -> chatService.markAsRead(userC, room.id()));
+        assertEquals(1, recorder.receiptRooms.size(), "người ngoài phòng không tạo sự kiện đã xem");
+    }
+
+    /** Ghi lại sự kiện realtime ChatService phát ra. */
+    private static final class RecordingPublisher implements ChatEventPublisherPort {
+        private final List<ChatRoom> messageRooms = new ArrayList<>();
+        private final List<ChatMessage> messages = new ArrayList<>();
+        private final List<ChatRoom> receiptRooms = new ArrayList<>();
+
+        @Override
+        public void publishNewMessage(ChatRoom room, ChatMessage message) {
+            messageRooms.add(room);
+            messages.add(message);
+        }
+
+        @Override
+        public void publishReadReceipt(ChatRoom room, UUID userId, Instant readAt) {
+            receiptRooms.add(room);
+        }
     }
 }

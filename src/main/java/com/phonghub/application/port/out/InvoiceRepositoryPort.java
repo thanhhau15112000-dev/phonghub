@@ -22,6 +22,11 @@ public interface InvoiceRepositoryPort {
     boolean existsByPaymentCode(String paymentCode);
     /** Khóa dòng theo id (SELECT ... FOR UPDATE) để job chạy nền không ghi đè khoản tiền vừa nhận. */
     Optional<Invoice> findByIdForUpdate(UUID id);
+    /** Payable invoices of a contract in stable id order, locked for an atomic checkout settlement. */
+    default List<Invoice> findPayableByContractIdForUpdate(UUID contractId) {
+        return findByContractId(contractId).stream().filter(Invoice::isPayable)
+            .sorted(java.util.Comparator.comparing(Invoice::getId)).toList();
+    }
     /** Id hóa đơn tiền thuê còn phải thanh toán, chưa gộp và đã quá hạn trước {@code today}. */
     List<UUID> findOverdueRentInvoiceIds(java.time.LocalDate today);
 
