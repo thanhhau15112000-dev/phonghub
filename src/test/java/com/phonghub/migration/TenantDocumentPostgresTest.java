@@ -19,6 +19,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -98,5 +99,15 @@ class TenantDocumentPostgresTest {
 
         repository.delete(tenantA, DocumentType.GPLX);
         assertTrue(repository.findByTenantIdAndType(tenantA, DocumentType.GPLX).isEmpty());
+
+        // V58 (#244): CCCD tải ở Hồ sơ cá nhân chưa gắn nhà trọ; tải lại ở trang nhà trọ thì ghi nhà trọ đó
+        Instant now = Instant.now();
+        repository.save(new TenantDocument(UUID.randomUUID(), tenantB, null, DocumentType.CCCD, null, null, null, null,
+            "0077", "tenants/b/tenant-documents/c.enc", "image/png", null, null, now, userId, now, userId));
+        assertNull(repository.findByTenantIdAndType(tenantB, DocumentType.CCCD).orElseThrow().propertyId());
+        repository.save(new TenantDocument(UUID.randomUUID(), tenantB, propertyId, DocumentType.CCCD, null, null, null,
+            null, "0077", "properties/p/tenant-documents/c2.enc", "image/png", null, null, now, userId, now, userId));
+        assertEquals(propertyId, repository.findByTenantIdAndType(tenantB, DocumentType.CCCD).orElseThrow().propertyId());
+        assertEquals(1, repository.findByTenantId(tenantB).size());
     }
 }

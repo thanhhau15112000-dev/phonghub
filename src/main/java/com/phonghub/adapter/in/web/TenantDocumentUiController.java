@@ -164,7 +164,7 @@ public class TenantDocumentUiController {
         }
     }
 
-    private static TenantDocumentUseCase.DocumentFile toFile(MultipartFile file) throws IOException {
+    static TenantDocumentUseCase.DocumentFile toFile(MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
             return null;
         }

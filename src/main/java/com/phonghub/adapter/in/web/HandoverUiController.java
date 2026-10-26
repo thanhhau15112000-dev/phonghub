@@ -4,6 +4,7 @@ import com.phonghub.application.port.in.CheckOutSettlementUseCase;
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.HandoverUseCase;
 import com.phonghub.application.port.in.RoomSetupUseCase;
+import com.phonghub.application.port.in.TenantDocumentUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
@@ -15,6 +16,7 @@ import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.AssetStatus;
 import com.phonghub.domain.model.Contract;
+import com.phonghub.domain.model.DocumentType;
 import com.phonghub.domain.model.HandoverPhotoKind;
 import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.Property;
@@ -55,6 +57,7 @@ public class HandoverUiController {
     private final CheckOutSettlementUseCase settlementUseCase;
     private final RoomSetupUseCase roomSetupUseCase;
     private final AuthorizationService authorizationService;
+    private final TenantDocumentUseCase tenantDocumentUseCase;
 
     public HandoverUiController(
         HandoverUseCase handoverUseCase,
@@ -65,7 +68,8 @@ public class HandoverUiController {
         CurrentUserPort currentUserPort,
         CheckOutSettlementUseCase settlementUseCase,
         RoomSetupUseCase roomSetupUseCase,
-        AuthorizationService authorizationService
+        AuthorizationService authorizationService,
+        TenantDocumentUseCase tenantDocumentUseCase
     ) {
         this.handoverUseCase = handoverUseCase;
         this.contractUseCase = contractUseCase;
@@ -76,6 +80,7 @@ public class HandoverUiController {
         this.settlementUseCase = settlementUseCase;
         this.roomSetupUseCase = roomSetupUseCase;
         this.authorizationService = authorizationService;
+        this.tenantDocumentUseCase = tenantDocumentUseCase;
     }
 
     private static HandoverType typeOf(String kind) {
@@ -131,6 +136,10 @@ public class HandoverUiController {
             model.addAttribute("canManage", canManage);
             model.addAttribute("ownerOrAdmin", ownerOrAdmin);
             model.addAttribute("primaryTenant", primaryTenant);
+            // Người thuê chính xác nhận check-in cần ảnh CCCD; ảnh tải ở Hồ sơ cá nhân cũng được tính (#244).
+            model.addAttribute("identityCardOnFile", primaryTenant && type == HandoverType.CHECK_IN
+                && tenantDocumentUseCase.ownDocuments().documents().stream()
+                    .anyMatch(document -> document.type() == DocumentType.CCCD));
             model.addAttribute("houseRules", rules);
             model.addAttribute("photoKinds", HandoverPhotoKind.values());
             model.addAttribute("assetStatuses", AssetStatus.values());
