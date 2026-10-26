@@ -8,7 +8,6 @@ import java.util.UUID;
 
 public interface ChatMessageUseCase {
     ChatMessage sendMessage(CurrentUser currentUser, UUID roomId, String content);
-    ChatMessage sendMediaMessage(CurrentUser currentUser, UUID roomId, String originalFilename, String contentType, byte[] bytes, String caption);
     List<ChatMessage> getMessages(CurrentUser currentUser, UUID roomId, Instant before, int limit);
     void markAsRead(CurrentUser currentUser, UUID roomId);
     int getTotalUnreadCount(CurrentUser currentUser);

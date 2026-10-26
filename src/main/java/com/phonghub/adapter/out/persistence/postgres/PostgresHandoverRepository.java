@@ -58,7 +58,9 @@ public class PostgresHandoverRepository implements HandoverRepositoryPort {
             instant(rs.getTimestamp("created_at")),
             rs.getObject("created_by", UUID.class),
             instant(rs.getTimestamp("updated_at")),
-            rs.getObject("updated_by", UUID.class)
+            rs.getObject("updated_by", UUID.class),
+            rs.getBoolean("early_termination"),
+            rs.getString("termination_reason")
         );
     }
 
@@ -68,10 +70,10 @@ public class PostgresHandoverRepository implements HandoverRepositoryPort {
             INSERT INTO handovers (id, contract_id, type, status, initial_electric_meter, initial_water_meter,
                 room_condition, keys_provided, contract_terms_hash, house_rules_text, house_rules_hash,
                 rejection_reason, sent_at, is_confirmed_by_tenant, confirmed_at, approved_by, approved_at,
-                final_deduction, created_at, created_by, updated_at, updated_by)
+                final_deduction, created_at, created_by, updated_at, updated_by, early_termination, termination_reason)
             VALUES (:id, :contractId, :type, :status, :electric, :water, :roomCondition, :keys, :termsHash,
                 :rulesText, :rulesHash, :reason, :sentAt, :confirmed, :confirmedAt, :approvedBy, :approvedAt,
-                :finalDeduction, :createdAt, :createdBy, :updatedAt, :updatedBy)
+                :finalDeduction, :createdAt, :createdBy, :updatedAt, :updatedBy, :earlyTermination, :terminationReason)
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 initial_electric_meter = EXCLUDED.initial_electric_meter,
@@ -88,6 +90,8 @@ public class PostgresHandoverRepository implements HandoverRepositoryPort {
                 approved_by = EXCLUDED.approved_by,
                 approved_at = EXCLUDED.approved_at,
                 final_deduction = EXCLUDED.final_deduction,
+                early_termination = EXCLUDED.early_termination,
+                termination_reason = EXCLUDED.termination_reason,
                 updated_at = EXCLUDED.updated_at,
                 updated_by = EXCLUDED.updated_by
             """;
@@ -113,9 +117,16 @@ public class PostgresHandoverRepository implements HandoverRepositoryPort {
             .addValue("createdAt", timestamp(handover.createdAt()))
             .addValue("createdBy", handover.createdBy())
             .addValue("updatedAt", timestamp(handover.updatedAt()))
-            .addValue("updatedBy", handover.updatedBy());
+            .addValue("updatedBy", handover.updatedBy())
+            .addValue("earlyTermination", handover.earlyTermination())
+            .addValue("terminationReason", handover.terminationReason());
         jdbcTemplate.update(sql, params);
         return handover;
+    }
+
+    @Override
+    public void delete(UUID handoverId) {
+        jdbcTemplate.update("DELETE FROM handovers WHERE id = :id", Map.of("id", handoverId));
     }
 
     @Override

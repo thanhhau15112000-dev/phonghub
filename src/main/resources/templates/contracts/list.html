@@ -33,7 +33,7 @@
                     <th>Thời hạn</th>
                     <th>Tiền thuê</th>
                     <th>Tiền đặt cọc</th>
-                    <th>Ngày thanh toán</th>
+                    <th>Bắt đầu chu kỳ</th>
                     <th>Trạng thái</th>
                     <th class="col-actions">Thao tác</th>
                 </tr>
@@ -50,7 +50,7 @@
                     <td th:text="${uiText.date(c.getStartDate()) + ' đến ' + uiText.date(c.getEndDate())}">2026-01-01 đến 2027-01-01</td>
                     <td th:text="${#numbers.formatDecimal(c.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     <td th:text="${#numbers.formatDecimal(c.getDepositAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
-                    <td th:text="'Ngày ' + ${c.getPaymentDay()}">Ngày 5</td>
+                    <td th:text="${uiText.date(c.billingAnchorDate())}">25/10/2026</td>
                     <td>
                         <span th:class="'badge badge-' + ${c.getStatus()}" th:text="${uiText.contractStatus(c.getStatus())}">Bản nháp</span>
                     </td>

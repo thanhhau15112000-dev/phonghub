@@ -28,8 +28,9 @@ public class TransactionalPropertyStaffUseCase implements PropertyStaffUseCase {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Member updatePermissions(UUID propertyId, UUID userId, boolean canCollectPayment, boolean canManageContracts,
-                                    boolean canViewDocuments) {
-        return delegate.updatePermissions(propertyId, userId, canCollectPayment, canManageContracts, canViewDocuments);
+                                    boolean canViewDocuments, boolean canManageRoomsAndAssets) {
+        return delegate.updatePermissions(propertyId, userId, canCollectPayment, canManageContracts, canViewDocuments,
+            canManageRoomsAndAssets);
     }
 
     @Override

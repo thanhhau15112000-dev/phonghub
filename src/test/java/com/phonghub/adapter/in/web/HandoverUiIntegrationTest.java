@@ -5,8 +5,14 @@ import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverItemRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverPhotoRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyHouseRulesRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantDocumentRepository;
+import com.phonghub.domain.model.Contract;
+import com.phonghub.domain.model.ContractStatus;
+import com.phonghub.domain.model.Room;
+import com.phonghub.domain.model.RoomStatus;
 import java.util.Base64;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -42,6 +48,8 @@ class HandoverUiIntegrationTest extends SeededWebTest {
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
 
     @Autowired private MockMvc mockMvc;
+    @Autowired private InMemoryContractRepository contracts;
+    @Autowired private InMemoryRoomRepository rooms;
     @Autowired private InMemoryHandoverRepository handovers;
     @Autowired private InMemoryHandoverPhotoRepository photos;
     @Autowired private InMemoryHandoverItemRepository items;
@@ -81,9 +89,33 @@ class HandoverUiIntegrationTest extends SeededWebTest {
     }
 
     @Test
-    @DisplayName("The whole check-in can be run from the forms and the buttons follow the role and the status")
+    @DisplayName("A draft contract activates only after tenant-confirmed check-in approval")
     void fullFlowThroughForms() throws Exception {
-        mockMvc.perform(post(PAGE).header("X-User-Id", OWNER_1).param("initialElectricMeter", "100.5")
+        Contract active = contracts.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        contracts.save(new Contract(active.getId(), active.getPropertyId(), active.getRoomId(), active.getPrimaryTenantId(),
+            active.getDepositAmount(), active.getRentAmount(), active.getStartDate(), active.getEndDate(),
+            active.getPaymentDay(), ContractStatus.DRAFT, active.getOccupants(), active.getCreatedAt(), active.getUpdatedAt()));
+        Room occupied = rooms.findById(active.getRoomId()).orElseThrow();
+        rooms.save(new Room(occupied.getId(), occupied.getPropertyId(), occupied.getRoomNumber(), occupied.getFloor(),
+            occupied.getAreaSqm(), occupied.getBasePrice(), occupied.getMaxOccupants(), RoomStatus.AVAILABLE,
+            occupied.getCreatedAt(), occupied.getUpdatedAt()));
+
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID).header("X-User-Id", OWNER_1))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Lập biên bản check-in")));
+        mockMvc.perform(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/activate").header("X-User-Id", OWNER_1))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                .redirectedUrl(PAGE));
+        org.junit.jupiter.api.Assertions.assertEquals(ContractStatus.DRAFT,
+            contracts.findById(DataSeeder.CONTRACT_1_ID).orElseThrow().getStatus());
+        org.junit.jupiter.api.Assertions.assertEquals(RoomStatus.AVAILABLE,
+            rooms.findById(active.getRoomId()).orElseThrow().getStatus());
+        mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID).header("X-User-Id", TENANT_1))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Bước hiện tại: hoàn thiện biên bản check-in")));
+
+        mockMvc.perform(post(PAGE + "/update").header("X-User-Id", OWNER_1).param("initialElectricMeter", "100.5")
                 .param("initialWaterMeter", "20").param("roomCondition", "Phòng sạch").param("keysProvided", "2 chìa"))
             .andExpect(flash().attributeExists("successMessage"));
         mockMvc.perform(get(PAGE).header("X-User-Id", OWNER_1))
@@ -132,6 +164,10 @@ class HandoverUiIntegrationTest extends SeededWebTest {
         mockMvc.perform(get(PAGE).header("X-User-Id", OWNER_1))
             .andExpect(content().string(containsString("APPROVED")))
             .andExpect(content().string(containsString("Đã duyệt lúc")));
+        org.junit.jupiter.api.Assertions.assertEquals(ContractStatus.ACTIVE,
+            contracts.findById(DataSeeder.CONTRACT_1_ID).orElseThrow().getStatus());
+        org.junit.jupiter.api.Assertions.assertEquals(RoomStatus.OCCUPIED,
+            rooms.findById(active.getRoomId()).orElseThrow().getStatus());
     }
 
     @Test

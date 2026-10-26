@@ -2,6 +2,7 @@ package com.phonghub.adapter.in.web;
 
 import com.phonghub.application.port.in.InvoiceUseCase;
 import com.phonghub.application.port.in.MaintenanceAttachmentUseCase;
+import com.phonghub.application.port.in.MaintenanceSubmissionUseCase;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
@@ -9,17 +10,23 @@ import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
+import com.phonghub.application.service.MaintenanceAssignmentTimeoutPolicy;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.model.LiableParty;
 import com.phonghub.domain.model.MaintenanceCause;
 import com.phonghub.domain.model.MaintenancePriority;
+import com.phonghub.domain.model.MaintenanceQuoteVersion;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -47,6 +54,8 @@ public class MaintenanceUiController {
     private final UserRepositoryPort userRepository;
     private final StaffPropertyAssignmentPort assignmentPort;
     private final MaintenanceAttachmentUseCase attachmentUseCase;
+    private final MaintenanceAssignmentTimeoutPolicy timeoutPolicy;
+    private final MaintenanceSubmissionUseCase submissionUseCase;
 
     public MaintenanceUiController(
         MaintenanceUseCase maintenanceUseCase,
@@ -56,9 +65,13 @@ public class MaintenanceUiController {
         InvoiceUseCase invoiceUseCase,
         UserRepositoryPort userRepository,
         StaffPropertyAssignmentPort assignmentPort,
-        MaintenanceAttachmentUseCase attachmentUseCase
+        MaintenanceAttachmentUseCase attachmentUseCase,
+        MaintenanceAssignmentTimeoutPolicy timeoutPolicy,
+        MaintenanceSubmissionUseCase submissionUseCase
     ) {
+        this.timeoutPolicy = timeoutPolicy;
         this.attachmentUseCase = attachmentUseCase;
+        this.submissionUseCase = submissionUseCase;
         this.assignmentPort = assignmentPort;
         this.invoiceUseCase = invoiceUseCase;
         this.userRepository = userRepository;
@@ -186,6 +199,7 @@ public class MaintenanceUiController {
         @RequestParam(name = "setRoomMaintenance", defaultValue = "false") boolean setRoomMaintenance,
         @RequestParam(required = false) MaintenanceCause cause,
         @RequestParam(required = false) String causeDetail,
+        @RequestParam(name = "files", required = false) List<MultipartFile> files,
         RedirectAttributes redirectAttributes
     ) {
         if (cause == null && currentUserPort.getCurrentUser().role() == UserRole.TENANT) {
@@ -196,12 +210,13 @@ public class MaintenanceUiController {
             ? "[" + causeDetail.trim() + "] " + description
             : description;
         try {
-            MaintenanceTicket ticket = maintenanceUseCase.createTicket(new MaintenanceUseCase.CreateMaintenanceTicketCommand(
-                roomId, title, fullDescription, priority, setRoomMaintenance, cause
-            ));
+            MaintenanceTicket ticket = submissionUseCase.createTicketWithAttachments(
+                new MaintenanceUseCase.CreateMaintenanceTicketCommand(
+                    roomId, title, fullDescription, priority, setRoomMaintenance, cause),
+                toAttachmentFiles(files));
             redirectAttributes.addFlashAttribute("successMessage", "Đã tạo yêu cầu bảo trì '" + ticket.getTitle() + "'.");
             return "redirect:/maintenance/" + ticket.getId();
-        } catch (DomainException | IllegalArgumentException ex) {
+        } catch (DomainException | IllegalArgumentException | java.io.IOException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
                 ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
                 : ex.getMessage());
@@ -219,15 +234,39 @@ public class MaintenanceUiController {
 
             model.addAttribute("currentUser", currentUser);
             model.addAttribute("ticket", ticket);
+            Instant now = Instant.now();
             model.addAttribute("technicianName", ticket.getAssignedTechnicianId() == null
                 ? "Chưa phân công" : userRepository.findById(ticket.getAssignedTechnicianId())
                     .map(com.phonghub.domain.model.User::fullName).orElse("Không tìm thấy tài khoản"));
             model.addAttribute("room", room);
             model.addAttribute("property", property);
-            model.addAttribute("technicians", assignmentPort.findByPropertyId(ticket.getPropertyId()).stream()
+            List<com.phonghub.domain.model.User> technicians = assignmentPort.findByPropertyId(ticket.getPropertyId()).stream()
                 .map(assignment -> userRepository.findById(assignment.staffUserId()).orElse(null))
-                .filter(user -> user != null && user.role() == UserRole.TECHNICIAN)
-                .toList());
+                .filter(user -> user != null && user.role() == UserRole.TECHNICIAN
+                    && user.status() == com.phonghub.domain.model.User.UserStatus.ACTIVE
+                    && !user.id().equals(ticket.getAssignedTechnicianId()))
+                .toList();
+            model.addAttribute("technicians", technicians);
+            model.addAttribute("assignmentElapsed", ticket.getAssignedAt() == null ? null
+                : formatDuration(Duration.between(ticket.getAssignedAt(), now)));
+            Instant assignmentDeadline = ticket.getAssignedAt() == null ? null
+                : ticket.getAssignedAt().plus(timeoutPolicy.assignmentTimeout());
+            model.addAttribute("assignmentDeadline", formatInstant(assignmentDeadline));
+            boolean assignmentActive = ticket.getStatus() == com.phonghub.domain.model.MaintenanceStatus.ASSIGNED
+                || ticket.getStatus() == com.phonghub.domain.model.MaintenanceStatus.IN_PROGRESS;
+            model.addAttribute("assignmentActive", assignmentActive);
+            model.addAttribute("assignmentTimeRemaining", assignmentDeadline == null || !assignmentActive ? null
+                : !now.isBefore(assignmentDeadline)
+                    ? "Đã quá mốc " + formatDuration(timeoutPolicy.assignmentTimeout())
+                    : "Còn " + formatDuration(Duration.between(now, assignmentDeadline)));
+            model.addAttribute("assignmentOverdue", assignmentDeadline != null && assignmentActive
+                && !now.isBefore(assignmentDeadline));
+            model.addAttribute("understaffedAt", formatInstant(ticket.getUnderstaffedNotifiedAt()));
+            Instant autoCancelAt = ticket.getUnderstaffedNotifiedAt() == null || !assignmentActive ? null
+                : ticket.getUnderstaffedNotifiedAt().plus(timeoutPolicy.understaffedCancelAfter());
+            model.addAttribute("autoCancelAt", formatInstant(autoCancelAt));
+            model.addAttribute("understaffedCancelAfter",
+                formatDuration(timeoutPolicy.understaffedCancelAfter()));
             model.addAttribute("attachments", attachmentUseCase.list(id));
             java.util.List<com.phonghub.domain.model.MaintenanceTicketEvent> timeline = maintenanceUseCase.getTimeline(id);
             java.util.Map<UUID, String> actorNames = new java.util.HashMap<>();
@@ -245,6 +284,8 @@ public class MaintenanceUiController {
             model.addAttribute("today", LocalDate.now());
             model.addAttribute("feeInvoice", invoiceUseCase.findFeeInvoiceForTicket(id).orElse(null));
             model.addAttribute("quote", maintenanceUseCase.visibleQuote(id));
+            model.addAttribute("quoteVersions", maintenanceUseCase.quoteHistory(id));
+            model.addAttribute("maxNegotiationRounds", MaintenanceTicket.MAX_NEGOTIATION_ROUNDS);
 
             return "maintenance/detail";
         } catch (DomainException ex) {
@@ -271,11 +312,17 @@ public class MaintenanceUiController {
     @PostMapping("/{id}/attachments")
     public String uploadAttachment(
         @PathVariable UUID id,
-        @RequestParam("file") MultipartFile file,
+        @RequestParam(name = "file", required = false) MultipartFile file,
+        @RequestParam(name = "files", required = false) List<MultipartFile> files,
         RedirectAttributes redirectAttributes
     ) {
         try {
-            attachmentUseCase.upload(id, file.getContentType(), file.getBytes());
+            List<MultipartFile> uploads = files == null ? new ArrayList<>() : new ArrayList<>(files);
+            if (file != null && !file.isEmpty()) uploads.add(file);
+            if (uploads.stream().noneMatch(upload -> upload != null && !upload.isEmpty())) {
+                throw new IllegalArgumentException("Cần chọn ít nhất một tệp để tải lên.");
+            }
+            attachmentUseCase.uploadAll(id, toAttachmentFiles(uploads));
             redirectAttributes.addFlashAttribute("successMessage", "Đã đính kèm tệp.");
         } catch (DomainException | IllegalArgumentException | java.io.IOException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
@@ -283,6 +330,18 @@ public class MaintenanceUiController {
                 : ex.getMessage());
         }
         return "redirect:/maintenance/" + id;
+    }
+
+    private static List<MaintenanceAttachmentUseCase.AttachmentFile> toAttachmentFiles(List<MultipartFile> files)
+        throws java.io.IOException {
+        List<MaintenanceAttachmentUseCase.AttachmentFile> result = new ArrayList<>();
+        if (files == null) return result;
+        for (MultipartFile file : files) {
+            if (file != null && !file.isEmpty()) {
+                result.add(new MaintenanceAttachmentUseCase.AttachmentFile(file.getContentType(), file.getBytes()));
+            }
+        }
+        return result;
     }
 
     @GetMapping("/{id}/attachments/{attachmentId}")
@@ -309,10 +368,11 @@ public class MaintenanceUiController {
     public String assignTechnician(
         @PathVariable UUID id,
         @RequestParam UUID technicianId,
+        @RequestParam(required = false) String reason,
         RedirectAttributes redirectAttributes
     ) {
         try {
-            maintenanceUseCase.assignTechnician(id, technicianId);
+            maintenanceUseCase.assignTechnician(id, technicianId, reason);
             redirectAttributes.addFlashAttribute("successMessage", "Đã giao yêu cầu cho kỹ thuật viên.");
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
@@ -320,6 +380,25 @@ public class MaintenanceUiController {
                 : ex.getMessage());
         }
         return "redirect:/maintenance/" + id;
+    }
+
+    private static String formatInstant(Instant value) {
+        return value == null ? null : DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+            .withZone(ZoneId.of("Asia/Ho_Chi_Minh")).format(value);
+    }
+
+    private static String formatDuration(Duration value) {
+        long totalMinutes = Math.max(0, value.toMinutes());
+        long days = totalMinutes / (24 * 60);
+        long hours = totalMinutes / 60 % 24;
+        long minutes = totalMinutes % 60;
+        if (days > 0) {
+            return hours == 0 ? days + " ngày" : days + " ngày " + hours + " giờ";
+        }
+        if (hours > 0) {
+            return minutes == 0 ? hours + " giờ" : hours + " giờ " + minutes + " phút";
+        }
+        return Math.max(1, minutes) + " phút";
     }
 
     @PostMapping("/{id}/reject")
@@ -383,6 +462,81 @@ public class MaintenanceUiController {
     ) {
         return act(id, redirectAttributes, () -> maintenanceUseCase.quoteTicket(id, amount, note),
             "Đã lưu báo giá sửa chữa.");
+    }
+
+    /** Staff hoặc chủ trọ chốt/đổi nhánh: OWNER = hao mòn tự nhiên, TENANT = lỗi do người thuê (#202, #203). */
+    @PostMapping("/{id}/branch")
+    public String confirmBranch(
+        @PathVariable UUID id,
+        @RequestParam LiableParty branch,
+        @RequestParam(required = false) String reason,
+        RedirectAttributes redirectAttributes
+    ) {
+        return act(id, redirectAttributes, () -> maintenanceUseCase.confirmBranch(id, branch, reason),
+            branch == LiableParty.OWNER
+                ? "Đã chốt nhánh hao mòn tự nhiên. Phiếu chờ chủ trọ duyệt."
+                : "Đã chốt nhánh lỗi do người thuê. Hãy lập báo giá để người thuê phê duyệt.");
+    }
+
+    @PostMapping("/{id}/owner-approve")
+    public String ownerApprove(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        return act(id, redirectAttributes, () -> maintenanceUseCase.ownerApprove(id),
+            "Đã duyệt xử lý. Phiếu sẵn sàng giao kỹ thuật viên; chi phí do chủ trọ chịu.");
+    }
+
+    @PostMapping("/{id}/owner-reject")
+    public String ownerReject(
+        @PathVariable UUID id,
+        @RequestParam String reason,
+        RedirectAttributes redirectAttributes
+    ) {
+        return act(id, redirectAttributes, () -> maintenanceUseCase.ownerReject(id, reason),
+            "Đã từ chối phiếu và thông báo cho người thuê.");
+    }
+
+    /** Báo giá chi tiết: các cột itemNames/itemQuantities/itemPrices song song theo thứ tự dòng. */
+    @PostMapping("/{id}/quote-detail")
+    public String submitQuote(
+        @PathVariable UUID id,
+        @RequestParam(name = "itemNames", required = false) List<String> itemNames,
+        @RequestParam(name = "itemQuantities", required = false) List<String> itemQuantities,
+        @RequestParam(name = "itemPrices", required = false) List<String> itemPrices,
+        @RequestParam(name = "laborAmount", required = false) BigDecimal laborAmount,
+        @RequestParam(name = "note", required = false) String note,
+        RedirectAttributes redirectAttributes
+    ) {
+        return act(id, redirectAttributes, () -> {
+            List<MaintenanceQuoteVersion.Line> lines = new ArrayList<>();
+            int rows = itemNames == null ? 0 : itemNames.size();
+            for (int index = 0; index < rows; index++) {
+                String name = itemNames.get(index);
+                String quantity = index < itemQuantities.size() ? itemQuantities.get(index) : "";
+                String price = index < itemPrices.size() ? itemPrices.get(index) : "";
+                if ((name == null || name.isBlank()) && quantity.isBlank() && price.isBlank()) {
+                    continue;
+                }
+                lines.add(new MaintenanceQuoteVersion.Line(name,
+                    quantity.isBlank() ? 1 : Integer.parseInt(quantity.trim()),
+                    price.isBlank() ? BigDecimal.ZERO : new BigDecimal(price.trim())));
+            }
+            maintenanceUseCase.submitQuote(new MaintenanceUseCase.SubmitQuoteCommand(id, lines, laborAmount, note));
+        }, "Đã gửi báo giá cho người thuê phê duyệt.");
+    }
+
+    @PostMapping("/{id}/quote/approve")
+    public String approveQuote(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        return act(id, redirectAttributes, () -> maintenanceUseCase.approveQuote(id),
+            "Đã phê duyệt báo giá. Kỹ thuật viên có thể bắt đầu sửa.");
+    }
+
+    @PostMapping("/{id}/quote/negotiate")
+    public String negotiateQuote(
+        @PathVariable UUID id,
+        @RequestParam String note,
+        RedirectAttributes redirectAttributes
+    ) {
+        return act(id, redirectAttributes, () -> maintenanceUseCase.negotiateQuote(id, note),
+            "Đã gửi đề nghị điều chỉnh báo giá.");
     }
 
     @PostMapping("/{id}/verify")

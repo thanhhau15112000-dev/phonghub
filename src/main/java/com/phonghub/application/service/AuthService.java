@@ -6,17 +6,21 @@ import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
+import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.domain.exception.AccountDisabledException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateEmailException;
+import com.phonghub.domain.exception.DuplicateIdentityCardException;
 import com.phonghub.domain.exception.DuplicateUsernameException;
 import com.phonghub.domain.exception.InvalidCredentialsException;
 import com.phonghub.domain.exception.UserNotFoundException;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
+import com.phonghub.domain.model.Tenant;
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -37,6 +41,7 @@ public class AuthService implements AuthUseCase {
     private final CurrentUserPort currentUserPort;
     private final AuthorizationService authorizationService;
     private final AuditPort auditPort;
+    private final TenantRepositoryPort tenantRepository;
 
     public AuthService(
         UserRepositoryPort userRepository,
@@ -45,11 +50,23 @@ public class AuthService implements AuthUseCase {
         AuthorizationService authorizationService,
         AuditPort auditPort
     ) {
+        this(userRepository, identityProviderPort, currentUserPort, authorizationService, auditPort, null);
+    }
+
+    public AuthService(
+        UserRepositoryPort userRepository,
+        IdentityProviderPort identityProviderPort,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        TenantRepositoryPort tenantRepository
+    ) {
         this.userRepository = userRepository;
         this.identityProviderPort = identityProviderPort;
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
         this.auditPort = auditPort != null ? auditPort : event -> {};
+        this.tenantRepository = tenantRepository;
     }
 
     public AuthService(
@@ -263,6 +280,8 @@ public class AuthService implements AuthUseCase {
         String normalizedUsername = command.username().trim().toLowerCase();
         String normalizedEmail = command.email().trim().toLowerCase();
 
+        String identityCardNumber = null;
+        Tenant existingTenant = null;
         if (!normalizedUsername.matches("^[a-z0-9._-]{3,50}$")) {
             throw new IllegalArgumentException(
                 "Tên đăng nhập không hợp lệ: phải từ 3 đến 50 ký tự và chỉ chứa chữ thường, chữ số, '.', '_' hoặc '-'");
@@ -292,6 +311,24 @@ public class AuthService implements AuthUseCase {
             }
         }
 
+        if (command.role() == UserRole.TENANT) {
+            if (command.identityCardNumber() == null
+                || !command.identityCardNumber().trim().matches("^(\\d{9}|\\d{12})$")) {
+                throw new IllegalArgumentException("Tài khoản người thuê bắt buộc có CCCD gồm 9 hoặc 12 chữ số.");
+            }
+            if (cleanPhone == null) {
+                throw new IllegalArgumentException("Tài khoản người thuê bắt buộc có số điện thoại hợp lệ.");
+            }
+            if (tenantRepository == null) {
+                throw new DomainException("Không thể tạo hồ sơ người thuê do cấu hình kho dữ liệu chưa sẵn sàng.");
+            }
+            identityCardNumber = command.identityCardNumber().trim();
+            existingTenant = tenantRepository.findByIdentityCardNumber(identityCardNumber).orElse(null);
+            if (existingTenant != null && existingTenant.userId() != null) {
+                throw new DuplicateIdentityCardException("CCCD này đã được liên kết với một tài khoản người thuê.");
+            }
+        }
+
         String temporaryPassword = generateSecureTemporaryPassword(16);
         UUID authUserId = identityProviderPort.adminCreateUser(normalizedEmail, temporaryPassword);
 
@@ -310,8 +347,26 @@ public class AuthService implements AuthUseCase {
         User savedUser;
         try {
             savedUser = userRepository.save(newUser);
+            if (command.role() == UserRole.TENANT) {
+                Tenant tenant = existingTenant == null
+                    ? Tenant.create(authUserId, command.fullName().trim(), identityCardNumber, cleanPhone,
+                        normalizedEmail, null)
+                    : new Tenant(existingTenant.id(), authUserId, command.fullName().trim(), identityCardNumber,
+                        cleanPhone, normalizedEmail, existingTenant.permanentAddress(), existingTenant.createdAt());
+                tenantRepository.save(tenant);
+            }
+            auditPort.recordEvent(AuditPort.AuditEvent.of(
+                "ADMIN_CREATE_USER",
+                caller.id(),
+                "USER",
+                authUserId.toString(),
+                Map.of("userId", savedUser.id().toString(), "role", savedUser.role().name())
+            ));
         } catch (Exception ex) {
-            // Compensation: Delete newly provisioned Supabase Auth identity if PostgreSQL write fails
+            // Compensation: database writes roll back in the transaction wrapper; remove the external identity too.
+            try {
+                userRepository.deleteById(authUserId);
+            } catch (Exception ignored) {}
             try {
                 identityProviderPort.adminDeleteUser(authUserId);
             } catch (Exception ignored) {}
@@ -320,14 +375,6 @@ public class AuthService implements AuthUseCase {
             }
             throw new DomainException("Không thể lưu tài khoản vào cơ sở dữ liệu: " + (ex.getMessage() != null ? ex.getMessage() : "Lỗi dữ liệu"), ex);
         }
-
-        auditPort.recordEvent(AuditPort.AuditEvent.of(
-            "ADMIN_CREATE_USER",
-            caller.id(),
-            "USER",
-            authUserId.toString(),
-            Map.of("userId", savedUser.id().toString(), "role", savedUser.role().name())
-        ));
 
         return new AdminCreateUserResult(
             savedUser.id(),
@@ -342,6 +389,72 @@ public class AuthService implements AuthUseCase {
             savedUser.createdAt()
         );
     }
+
+    @Override
+    public List<User> listTenantAccountsMissingProfiles() {
+        CurrentUser caller = currentUserPort.getCurrentUser();
+        authorizationService.assertAdmin(caller);
+        if (tenantRepository == null) {
+            throw new DomainException("Không thể kiểm tra hồ sơ người thuê do cấu hình kho dữ liệu chưa sẵn sàng.");
+        }
+        return userRepository.findByRole(UserRole.TENANT).stream()
+            .filter(user -> tenantRepository.findByUserId(user.id()).isEmpty())
+            .sorted(java.util.Comparator.comparing(User::username,
+                java.util.Comparator.nullsFirst(String.CASE_INSENSITIVE_ORDER)))
+            .toList();
+    }
+
+    @Override
+    public void adminAttachTenantProfile(UUID targetUserId, String identityCardNumber, String phone) {
+        CurrentUser caller = currentUserPort.getCurrentUser();
+        authorizationService.assertAdmin(caller);
+        if (targetUserId == null) {
+            throw new IllegalArgumentException("Target user ID cannot be null");
+        }
+        if (tenantRepository == null) {
+            throw new DomainException("Không thể tạo hồ sơ người thuê do cấu hình kho dữ liệu chưa sẵn sàng.");
+        }
+        String cleanIdCard = identityCardNumber == null ? "" : identityCardNumber.trim();
+        if (!cleanIdCard.matches("^(\\d{9}|\\d{12})$")) {
+            throw new IllegalArgumentException("CCCD phải gồm 9 hoặc 12 chữ số.");
+        }
+        String cleanPhone = phone == null ? "" : phone.trim();
+        if (!cleanPhone.matches("^0\\d{9}$")) {
+            throw new IllegalArgumentException("Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0.");
+        }
+
+        User user = userRepository.findById(targetUserId)
+            .orElseThrow(() -> new UserNotFoundException("Target user not found: " + targetUserId));
+        if (user.role() != UserRole.TENANT) {
+            throw new IllegalArgumentException("Chỉ có thể bổ sung hồ sơ cho tài khoản người thuê.");
+        }
+        if (tenantRepository.findByUserId(targetUserId).isPresent()) {
+            throw new com.phonghub.domain.exception.ConflictException("Tài khoản này đã có hồ sơ người thuê.");
+        }
+        if (userRepository.findAll().stream().anyMatch(other -> !other.id().equals(targetUserId)
+            && cleanPhone.equals(other.phone()))) {
+            throw new DomainException("Số điện thoại đã được sử dụng bởi một tài khoản khác.");
+        }
+
+        Tenant existing = tenantRepository.findByIdentityCardNumber(cleanIdCard).orElse(null);
+        if (existing != null && existing.userId() != null) {
+            throw new DuplicateIdentityCardException("CCCD này đã được liên kết với một tài khoản người thuê.");
+        }
+        User updatedUser = new User(user.id(), user.username(), user.email(), user.fullName(), cleanPhone,
+            user.role(), user.status(), user.mustChangePassword(), user.createdAt());
+        if (!cleanPhone.equals(user.phone())) {
+            userRepository.save(updatedUser);
+        }
+        Tenant linked = existing == null
+            ? Tenant.create(targetUserId, user.fullName(), cleanIdCard, cleanPhone, user.email(), null)
+            : new Tenant(existing.id(), targetUserId, existing.fullName(), cleanIdCard, cleanPhone,
+                user.email(), existing.permanentAddress(), existing.createdAt());
+        Tenant saved = tenantRepository.save(linked);
+        auditPort.recordEvent(AuditPort.AuditEvent.of("ADMIN_TENANT_PROFILE_LINKED", caller.id(), "USER",
+            targetUserId.toString(), Map.of("tenantId", saved.id().toString(),
+                "identityCardNumber", saved.maskedIdentityCardNumber())));
+    }
+
 
     @Override
     public void adminDeleteUser(UUID targetUserId) {

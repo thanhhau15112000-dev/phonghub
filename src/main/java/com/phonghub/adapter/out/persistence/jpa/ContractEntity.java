@@ -64,6 +64,16 @@ class ContractEntity {
     @Column(nullable = false, length = 30)
     private ContractStatus status;
 
+    /** Thời điểm kích hoạt: chu kỳ thu tiền tính từ đây. */
+    @Column(name = "activated_at")
+    private Instant activatedAt;
+
+    @Column(name = "deposit_applied_amount", nullable = false, precision = 12, scale = 2)
+    private BigDecimal depositAppliedAmount;
+
+    @Column(name = "settlement_credit_amount", nullable = false, precision = 12, scale = 2)
+    private BigDecimal settlementCreditAmount;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -103,6 +113,9 @@ class ContractEntity {
         this.endDate = contract.getEndDate();
         this.paymentDay = contract.getPaymentDay();
         this.status = contract.getStatus();
+        this.activatedAt = contract.getActivatedAt();
+        this.depositAppliedAmount = contract.getDepositAppliedAmount();
+        this.settlementCreditAmount = contract.getSettlementCreditAmount();
         if (this.createdAt == null) {
             this.createdAt = contract.getCreatedAt();
         }
@@ -131,7 +144,8 @@ class ContractEntity {
     Contract toDomain() {
         Contract contract = new Contract(id, property.getId(), room.getId(), primaryTenantId, depositAmount,
             rentAmount, startDate, endDate, paymentDay, status,
-            occupants.stream().map(ContractOccupantEntity::toDomain).toList(), createdAt, updatedAt);
+            occupants.stream().map(ContractOccupantEntity::toDomain).toList(), activatedAt, depositAppliedAmount,
+            settlementCreditAmount, createdAt, updatedAt);
         contract.restoreVersion(version);
         return contract;
     }

@@ -5,6 +5,7 @@ import com.phonghub.domain.exception.OptimisticLockConflictException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -55,6 +56,17 @@ public class JpaContractRepository implements ContractRepositoryPort {
     @Override
     public Optional<Contract> findById(UUID id) {
         return contracts.findById(id).map(ContractEntity::toDomain);
+    }
+
+    /** Đọc lại bản mới nhất và khóa dòng (SELECT ... FOR UPDATE) tới hết transaction hiện tại. */
+    @Override
+    public Optional<Contract> findByIdForUpdate(UUID id) {
+        ContractEntity cached = entityManager.find(ContractEntity.class, id);
+        if (cached == null) {
+            return Optional.empty();
+        }
+        entityManager.refresh(cached, LockModeType.PESSIMISTIC_WRITE);
+        return Optional.of(cached.toDomain());
     }
 
     @Override

@@ -480,28 +480,7 @@ public class SepayPaymentService implements SepayWebhookUseCase {
 
     /** Hóa đơn phí sửa chữa đã trả đủ: phiếu bảo trì đang chờ thanh toán chuyển sang hoàn tất. */
     private void completeMaintenanceTicketIfPaid(Invoice invoice) {
-        if (invoice.getStatus() != InvoiceStatus.PAID) {
-            return;
-        }
-        // Hóa đơn phí riêng: phiếu của nó. Hóa đơn tháng: phiếu của các khoản phí đã gộp (dòng chi tiết).
-        List<UUID> ticketIds = new java.util.ArrayList<>();
-        if (invoice.getType() == InvoiceType.MAINTENANCE && invoice.getTicketId() != null) {
-            ticketIds.add(invoice.getTicketId());
-        }
-        invoice.getItems().stream()
-            .filter(item -> item.sourceInvoiceId() != null)
-            .forEach(item -> invoiceRepository.findById(item.sourceInvoiceId())
-                .map(Invoice::getTicketId)
-                .ifPresent(ticketIds::add));
-
-        for (UUID ticketId : ticketIds) {
-            ticketRepository.findById(ticketId)
-                .filter(ticket -> ticket.getStatus() == MaintenanceStatus.AWAITING_PAYMENT)
-                .ifPresent(ticket -> {
-                    ticket.markFeePaid();
-                    ticketRepository.save(ticket);
-                });
-        }
+        new MaintenanceFeeSettlement(invoiceRepository, ticketRepository).completeIfPaid(invoice);
     }
 
     private Invoice matchInvoice(String code, String content) {
@@ -577,9 +556,12 @@ public class SepayPaymentService implements SepayWebhookUseCase {
             amount, gateway, acc, content
         );
         if (invoice != null) {
-            String label = invoice.getType() == InvoiceType.MAINTENANCE
-                ? "Phí sửa chữa"
-                : String.format("Kỳ %02d/%d", invoice.getMonth(), invoice.getYear());
+            String label = switch (invoice.getType()) {
+                case MAINTENANCE -> "Phí sửa chữa";
+                case CHECK_OUT -> "Hóa đơn chốt điện/nước";
+                case CANCELLATION -> "Phí hủy hợp đồng";
+                case RENT -> String.format("Kỳ %02d/%d", invoice.getMonth(), invoice.getYear());
+            };
             message += String.format(
                 ". %s (mã %s): đã thu %,.0f / %,.0f đ.",
                 label, invoice.getPaymentCode(), invoice.getPaidAmount(), invoice.getTotalAmount()

@@ -68,6 +68,7 @@
                class="data-table" id="transactionTable">
             <thead>
                 <tr>
+                    <th>Loại giao dịch</th>
                     <th>Thời gian</th>
                     <th>Mã tham chiếu</th>
                     <th>Nhà trọ / phòng</th>
@@ -80,6 +81,7 @@
             </thead>
             <tbody>
                 <tr th:each="r : ${report.rows()}">
+                    <td th:text="${r.transactionType() == 'DEPOSIT_OFFSET' ? 'Cấn trừ tiền cọc' : 'Chuyển khoản SePay'}">Chuyển khoản SePay</td>
                     <td th:text="${#temporals.format(r.receivedAt(), 'dd/MM/yyyy HH:mm')}">01/10/2026 08:00</td>
                     <td style="font-family: monospace;" th:text="${r.referenceCode() != null ? r.referenceCode() : r.sepayId()}">REF</td>
                     <td>

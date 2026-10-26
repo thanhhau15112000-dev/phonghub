@@ -2,6 +2,8 @@ package com.phonghub.adapter.out.persistence.jpa;
 
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.domain.model.Property;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -17,9 +19,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class JpaPropertyRepository implements PropertyRepositoryPort {
 
     private final PropertyJpaRepository properties;
+    private final EntityManager entityManager;
 
-    JpaPropertyRepository(PropertyJpaRepository properties) {
+    JpaPropertyRepository(PropertyJpaRepository properties, EntityManager entityManager) {
         this.properties = properties;
+        this.entityManager = entityManager;
     }
 
     @Override
@@ -34,6 +38,12 @@ public class JpaPropertyRepository implements PropertyRepositoryPort {
     @Override
     public Optional<Property> findById(UUID id) {
         return properties.findById(id).map(PropertyEntity::toDomain);
+    }
+
+    /** Khóa dòng nhà trọ (SELECT ... FOR UPDATE) tới hết transaction hiện tại. */
+    @Override
+    public void lockById(UUID id) {
+        entityManager.find(PropertyEntity.class, id, LockModeType.PESSIMISTIC_WRITE);
     }
 
     @Override

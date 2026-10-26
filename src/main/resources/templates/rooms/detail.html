@@ -24,7 +24,7 @@
         <div class="flex-between" style="margin-bottom: 16px;">
             <div style="display: flex; align-items: center; gap: 12px;">
                 <h2 style="margin: 0;">Thông tin phòng</h2>
-                <button th:if="${currentUser != null and !room.isArchived() and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                <button th:if="${currentUser != null and !room.isArchived() and canManageRoomsAndAssets}"
                         type="button"
                         id="editRoomBtn"
                         class="btn btn-sm btn-secondary"
@@ -64,7 +64,7 @@
         </div>
 
         <!-- Biểu mẫu đổi trạng thái (quản trị viên, nhân viên hoặc chủ trọ) -->
-        <div th:if="${currentUser != null and !room.isArchived() and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+        <div th:if="${currentUser != null and !room.isArchived() and canManageRoomsAndAssets}" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
             <h3 style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Thay đổi trạng thái phòng</h3>
             <p th:if="${activeContract != null}" style="color: var(--text-secondary); font-size: 12px; margin: 0;">
                 Phòng đang có người ở theo hợp đồng nên trạng thái chỉ thay đổi khi kết thúc hợp đồng (trả phòng).
@@ -140,6 +140,34 @@
                         </td>
                     </tr>
                 </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card" id="initial-condition">
+        <h2>Biên bản hiện trạng</h2>
+        <div th:if="${initialCondition.snapshot() == null}" class="empty-state">
+            <p>Phòng được tạo trước khi lưu biên bản hiện trạng. Bổ sung hiện trạng để lưu mốc điện, nước và tài sản.</p>
+        </div>
+        <div th:if="${initialCondition.snapshot() != null}">
+            <div class="form-row">
+                <div><strong>Điện:</strong> <span th:text="${initialCondition.snapshot().electricMeter()}">0</span></div>
+                <div><strong>Nước:</strong> <span th:text="${initialCondition.snapshot().waterMeter()}">0</span></div>
+                <div><strong>Ghi lúc:</strong> <span th:text="${#temporals.format(initialCondition.snapshot().createdAt(), 'dd/MM/yyyy HH:mm')}"></span></div>
+            </div>
+            <p th:text="${initialCondition.snapshot().conditionNote()}"></p>
+            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                <a th:if="${conditionElectricPhoto != null}" th:href="${conditionElectricPhoto}" target="_blank" rel="noopener noreferrer">Ảnh đồng hồ điện</a>
+                <a th:if="${conditionWaterPhoto != null}" th:href="${conditionWaterPhoto}" target="_blank" rel="noopener noreferrer">Ảnh đồng hồ nước</a>
+            </div>
+            <p th:if="${#lists.isEmpty(initialCondition.items())}" style="color: var(--text-secondary);">Đã xác nhận phòng không có tài sản.</p>
+            <table th:if="${!#lists.isEmpty(initialCondition.items())}" class="data-table">
+                <thead><tr><th>Tài sản</th><th>Số lượng</th><th>Tình trạng</th><th>Ghi chú</th><th>Giá trị ước tính</th></tr></thead>
+                <tbody><tr th:each="item : ${initialCondition.items()}">
+                    <td th:text="${item.name()}"></td><td th:text="${item.quantity()}"></td>
+                    <td th:text="${uiText.assetStatus(item.status())}"></td><td th:text="${item.note()}"></td>
+                    <td th:text="${#numbers.formatDecimal(item.estimatedValue(), 0, 'POINT', 0, 'COMMA') + ' đ'}"></td>
+                </tr></tbody>
             </table>
         </div>
     </div>
@@ -259,9 +287,17 @@
             <button type="button" class="btn btn-sm btn-secondary" style="margin-bottom: 12px;" onclick="addBatchAssetRow()">+ Thêm dòng</button>
             <div th:if="${!#lists.isEmpty(batchOtherRooms)}" class="form-group">
                 <label class="form-label">Áp dụng thêm cho các phòng (cùng nhà trọ)</label>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
+                    <select id="batchFloorSelector" class="form-control" style="width: auto;">
+                        <option value="">Chọn phòng theo tầng...</option>
+                        <option th:each="floor : ${batchRoomFloors}" th:value="${floor}" th:text="'Tầng ' + ${floor}"></option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="selectBatchRooms(true)">Chọn tất cả</button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="selectBatchRooms(false)">Bỏ chọn</button>
+                </div>
                 <div style="display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px;">
                     <label th:each="r : ${batchOtherRooms}" style="display: inline-flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" name="alsoRoomIds" th:value="${r.getId()}">
+                        <input type="checkbox" name="alsoRoomIds" th:value="${r.getId()}" th:attr="data-room-floor=${r.getFloor()}">
                         <span th:text="${r.getRoomNumber()}">P102</span>
                     </label>
                 </div>
@@ -273,6 +309,17 @@
         </form>
     </dialog>
     <script th:if="${canManageAssets}">
+        function selectBatchRooms(checked) {
+            const selectedFloor = document.getElementById('batchFloorSelector').value;
+            document.querySelectorAll('input[name="alsoRoomIds"]').forEach(input => {
+                if (!selectedFloor) {
+                    input.checked = checked;
+                } else if (input.dataset.roomFloor === selectedFloor) {
+                    input.checked = checked;
+                }
+            });
+            document.getElementById('batchFloorSelector').value = '';
+        }
         function addBatchAssetRow() {
             const body = document.querySelector('#batchAssetRows tbody');
             if (body.rows.length >= 30) {
@@ -446,7 +493,7 @@
     </div>
 
     <!-- Dialog chỉnh sửa thông tin phòng (Chủ nhà hoặc Quản trị viên) -->
-    <dialog th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+    <dialog th:if="${currentUser != null and canManageRoomsAndAssets}"
             id="editRoomModal"
             class="modal-dialog"
             style="max-width: 500px;">

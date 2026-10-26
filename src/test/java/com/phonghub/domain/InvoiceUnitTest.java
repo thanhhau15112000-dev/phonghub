@@ -36,48 +36,53 @@ class InvoiceUnitTest {
     }
 
     @Test
-    @DisplayName("Due date clamps payment day 31 to the last day of a short month")
-    void dueDateClampsToMonthLength() {
-        Invoice feb = Invoice.issueMonthlyRent(contract(ContractStatus.ACTIVE, 31), YearMonth.of(2026, 2), "PHAAAA2222");
-        assertEquals(LocalDate.of(2026, 2, 28), feb.getDueDate());
+    @DisplayName("A January 31 anchor clamps the February cycle and resumes on March 31")
+    void januaryThirtyFirstAnchorClampsFebruaryCycle() {
+        Contract anchored = contract(ContractStatus.ACTIVE, 31, LocalDate.of(2026, 1, 31), LocalDate.of(2027, 1, 30));
+        Invoice feb = Invoice.issueMonthlyRent(anchored, YearMonth.of(2026, 2), "PHAAAA2222");
+        assertEquals(LocalDate.of(2026, 2, 28), feb.getCycleStartDate());
+        assertEquals(LocalDate.of(2026, 3, 7), feb.getDueDate());
+        Invoice march = Invoice.issueMonthlyRent(anchored, YearMonth.of(2026, 3), "PHBBBB3333");
+        assertEquals(LocalDate.of(2026, 3, 31), march.getCycleStartDate());
         assertEquals(InvoiceStatus.ISSUED, feb.getStatus());
         assertEquals(0, new BigDecimal("3500000").compareTo(feb.getTotalAmount()));
     }
 
     @Test
-    @DisplayName("First month's due date is not before the contract start date when payment day has passed")
-    void firstMonthDueDateCannotPrecedeContractStart() {
+    @DisplayName("The first cycle is billed from its anchor date for seven days")
+    void firstCycleDueDateFollowsCycleStart() {
         LocalDate startDate = LocalDate.of(2026, 10, 25);
         Contract contract = contract(ContractStatus.ACTIVE, 5, startDate, LocalDate.of(2027, 10, 24));
 
         Invoice invoice = Invoice.issueMonthlyRent(contract, YearMonth.of(2026, 10), "PHAAAA2222");
 
-        assertEquals(startDate, invoice.getDueDate());
+        assertEquals(LocalDate.of(2026, 11, 1), invoice.getDueDate());
         assertFalse(invoice.isOverdue(startDate));
-        assertTrue(invoice.isOverdue(startDate.plusDays(1)));
+        assertFalse(invoice.isOverdue(invoice.getDueDate()));
+        assertTrue(invoice.isOverdue(invoice.getDueDate().plusDays(1)));
         assertEquals(0, new BigDecimal("3500000").compareTo(invoice.getTotalAmount()), "first-month rent is not prorated");
     }
 
     @Test
-    @DisplayName("First month's configured payment day remains when it is on or after the contract start")
-    void firstMonthKeepsPaymentDayWhenItHasNotPassed() {
+    @DisplayName("First cycle due date ignores the legacy configured payment day")
+    void firstCycleUsesSevenDayRule() {
         Contract contract = contract(
             ContractStatus.ACTIVE, 5, LocalDate.of(2026, 10, 2), LocalDate.of(2027, 10, 1));
 
         Invoice invoice = Invoice.issueMonthlyRent(contract, YearMonth.of(2026, 10), "PHAAAA2222");
 
-        assertEquals(LocalDate.of(2026, 10, 5), invoice.getDueDate());
+        assertEquals(LocalDate.of(2026, 10, 9), invoice.getDueDate());
     }
 
     @Test
-    @DisplayName("First month's due date is clamped to the contract start when a short-month payment day has passed")
-    void shortMonthFirstDueDateCannotPrecedeContractStart() {
+    @DisplayName("A February cycle uses its start date rather than the configured payment day")
+    void februaryCycleUsesSevenDayRule() {
         LocalDate startDate = LocalDate.of(2026, 2, 20);
         Contract contract = contract(ContractStatus.ACTIVE, 31, startDate, LocalDate.of(2027, 2, 19));
 
         Invoice invoice = Invoice.issueMonthlyRent(contract, YearMonth.of(2026, 2), "PHAAAA2222");
 
-        assertEquals(LocalDate.of(2026, 2, 28), invoice.getDueDate());
+        assertEquals(LocalDate.of(2026, 2, 27), invoice.getDueDate());
         assertFalse(invoice.isOverdue(startDate));
     }
 
@@ -101,36 +106,36 @@ class InvoiceUnitTest {
     }
 
     @Test
-    @DisplayName("#208: a first period issued a few days after the start date is not overdue on issue")
+    @DisplayName("A first cycle keeps its start-plus-seven due date when issued within seven days")
     void firstPeriodIssuedAfterStartDate() {
         Contract contract = contract(ContractStatus.ACTIVE, 5, LocalDate.of(2026, 10, 25), LocalDate.of(2027, 10, 24));
 
         Invoice invoice = issueOn(contract, YearMonth.of(2026, 10), LocalDate.of(2026, 10, 28));
 
-        assertEquals(LocalDate.of(2026, 10, 31), invoice.getDueDate());
+        assertEquals(LocalDate.of(2026, 11, 1), invoice.getDueDate());
         assertFalse(invoice.isOverdue(LocalDate.of(2026, 10, 28)));
     }
 
     @Test
-    @DisplayName("#208: issuing on the start date leaves three days to pay instead of zero")
+    @DisplayName("Issuing on the cycle start uses the seven-day cycle due date")
     void issuedOnStartDateLeavesThreeDays() {
         LocalDate startDate = LocalDate.of(2026, 10, 25);
         Contract contract = contract(ContractStatus.ACTIVE, 5, startDate, LocalDate.of(2027, 10, 24));
 
         Invoice invoice = issueOn(contract, YearMonth.of(2026, 10), startDate);
 
-        assertEquals(LocalDate.of(2026, 10, 28), invoice.getDueDate());
+        assertEquals(LocalDate.of(2026, 11, 1), invoice.getDueDate());
     }
 
     @Test
-    @DisplayName("#208: a payment day more than three days after issue is kept as the due date")
+    @DisplayName("Cycle due date is used when later than the three-day issue floor")
     void laterPaymentDayIsKept() {
         Contract contract = contract(ContractStatus.ACTIVE, 5, LocalDate.of(2026, 8, 1), LocalDate.of(2027, 7, 31));
 
-        // Job tạo kỳ 11/2026 vào ngày cuối tháng 10: hạn vẫn là ngày thanh toán 05/11.
+        // Chu kỳ tháng 11 bắt đầu 01/11, nên hạn là ngày 08/11.
         Invoice invoice = issueOn(contract, YearMonth.of(2026, 11), LocalDate.of(2026, 10, 31));
 
-        assertEquals(LocalDate.of(2026, 11, 5), invoice.getDueDate());
+        assertEquals(LocalDate.of(2026, 11, 8), invoice.getDueDate());
     }
 
     @Test
@@ -177,13 +182,13 @@ class InvoiceUnitTest {
     @DisplayName("Due / overdue are derived from the due date only while unpaid")
     void dueAndOverdue() {
         Invoice invoice = Invoice.issueMonthlyRent(contract(ContractStatus.ACTIVE, 5), YearMonth.of(2026, 3), "PHAAAA2222");
-        assertFalse(invoice.isDue(LocalDate.of(2026, 3, 4)));
-        assertTrue(invoice.isDue(LocalDate.of(2026, 3, 5)));
-        assertFalse(invoice.isOverdue(LocalDate.of(2026, 3, 5)));
-        assertTrue(invoice.isOverdue(LocalDate.of(2026, 3, 6)));
+        assertFalse(invoice.isDue(invoice.getDueDate().minusDays(1)));
+        assertTrue(invoice.isDue(invoice.getDueDate()));
+        assertFalse(invoice.isOverdue(invoice.getDueDate()));
+        assertTrue(invoice.isOverdue(invoice.getDueDate().plusDays(1)));
 
         invoice.applyPayment(new BigDecimal("3500000"), Instant.now());
-        assertFalse(invoice.isOverdue(LocalDate.of(2026, 3, 6)));
+        assertFalse(invoice.isOverdue(invoice.getDueDate().plusDays(1)));
     }
 
     @Test
@@ -235,7 +240,7 @@ class InvoiceUnitTest {
         assertEquals(0, new BigDecimal("3700000").compareTo(monthly.getTotalAmount()));
         assertEquals(0, new BigDecimal("3500000").compareTo(monthly.getRentAmount()));
         assertEquals(2, monthly.getItems().size());
-        assertEquals("Tiền thuê phòng tháng 03/2026", monthly.getItems().get(0).name());
+        assertEquals("Tiền thuê kỳ 3 (15/03/2026 – 14/04/2026)", monthly.getItems().get(0).name());
         assertEquals("Phí sửa chữa: Vỡ kính", monthly.getItems().get(1).name());
         assertEquals(unpaid.getId(), monthly.getItems().get(1).sourceInvoiceId());
         assertEquals(0, new BigDecimal("200000").compareTo(monthly.getItems().get(1).totalAmount()));

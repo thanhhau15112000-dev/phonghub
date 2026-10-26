@@ -84,6 +84,20 @@ public class NotificationDispatcher {
         return send(recipients, title, message, link);
     }
 
+    /** Người thu tiền của nhà trọ: chủ trọ và staff được phân công có quyền thu tiền (#205). */
+    public int notifyPaymentCollectors(UUID propertyId, String title, String message, String link) {
+        Map<UUID, User> recipients = new LinkedHashMap<>();
+        propertyRepository.findById(propertyId).map(Property::ownerId)
+            .flatMap(userRepository::findById)
+            .ifPresent(owner -> recipients.put(owner.id(), owner));
+        assignmentPort.findByPropertyId(propertyId).stream()
+            .filter(StaffPropertyAssignment::canCollectPayment)
+            .map(StaffPropertyAssignment::staffUserId)
+            .map(userRepository::findById).flatMap(Optional::stream)
+            .forEach(staff -> recipients.putIfAbsent(staff.id(), staff));
+        return send(recipients, title, message, link);
+    }
+
     private int send(Map<UUID, User> recipients, String title, String message, String link) {
         for (User user : recipients.values()) {
             notificationRepository.save(Notification.createForUser(title, message, user, link));

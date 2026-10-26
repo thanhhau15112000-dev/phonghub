@@ -33,10 +33,10 @@
 
             <!-- Các nút thao tác -->
             <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" class="inline-actions">
-                <!-- Nút kích hoạt khi ở trạng thái bản nháp -->
+            <!-- Bắt đầu quy trình check-in; hợp đồng chỉ có hiệu lực sau khi duyệt biên bản. -->
                 <form th:if="${contract.getStatus().name() == 'DRAFT'}" th:action="@{'/contracts/' + ${contract.getId()} + '/activate'}" method="post">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <button type="submit" class="btn btn-primary">Kích hoạt hợp đồng (chuyển phòng sang đang thuê)</button>
+                    <button type="submit" class="btn btn-primary" th:text="${checkIn == null} ? 'Lập biên bản check-in' : 'Mở biên bản check-in'">Lập biên bản check-in</button>
                 </form>
 
                 <!-- Hợp đồng nháp sửa / hủy được (#89); hủy giữ lại bản ghi với trạng thái "Đã hủy" -->
@@ -48,14 +48,36 @@
                             onclick="return confirm('Hủy hợp đồng nháp này? Hợp đồng sẽ chuyển sang trạng thái Đã hủy và không kích hoạt được nữa.');">Hủy hợp đồng nháp</button>
                 </form>
 
-                <!-- Hợp đồng còn người ở (đang hiệu lực hoặc hết hạn chưa trả phòng, #87): gia hạn hoặc chấm dứt ngay -->
+                <!-- Hợp đồng còn người ở (đang hiệu lực hoặc hết hạn chưa trả phòng, #87): gia hạn hoặc mở check-out sớm -->
                 <button th:if="${contract.isResiding()}" type="button" class="btn btn-secondary"
                         onclick="document.getElementById('renewModal').showModal()">Gia hạn hợp đồng</button>
-                <button th:if="${contract.isResiding() and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                <button th:if="${contract.isResiding() and canManageContracts}"
                         type="button" class="btn btn-danger"
-                        onclick="document.getElementById('terminateModal').showModal()">Chấm dứt ngay…</button>
+                        onclick="document.getElementById('terminateModal').showModal()">Kết thúc sớm…</button>
             </div>
         </div>
+        <section th:if="${contract.getStatus().name() == 'DRAFT'}" style="margin-top: 14px;">
+            <h2 style="font-size: 16px; margin-bottom: 8px;">Tiến độ nhận phòng</h2>
+            <p th:if="${checkIn == null}" style="margin: 0;">Chưa lập biên bản check-in.</p>
+            <p th:if="${checkIn != null and checkIn.handover().status().name() == 'DRAFT' or checkIn != null and checkIn.handover().status().name() == 'REJECTED'}" style="margin: 0;">Bước hiện tại: hoàn thiện biên bản check-in và gửi người thuê.</p>
+            <p th:if="${checkIn != null and checkIn.handover().status().name() == 'PENDING_TENANT'}" style="margin: 0;">Bước hiện tại: chờ người thuê chính xác nhận.</p>
+            <p th:if="${checkIn != null and checkIn.handover().status().name() == 'PENDING_APPROVAL'}" style="margin: 0;">Bước hiện tại: chờ người quản lý duyệt.</p>
+            <a th:if="${checkIn != null}" th:href="@{'/contracts/' + ${contract.getId()} + '/handover'}" class="btn btn-sm btn-secondary" style="margin-top: 8px;">Mở biên bản</a>
+        </section>
+        <section th:if="${contract.isResiding()}" style="margin-top: 14px;">
+            <h2 style="font-size: 16px; margin-bottom: 8px;">Tiến độ trả phòng</h2>
+            <p th:if="${checkOut == null}" style="margin: 0;">Chưa lập biên bản check-out.</p>
+            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'DRAFT'}" style="margin: 0;">Đang hoàn thiện biên bản check-out.</p>
+            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'PENDING_TENANT'}" style="margin: 0;">Chờ người thuê kiểm tra và xác nhận check-out.</p>
+            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'PENDING_APPROVAL'}" style="margin: 0;">
+                Người thuê đã xác nhận; chờ quản lý duyệt và chốt tiền cọc.
+                <span th:if="${openInvoiceCount != null and openInvoiceCount > 0}"
+                      th:text="${' Còn ' + openInvoiceCount + ' hóa đơn chưa thanh toán; cần thanh toán hoặc cấn trừ từ tiền cọc trước khi duyệt.'}">Còn hóa đơn chưa thanh toán.</span>
+            </p>
+            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'REJECTED'}" style="margin: 0;">Biên bản check-out bị từ chối; cần mở lại và hoàn thiện.</p>
+            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'APPROVED'}" style="margin: 0;">Check-out đã được duyệt; hợp đồng đã kết thúc.</p>
+            <a th:if="${checkOut != null}" th:href="@{'/contracts/' + ${contract.getId()} + '/check-out'}" class="btn btn-sm btn-secondary" style="margin-top: 8px;">Mở biên bản check-out</a>
+        </section>
     </div>
 
     <!-- Thông tin hợp đồng -->
@@ -84,10 +106,6 @@
                     <tr>
                         <td style="color: var(--text-secondary);">Tiền đặt cọc:</td>
                         <td th:text="${#numbers.formatDecimal(contract.getDepositAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
-                    </tr>
-                    <tr>
-                        <td style="color: var(--text-secondary);">Ngày thanh toán hàng tháng:</td>
-                        <td th:text="'Ngày ' + ${contract.getPaymentDay()} + ' hằng tháng'">Ngày 5 hằng tháng</td>
                     </tr>
                 </tbody>
             </table>
@@ -146,7 +164,7 @@
 
             <div class="flex-between" style="margin-top: 20px; margin-bottom: 8px;">
                 <h3 style="font-size: 14px; font-weight: 600; margin: 0;">Người ở cùng phòng</h3>
-                <button th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                <button th:if="${canManageOccupants}"
                         type="button"
                         id="addOccupantBtn"
                         class="btn btn-sm btn-primary"
@@ -214,6 +232,26 @@
         </div>
     </div>
 
+    <div class="card" id="billing-cycles" style="margin-top: 20px;">
+        <h2 style="margin-top: 0;">Chu kỳ thanh toán</h2>
+        <p style="color: var(--text-secondary); font-size: 13px;">
+            Chu kỳ đầu bắt đầu từ ngày <strong th:text="${uiText.date(contract.billingAnchorDate())}">25/10/2026</strong>;
+            tháng ngắn dùng ngày cuối tháng.
+        </p>
+        <div th:if="${#lists.isEmpty(billingCycles)}" class="empty-state" style="padding: 12px;">
+            Chưa có chu kỳ trong thời hạn hợp đồng.
+        </div>
+        <table th:unless="${#lists.isEmpty(billingCycles)}" class="data-table" style="font-size: 13px;">
+            <thead><tr><th>Kỳ</th><th>Thời gian</th></tr></thead>
+            <tbody>
+                <tr th:each="cycle : ${billingCycles}">
+                    <td th:text="${cycle.number()}">1</td>
+                    <td th:text="${uiText.date(cycle.startDate()) + ' – ' + uiText.date(cycle.endDate())}">25/10/2026 – 24/11/2026</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
     <!-- Thanh toán tiền thuê (quản trị viên không xem số liệu tiền, #163) -->
     <div th:if="${invoices != null}" class="card" id="payments" style="margin-top: 20px;">
         <div class="flex-between" style="margin-bottom: 12px;">
@@ -224,6 +262,32 @@
                 <input type="month" id="invoicePeriod" name="period" class="form-control" th:value="${defaultInvoicePeriod}" required style="width: auto;">
                 <button type="submit" class="btn btn-sm btn-primary">Tạo kỳ thanh toán</button>
             </form>
+        </div>
+
+        <!-- Yêu cầu xác nhận thanh toán của người thuê (#205): chủ trọ và nhân viên thu tiền xác nhận hoặc từ chối -->
+        <div th:if="${canVoidInvoice and !#lists.isEmpty(paymentClaims.?[status().name() == 'PENDING'])}"
+             id="pending-claims" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; margin-bottom: 16px;">
+            <h3 style="font-size: 14px; margin: 0 0 8px;">Yêu cầu xác nhận thanh toán đang chờ</h3>
+            <div th:each="claim : ${paymentClaims.?[status().name() == 'PENDING']}"
+                 style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; padding: 8px 0; border-top: 1px solid var(--border-color); font-size: 13px;">
+                <span style="flex: 1; min-width: 220px;">
+                    <strong th:text="${#numbers.formatDecimal(claim.amount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">500,000 đ</strong>
+                    · <span th:text="${claim.method().name() == 'CASH' ? 'Tiền mặt' : 'Chuyển khoản'}">Tiền mặt</span>
+                    <span th:if="${claim.note() != null}" style="color: var(--text-secondary);" th:text="'· ' + ${claim.note()}">ghi chú</span>
+                    <a th:href="@{'/invoices/' + ${claim.invoiceId()} + '/pay'}" style="color: var(--accent);">Xem hóa đơn</a>
+                </span>
+                <form th:action="@{'/payment-claims/' + ${claim.id()} + '/confirm'}" method="post" style="margin: 0;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <input type="hidden" name="contractId" th:value="${contract.getId()}">
+                    <button type="submit" class="btn btn-sm btn-primary">Xác nhận đã nhận tiền</button>
+                </form>
+                <form th:action="@{'/payment-claims/' + ${claim.id()} + '/reject'}" method="post" style="margin: 0; display: flex; gap: 6px;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <input type="hidden" name="contractId" th:value="${contract.getId()}">
+                    <input type="text" name="reason" class="form-control" required maxlength="500" placeholder="Lý do từ chối">
+                    <button type="submit" class="btn btn-sm btn-danger">Từ chối</button>
+                </form>
+            </div>
         </div>
 
         <!-- Hướng dẫn chuyển khoản cho kỳ còn nợ cũ nhất -->
@@ -326,8 +390,8 @@
         </table>
     </div>
 
-    <!-- Dialog thêm người ở vào phòng (Chủ nhà hoặc Quản trị viên) -->
-    <dialog th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+    <!-- Dialog thêm người ở vào phòng (chủ trọ, quản trị viên hoặc nhân viên có quyền quản lý hợp đồng) -->
+    <dialog th:if="${canManageOccupants}"
             id="addOccupantModal"
             class="modal-dialog"
             style="max-width: 760px;">
@@ -343,7 +407,7 @@
                 </div>
                 <div>
                     <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Thêm người thuê vào phòng</h3>
-                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Phòng <strong th:text="${room.getRoomNumber()}">P101</strong> — Sức chứa: <strong th:text="${room.getMaxOccupants()}">2</strong> người</p>
+                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Phòng <strong th:text="${room.getRoomNumber()}">P101</strong> — Đang ở: <strong th:text="${currentOccupantCount + '/' + room.getMaxOccupants()}">1/2</strong> — Còn <strong th:text="${remainingCapacity}">1</strong> chỗ</p>
                 </div>
             </div>
             <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('addOccupantModal').close()">✕</button>
@@ -352,7 +416,7 @@
         <section style="margin-bottom: 16px;">
             <h4 style="margin: 0 0 4px; font-size: 14px;">Thêm nhanh từ hồ sơ trong nhà trọ</h4>
             <p style="margin: 0 0 10px; color: var(--text-secondary); font-size: 12px;">
-                Tìm và chọn nhiều người thuê chưa có hợp đồng cư trú, rồi xác nhận một lần.
+                Tìm và chọn nhiều người thuê đã có tài khoản, chưa có hợp đồng cư trú, rồi xác nhận một lần.
             </p>
             <div th:if="${remainingOccupantSlots <= 0}" class="empty-state" style="padding: 12px;">
                 Phòng đã đủ sức chứa. Trả phòng cho một người trước khi thêm người khác.
@@ -363,7 +427,7 @@
                   id="bulkOccupantForm">
                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                 <div class="form-group" style="margin-bottom: 10px;">
-                    <label class="form-label" for="occupantSearch">Tìm theo tên, số điện thoại hoặc email</label>
+                    <label class="form-label" for="occupantSearch">Tìm theo tên, CCCD hoặc số điện thoại</label>
                     <input type="search" id="occupantSearch" class="form-control" placeholder="Bắt đầu nhập để lọc danh sách">
                 </div>
                 <div style="display: flex; justify-content: flex-end; margin: -2px 0 8px;">
@@ -377,18 +441,21 @@
                      style="max-height: 230px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px;">
                     <label th:each="tenant : ${availableOccupants}"
                            class="bulk-occupant-option"
-                           th:attr="data-search=${tenant.fullName() + ' ' + tenant.phone() + ' ' + (tenant.email() != null ? tenant.email() : '')}"
+                           th:attr="data-search=${tenant.fullName() + ' ' + tenant.maskedIdentityCardNumber() + ' ' + (tenant.phone() == null ? '' : '****' + #strings.substring(tenant.phone(), 6))}"
                            style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--border-color); cursor: pointer;">
                         <input type="checkbox" name="tenantIds" th:value="${tenant.id()}" style="margin-top: 3px;">
                         <span style="min-width: 0;">
                             <strong th:text="${tenant.fullName()}">Nguyễn Văn A</strong>
                             <span style="display: block; color: var(--text-secondary); font-size: 12px;">
-                                <span th:text="${tenant.phone()}">0900000000</span>
-                                <span th:if="${tenant.email() != null}" th:text="${' · ' + tenant.email()}"> · tenant@example.com</span>
+                                <span th:text="${tenant.phone() == null ? '—' : '****' + #strings.substring(tenant.phone(), 6)}">****0000</span>
                                 <span th:text="${' · CCCD ' + tenant.maskedIdentityCardNumber()}"> · CCCD ****1234</span>
                             </span>
                         </span>
                     </label>
+                </div>
+                <div class="form-group" style="margin: 10px 0 0;">
+                    <label class="form-label" for="bulkOccupantCheckInDate">Ngày nhận phòng (áp dụng cho tất cả người đã chọn)</label>
+                    <input type="date" id="bulkOccupantCheckInDate" name="checkInDate" th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}" class="form-control" style="max-width: 220px;">
                 </div>
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px;">
                     <span id="bulkOccupantCount" style="font-size: 12px; color: var(--text-secondary);" aria-live="polite">Chưa chọn ai</span>
@@ -400,60 +467,156 @@
             </div>
         </section>
 
-        <details th:if="${remainingOccupantSlots > 0}" style="border-top: 1px solid var(--border-color); padding-top: 12px;">
-            <summary style="cursor: pointer; font-size: 13px; font-weight: 600;">Thêm người mới chưa có hồ sơ</summary>
-        <form th:action="@{'/contracts/' + ${contract.getId()} + '/occupants'}" method="post" style="margin-top: 12px;">
-            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <details th:if="${remainingCapacity > 0}" style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-bottom: 12px;">
+            <summary style="cursor: pointer; font-size: 13px; font-weight: 600;">Thêm 1 người: chọn người đã có tài khoản hoặc nhập mới</summary>
+            <form data-occupant-panel="single" style="margin-top: 12px;"
+                  th:action="@{'/contracts/' + ${contract.getId()} + '/occupants'}" method="post">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
 
-            <div class="form-group" style="margin-bottom: 12px;">
-                <label class="form-label" for="addOccupantFullName">Họ và tên <span style="color: var(--danger-color, #dc2626);">*</span></label>
-                <input type="text" id="addOccupantFullName" name="fullName" class="form-control" required placeholder="VD: Nguyễn Văn B">
-            </div>
-
-            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-                <div class="form-group" style="margin: 0;">
-                    <label class="form-label" for="addOccupantIdCard">Số CCCD / Định danh <span style="color: var(--danger-color, #dc2626);">*</span></label>
-                    <input type="text" id="addOccupantIdCard" name="identityCardNumber" class="form-control" required placeholder="12 chữ số">
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label">Ai là người thuê?</label>
+                    <div th:replace="~{fragments/tenant-picker :: field('tenantProfileId', 'tenantUserId')}"></div>
                 </div>
-                <div class="form-group" style="margin: 0;">
-                    <label class="form-label" for="addOccupantPhone">Số điện thoại <span style="color: var(--danger-color, #dc2626);">*</span></label>
-                    <input type="tel" id="addOccupantPhone" name="phone" class="form-control" required placeholder="090xxxxxxx">
-                </div>
-            </div>
 
-            <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-                <div class="form-group" style="margin: 0;">
-                    <label class="form-label" for="addOccupantEmail">Email</label>
-                    <input type="email" id="addOccupantEmail" name="email" class="form-control" placeholder="tenant@gmail.com">
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" for="addOccupantFullName">Họ và tên <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                    <input type="text" id="addOccupantFullName" name="fullName" class="form-control" required placeholder="VD: Nguyễn Văn B">
                 </div>
-                <div class="form-group" style="margin: 0;">
-                    <label class="form-label" for="addOccupantCheckInDate">Ngày nhận phòng</label>
-                    <input type="date" id="addOccupantCheckInDate" name="checkInDate" th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}" class="form-control">
+
+                <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" for="addOccupantIdCard">Số CCCD / Định danh <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                        <input type="text" id="addOccupantIdCard" name="identityCardNumber" class="form-control" required placeholder="12 chữ số">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" for="addOccupantPhone">Số điện thoại <span style="color: var(--danger-color, #dc2626);">*</span></label>
+                        <input type="tel" id="addOccupantPhone" name="phone" class="form-control" required placeholder="090xxxxxxx">
+                    </div>
                 </div>
-            </div>
 
-            <div class="form-group" style="margin-bottom: 12px;">
-                <label class="form-label" for="addOccupantAddress">Địa chỉ thường trú</label>
-                <input type="text" id="addOccupantAddress" name="permanentAddress" class="form-control" placeholder="Xã/Phường, Huyện/Quận, Tỉnh/TP">
-            </div>
+                <div class="grid-cols" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" for="addOccupantEmail">Email đăng nhập <span style="color: var(--text-secondary); font-weight: normal;">(bắt buộc nếu chưa có tài khoản)</span></label>
+                        <input type="email" id="addOccupantEmail" name="email" class="form-control" placeholder="tenant@gmail.com">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label" for="addOccupantCheckInDate">Ngày nhận phòng</label>
+                        <input type="date" id="addOccupantCheckInDate" name="checkInDate" th:value="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}" class="form-control">
+                    </div>
+                </div>
 
-            <div class="form-group" style="margin-bottom: 16px; padding: 10px 12px; background: var(--bg-hover, #f8fafc); border-radius: 6px; border: 1px solid var(--border-color);">
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; cursor: pointer; margin: 0;">
-                    <input type="checkbox" id="addOccupantCreateAccount" name="createAccount" value="true">
-                    <span>Cấp tài khoản đăng nhập cho người thuê</span>
-                </label>
-                <p style="color: var(--text-secondary); font-size: 11px; margin: 4px 0 0 24px;">
-                    Hệ thống sẽ tạo tài khoản vai trò Người thuê (TENANT) và liên kết hồ sơ khi nhập email hợp lệ.
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" for="addOccupantAddress">Địa chỉ thường trú</label>
+                    <input type="text" id="addOccupantAddress" name="permanentAddress" class="form-control" placeholder="Xã/Phường, Huyện/Quận, Tỉnh/TP">
+                </div>
+
+                <p style="margin: 0 0 14px; color: var(--text-secondary); font-size: 12px;">
+                    Người ở cùng luôn có tài khoản Người thuê (TENANT): chọn người đã có tài khoản, hoặc nhập email để hệ thống
+                    tạo hay liên kết tài khoản. Nếu tạo mới, mật khẩu tạm chỉ hiển thị một lần.
                 </p>
-            </div>
 
-            <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-color);">
-                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('addOccupantModal').close()">Hủy</button>
-                <button type="submit" class="btn btn-sm btn-primary">Thêm người thuê</button>
-            </div>
-        </form>
+                <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('addOccupantModal').close()">Hủy</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Thêm người thuê</button>
+                </div>
+            </form>
+        </details>
+
+        <details th:if="${remainingCapacity > 1}" style="border-top: 1px solid var(--border-color); padding-top: 12px;">
+            <summary style="cursor: pointer; font-size: 13px; font-weight: 600;">Thêm nhiều người cùng lúc: nhập từng dòng (có thể có người mới)</summary>
+            <form data-occupant-panel="batch" style="margin-top: 12px;"
+                  th:action="@{'/contracts/' + ${contract.getId()} + '/occupants/batch'}" method="post">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <p style="margin: 0 0 10px; font-size: 12px; color: var(--text-secondary);">
+                    Đang nhập <strong id="batchOccupantCount">1/2</strong> người (tối đa bằng số chỗ còn trống). Mỗi người phải có sẵn tài khoản
+                    (cần cấp tài khoản mới thì dùng "Thêm 1 người"). Cả lượt bị từ chối nếu có người trùng hoặc đang ở hợp đồng khác.
+                </p>
+                <div id="batchOccupantRows" th:attr="data-limit=${remainingCapacity}"></div>
+                <template id="batchOccupantRowTemplate">
+                    <div class="batch-occupant-row" style="padding: 10px; margin-bottom: 10px; border: 1px solid var(--border-color); border-radius: 6px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <strong class="batch-row-title" style="font-size: 13px;">Người 1</strong>
+                            <button type="button" class="btn btn-sm btn-secondary batch-remove-row">Bỏ người này</button>
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <div th:replace="~{fragments/tenant-picker :: field('tenantProfileIds', 'tenantUserIds')}"></div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <input name="fullNames" class="form-control batch-full-name" placeholder="Họ và tên *" required>
+                            <input name="identityCardNumbers" class="form-control batch-id-card" placeholder="CCCD *" required pattern="\d{9}|\d{12}">
+                            <input name="phones" class="form-control batch-phone" placeholder="Số điện thoại *" required pattern="0\d{9}">
+                            <input name="emails" type="email" class="form-control batch-email" placeholder="Email">
+                        </div>
+                        <input name="permanentAddresses" class="form-control batch-address" placeholder="Địa chỉ thường trú" style="margin-top: 8px;">
+                    </div>
+                </template>
+                <div style="display: flex; justify-content: space-between; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                    <button type="button" id="addBatchOccupantRow" class="btn btn-sm btn-secondary">+ Thêm người</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Thêm tất cả</button>
+                </div>
+            </form>
         </details>
     </dialog>
+
+    <div th:replace="~{fragments/tenant-picker :: data(${tenantChoices})}"></div>
+    <div th:replace="~{fragments/tenant-picker :: script}"></div>
+    <script>
+        (function () {
+            function byId(id) { return document.getElementById(id); }
+            var singlePicker = document.querySelector('[data-occupant-panel="single"] .tenant-picker');
+            if (singlePicker) {
+                wireTenantPicker(singlePicker, {
+                    fields: {
+                        fullName: byId('addOccupantFullName'),
+                        idCard: byId('addOccupantIdCard'),
+                        phone: byId('addOccupantPhone'),
+                        email: byId('addOccupantEmail'),
+                        address: byId('addOccupantAddress')
+                    }
+                });
+            }
+
+            // Thêm nhiều người theo dòng: không cho thêm dòng vượt số chỗ còn trống của phòng
+            var rowsBox = byId('batchOccupantRows');
+            var template = byId('batchOccupantRowTemplate');
+            var addButton = byId('addBatchOccupantRow');
+            if (!rowsBox || !template || !addButton) return;
+            var limit = Number(rowsBox.dataset.limit) || 0;
+            var counter = byId('batchOccupantCount');
+            function refresh() {
+                var rows = rowsBox.querySelectorAll('.batch-occupant-row');
+                rows.forEach(function (row, index) {
+                    row.querySelector('.batch-row-title').textContent = 'Người ' + (index + 1);
+                    row.querySelector('.batch-remove-row').disabled = rows.length === 1;
+                });
+                counter.textContent = rows.length + '/' + limit;
+                addButton.disabled = rows.length >= limit;
+                addButton.textContent = rows.length >= limit ? 'Đã đủ chỗ trống' : '+ Thêm người';
+            }
+            function addRow() {
+                var row = template.content.firstElementChild.cloneNode(true);
+                rowsBox.appendChild(row);
+                wireTenantPicker(row.querySelector('.tenant-picker'), {
+                    fields: {
+                        fullName: row.querySelector('.batch-full-name'),
+                        idCard: row.querySelector('.batch-id-card'),
+                        phone: row.querySelector('.batch-phone'),
+                        email: row.querySelector('.batch-email'),
+                        address: row.querySelector('.batch-address')
+                    }
+                });
+                row.querySelector('.batch-remove-row').addEventListener('click', function () {
+                    row.remove();
+                    refresh();
+                });
+                refresh();
+            }
+            addButton.addEventListener('click', function () {
+                if (rowsBox.querySelectorAll('.batch-occupant-row').length < limit) addRow();
+            });
+            addRow();
+        })();
+    </script>
 
     <!-- Dialog sửa hồ sơ người thuê (Chủ nhà hoặc Quản trị viên) -->
     <dialog th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
@@ -613,10 +776,10 @@
                     <input type="date" id="draftEnd" name="endDate" class="form-control" required th:value="${contract.getEndDate()}">
                 </div>
             </div>
-            <div class="form-group">
-                <label class="form-label" for="draftPaymentDay">Ngày thanh toán hằng tháng (1–31) *</label>
-                <input type="number" id="draftPaymentDay" name="paymentDay" class="form-control" min="1" max="31" required th:value="${contract.getPaymentDay()}">
-            </div>
+            <input type="hidden" name="paymentDay" th:value="${contract.getPaymentDay()}">
+            <p style="color: var(--text-secondary); font-size: 12px; margin-top: -4px;">
+                Hạn thanh toán được tính 7 ngày sau ngày bắt đầu của từng chu kỳ.
+            </p>
             <div style="display: flex; justify-content: flex-end; gap: 8px;">
                 <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('editDraftModal').close()">Đóng</button>
                 <button type="submit" class="btn btn-sm btn-primary">Lưu thay đổi</button>
@@ -656,19 +819,16 @@
         </form>
     </dialog>
 
-    <!-- Dialog chấm dứt hợp đồng ngay (không qua biên bản check-out): chỉ chủ trọ/quản trị viên, bắt buộc lý do -->
-    <dialog th:if="${contract.isResiding() and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+    <!-- Kết thúc sớm vẫn phải lập và duyệt biên bản check-out -->
+    <dialog th:if="${contract.isResiding() and canManageContracts}"
             id="terminateModal" class="modal-dialog" style="max-width: 520px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-            <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Chấm dứt hợp đồng ngay</h3>
+            <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Kết thúc hợp đồng sớm</h3>
             <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('terminateModal').close()">✕</button>
         </div>
         <div style="font-size: 13px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 12px;">
-            Chấm dứt ngay <strong>không lập biên bản check-out</strong>: không đối chiếu tài sản, không có xác nhận của người thuê
-            và không tính khấu trừ cọc. Trả phòng thông thường hãy dùng nút <strong>Check-out</strong>.
-            <div th:if="${invoices != null and !#lists.isEmpty(invoices.?[payable])}" style="margin-top: 8px; color: var(--danger, #b91c1c);">
-                Hợp đồng còn <strong th:text="${#lists.size(invoices.?[payable])}">1</strong> hóa đơn chưa thu xong; các hóa đơn này vẫn giữ để thu tiếp sau khi chấm dứt.
-            </div>
+            Hệ thống sẽ mở biên bản check-out và lưu lý do. Hợp đồng chỉ kết thúc sau khi người thuê xác nhận,
+            quản lý kiểm tra tài sản, xử lý công nợ và duyệt biên bản.
         </div>
         <form th:action="@{'/contracts/' + ${contract.getId()} + '/terminate'}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -677,13 +837,9 @@
                 <textarea id="terminateReason" name="reason" class="form-control" rows="3" maxlength="500" required
                           placeholder="Ví dụ: Người thuê bỏ đi không báo, vi phạm nội quy..."></textarea>
             </div>
-            <label style="font-size: 13px; display: flex; align-items: center; gap: 6px; margin-bottom: 12px;">
-                <input type="checkbox" name="requiresMaintenance" value="true">
-                Phòng cần kiểm tra bảo trì sau khi trả
-            </label>
             <div style="display: flex; justify-content: flex-end; gap: 8px;">
                 <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('terminateModal').close()">Đóng</button>
-                <button type="submit" class="btn btn-sm btn-danger">Chấm dứt hợp đồng</button>
+                <button type="submit" class="btn btn-sm btn-danger">Mở biên bản check-out</button>
             </div>
         </form>
     </dialog>

@@ -46,8 +46,12 @@ public class JpaPersistenceConfiguration {
     }
 
     @Bean
-    public PropertyRepositoryPort propertyRepository(PropertyJpaRepository properties) {
-        return new JpaPropertyRepository(properties);
+    public PropertyRepositoryPort propertyRepository(
+        PropertyJpaRepository properties,
+        EntityManagerFactory entityManagerFactory
+    ) {
+        return new JpaPropertyRepository(properties,
+            SharedEntityManagerCreator.createSharedEntityManager(entityManagerFactory));
     }
 
     @Bean

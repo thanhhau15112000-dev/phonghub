@@ -33,7 +33,6 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
     private final ChatMessageRepositoryPort chatMessageRepositoryPort;
     private final UserRepositoryPort userRepositoryPort;
     private final ChatEventPublisherPort chatEventPublisherPort;
-    private final com.phonghub.application.port.out.MediaStoragePort mediaStoragePort;
     private final Clock clock;
 
     public ChatService(
@@ -41,14 +40,12 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         ChatMessageRepositoryPort chatMessageRepositoryPort,
         UserRepositoryPort userRepositoryPort,
         ChatEventPublisherPort chatEventPublisherPort,
-        com.phonghub.application.port.out.MediaStoragePort mediaStoragePort,
         Clock clock
     ) {
         this.chatRoomRepositoryPort = Objects.requireNonNull(chatRoomRepositoryPort, "chatRoomRepositoryPort must not be null");
         this.chatMessageRepositoryPort = Objects.requireNonNull(chatMessageRepositoryPort, "chatMessageRepositoryPort must not be null");
         this.userRepositoryPort = Objects.requireNonNull(userRepositoryPort, "userRepositoryPort must not be null");
         this.chatEventPublisherPort = Objects.requireNonNull(chatEventPublisherPort, "chatEventPublisherPort must not be null");
-        this.mediaStoragePort = Objects.requireNonNull(mediaStoragePort, "mediaStoragePort must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
@@ -198,79 +195,23 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         // Đánh dấu người gửi đã đọc tại thời điểm gửi
         chatRoomRepositoryPort.updateLastRead(roomId, currentUser.id(), clock.instant());
 
-        // Phát sự kiện real-time tới tất cả người dùng đang lắng nghe
-        chatEventPublisherPort.publishNewMessage(roomId, saved);
+        // Phát sự kiện real-time tới những người được đọc phòng
+        chatEventPublisherPort.publishNewMessage(room, saved);
 
         return saved;
-    }
-
-    @Override
-    public ChatMessage sendMediaMessage(
-        CurrentUser currentUser,
-        UUID roomId,
-        String originalFilename,
-        String contentType,
-        byte[] bytes,
-        String caption
-    ) {
-        assertAuthenticated(currentUser);
-        if (bytes == null || bytes.length == 0) {
-            throw new IllegalArgumentException("Dữ liệu tệp không được để trống");
-        }
-        if (bytes.length > 25 * 1024 * 1024) {
-            throw new IllegalArgumentException("Kích thước tệp vượt quá giới hạn 25MB");
-        }
-
-        ChatRoom room = getRoomById(currentUser, roomId);
-        String mediaType = detectMediaType(contentType, originalFilename);
-        String mediaUrl = mediaStoragePort.store(originalFilename, contentType, bytes);
-        String textContent = caption != null ? caption.trim() : "";
-
-        ChatMessage message = ChatMessage.createMedia(
-            room.id(),
-            currentUser.id(),
-            currentUser.fullName(),
-            textContent,
-            mediaUrl,
-            mediaType,
-            clock.instant()
-        );
-
-        ChatMessage saved = chatMessageRepositoryPort.save(message);
-        chatRoomRepositoryPort.updateLastRead(roomId, currentUser.id(), clock.instant());
-        chatEventPublisherPort.publishNewMessage(roomId, saved);
-        return saved;
-    }
-
-    private String detectMediaType(String contentType, String filename) {
-        if (contentType != null) {
-            String ct = contentType.toLowerCase();
-            if (ct.startsWith("image/")) return "IMAGE";
-            if (ct.startsWith("video/")) return "VIDEO";
-        }
-        if (filename != null) {
-            String fn = filename.toLowerCase();
-            if (fn.endsWith(".png") || fn.endsWith(".jpg") || fn.endsWith(".jpeg") || fn.endsWith(".gif") || fn.endsWith(".webp")) {
-                return "IMAGE";
-            }
-            if (fn.endsWith(".mp4") || fn.endsWith(".webm") || fn.endsWith(".mov") || fn.endsWith(".avi") || fn.endsWith(".mkv")) {
-                return "VIDEO";
-            }
-        }
-        throw new IllegalArgumentException("Định dạng tệp không được hỗ trợ. Chỉ chấp nhận hình ảnh hoặc video.");
     }
 
     @Override
     public List<ChatMessage> getMessages(CurrentUser currentUser, UUID roomId, Instant before, int limit) {
         assertAuthenticated(currentUser);
         // Kiểm tra quyền truy cập phòng
-        getRoomById(currentUser, roomId);
+        ChatRoom room = getRoomById(currentUser, roomId);
 
         int queryLimit = (limit <= 0 || limit > 100) ? 30 : limit;
         List<ChatMessage> messages = chatMessageRepositoryPort.findByRoomId(roomId, before, queryLimit);
 
         // Khi người dùng tải tin nhắn của phòng, tự động đánh dấu đã đọc
-        markAsRead(currentUser, roomId);
+        markRoomAsRead(currentUser, room);
 
         return messages;
     }
@@ -280,9 +221,16 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         if (currentUser == null || roomId == null) {
             return;
         }
+        markRoomAsRead(currentUser, getRoomById(currentUser, roomId));
+    }
+
+    private void markRoomAsRead(CurrentUser currentUser, ChatRoom room) {
         Instant now = clock.instant();
-        chatRoomRepositoryPort.updateLastRead(roomId, currentUser.id(), now);
-        chatEventPublisherPort.publishReadReceipt(roomId, currentUser.id(), now);
+        chatRoomRepositoryPort.updateLastRead(room.id(), currentUser.id(), now);
+        // "Đã xem" chỉ hiển thị trong phòng 1-1; Kênh Chung không cần báo cho cả hệ thống mỗi lần có người mở
+        if (room.isDirect()) {
+            chatEventPublisherPort.publishReadReceipt(room, currentUser.id(), now);
+        }
     }
 
     @Override

@@ -4,6 +4,7 @@ import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.io.Serializable;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public interface AuthUseCase {
@@ -13,6 +14,8 @@ public interface AuthUseCase {
     void changePassword(String newPassword);
     PasswordResetResult adminResetPassword(UUID targetUserId);
     AdminCreateUserResult adminCreateUser(CreateUserCommand command);
+    List<User> listTenantAccountsMissingProfiles();
+    void adminAttachTenantProfile(UUID targetUserId, String identityCardNumber, String phone);
     void adminDeleteUser(UUID targetUserId);
 
     record CreateUserCommand(
@@ -20,8 +23,13 @@ public interface AuthUseCase {
         String email,
         String fullName,
         String phone,
-        UserRole role
-    ) {}
+        UserRole role,
+        String identityCardNumber
+    ) {
+        public CreateUserCommand(String username, String email, String fullName, String phone, UserRole role) {
+            this(username, email, fullName, phone, role, null);
+        }
+    }
 
     // Serializable: được truyền qua flash attribute, lưu tạm trong session store
     record PasswordResetResult(

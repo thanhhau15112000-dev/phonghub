@@ -158,7 +158,7 @@ class RoomServiceUpdateUnitTest {
         assertEquals(new BigDecimal("4000000"), updated.getBasePrice());
         assertEquals(3, updated.getMaxOccupants());
 
-        verify(authorizationService).assertOwnerOrAdmin(ownerUser, propertyId);
+        verify(authorizationService).assertCanManageRoomsAndAssets(ownerUser, propertyId);
         verify(roomRepository).save(existingRoom);
     }
 
@@ -211,7 +211,7 @@ class RoomServiceUpdateUnitTest {
         when(currentUserPort.getCurrentUser()).thenReturn(staffUser);
         when(roomRepository.findById(roomId)).thenReturn(Optional.of(existingRoom));
         doThrow(new UnauthorizedPropertyAccessException("Access denied"))
-            .when(authorizationService).assertOwnerOrAdmin(staffUser, propertyId);
+            .when(authorizationService).assertCanManageRoomsAndAssets(staffUser, propertyId);
 
         var cmd = new RoomUseCase.UpdateRoomCommand(
             roomId,

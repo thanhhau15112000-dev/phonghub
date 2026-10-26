@@ -11,6 +11,7 @@ public interface UserRepositoryPort {
     Optional<User> findById(UUID id);
     Optional<User> findByUsername(String username);
     Optional<User> findByEmail(String email);
+    Optional<User> findByPhone(String phone);
     List<User> findByRole(UserRole role);
     List<User> findAll();
     void deleteById(UUID id);

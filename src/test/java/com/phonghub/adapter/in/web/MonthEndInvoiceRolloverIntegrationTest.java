@@ -94,6 +94,8 @@ class MonthEndInvoiceRolloverIntegrationTest {
             .param("cause", "TENANT_USAGE"));
         MaintenanceTicket ticket = ticketRepository.findAll().stream()
             .filter(t -> t.getTitle().equals(title)).findFirst().orElseThrow();
+        // Lỗi do người thuê: chốt nhánh, báo giá và người thuê phê duyệt trước khi sửa (#203).
+        MaintenanceTestFlow.tenantFaultReady(mockMvc, ticket.getId().toString(), ADMIN, TENANT, 1_000_000);
         mockMvc.perform(as(post("/maintenance/" + ticket.getId() + "/accept"), ADMIN));
         mockMvc.perform(as(post("/maintenance/" + ticket.getId() + "/resolve"), ADMIN)
             .param("resolutionNotes", "Đã sửa")
@@ -159,7 +161,7 @@ class MonthEndInvoiceRolloverIntegrationTest {
             .andExpect(content().string(containsString("Phí sửa chữa: Vỡ kính cửa sổ")))
             .andExpect(content().string(containsString("Phí sửa chữa: Hỏng ổ khóa")))
             .andExpect(content().string(containsString("4.250.000 đ")))
-            .andExpect(content().string(not(containsString("Hỏng vòi sen"))));
+            .andExpect(content().string(not(containsString("Phí sửa chữa: Hỏng vòi sen"))));
         // Khoản đã gộp trỏ về hóa đơn tháng
         mockMvc.perform(as(get("/invoices/" + unpaidA.getId() + "/pay"), TENANT))
             .andExpect(content().string(containsString("đã được gộp vào hóa đơn tháng")))

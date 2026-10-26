@@ -107,8 +107,9 @@
         </div>
 
         <div class="actor-switcher-box" th:if="${demoEnabled}">
-            <span class="actor-tag" th:text="${currentUser != null ? uiText.role(currentUser.role()) : 'Chưa đăng nhập'}">Quản trị viên</span>
-            <form th:action="@{/switch-user}" method="get" style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;">
+            <!-- Ô chọn người dùng đã ghi "Vai trò — Tên" nên chỉ hiện nhãn riêng khi chưa đăng nhập -->
+            <span class="actor-tag" th:if="${currentUser == null}">Chưa đăng nhập</span>
+            <form th:action="@{/switch-user}" method="get" style="display: inline-flex; align-items: center; gap: 4px;">
                 <select name="userId" class="form-control" aria-label="Chọn người dùng demo" style="width: auto; padding: 2px 6px; font-size: 12px;" onchange="this.form.submit()">
                     <option th:each="u : ${demoUsers}"
                             th:value="${u.key}"

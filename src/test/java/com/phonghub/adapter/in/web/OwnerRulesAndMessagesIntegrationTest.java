@@ -56,7 +56,8 @@ class OwnerRulesAndMessagesIntegrationTest extends SeededWebTest {
                 .param("name", "X").param("address", "Y"))
             .andExpect(flash().attribute("errorMessage", AuthorizationService.MSG_NOT_OWNER));
         mockMvc.perform(post("/properties/" + PROPERTY + "/tenants").header("X-User-Id", OWNER_2)
-                .param("fullName", "Người lạ").param("identityCardNumber", "079301009999").param("phone", "0912000999"))
+                .param("fullName", "Người lạ").param("identityCardNumber", "079301009999")
+                .param("phone", "0912000999").param("email", "stranger@example.test"))
             .andExpect(flash().attribute("errorMessage", AuthorizationService.MSG_NOT_OWNER));
         mockMvc.perform(post("/rooms/" + ROOM + "/assets/template").header("X-User-Id", OWNER_2)
                 .param("template", "BASIC"))

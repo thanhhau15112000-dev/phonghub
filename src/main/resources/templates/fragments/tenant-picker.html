@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<!-- Bộ chọn "Ai là người thuê?" dùng chung cho tạo hợp đồng, thêm người ở và thêm người thuê vào nhà.
+     Một ô tìm kiếm cho cả hồ sơ lẫn tài khoản; kết quả là danh sách bấm chọn được. Chọn xong thì điền và khóa thông tin
+     lấy từ hồ sơ (CCCD đầy đủ không đưa ra trình duyệt). Người đang có hợp đồng hiện mờ, không chọn được ở mọi đường. -->
+
+<!-- Dữ liệu người thuê: đưa ra một lần mỗi trang, mọi bộ chọn trên trang đọc chung. -->
+<th:block th:fragment="data(choices)">
+    <style>
+        .tenant-picker [hidden] { display: none !important; }
+        .tenant-picker .tp-results { border: 1px solid var(--border-color); border-radius: 6px; margin-top: 6px; max-height: 280px; overflow: auto; background: #fff; }
+        .tenant-picker .tp-row { display: block; width: 100%; text-align: left; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--border-color); background: transparent; cursor: pointer; font: inherit; }
+        .tenant-picker .tp-row:hover:not(:disabled), .tenant-picker .tp-row:focus-visible { background: var(--bg-hover, #f1f5f9); }
+        .tenant-picker .tp-row:disabled { cursor: not-allowed; opacity: .6; }
+        .tenant-picker .tp-row small { display: block; color: var(--text-secondary); }
+        .tenant-picker .tp-note { padding: 8px 12px; font-size: 12px; color: var(--text-secondary); }
+        .tenant-picker .tp-chosen { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-hover, #f8fafc); }
+    </style>
+    <div id="tenantChoices" hidden>
+        <span th:each="c : ${choices}" class="tp-person"
+              th:attr="data-profile-id=${c.profileId()},data-user-id=${c.userId()},data-name=${c.fullName()},data-masked-id=${c.maskedIdentityCard()},data-phone=${c.phone()},data-email=${c.email()},data-address=${c.address()},data-has-account=${c.hasAccount()},data-busy=${c.busy()}"></span>
+    </div>
+</th:block>
+
+<!-- Ô chọn: hai ô ẩn gửi profileId/userId lên máy chủ như trước, người dùng chỉ thấy một ô tìm kiếm. -->
+<div th:fragment="field(profileName, userName)" class="tenant-picker">
+    <input type="hidden" class="tp-profile" th:name="${profileName}">
+    <input type="hidden" class="tp-user" th:name="${userName}">
+    <div class="tp-search-box">
+        <input type="search" class="form-control tp-search" autocomplete="off"
+               placeholder="Tìm người đã có: gõ tên, số điện thoại, email hoặc 4 số cuối CCCD">
+        <small class="tp-hint" style="display: block; margin-top: 4px; color: var(--text-secondary);">
+            Chưa có trong danh sách? Nhập người mới ở các ô bên dưới.
+        </small>
+        <div class="tp-results" role="listbox" hidden></div>
+    </div>
+    <div class="tp-chosen" hidden>
+        <span><strong class="tp-chosen-name"></strong> <small class="tp-chosen-badges" style="color: var(--text-secondary);"></small></span>
+        <button type="button" class="btn btn-sm btn-secondary tp-clear">Bỏ chọn</button>
+    </div>
+    <p class="tp-note" hidden style="margin: 6px 0 0;"></p>
+</div>
+
+<script th:fragment="script">
+    function readTenantPeople() {
+        return Array.prototype.map.call(document.querySelectorAll('#tenantChoices .tp-person'), function (el) {
+            return {
+                profileId: el.dataset.profileId || '', userId: el.dataset.userId || '', name: el.dataset.name || '',
+                maskedId: el.dataset.maskedId || '', phone: el.dataset.phone || '', email: el.dataset.email || '',
+                address: el.dataset.address || '', hasAccount: el.dataset.hasAccount === 'true', busy: el.dataset.busy === 'true'
+            };
+        });
+    }
+    // Bỏ dấu và chữ hoa để "nguyen" tìm được "Nguyễn"
+    function plainText(text) {
+        return (text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd');
+    }
+
+    window.wireTenantPicker = function (root, options) {
+        if (!root) return;
+        options = options || {};
+        var fields = options.fields || {};
+        var people = window.tenantPickerPeople || (window.tenantPickerPeople = readTenantPeople());
+        var profileInput = root.querySelector('.tp-profile');
+        var userInput = root.querySelector('.tp-user');
+        var searchBox = root.querySelector('.tp-search-box');
+        var search = root.querySelector('.tp-search');
+        var hint = root.querySelector('.tp-hint');
+        var results = root.querySelector('.tp-results');
+        var chosenBox = root.querySelector('.tp-chosen');
+        var chosenName = root.querySelector('.tp-chosen-name');
+        var chosenBadges = root.querySelector('.tp-chosen-badges');
+        var note = root.querySelector('.tp-note');
+        var lockable = [fields.fullName, fields.idCard, fields.phone, fields.address].filter(Boolean);
+        var inputs = lockable.concat(fields.email ? [fields.email] : []);
+        var idCardPlaceholder = fields.idCard ? fields.idCard.placeholder : '';
+        var chosen = null;
+
+        // Nhớ ô nào bắt buộc ban đầu: khóa theo hồ sơ thì máy chủ lấy dữ liệu từ hồ sơ nên không đòi nhập lại
+        inputs.forEach(function (input) { input.dataset.wasRequired = input.required ? 'true' : 'false'; });
+
+        function setLocked(input, locked) {
+            if (!input) return;
+            input.readOnly = locked;
+            input.required = !locked && input.dataset.wasRequired === 'true';
+            input.style.background = locked ? 'var(--bg-hover, #f1f5f9)' : '';
+        }
+        function badgeText(person) {
+            var parts = [];
+            if (!person.profileId) parts.push('Chỉ có tài khoản, chưa có hồ sơ');
+            else parts.push(person.hasAccount ? 'Có tài khoản app' : 'Chưa có tài khoản app');
+            if (person.busy) parts.push('Đang có hợp đồng');
+            return parts.join(' · ');
+        }
+        function syncCreateAccount() {
+            if (!options.createAccount) return;
+            var blocked = !!(chosen && chosen.hasAccount);
+            options.createAccount.disabled = blocked;
+            if (blocked) options.createAccount.checked = false;
+            if (options.createAccountHint) options.createAccountHint.hidden = !blocked;
+            // Cấp tài khoản cần email
+            if (fields.email && !blocked) fields.email.required = options.createAccount.checked;
+        }
+        function matches(person, term) {
+            return plainText(person.name + ' ' + person.phone + ' ' + person.email + ' ' + person.maskedId).indexOf(term) >= 0;
+        }
+        function appendNote(text) {
+            var div = document.createElement('div');
+            div.className = 'tp-note';
+            div.textContent = text;
+            results.appendChild(div);
+        }
+        function buildRow(person) {
+            var row = document.createElement('button');
+            row.type = 'button';
+            row.className = 'tp-row';
+            row.disabled = person.busy;
+            var name = document.createElement('strong');
+            name.textContent = person.name;
+            var detail = document.createElement('small');
+            detail.textContent = [person.maskedId, person.phone, person.email].filter(Boolean).join(' · ');
+            var status = document.createElement('small');
+            status.textContent = badgeText(person);
+            row.appendChild(name);
+            row.appendChild(detail);
+            row.appendChild(status);
+            row.addEventListener('click', function () { choose(person); });
+            return row;
+        }
+        function renderResults() {
+            var term = plainText(search.value.trim());
+            results.innerHTML = '';
+            if (!term) { results.hidden = true; return; }
+            var found = people.filter(function (person) { return matches(person, term); });
+            results.hidden = false;
+            if (!found.length) { appendNote('Không thấy ai khớp. Nhập người mới ở các ô bên dưới.'); return; }
+            found.slice(0, 6).forEach(function (person) { results.appendChild(buildRow(person)); });
+            if (found.length > 6) appendNote('Còn ' + (found.length - 6) + ' người khác, gõ thêm để thu hẹp.');
+        }
+
+        function choose(person) {
+            chosen = person;
+            profileInput.value = person.profileId;
+            // Người đã có hồ sơ thì chỉ cần mã hồ sơ; tài khoản chưa có hồ sơ thì gửi mã tài khoản để máy chủ tạo hồ sơ
+            userInput.value = person.profileId ? '' : person.userId;
+            if (fields.fullName) fields.fullName.value = person.name;
+            if (fields.phone) fields.phone.value = person.phone;
+            if (fields.email) fields.email.value = person.email;
+            if (fields.address) fields.address.value = person.address;
+            if (person.profileId) {
+                if (fields.idCard) {
+                    fields.idCard.value = '';
+                    fields.idCard.placeholder = person.maskedId + ' (theo hồ sơ)';
+                }
+                lockable.forEach(function (input) { setLocked(input, true); });
+            } else {
+                lockable.forEach(function (input) { setLocked(input, false); });
+            }
+            setLocked(fields.email, person.hasAccount);
+            chosenName.textContent = person.name;
+            chosenBadges.textContent = badgeText(person);
+            note.textContent = person.profileId
+                ? 'Thông tin lấy từ hồ sơ đã có nên không sửa ở đây (muốn sửa, vào trang người thuê).'
+                : 'Tài khoản này chưa có hồ sơ người thuê: bổ sung CCCD bên dưới để tạo hồ sơ.';
+            note.hidden = false;
+            chosenBox.hidden = false;
+            searchBox.hidden = true;
+            results.hidden = true;
+            syncCreateAccount();
+        }
+        function clear() {
+            chosen = null;
+            profileInput.value = '';
+            userInput.value = '';
+            inputs.forEach(function (input) { input.value = ''; setLocked(input, false); });
+            if (fields.idCard) fields.idCard.placeholder = idCardPlaceholder;
+            chosenBox.hidden = true;
+            note.hidden = true;
+            searchBox.hidden = false;
+            search.value = '';
+            results.innerHTML = '';
+            results.hidden = true;
+            syncCreateAccount();
+        }
+
+        if (!people.length) {
+            search.hidden = true;
+            hint.textContent = 'Chưa có người thuê nào để chọn. Nhập người mới ở các ô bên dưới.';
+        }
+        search.addEventListener('input', renderResults);
+        search.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') { search.value = ''; renderResults(); return; }
+            if (event.key !== 'Enter') return;
+            // Enter không được gửi cả form; có đúng một người chọn được thì chọn luôn
+            event.preventDefault();
+            var term = plainText(search.value.trim());
+            var found = term ? people.filter(function (person) { return matches(person, term) && !person.busy; }) : [];
+            if (found.length === 1) choose(found[0]);
+        });
+        root.querySelector('.tp-clear').addEventListener('click', clear);
+        if (options.createAccount) options.createAccount.addEventListener('change', syncCreateAccount);
+        syncCreateAccount();
+        if (options.preselectProfileId) {
+            var preselected = people.filter(function (person) { return person.profileId === options.preselectProfileId; })[0];
+            if (preselected && !preselected.busy) choose(preselected);
+        }
+    };
+</script>
+</body>
+</html>

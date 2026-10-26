@@ -64,8 +64,10 @@ public class MonthlyInvoiceService implements MonthlyInvoiceUseCase {
 
     @Override
     public boolean issueForContract(UUID contractId, YearMonth period, LocalDate today) {
-        Optional<Contract> contract = contractRepository.findById(contractId);
-        if (contract.isEmpty() || !isEligible(contract.get(), period) || issuer.exists(contract.get(), period)) {
+        Optional<Contract> contract = contractRepository.findByIdForUpdate(contractId);
+        if (contract.isEmpty() || today == null || !isEligible(contract.get(), period)
+            || contract.get().billingCycle(period).orElseThrow().startDate().isAfter(today)
+            || issuer.exists(contract.get(), period)) {
             return false;
         }
         issuer.issue(contract.get(), period, today);
@@ -116,11 +118,6 @@ public class MonthlyInvoiceService implements MonthlyInvoiceUseCase {
     }
 
     private static boolean isEligible(Contract contract, YearMonth period) {
-        if (!contract.isResiding()) {
-            return false;
-        }
-        YearMonth firstMonth = YearMonth.from(contract.getStartDate());
-        YearMonth lastMonth = YearMonth.from(contract.getEndDate());
-        return period.isAfter(firstMonth) && !period.isAfter(lastMonth);
+        return contract.isResiding() && contract.billingCycle(period).isPresent();
     }
 }

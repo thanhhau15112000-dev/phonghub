@@ -2,6 +2,7 @@ package com.phonghub.application;
 
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
@@ -19,6 +20,8 @@ import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractOccupant;
 import com.phonghub.domain.model.ContractStatus;
+import com.phonghub.domain.model.Handover;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
@@ -43,12 +46,14 @@ class ContractServiceCheckOutOccupantUnitTest {
     private InMemoryPropertyRepository propertyRepo;
     private InMemoryRoomRepository roomRepo;
     private InMemoryContractRepository contractRepo;
+    private InMemoryHandoverRepository handoverRepo;
     private InMemoryTenantRepository tenantRepo;
     private InMemoryUserRepository userRepo;
     private InMemoryStaffPropertyAssignmentRepository assignmentRepo;
     private LocalDemoAuthenticationAdapter authAdapter;
     private AuthorizationService authService;
     private AuditPort auditPort;
+    private IdentityProviderPort identityProvider;
     private ContractService contractService;
 
     private Property property;
@@ -64,6 +69,7 @@ class ContractServiceCheckOutOccupantUnitTest {
         propertyRepo = new InMemoryPropertyRepository();
         roomRepo = new InMemoryRoomRepository();
         contractRepo = new InMemoryContractRepository();
+        handoverRepo = new InMemoryHandoverRepository();
         tenantRepo = new InMemoryTenantRepository();
         userRepo = new InMemoryUserRepository();
         assignmentRepo = new InMemoryStaffPropertyAssignmentRepository();
@@ -72,6 +78,9 @@ class ContractServiceCheckOutOccupantUnitTest {
         authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_OWNER_1);
 
         authService = new AuthorizationService(assignmentRepo, propertyRepo, tenantRepo, contractRepo);
+        identityProvider = Mockito.mock(IdentityProviderPort.class);
+        Mockito.when(identityProvider.adminCreateUser(Mockito.anyString(), Mockito.anyString()))
+            .thenAnswer(call -> UUID.randomUUID());
         
         recordedEvents = new ArrayList<>();
         auditPort = event -> recordedEvents.add(event);
@@ -82,10 +91,12 @@ class ContractServiceCheckOutOccupantUnitTest {
             propertyRepo,
             tenantRepo,
             userRepo,
-            null,
+            identityProvider,
             authAdapter,
             authService,
-            auditPort
+            auditPort,
+            handoverRepo,
+            null
         );
 
         property = propertyRepo.save(new Property(
@@ -102,6 +113,8 @@ class ContractServiceCheckOutOccupantUnitTest {
 
         room = roomRepo.save(Room.create(property.id(), "P101", 1, new BigDecimal("25.0"), new BigDecimal("3500000"), 3));
 
+        userRepo.save(new User(LocalDemoAuthenticationAdapter.TENANT_1_ID, "primary@phonghub.local", "Nguyễn Văn A",
+            "0901234567", UserRole.TENANT, User.UserStatus.ACTIVE, Instant.now()));
         primaryTenant = tenantRepo.save(Tenant.create(
             LocalDemoAuthenticationAdapter.TENANT_1_ID,
             "Nguyễn Văn A",
@@ -125,18 +138,14 @@ class ContractServiceCheckOutOccupantUnitTest {
         activeContract = contractService.createContract(new ContractUseCase.CreateContractCommand(
             property.id(),
             room.getId(),
-            primaryTenant.fullName(),
-            primaryTenant.identityCardNumber(),
-            primaryTenant.phone(),
-            primaryTenant.email(),
-            primaryTenant.userId(),
+            primaryTenant.id(),
             new BigDecimal("3500000"),
             new BigDecimal("3500000"),
             LocalDate.now().minusDays(10),
             LocalDate.now().plusMonths(6),
             5
         ));
-        contractService.activateContract(activeContract.getId());
+        activateWithApprovedCheckIn(activeContract.getId());
 
         // Add co-tenant
         coTenant = tenantRepo.save(Tenant.create(
@@ -155,10 +164,17 @@ class ContractServiceCheckOutOccupantUnitTest {
             coTenant.phone(),
             coTenant.email(),
             coTenant.permanentAddress(),
-            LocalDate.now().minusDays(5),
-            false
-        )).occupant();
+            LocalDate.now().minusDays(5))).occupant();
+        coTenant = tenantRepo.findById(coTenant.id()).orElseThrow();
         activeContract = contractRepo.findById(activeContract.getId()).orElseThrow();
+    }
+
+    private void activateWithApprovedCheckIn(UUID contractId) {
+        UUID actorId = authAdapter.getCurrentUser().id();
+        Handover draft = Handover.draft(contractId, HandoverType.CHECK_IN, BigDecimal.ZERO, BigDecimal.ZERO,
+            "Phòng đã kiểm tra", null, actorId);
+        handoverRepo.save(draft.send("terms-hash", null, null, actorId).tenantConfirm(actorId).approve(actorId));
+        contractService.activateContract(contractId);
     }
 
     @Test
@@ -291,6 +307,10 @@ class ContractServiceCheckOutOccupantUnitTest {
     @Test
     @DisplayName("Cannot check out occupant from non-active contract")
     void testCannotCheckOutFromTerminatedContract() {
+        UUID actor = authAdapter.getCurrentUser().id();
+        handoverRepo.save(Handover.draft(activeContract.getId(), HandoverType.CHECK_OUT, BigDecimal.ZERO,
+            BigDecimal.ZERO, "Phòng đã kiểm tra", null, actor).send("terms-hash", null, null, actor)
+            .tenantConfirm(actor).approve(actor));
         contractService.terminateContract(activeContract.getId(), false);
 
         ContractUseCase.CheckOutOccupantCommand cmd = new ContractUseCase.CheckOutOccupantCommand(

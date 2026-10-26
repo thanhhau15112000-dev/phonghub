@@ -14,6 +14,35 @@
         </div>
     </div>
 
+    <div class="card" th:if="${!#lists.isEmpty(tenantAccountsMissingProfiles)}" style="margin-bottom: 20px;">
+        <h2>Tài khoản người thuê chưa có hồ sơ CCCD</h2>
+        <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 16px;">
+            Bổ sung CCCD để gắn các tài khoản cũ vào hồ sơ người thuê. Mỗi CCCD chỉ liên kết được với một tài khoản.
+        </p>
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead><tr><th>Tài khoản</th><th>Họ và tên</th><th>Email</th><th>Bổ sung SĐT và CCCD</th></tr></thead>
+                <tbody>
+                    <tr th:each="tenantUser : ${tenantAccountsMissingProfiles}">
+                        <td th:text="${tenantUser.username()}">username</td>
+                        <td th:text="${tenantUser.fullName()}">Người thuê</td>
+                        <td th:text="${tenantUser.email()}">tenant@example.com</td>
+                        <td>
+                            <form th:action="@{'/admin/users/' + ${tenantUser.id()} + '/tenant-profile'}" method="post" class="table-actions">
+                                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                                <input type="tel" name="phone" class="form-control" required pattern="^0\d{9}$" maxlength="10"
+                                       inputmode="numeric" aria-label="Số điện thoại" th:value="${tenantUser.phone()}" placeholder="Số điện thoại">
+                                <input type="text" name="identityCardNumber" class="form-control" required pattern="(\d{9}|\d{12})"
+                                       maxlength="12" inputmode="numeric" aria-label="CCCD" placeholder="Số CCCD">
+                                <button type="submit" class="btn btn-sm btn-primary">Gắn hồ sơ</button>
+                            </form>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <div class="card" style="margin-bottom: 20px;">
         <h2>Tạo tài khoản</h2>
         <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 16px;">
@@ -37,7 +66,7 @@
                     <input id="fullName" type="text" name="fullName" class="form-control" required>
                 </div>
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label" for="phone">Số điện thoại</label>
+                    <label class="form-label" for="phone">Số điện thoại <span id="tenantPhoneRequired" style="display:none;">*</span></label>
                     <input id="phone" type="tel" name="phone" class="form-control"
                            placeholder="Ví dụ: 0912345678" pattern="^0\d{9}$"
                            title="Số điện thoại gồm 10 chữ số bắt đầu bằng 0">
@@ -50,6 +79,13 @@
                         <option th:each="role : ${roles}" th:value="${role}" th:text="${uiText.role(role)}">Người thuê</option>
                     </select>
                 </div>
+            </div>
+            <div class="form-group" id="tenantIdentityCardField" style="display: none; max-width: 420px;">
+                <label class="form-label" for="identityCardNumber">CCCD người thuê *</label>
+                <input id="identityCardNumber" type="text" name="identityCardNumber" class="form-control"
+                       pattern="(\d{9}|\d{12})" inputmode="numeric" maxlength="12"
+                       title="CCCD gồm 9 hoặc 12 chữ số">
+                <small>Tài khoản người thuê luôn được gắn với một hồ sơ CCCD duy nhất.</small>
             </div>
             <button type="submit" class="btn btn-primary">Tạo tài khoản và sinh mật khẩu tạm thời</button>
 
@@ -382,5 +418,24 @@
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const role = document.getElementById('role');
+        const field = document.getElementById('tenantIdentityCardField');
+        const card = document.getElementById('identityCardNumber');
+        const phone = document.getElementById('phone');
+        const phoneRequired = document.getElementById('tenantPhoneRequired');
+        if (!role || !field || !card || !phone) return;
+        const sync = () => {
+            const isTenant = role.value === 'TENANT';
+            field.style.display = isTenant ? '' : 'none';
+            card.required = isTenant;
+            phone.required = isTenant;
+            if (phoneRequired) phoneRequired.style.display = isTenant ? '' : 'none';
+        };
+        role.addEventListener('change', sync);
+        sync();
+    });
+</script>
 </body>
 </html>

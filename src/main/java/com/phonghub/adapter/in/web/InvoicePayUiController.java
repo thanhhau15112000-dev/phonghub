@@ -2,6 +2,7 @@ package com.phonghub.adapter.in.web;
 
 import com.phonghub.application.port.in.InvoiceUseCase;
 import com.phonghub.application.port.in.MaintenanceUseCase;
+import com.phonghub.application.port.in.ManualPaymentUseCase;
 import com.phonghub.application.port.in.SepayWebhookUseCase;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.config.SepayProperties;
@@ -36,14 +37,17 @@ public class InvoicePayUiController {
     private final CurrentUserPort currentUserPort;
     private final SepayProperties sepayProperties;
     private final SepayWebhookUseCase sepayWebhookUseCase;
+    private final ManualPaymentUseCase manualPayments;
 
     public InvoicePayUiController(
         InvoiceUseCase invoiceUseCase,
         MaintenanceUseCase maintenanceUseCase,
         CurrentUserPort currentUserPort,
         SepayProperties sepayProperties,
-        SepayWebhookUseCase sepayWebhookUseCase
+        SepayWebhookUseCase sepayWebhookUseCase,
+        ManualPaymentUseCase manualPayments
     ) {
+        this.manualPayments = manualPayments;
         this.sepayWebhookUseCase = sepayWebhookUseCase;
         this.invoiceUseCase = invoiceUseCase;
         this.maintenanceUseCase = maintenanceUseCase;
@@ -72,6 +76,8 @@ public class InvoicePayUiController {
             model.addAttribute("ticketTitle", ticketTitle);
             model.addAttribute("today", LocalDate.now());
             model.addAttribute("returnUrl", returnUrl(invoice));
+            model.addAttribute("claims", manualPayments.listForContract(invoice.getContractId()).stream()
+                .filter(claim -> claim.invoiceId().equals(invoice.getId())).toList());
             model.addAttribute("sandboxCheckoutEnabled", sepayProperties.hasSandboxCheckoutConfiguration());
             model.addAttribute("bankConfigured", sepayProperties.hasBankAccount());
             model.addAttribute("bankCode", sepayProperties.getBankCode());

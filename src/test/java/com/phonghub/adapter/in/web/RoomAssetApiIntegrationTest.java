@@ -4,6 +4,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
+import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
+import com.phonghub.domain.model.StaffPropertyAssignment;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +44,9 @@ class RoomAssetApiIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private StaffPropertyAssignmentPort assignments;
+
     private String assetJson(String code, String name, int quantity) {
         String codePart = code == null ? "" : "\"assetCode\":\"" + code + "\",";
         return "{" + codePart + "\"name\":\"" + name + "\",\"quantity\":" + quantity + ",\"estimatedValue\":1500000}";
@@ -64,9 +69,18 @@ class RoomAssetApiIntegrationTest {
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.assetCode").value(org.hamcrest.Matchers.startsWith("TS-")))
             .andExpect(jsonPath("$.status").value("GOOD"));
-        mockMvc.perform(post(ROOM_ASSETS).header("X-User-Id", STAFF_1)
-                .contentType(MediaType.APPLICATION_JSON).content(assetJson(null, "Tủ lạnh", 1)))
-            .andExpect(status().isCreated());
+        UUID staffId = UUID.fromString(STAFF_1);
+        StaffPropertyAssignment existing = assignments.find(staffId, DataSeeder.PROP_1_ID).orElseThrow();
+        assignments.save(new StaffPropertyAssignment(existing.id(), existing.staffUserId(), existing.propertyId(),
+            existing.canCollectPayment(), existing.canManageContracts(), existing.canViewDocuments(), true,
+            existing.assignedAt()));
+        try {
+            mockMvc.perform(post(ROOM_ASSETS).header("X-User-Id", STAFF_1)
+                    .contentType(MediaType.APPLICATION_JSON).content(assetJson(null, "Tủ lạnh", 1)))
+                .andExpect(status().isCreated());
+        } finally {
+            assignments.save(existing);
+        }
     }
 
     @Test

@@ -44,7 +44,8 @@ public class InMemoryStatisticsQueryAdapter implements StatisticsQueryPort {
     private static final Set<InvoiceStatus> UNPAID = EnumSet.of(
         InvoiceStatus.ISSUED, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE);
     private static final Set<MaintenanceStatus> OPEN = EnumSet.of(
-        MaintenanceStatus.REPORTED, MaintenanceStatus.ASSIGNED, MaintenanceStatus.IN_PROGRESS);
+        MaintenanceStatus.REPORTED, MaintenanceStatus.ASSIGNED, MaintenanceStatus.IN_PROGRESS,
+        MaintenanceStatus.PENDING_OWNER_APPROVAL, MaintenanceStatus.PENDING_TENANT_APPROVAL);
     private static final Set<MaintenanceStatus> WORK_DONE = EnumSet.of(
         MaintenanceStatus.RESOLVED, MaintenanceStatus.AWAITING_PAYMENT);
 

@@ -2,6 +2,7 @@ package com.phonghub.adapter.in.web;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -453,9 +454,31 @@ class ProductionAuthSecurityTest {
                 .param("username", "tenant2")
                 .param("email", "tenant2@phonghub.local")
                 .param("fullName", "Tenant Two")
+                .param("phone", "0911223344")
+                .param("identityCardNumber", "123456789")
                 .param("role", "TENANT"))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/admin/users"));
+
+        verify(authUseCase).adminCreateUser(argThat(command -> command.role() == UserRole.TENANT
+            && "123456789".equals(command.identityCardNumber())
+            && "0911223344".equals(command.phone())));
+    }
+
+    @Test
+    void adminCanBackfillLegacyTenantProfileWithCccdAndPhone() throws Exception {
+        UUID tenantId = UUID.randomUUID();
+
+        mockMvc.perform(post("/admin/users/{userId}/tenant-profile", tenantId)
+                .session(loginAsAdmin())
+                .with(csrf())
+                .param("phone", "0911223344")
+                .param("identityCardNumber", "123456789"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/admin/users"))
+            .andExpect(flash().attribute("tableSuccessMessage", "Đã gắn hồ sơ CCCD với tài khoản người thuê."));
+
+        verify(authUseCase).adminAttachTenantProfile(tenantId, "123456789", "0911223344");
     }
 
     @Test
@@ -1091,6 +1114,40 @@ class ProductionAuthSecurityTest {
             .andExpect(jsonPath("$.username").value("newstaff"))
             .andExpect(jsonPath("$.temporaryPassword").value("TempPass#2026!"))
             .andExpect(jsonPath("$.mustChangePassword").value(true));
+    }
+
+    @Test
+    void adminCreateTenantApiPassesCccdToUseCase() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(new User(
+            adminId, "admin", "admin@phonghub.local", "Admin User", "0900000000",
+            UserRole.ADMIN, User.UserStatus.ACTIVE, false, Instant.now())));
+        when(jwtDecoder.decode("admin.jwt.token")).thenReturn(new Jwt(
+            "admin.jwt.token", Instant.now(), Instant.now().plusSeconds(3600), Map.of("alg", "HS256"),
+            Map.of("sub", adminId.toString(), "aud", List.of("authenticated"),
+                "iss", "https://mock.supabase.co/auth/v1")));
+        when(authUseCase.adminCreateUser(any())).thenReturn(new AuthUseCase.AdminCreateUserResult(
+            UUID.randomUUID(), "tenant2", "tenant2@phonghub.local", "Tenant Two", "0911223344",
+            UserRole.TENANT, User.UserStatus.ACTIVE, true, "TempPass#2026!", Instant.now()));
+
+        mockMvc.perform(post("/api/admin/users")
+                .header("Authorization", "Bearer admin.jwt.token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "tenant2",
+                      "email": "tenant2@phonghub.local",
+                      "fullName": "Tenant Two",
+                      "phone": "0911223344",
+                      "role": "TENANT",
+                      "identityCardNumber": "079200001234"
+                    }
+                    """))
+            .andExpect(status().isCreated());
+
+        verify(authUseCase).adminCreateUser(argThat(command -> command.role() == UserRole.TENANT
+            && "079200001234".equals(command.identityCardNumber())
+            && "0911223344".equals(command.phone())));
     }
 
     @Test

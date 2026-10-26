@@ -33,7 +33,9 @@ public record Handover(
     Instant createdAt,
     UUID createdBy,
     Instant updatedAt,
-    UUID updatedBy
+    UUID updatedBy,
+    boolean earlyTermination,
+    String terminationReason
 ) {
     public Handover {
         if (id == null || contractId == null) {
@@ -55,7 +57,16 @@ public record Handover(
         if (finalDeduction != null && finalDeduction.signum() < 0) {
             throw new IllegalArgumentException("Khoản khấu trừ không được âm.");
         }
+        if (terminationReason != null && terminationReason.trim().length() > 500) {
+            throw new IllegalArgumentException("Lý do kết thúc sớm tối đa 500 ký tự.");
+        }
+        if (earlyTermination && (type != HandoverType.CHECK_OUT || terminationReason == null || terminationReason.isBlank())) {
+            throw new IllegalArgumentException("Kết thúc sớm cần biên bản check-out và lý do.");
+        }
         roomCondition = roomCondition.trim();
+        if (terminationReason != null) {
+            terminationReason = terminationReason.trim();
+        }
         if (createdAt == null) {
             createdAt = Instant.now();
         }
@@ -76,7 +87,33 @@ public record Handover(
         Instant now = Instant.now();
         return new Handover(UUID.randomUUID(), contractId, type, HandoverStatus.DRAFT, electric, water,
             roomCondition, blankToNull(keysProvided), null, null, null, null, null, false, null, null, null, null,
-            now, actorId, now, actorId);
+            now, actorId, now, actorId, false, null);
+    }
+
+    /** Compatibility constructor for existing records without early-termination metadata. */
+    public Handover(
+        UUID id, UUID contractId, HandoverType type, HandoverStatus status, BigDecimal initialElectricMeter,
+        BigDecimal initialWaterMeter, String roomCondition, String keysProvided, String contractTermsHash,
+        String houseRulesText, String houseRulesHash, String rejectionReason, Instant sentAt,
+        boolean confirmedByTenant, Instant confirmedAt, UUID approvedBy, Instant approvedAt, BigDecimal finalDeduction,
+        Instant createdAt, UUID createdBy, Instant updatedAt, UUID updatedBy
+    ) {
+        this(id, contractId, type, status, initialElectricMeter, initialWaterMeter, roomCondition, keysProvided,
+            contractTermsHash, houseRulesText, houseRulesHash, rejectionReason, sentAt, confirmedByTenant,
+            confirmedAt, approvedBy, approvedAt, finalDeduction, createdAt, createdBy, updatedAt, updatedBy, false, null);
+    }
+
+    public Handover asEarlyTermination(String reason, UUID actorId) {
+        if (type != HandoverType.CHECK_OUT || status != HandoverStatus.DRAFT) {
+            throw new InvalidHandoverStateException("Chỉ có thể ghi lý do kết thúc sớm trên biên bản check-out nháp.");
+        }
+        if (reason == null || reason.isBlank() || reason.trim().length() > 500) {
+            throw new IllegalArgumentException("Lý do kết thúc sớm phải có và tối đa 500 ký tự.");
+        }
+        return new Handover(id, contractId, type, status, initialElectricMeter, initialWaterMeter, roomCondition,
+            keysProvided, contractTermsHash, houseRulesText, houseRulesHash, rejectionReason, sentAt,
+            confirmedByTenant, confirmedAt, approvedBy, approvedAt, finalDeduction, createdAt, createdBy,
+            Instant.now(), actorId, true, reason.trim());
     }
 
     public Handover edit(BigDecimal electric, BigDecimal water, String roomCondition, String keysProvided,
@@ -84,7 +121,8 @@ public record Handover(
         requireStatus(HandoverStatus.DRAFT, "chỉnh sửa");
         return new Handover(id, contractId, type, status, electric, water, roomCondition, blankToNull(keysProvided),
             contractTermsHash, houseRulesText, houseRulesHash, rejectionReason, sentAt, confirmedByTenant,
-            confirmedAt, approvedBy, approvedAt, finalDeduction, createdAt, createdBy, Instant.now(), actorId);
+            confirmedAt, approvedBy, approvedAt, finalDeduction, createdAt, createdBy, Instant.now(), actorId,
+            earlyTermination, terminationReason);
     }
 
     public Handover send(String termsHash, String rulesText, String rulesHash, UUID actorId) {
@@ -146,7 +184,8 @@ public record Handover(
     ) {
         return new Handover(id, contractId, type, newStatus, initialElectricMeter, initialWaterMeter, roomCondition,
             keysProvided, termsHash, rulesText, rulesHash, reason, newSentAt, confirmed, newConfirmedAt,
-            newApprovedBy, newApprovedAt, deduction, createdAt, createdBy, now, actorId);
+            newApprovedBy, newApprovedAt, deduction, createdAt, createdBy, now, actorId,
+            earlyTermination, terminationReason);
     }
 
     private void requireStatus(HandoverStatus expected, String action) {

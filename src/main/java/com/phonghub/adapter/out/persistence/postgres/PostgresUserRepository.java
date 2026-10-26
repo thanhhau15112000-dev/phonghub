@@ -116,6 +116,16 @@ public class PostgresUserRepository implements UserRepositoryPort {
     }
 
     @Override
+    public Optional<User> findByPhone(String phone) {
+        String normalized = PersonalDataFields.normalizePhone(phone);
+        if (normalized == null || normalized.isBlank()) return Optional.empty();
+        String sql = "SELECT * FROM users WHERE phone_hmac = :hmac";
+        List<User> list = jdbcTemplate.query(sql,
+            Map.of("hmac", protector.blindIndex(PersonalDataFields.USERS_PHONE, normalized)), rowMapper);
+        return list.isEmpty() ? Optional.empty() : Optional.of(list.getFirst());
+    }
+
+    @Override
     public List<User> findByRole(UserRole role) {
         String sql = "SELECT * FROM users WHERE role = :role";
         return jdbcTemplate.query(sql, Map.of("role", role.name()), rowMapper);

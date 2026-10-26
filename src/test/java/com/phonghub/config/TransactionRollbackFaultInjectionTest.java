@@ -8,24 +8,30 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.MaintenanceUseCase;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.port.out.HandoverRepositoryPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.application.service.ContractService;
 import com.phonghub.application.service.MaintenanceService;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
+import com.phonghub.domain.model.Handover;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
@@ -33,6 +39,8 @@ import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomPage;
 import com.phonghub.domain.model.RoomSearchCriteria;
 import com.phonghub.domain.model.RoomStatus;
+import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -56,7 +64,9 @@ class TransactionRollbackFaultInjectionTest {
     private static InMemoryRoomRepository realRoomRepo;
     private static InMemoryMaintenanceTicketRepository realTicketRepo;
     private static InMemoryContractRepository realContractRepo;
+    private static InMemoryHandoverRepository realHandoverRepo;
     private static InMemoryTenantRepository realTenantRepo;
+    private static InMemoryUserRepository realUserRepo;
 
     private static boolean failTicketSave;
     private static boolean failContractSave;
@@ -220,6 +230,16 @@ class TransactionRollbackFaultInjectionTest {
         }
 
         @Bean
+        public UserRepositoryPort userRepository() {
+            return realUserRepo;
+        }
+
+        @Bean
+        public HandoverRepositoryPort handoverRepository() {
+            return realHandoverRepo;
+        }
+
+        @Bean
         public AuthorizationService authorizationService() {
             return new AuthorizationService(mockAssignmentRepo, mockPropertyRepo, realTenantRepo, realContractRepo);
         }
@@ -242,10 +262,13 @@ class TransactionRollbackFaultInjectionTest {
             ContractRepositoryPort contractRepo,
             RoomRepositoryPort roomRepo,
             TenantRepositoryPort tenantRepo,
-            AuthorizationService auth
+            UserRepositoryPort userRepo,
+            AuthorizationService auth,
+            HandoverRepositoryPort handoverRepo
         ) {
             ContractService service = new ContractService(
-                contractRepo, roomRepo, mockPropertyRepo, tenantRepo, mockCurrentUserPort, auth
+                contractRepo, roomRepo, mockPropertyRepo, tenantRepo, userRepo, null, mockCurrentUserPort, auth,
+                event -> { }, handoverRepo
             );
             return new TransactionalContractUseCase(service);
         }
@@ -260,7 +283,9 @@ class TransactionRollbackFaultInjectionTest {
         realRoomRepo = new InMemoryRoomRepository();
         realTicketRepo = new InMemoryMaintenanceTicketRepository();
         realContractRepo = new InMemoryContractRepository();
+        realHandoverRepo = new InMemoryHandoverRepository();
         realTenantRepo = new InMemoryTenantRepository();
+        realUserRepo = new InMemoryUserRepository();
 
         failTicketSave = false;
         failContractSave = false;
@@ -315,8 +340,14 @@ class TransactionRollbackFaultInjectionTest {
         UUID roomId = UUID.randomUUID();
         UUID contractId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
+        UUID tenantUserId = UUID.randomUUID();
         CurrentUser admin = new CurrentUser(UUID.randomUUID(), "admin@phonghub.local", "Admin", UserRole.ADMIN);
         when(mockCurrentUserPort.getCurrentUser()).thenReturn(admin);
+
+        realUserRepo.save(new User(tenantUserId, "tenant_rollback", "tenant-rollback@example.test", "Tenant",
+            "0900000001", UserRole.TENANT, User.UserStatus.ACTIVE, false, Instant.now()));
+        realTenantRepo.save(new Tenant(tenantId, tenantUserId, "Tenant", "079201007701", "0900000001",
+            "tenant-rollback@example.test", null, Instant.now()));
 
         Contract contract = new Contract(
             contractId, propertyId, roomId, tenantId,
@@ -328,6 +359,13 @@ class TransactionRollbackFaultInjectionTest {
 
         Room room = new Room(roomId, propertyId, "201", 2, new BigDecimal("30.0"), new BigDecimal("5000000"), 2, RoomStatus.AVAILABLE, Instant.now(), Instant.now());
         realRoomRepo.save(room);
+
+        Handover approvedCheckIn = Handover.draft(contractId, HandoverType.CHECK_IN, BigDecimal.ZERO,
+            BigDecimal.ZERO, "Tình trạng đã ghi nhận", null, admin.id())
+            .send("terms", null, null, admin.id())
+            .tenantConfirm(admin.id())
+            .approve(admin.id());
+        realHandoverRepo.save(approvedCheckIn);
 
         // Inject fault on 2nd write: contractRepository.save fails
         failContractSave = true;
@@ -365,6 +403,13 @@ class TransactionRollbackFaultInjectionTest {
 
         Room room = new Room(roomId, propertyId, "201", 2, new BigDecimal("30.0"), new BigDecimal("5000000"), 2, RoomStatus.OCCUPIED, Instant.now(), Instant.now());
         realRoomRepo.save(room);
+
+        Handover approvedCheckOut = Handover.draft(contractId, HandoverType.CHECK_OUT, BigDecimal.ZERO,
+            BigDecimal.ZERO, "Tình trạng đã ghi nhận", null, tenantId)
+            .send("terms", null, null, tenantId)
+            .tenantConfirm(tenantId)
+            .approve(admin.id());
+        realHandoverRepo.save(approvedCheckOut);
 
         // Inject fault on 2nd write: contractRepository.save fails
         failContractSave = true;

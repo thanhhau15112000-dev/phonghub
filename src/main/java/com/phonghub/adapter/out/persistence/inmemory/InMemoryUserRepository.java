@@ -34,6 +34,14 @@ public class InMemoryUserRepository implements UserRepositoryPort {
     }
 
     @Override
+    public Optional<User> findByPhone(String phone) {
+        if (phone == null || phone.isBlank()) return Optional.empty();
+        return store.values().stream()
+            .filter(u -> u.phone() != null && phone.trim().equals(u.phone().trim()))
+            .findFirst();
+    }
+
+    @Override
     public Optional<User> findByEmail(String email) {
         if (email == null) return Optional.empty();
         return store.values().stream()

@@ -9,6 +9,7 @@ import com.phonghub.application.port.in.RoomAssetUseCase;
 import com.phonghub.application.port.in.TenantDocumentUseCase;
 import com.phonghub.application.port.in.UtilityUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
+import com.phonghub.application.port.in.RoomSetupUseCase;
 import com.phonghub.application.port.in.TenantUseCase;
 import com.phonghub.application.port.in.UserUseCase;
 import com.phonghub.application.service.TenantService;
@@ -30,6 +31,7 @@ import com.phonghub.application.port.out.RoomAssetRepositoryPort;
 import com.phonghub.application.port.out.TenantDataProtectionPort;
 import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
 import com.phonghub.application.port.out.RoomRepositoryPort;
+import com.phonghub.application.port.out.RoomConditionRepositoryPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
@@ -43,6 +45,7 @@ import com.phonghub.application.service.RoomAssetService;
 import com.phonghub.application.service.TenantDocumentService;
 import com.phonghub.application.service.UtilityService;
 import com.phonghub.application.service.RoomService;
+import com.phonghub.application.service.RoomSetupService;
 import com.phonghub.application.service.UserService;
 import com.phonghub.application.port.in.InvoiceDueReminderUseCase;
 import com.phonghub.application.port.in.NotificationInboxUseCase;
@@ -166,6 +169,20 @@ public class PhongHubConfiguration {
         return new TransactionalRoomAssetUseCase(service);
     }
 
+    @Bean
+    public RoomSetupUseCase roomSetupUseCase(
+        RoomUseCase roomUseCase,
+        RoomAssetUseCase roomAssetUseCase,
+        RoomConditionRepositoryPort conditionRepository,
+        RoomRepositoryPort roomRepository,
+        PropertyRepositoryPort propertyRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService
+    ) {
+        return new TransactionalRoomSetupUseCase(new RoomSetupService(roomUseCase, roomAssetUseCase,
+            conditionRepository, roomRepository, propertyRepository, currentUserPort, authorizationService));
+    }
+
     /**
      * OCR chỉ số đồng hồ (#67): {@code phonghub.ocr.engine=tesseract} dùng lệnh tesseract (image Docker đã cài). Chọn
      * tesseract mà máy không có lệnh thì ghi cảnh báo và quay về nhập tay, không làm app lỗi khi khởi động.
@@ -228,12 +245,20 @@ public class PhongHubConfiguration {
         AuthorizationService authorizationService,
         AuditPort auditPort,
         StorageProperties storageProperties,
-        NotificationDispatcher notificationDispatcher
+        NotificationDispatcher notificationDispatcher,
+        RoomConditionRepositoryPort roomConditionRepository,
+        com.phonghub.application.port.in.RoomAssetUseCase roomAssetUseCase,
+        InvoiceRepositoryPort invoiceRepository,
+        com.phonghub.application.port.out.InvoicePaymentRecordRepositoryPort invoicePaymentRecordRepository,
+        MeterReadingRepositoryPort meterReadingRepository,
+        ServiceRateRepositoryPort serviceRateRepository,
+        com.phonghub.application.service.EarlyTerminationBillingService earlyTerminationBillingService
     ) {
         HandoverService service = new HandoverService(
             handoverRepo, photoRepo, itemRepo, rulesRepo, contractRepo, assetRepo, tenantRepo, documentRepo,
             contractUseCase, fileStoragePort, currentUserPort, authorizationService, auditPort, storageProperties.getMaxFileSizeBytes(),
-            notificationDispatcher
+            notificationDispatcher, roomConditionRepository, roomAssetUseCase, invoiceRepository,
+            invoicePaymentRecordRepository, meterReadingRepository, serviceRateRepository, earlyTerminationBillingService
         );
         return new TransactionalHandoverUseCase(service);
     }
@@ -281,6 +306,15 @@ public class PhongHubConfiguration {
             new com.phonghub.application.service.MaintenanceAttachmentService(attachmentRepo, ticketRepo, tenantRepo,
                 fileStoragePort, currentUserPort, authorizationService, auditPort, maxImages,
                 storageProperties.getMaxFileSizeBytes(), Math.min(maxVideoBytes, storageProperties.getMaxFileSizeBytes())));
+    }
+
+    @Bean
+    public com.phonghub.application.port.in.MaintenanceSubmissionUseCase maintenanceSubmissionUseCase(
+        MaintenanceUseCase maintenanceUseCase,
+        com.phonghub.application.port.in.MaintenanceAttachmentUseCase attachmentUseCase
+    ) {
+        return new TransactionalMaintenanceSubmissionUseCase(
+            new com.phonghub.application.service.MaintenanceSubmissionService(maintenanceUseCase, attachmentUseCase));
     }
 
     @Bean
@@ -372,12 +406,38 @@ public class PhongHubConfiguration {
         IdentityProviderPort identityProviderPort,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
-        AuditPort auditPort
+        AuditPort auditPort,
+        HandoverRepositoryPort handoverRepo,
+        com.phonghub.application.port.out.DraftHandoverCleanupPort draftHandoverCleanupPort,
+        MonthlyInvoiceUseCase monthlyInvoiceUseCase
     ) {
         ContractService service = new ContractService(
-            contractRepo, roomRepo, propertyRepo, tenantRepo, userRepo, identityProviderPort, currentUserPort, authorizationService, auditPort
+            contractRepo, roomRepo, propertyRepo, tenantRepo, userRepo, identityProviderPort, currentUserPort, authorizationService,
+            auditPort, handoverRepo, draftHandoverCleanupPort, monthlyInvoiceUseCase
         );
         return new TransactionalContractUseCase(service);
+    }
+
+    @Bean
+    public com.phonghub.application.port.out.DraftHandoverCleanupPort draftHandoverCleanupPort(
+        HandoverRepositoryPort handoverRepo,
+        HandoverPhotoRepositoryPort photoRepo,
+        HandoverItemRepositoryPort itemRepo,
+        FileStoragePort fileStoragePort
+    ) {
+        return new com.phonghub.application.service.HandoverDraftCleanupService(
+            handoverRepo, photoRepo, itemRepo, fileStoragePort);
+    }
+
+    @Bean
+    public com.phonghub.application.service.EarlyTerminationBillingService earlyTerminationBillingService(
+        InvoiceRepositoryPort invoiceRepository,
+        MeterReadingRepositoryPort readingRepository,
+        ServiceRateRepositoryPort rateRepository,
+        AuditPort auditPort
+    ) {
+        return new com.phonghub.application.service.EarlyTerminationBillingService(
+            invoiceRepository, readingRepository, rateRepository, auditPort);
     }
 
     @Bean
@@ -403,6 +463,96 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.service.MaintenanceAssignmentTimeoutPolicy maintenanceAssignmentTimeoutPolicy(
+        @org.springframework.beans.factory.annotation.Value(
+            "${phonghub.maintenance.assignment-timeout:PT72H}") String assignmentTimeout,
+        @org.springframework.beans.factory.annotation.Value(
+            "${phonghub.maintenance.understaffed-cancel-after:PT24H}") String cancelAfter
+    ) {
+        return new com.phonghub.application.service.MaintenanceAssignmentTimeoutPolicy(
+            java.time.Duration.parse(assignmentTimeout), java.time.Duration.parse(cancelAfter));
+    }
+
+    @Bean
+    public com.phonghub.application.service.MaintenanceAssignmentTimeoutService maintenanceAssignmentTimeoutService(
+        MaintenanceTicketRepositoryPort ticketRepo,
+        PropertyRepositoryPort propertyRepo,
+        StaffPropertyAssignmentPort assignmentRepo,
+        TenantRepositoryPort tenantRepo,
+        UserRepositoryPort userRepo,
+        NotificationRepositoryPort notificationRepo,
+        AuditPort auditPort,
+        com.phonghub.application.service.MaintenanceAssignmentTimeoutPolicy timeoutPolicy
+    ) {
+        return new com.phonghub.application.service.MaintenanceAssignmentTimeoutService(
+            ticketRepo, propertyRepo, assignmentRepo, tenantRepo, userRepo, notificationRepo, auditPort, timeoutPolicy);
+    }
+
+    @Bean
+    public com.phonghub.application.service.MaintenanceApprovalPolicy maintenanceApprovalPolicy(
+        @org.springframework.beans.factory.annotation.Value(
+            "${phonghub.maintenance.owner-approval-window:P3D}") String ownerWindow,
+        @org.springframework.beans.factory.annotation.Value(
+            "${phonghub.maintenance.quote-approval-window:P7D}") String quoteWindow,
+        @org.springframework.beans.factory.annotation.Value(
+            "${phonghub.maintenance.owner-reminder-before:P1D}") String ownerReminder,
+        @org.springframework.beans.factory.annotation.Value(
+            "${phonghub.maintenance.quote-reminder-before:P2D}") String quoteReminder
+    ) {
+        return new com.phonghub.application.service.MaintenanceApprovalPolicy(
+            java.time.Duration.parse(ownerWindow), java.time.Duration.parse(quoteWindow),
+            java.time.Duration.parse(ownerReminder), java.time.Duration.parse(quoteReminder));
+    }
+
+    @Bean
+    public com.phonghub.application.service.MaintenanceNotifier maintenanceNotifier(
+        PropertyRepositoryPort propertyRepo,
+        StaffPropertyAssignmentPort assignmentRepo,
+        TenantRepositoryPort tenantRepo,
+        UserRepositoryPort userRepo,
+        NotificationRepositoryPort notificationRepo
+    ) {
+        return new com.phonghub.application.service.MaintenanceNotifier(
+            propertyRepo, assignmentRepo, tenantRepo, userRepo, notificationRepo);
+    }
+
+    @Bean
+    public com.phonghub.application.service.MaintenanceApprovalService maintenanceApprovalService(
+        MaintenanceTicketRepositoryPort ticketRepo,
+        com.phonghub.application.service.MaintenanceNotifier notifier,
+        AuditPort auditPort,
+        com.phonghub.application.service.MaintenanceApprovalPolicy approvalPolicy
+    ) {
+        return new com.phonghub.application.service.MaintenanceApprovalService(
+            ticketRepo, notifier, auditPort, approvalPolicy);
+    }
+
+    @Bean
+    public com.phonghub.application.service.MaintenanceFeeSettlement maintenanceFeeSettlement(
+        InvoiceRepositoryPort invoiceRepo,
+        MaintenanceTicketRepositoryPort ticketRepo
+    ) {
+        return new com.phonghub.application.service.MaintenanceFeeSettlement(invoiceRepo, ticketRepo);
+    }
+
+    @Bean
+    public com.phonghub.application.port.in.ManualPaymentUseCase manualPaymentUseCase(
+        com.phonghub.application.port.out.PaymentClaimRepositoryPort claimRepo,
+        InvoiceRepositoryPort invoiceRepo,
+        ContractRepositoryPort contractRepo,
+        TenantRepositoryPort tenantRepo,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        NotificationDispatcher notificationDispatcher,
+        com.phonghub.application.service.MaintenanceFeeSettlement feeSettlement
+    ) {
+        return new TransactionalManualPaymentUseCase(new com.phonghub.application.service.ManualPaymentService(
+            claimRepo, invoiceRepo, contractRepo, tenantRepo, currentUserPort, authorizationService, auditPort,
+            notificationDispatcher, feeSettlement));
+    }
+
+    @Bean
     public MaintenanceUseCase maintenanceUseCase(
         MaintenanceTicketRepositoryPort ticketRepo,
         RoomRepositoryPort roomRepo,
@@ -415,11 +565,14 @@ public class PhongHubConfiguration {
         UserRepositoryPort userRepo,
         StaffPropertyAssignmentPort assignmentRepo,
         NotificationRepositoryPort notificationRepo,
-        com.phonghub.application.service.MaintenanceSlaPolicy slaPolicy
+        com.phonghub.application.service.MaintenanceSlaPolicy slaPolicy,
+        com.phonghub.application.service.MaintenanceApprovalPolicy approvalPolicy,
+        com.phonghub.application.service.MaintenanceNotifier notifier
     ) {
         MaintenanceService service = new MaintenanceService(
             ticketRepo, roomRepo, tenantRepo, contractRepo, invoiceRepo, auditPort,
-            currentUserPort, authorizationService, userRepo, assignmentRepo, notificationRepo, slaPolicy
+            currentUserPort, authorizationService, userRepo, assignmentRepo, notificationRepo, slaPolicy,
+            approvalPolicy, notifier
         );
         return new TransactionalMaintenanceUseCase(service);
     }
@@ -467,9 +620,11 @@ public class PhongHubConfiguration {
         IdentityProviderPort identityProviderPort,
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
-        AuditPort auditPort
+        AuditPort auditPort,
+        TenantRepositoryPort tenantRepo
     ) {
-        return new AuthService(userRepo, identityProviderPort, currentUserPort, authorizationService, auditPort);
+        return new TransactionalAuthUseCase(
+            new AuthService(userRepo, identityProviderPort, currentUserPort, authorizationService, auditPort, tenantRepo));
     }
 
     @Bean
@@ -479,10 +634,12 @@ public class PhongHubConfiguration {
         AuthorizationService authorizationService,
         AuditPort auditPort,
         ContractRepositoryPort contractRepo,
-        com.phonghub.application.service.TenantLockPolicy tenantLockPolicy
+        com.phonghub.application.service.TenantLockPolicy tenantLockPolicy,
+        UserRepositoryPort userRepo,
+        IdentityProviderPort identityProviderPort
     ) {
         TenantService service = new TenantService(tenantRepo, currentUserPort, authorizationService, auditPort,
-            contractRepo, tenantLockPolicy);
+            contractRepo, tenantLockPolicy, userRepo, identityProviderPort);
         return new TransactionalTenantUseCase(service);
     }
 
@@ -618,11 +775,12 @@ public class PhongHubConfiguration {
         TenantRepositoryPort tenantRepository,
         StaffPropertyAssignmentPort assignmentRepository,
         CurrentUserPort currentUserPort,
-        AuthorizationService authorizationService
+        AuthorizationService authorizationService,
+        com.phonghub.application.port.out.InvoicePaymentRecordRepositoryPort paymentRecordRepository
     ) {
         return new com.phonghub.application.service.PaymentReconciliationService(paymentRepository, invoiceRepository,
             contractRepository, propertyRepository, roomRepository, tenantRepository, assignmentRepository,
-            currentUserPort, authorizationService);
+            currentUserPort, authorizationService, paymentRecordRepository);
     }
 
     @Bean
@@ -687,10 +845,11 @@ public class PhongHubConfiguration {
         HandoverRepositoryPort handoverRepo,
         HandoverItemRepositoryPort itemRepo,
         MeterReadingRepositoryPort meterReadingRepository,
-        ServiceRateRepositoryPort serviceRateRepository
+        ServiceRateRepositoryPort serviceRateRepository,
+        com.phonghub.application.port.out.InvoicePaymentRecordRepositoryPort paymentRecordRepository
     ) {
         return new com.phonghub.application.service.CheckOutSettlementService(contractUseCase, invoiceUseCase,
-            handoverRepo, itemRepo, meterReadingRepository, serviceRateRepository);
+            handoverRepo, itemRepo, meterReadingRepository, serviceRateRepository, paymentRecordRepository);
     }
 
     @Bean
@@ -714,27 +873,14 @@ public class PhongHubConfiguration {
     }
 
     @Bean
-    public com.phonghub.application.port.out.MediaStoragePort mediaStoragePort(
-        @org.springframework.beans.factory.annotation.Value("${supabase.url:}") String supabaseUrl,
-        @org.springframework.beans.factory.annotation.Value("${supabase.service-role-key:}") String serviceRoleKey,
-        @org.springframework.beans.factory.annotation.Value("${phonghub.chat.supabase-bucket:chat-media}") String bucketName
-    ) {
-        if (supabaseUrl != null && !supabaseUrl.isBlank() && serviceRoleKey != null && !serviceRoleKey.isBlank()) {
-            return new com.phonghub.adapter.out.supabase.storage.SupabaseMediaStorageAdapter(supabaseUrl, serviceRoleKey, bucketName);
-        }
-        return new com.phonghub.adapter.out.storage.LocalMediaStorageAdapter();
-    }
-
-    @Bean
     public com.phonghub.application.service.ChatService chatService(
         com.phonghub.application.port.out.ChatRoomRepositoryPort chatRoomRepository,
         com.phonghub.application.port.out.ChatMessageRepositoryPort chatMessageRepository,
         UserRepositoryPort userRepository,
-        com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher,
-        com.phonghub.application.port.out.MediaStoragePort mediaStoragePort
+        com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher
     ) {
         return new com.phonghub.application.service.ChatService(
-            chatRoomRepository, chatMessageRepository, userRepository, sseChatEventPublisher, mediaStoragePort,
+            chatRoomRepository, chatMessageRepository, userRepository, sseChatEventPublisher,
             java.time.Clock.systemUTC()
         );
     }

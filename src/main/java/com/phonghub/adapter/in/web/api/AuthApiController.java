@@ -58,7 +58,8 @@ public class AuthApiController {
         String email,
         @NotBlank(message = "Full name cannot be blank") String fullName,
         String phone,
-        @NotNull(message = "Role is required") UserRole role
+        @NotNull(message = "Role is required") UserRole role,
+        String identityCardNumber
     ) {}
 
     @PostMapping("/api/auth/login")
@@ -107,7 +108,8 @@ public class AuthApiController {
             request.email(),
             request.fullName(),
             request.phone(),
-            request.role()
+            request.role(),
+            request.identityCardNumber()
         ));
         AdminCreatedUserResponse response = AdminCreatedUserResponse.from(created);
         return ResponseEntity.created(URI.create("/api/admin/users/" + response.id())).body(response);

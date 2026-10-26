@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
@@ -17,6 +18,8 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
+import com.phonghub.domain.model.Handover;
+import com.phonghub.domain.model.HandoverType;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
@@ -35,7 +38,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 /**
  * Trạng thái phòng luôn khớp với hợp đồng: phiếu bảo trì không đưa phòng có người ở sang Bảo trì/Trống, người thuê chỉ
- * báo hỏng phòng của mình, và dữ liệu cũ (phòng có người ở đang Bảo trì) vẫn kết thúc được hợp đồng.
+ * báo hỏng phòng của mình, và dữ liệu cũ (phòng có người ở đang Bảo trì) vẫn mở được check-out nhưng chưa kết thúc hợp đồng.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -53,6 +56,7 @@ class RoomStatusIntegrityIntegrationTest {
     @Autowired private InMemoryRoomRepository roomRepository;
     @Autowired private InMemoryTenantRepository tenantRepository;
     @Autowired private InMemoryContractRepository contractRepository;
+    @Autowired private InMemoryHandoverRepository handoverRepository;
     @Autowired private InMemoryMaintenanceTicketRepository ticketRepository;
 
     @BeforeEach
@@ -63,6 +67,7 @@ class RoomStatusIntegrityIntegrationTest {
         roomRepository.clear();
         tenantRepository.clear();
         contractRepository.clear();
+        handoverRepository.clear();
         ticketRepository.clear();
         DataSeeder.seedAll(
             userRepository, propertyRepository, assignmentRepository, roomRepository,
@@ -147,18 +152,31 @@ class RoomStatusIntegrityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Dữ liệu cũ: phòng có người ở đang Bảo trì vẫn kết thúc được hợp đồng, phòng giữ Bảo trì")
-    void legacyMaintenanceRoomCanStillTerminate() throws Exception {
+    @DisplayName("Dữ liệu cũ: phòng có người ở đang Bảo trì chỉ mở check-out, hợp đồng vẫn hiệu lực")
+    void legacyMaintenanceRoomMustCompleteCheckOutBeforeTermination() throws Exception {
         Room room = roomRepository.findById(DataSeeder.ROOM_101_ID).orElseThrow();
         room.transitionTo(RoomStatus.MAINTENANCE);
         roomRepository.save(room);
+        UUID ownerId = UUID.fromString(OWNER_1);
+        UUID tenantId = UUID.fromString(TENANT);
+        Handover approvedCheckIn = Handover.draft(DataSeeder.CONTRACT_1_ID, HandoverType.CHECK_IN,
+            BigDecimal.ZERO, BigDecimal.ZERO, "Đã ghi nhận hiện trạng", null, ownerId)
+            .send("terms-hash", null, null, ownerId)
+            .tenantConfirm(tenantId)
+            .approve(ownerId);
+        handoverRepository.save(approvedCheckIn);
 
         mockMvc.perform(asUser(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/terminate"), OWNER_1)
                 .param("reason", "Người thuê bỏ đi"))
-            .andExpect(flash().attribute("successMessage", containsString("Bảo trì")));
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl(
+                "/contracts/" + DataSeeder.CONTRACT_1_ID + "/check-out"))
+            .andExpect(flash().attribute("successMessage", containsString("check-out")));
 
-        assertEquals(ContractStatus.TERMINATED,
+        assertEquals(ContractStatus.ACTIVE,
             contractRepository.findById(DataSeeder.CONTRACT_1_ID).orElseThrow().getStatus());
+        var checkOut = handoverRepository.find(DataSeeder.CONTRACT_1_ID, HandoverType.CHECK_OUT).orElseThrow();
+        assertTrue(checkOut.earlyTermination());
+        assertEquals("Người thuê bỏ đi", checkOut.terminationReason());
         assertEquals(RoomStatus.MAINTENANCE, roomStatus(DataSeeder.ROOM_101_ID));
     }
 

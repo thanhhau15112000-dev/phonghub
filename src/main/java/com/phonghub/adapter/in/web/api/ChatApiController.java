@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -57,10 +58,14 @@ public class ChatApiController {
         return user;
     }
 
+    /** Luồng SSE của widget chat; proxy không được nén hay gom dữ liệu, nếu không tin sẽ đến trễ. */
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream() {
+    public ResponseEntity<SseEmitter> stream() {
         CurrentUser user = requireUser();
-        return sseChatEventPublisher.subscribe(user.id());
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-transform")
+            .header("X-Accel-Buffering", "no")
+            .body(sseChatEventPublisher.subscribe(user.id()));
     }
 
     @GetMapping("/rooms")
@@ -112,27 +117,6 @@ public class ChatApiController {
     ) {
         CurrentUser user = requireUser();
         ChatMessage message = chatMessageUseCase.sendMessage(user, roomId, request.content());
-        return ResponseEntity.ok(message);
-    }
-
-    @PostMapping(value = "/rooms/{roomId}/media", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ChatMessage> sendMedia(
-        @PathVariable UUID roomId,
-        @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
-        @RequestParam(value = "caption", required = false) String caption
-    ) throws java.io.IOException {
-        CurrentUser user = requireUser();
-        if (file == null || file.isEmpty()) {
-            return ResponseEntity.badRequest().build();
-        }
-        ChatMessage message = chatMessageUseCase.sendMediaMessage(
-            user,
-            roomId,
-            file.getOriginalFilename(),
-            file.getContentType(),
-            file.getBytes(),
-            caption
-        );
         return ResponseEntity.ok(message);
     }
 

@@ -32,7 +32,7 @@ class PropertyTenantApiIntegrationTest extends SeededWebTest {
 
     private static String body(String name, String cccd, String phone) {
         return "{\"fullName\":\"" + name + "\",\"identityCardNumber\":\"" + cccd + "\",\"phone\":\"" + phone
-            + "\",\"email\":\"khach@example.com\",\"permanentAddress\":\"Hà Nội\"}";
+            + "\",\"email\":\"khach+" + phone + "@example.test\",\"permanentAddress\":\"Hà Nội\"}";
     }
 
     private ResultActions add(String path, String body, String user) throws Exception {
