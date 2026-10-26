@@ -376,6 +376,36 @@ public class Invoice {
         return overpayment;
     }
 
+    /** Replace final-meter lines after the tenant confirms a corrected checkout; preserve all receipts. */
+    public void reviseCheckOutUtilities(List<InvoiceItem> charges) {
+        if ((type != InvoiceType.CANCELLATION && type != InvoiceType.CHECK_OUT)
+            || status == InvoiceStatus.VOIDED || status == InvoiceStatus.DRAFT || depositPaidAmount.signum() > 0) {
+            throw new DomainException("Không thể điều chỉnh điện nước trên hóa đơn đã hủy hoặc đã cấn trừ cọc.");
+        }
+        if (charges == null || charges.stream().anyMatch(charge -> charge == null || !charge.isCheckOutCharge())) {
+            throw new IllegalArgumentException("Cần cung cấp các khoản điện nước chốt check-out hợp lệ.");
+        }
+        // paidAmount may have been capped at the previous total; its credit is still part of the original receipts.
+        BigDecimal received = paidAmount.add(settlementCreditAmount);
+        if (type == InvoiceType.CHECK_OUT) {
+            items.clear();
+        } else {
+            items.removeIf(InvoiceItem::isCheckOutCharge);
+        }
+        items.addAll(charges);
+        totalAmount = items.stream().map(InvoiceItem::totalAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        settlementCreditAmount = received.subtract(totalAmount).max(BigDecimal.ZERO);
+        paidAmount = received.min(totalAmount);
+        if (paidAmount.compareTo(totalAmount) >= 0) {
+            status = InvoiceStatus.PAID;
+            if (paidAt == null) paidAt = Instant.now();
+        } else {
+            status = paidAmount.signum() > 0 ? InvoiceStatus.PARTIALLY_PAID : InvoiceStatus.ISSUED;
+            paidAt = null;
+        }
+        updatedAt = Instant.now();
+    }
+
     /** Voids future rent when a contract ends; prior receipts remain as a settlement credit. */
     public BigDecimal voidForEarlyTermination() {
         if (type != InvoiceType.RENT || status == InvoiceStatus.VOIDED || status == InvoiceStatus.DRAFT) {

@@ -32,6 +32,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
@@ -278,6 +280,78 @@ class CheckOutApiIntegrationTest extends SeededWebTest {
         List<InvoicePaymentRecord> offsets = paymentRecords.findByInvoiceId(utilityInvoice.getId());
         org.junit.jupiter.api.Assertions.assertEquals(1, offsets.size());
         org.junit.jupiter.api.Assertions.assertEquals(InvoicePaymentRecord.Type.DEPOSIT_OFFSET, offsets.getFirst().type());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"false, NONE", "false, PARTIAL", "false, FULL", "true, NONE", "true, PARTIAL", "true, FULL"})
+    @DisplayName("Reconfirming corrected checkout meters revises the same invoice and preserves receipts and credits")
+    void correctedCheckoutRevisesInvoice(boolean early, String payment) throws Exception {
+        approvedCheckIn();
+        var contract = contracts.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();
+        if (early) {
+            org.springframework.test.util.ReflectionTestUtils.setField(contract, "endDate", LocalDate.now().plusMonths(6));
+            contracts.save(contract);
+        }
+        var rentFee = early ? contract.getRentAmount().multiply(new java.math.BigDecimal("0.5"))
+            .setScale(0, java.math.RoundingMode.HALF_UP) : java.math.BigDecimal.ZERO;
+        Instant now = Instant.now();
+        serviceRates.save(new ServiceRate(UUID.randomUUID(), DataSeeder.PROP_1_ID, "Điện", ChargeType.PER_KWH,
+            new java.math.BigDecimal("3000"), now, LocalDemoAuthenticationAdapter.OWNER_1_ID, now,
+            LocalDemoAuthenticationAdapter.OWNER_1_ID));
+        createCheckOut();
+        updateCheckoutElectricMeter(1510);
+        sendAndConfirm();
+        InvoiceType type = early ? InvoiceType.CANCELLATION : InvoiceType.CHECK_OUT;
+        var invoice = invoices.findByContractId(contract.getId()).stream()
+            .filter(found -> found.getType() == type).findFirst().orElseThrow();
+        UUID invoiceId = invoice.getId();
+        LocalDate dueDate = invoice.getDueDate();
+        String paymentCode = invoice.getPaymentCode();
+        var received = switch (payment) {
+            case "FULL" -> invoice.getTotalAmount();
+            case "PARTIAL" -> new java.math.BigDecimal("10000");
+            default -> java.math.BigDecimal.ZERO;
+        };
+        if (received.signum() > 0) {
+            mockMvc.perform(post("/api/invoices/" + invoiceId + "/manual-payments").header("X-User-Id", OWNER_1)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"amount\":" + received + ",\"method\":\"CASH\"}"))
+                .andExpect(status().isCreated());
+        }
+
+        // Increase, decrease, repeat the same correction, then remove consumption entirely.
+        for (int meter : new int[] {1530, 1505, 1505, 1500}) {
+            mockMvc.perform(post(CONTRACT + "/check-out/reject").header("X-User-Id", STAFF_1)
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Sửa chỉ số điện\"}"))
+                .andExpect(status().isOk());
+            mockMvc.perform(post(CONTRACT + "/check-out/reopen").header("X-User-Id", STAFF_1))
+                .andExpect(status().isOk());
+            updateCheckoutElectricMeter(meter);
+            mockMvc.perform(post(CONTRACT + "/check-out/send").header("X-User-Id", OWNER_1))
+                .andExpect(status().isOk());
+            mockMvc.perform(post(CONTRACT + "/check-out/confirm").header("X-User-Id", TENANT_1))
+                .andExpect(status().isOk());
+            var revised = invoices.findById(invoiceId).orElseThrow();
+            var total = rentFee.add(java.math.BigDecimal.valueOf((meter - 1500L) * 3000));
+            var credit = received.subtract(total).max(java.math.BigDecimal.ZERO);
+            assertEquals(0, total.compareTo(revised.getTotalAmount()));
+            assertEquals(0, received.compareTo(revised.getPaidAmount().add(revised.getSettlementCreditAmount())));
+            assertEquals(0, credit.compareTo(revised.getSettlementCreditAmount()));
+            assertEquals(0, credit.compareTo(contracts.findById(contract.getId()).orElseThrow().getSettlementCreditAmount()));
+            assertEquals(total.compareTo(received) <= 0 ? InvoiceStatus.PAID
+                : received.signum() > 0 ? InvoiceStatus.PARTIALLY_PAID : InvoiceStatus.ISSUED, revised.getStatus());
+            assertEquals(dueDate, revised.getDueDate());
+            assertEquals(paymentCode, revised.getPaymentCode());
+            assertEquals(1, invoices.findByContractId(contract.getId()).size());
+            assertEquals(meter == 1500 ? 0 : 1, revised.getItems().stream().filter(item -> item.isUtilityCharge()).count());
+        }
+    }
+
+    private void updateCheckoutElectricMeter(int meter) throws Exception {
+        mockMvc.perform(patch(CONTRACT + "/check-out").header("X-User-Id", OWNER_1)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"initialElectricMeter\":" + meter
+                    + ",\"initialWaterMeter\":40,\"roomCondition\":\"Phòng trả lại\",\"keysProvided\":\"2 chìa\"}"))
+            .andExpect(status().isOk());
     }
 
     @Test

@@ -143,9 +143,9 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
         return invoice;
     }
 
-    /** Ghi lại toàn bộ dòng chi tiết của hóa đơn (hóa đơn không có dòng nào thì giữ nguyên dữ liệu cũ). */
+    /** Replace invoice lines; a corrected checkout may legitimately remove every final-meter charge. */
     private void saveItems(Invoice invoice) {
-        if (invoice.getItems().isEmpty()) {
+        if (invoice.getItems().isEmpty() && invoice.getType() != InvoiceType.CHECK_OUT) {
             return;
         }
         jdbcTemplate.update("DELETE FROM invoice_items WHERE invoice_id = :invoiceId", Map.of("invoiceId", invoice.getId()));

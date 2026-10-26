@@ -605,14 +605,35 @@ public class HandoverService implements HandoverUseCase {
      */
     private void issueCheckOutInvoices(Contract contract, Handover checkIn, Handover checkOut, CurrentUser user) {
         if (invoiceRepository == null || meterReadingRepository == null || serviceRateRepository == null) return;
+        contract = contractRepository.findByIdForUpdate(contract.getId())
+            .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + checkOut.contractId()));
         java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
         List<InvoiceItem> charges = finalUtilityCharges(contract, checkIn, checkOut);
+        Invoice existing = invoiceRepository.findByContractId(contract.getId()).stream()
+            .filter(invoice -> (invoice.getType() == com.phonghub.domain.model.InvoiceType.CANCELLATION
+                || invoice.getType() == com.phonghub.domain.model.InvoiceType.CHECK_OUT)
+                && invoice.getStatus() != com.phonghub.domain.model.InvoiceStatus.VOIDED)
+            .findFirst().orElse(null);
+        if (existing != null) {
+            Invoice invoice = invoiceRepository.findByIdForUpdate(existing.getId()).orElseThrow();
+            BigDecimal previousTotal = invoice.getTotalAmount();
+            BigDecimal previousCredit = invoice.getSettlementCreditAmount();
+            invoice.reviseCheckOutUtilities(charges);
+            contract.reviseSettlementCredit(previousCredit, invoice.getSettlementCreditAmount());
+            contractRepository.save(contract);
+            invoiceRepository.save(invoice);
+            auditPort.recordEvent(AuditPort.AuditEvent.of("CHECKOUT_INVOICE_REVISED", user.id(), "INVOICE",
+                invoice.getId().toString(), contract.getPropertyId(), Map.of(
+                    "handoverId", checkOut.id().toString(), "previousTotal", previousTotal.toPlainString(),
+                    "totalAmount", invoice.getTotalAmount().toPlainString(),
+                    "refundCredit", invoice.getSettlementCreditAmount().toPlainString())));
+            return;
+        }
         boolean beforeEndDate = contract.getStatus() == com.phonghub.domain.model.ContractStatus.ACTIVE
             && today.isBefore(contract.getEndDate());
         if (earlyTerminationBilling != null && beforeEndDate) {
-            Contract locked = contractRepository.findByIdForUpdate(contract.getId()).orElse(contract);
-            earlyTerminationBilling.billEarlyTermination(locked, user, today, charges);
-            contractRepository.save(locked);
+            earlyTerminationBilling.billEarlyTermination(contract, user, today, charges);
+            contractRepository.save(contract);
             return;
         }
         issueFinalUtilityInvoice(contract, checkOut, charges, today, user.id());
@@ -657,9 +678,7 @@ public class HandoverService implements HandoverUseCase {
         BigDecimal quantity = finalValue.subtract(fromValue);
         for (ServiceRate rate : rates) {
             if (rate.chargeType() == chargeType && rate.pricePerUnit().signum() > 0) {
-                out.add(InvoiceItem.charge(rate.serviceName() + " chốt check-out ("
-                    + quantity.stripTrailingZeros().toPlainString() + " " + unit + ")",
-                    quantity, rate.pricePerUnit(), null, rate.id()));
+                out.add(InvoiceItem.checkOutCharge(rate.serviceName(), quantity, rate.pricePerUnit(), unit, rate.id()));
             }
         }
     }

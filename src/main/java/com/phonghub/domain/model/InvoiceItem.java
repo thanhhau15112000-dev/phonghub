@@ -52,6 +52,19 @@ public record InvoiceItem(
         return rateId != null;
     }
 
+    private static final String CHECK_OUT_CHARGE_MARKER = " chốt check-out (";
+
+    public static InvoiceItem checkOutCharge(String name, BigDecimal quantity, BigDecimal unitPrice,
+                                             String unit, UUID rateId) {
+        return charge(name + CHECK_OUT_CHARGE_MARKER + quantity.stripTrailingZeros().toPlainString()
+            + " " + unit + ")", quantity, unitPrice, null, rateId);
+    }
+
+    /** Recognizes final-meter lines, including invoices issued before checkout revisions were supported. */
+    public boolean isCheckOutCharge() {
+        return isUtilityCharge() && readingId == null && name.contains(CHECK_OUT_CHARGE_MARKER);
+    }
+
     public static final String LATE_FEE_NAME = "Phạt trả trễ";
 
     /** Dòng phạt trả trễ (#80): một dòng riêng, không gắn chỉ số, đơn giá hay hóa đơn nguồn. */

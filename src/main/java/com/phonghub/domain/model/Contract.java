@@ -383,6 +383,16 @@ public class Contract {
         this.updatedAt = Instant.now();
     }
 
+    /** Replace only one invoice's provisional refund, retaining credits from other invoices. */
+    public void reviseSettlementCredit(BigDecimal previousCredit, BigDecimal revisedCredit) {
+        if (previousCredit == null || revisedCredit == null || previousCredit.signum() < 0
+            || revisedCredit.signum() < 0 || previousCredit.compareTo(settlementCreditAmount) > 0) {
+            throw new DomainException("Khoản hoàn/đối trừ của hóa đơn không khớp với quyết toán hợp đồng.");
+        }
+        settlementCreditAmount = settlementCreditAmount.subtract(previousCredit).add(revisedCredit);
+        updatedAt = Instant.now();
+    }
+
     /** Kết thúc hợp đồng (trả phòng/chấm dứt); hợp đồng đã hết hạn nhưng chưa trả phòng cũng kết thúc qua đây. */
     public void terminate() {
         if (!isResiding()) {
