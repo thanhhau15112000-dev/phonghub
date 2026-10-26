@@ -1,6 +1,8 @@
 package com.phonghub.adapter.in.web;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -13,6 +15,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
@@ -616,7 +619,12 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(get("/account/profile").session(session))
             .andExpect(status().isOk())
             .andExpect(model().attributeExists("user"))
-            .andExpect(model().attributeExists("currentUser"));
+            .andExpect(model().attributeExists("currentUser"))
+            .andExpect(content().string(containsString("id=\"accountMenuButton\"")))
+            .andExpect(content().string(containsString("class=\"account-menu-name\">Admin User</span>")))
+            .andExpect(content().string(containsString("Chi tiết hồ sơ")))
+            .andExpect(content().string(containsString("action=\"/session/logout\"")))
+            .andExpect(content().string(not(containsString("id=\"demoUserSwitcher\""))));
     }
 
     @Test
