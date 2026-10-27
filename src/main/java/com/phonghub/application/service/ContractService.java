@@ -500,6 +500,7 @@ public class ContractService implements ContractUseCase {
         if (userRepository == null) {
             return List.of();
         }
+        boolean acrossProperties = authorizationService.canSelectTenantsAcrossProperties(actor);
 
         String q = query == null ? "" : query.trim();
         String digits = q.replaceAll("\\D", "");
@@ -528,6 +529,8 @@ public class ContractService implements ContractUseCase {
             boolean suffixSearch = q.matches("\\d+") && digits.length() >= 3;
             if (suffixSearch) {
                 candidates = localCandidates;
+            } else if (acrossProperties) {
+                candidates = tenantRepository.findAll();
             } else {
                 candidates = java.util.stream.Stream.concat(localCandidates.stream(),
                         tenantRepository.findAccountProfilesWithoutPropertyLinks().stream())
@@ -536,12 +539,21 @@ public class ContractService implements ContractUseCase {
             }
         }
 
+        // Tập ứng viên của admin là toàn hệ thống nên tra tài khoản và nơi ở một lần thay vì theo từng người thuê.
+        java.util.function.Predicate<Tenant> hasActiveTenantAccount = acrossProperties
+            ? activeTenantAccountFilter()
+            : tenant -> userRepository.findById(tenant.userId())
+                .filter(user -> user.role() == UserRole.TENANT && user.status() == User.UserStatus.ACTIVE).isPresent();
+        java.util.function.Predicate<UUID> residesAnywhere = acrossProperties
+            ? residingTenantIds()::contains
+            : this::tenantResidesAnywhere;
+
         return candidates.stream()
             .filter(tenant -> tenant.userId() != null)
-            .filter(tenant -> userRepository.findById(tenant.userId())
-                .filter(user -> user.role() == UserRole.TENANT && user.status() == User.UserStatus.ACTIVE).isPresent())
-            .filter(tenant -> isTenantSelectableForProperty(tenant, propertyId, visibleLinkedIds, hiddenLinkedIds))
-            .filter(tenant -> !tenantResidesAnywhere(tenant.id()))
+            .filter(hasActiveTenantAccount)
+            .filter(tenant -> isTenantSelectableForProperty(
+                tenant, propertyId, visibleLinkedIds, hiddenLinkedIds, acrossProperties))
+            .filter(tenant -> !residesAnywhere.test(tenant.id()))
             .filter(tenant -> tenantMatchesQuery(tenant, q, digits, foldedQuery, localProfileIds.contains(tenant.id())))
             .sorted(java.util.Comparator.comparing((Tenant tenant) -> foldTenantSearch(tenant.fullName()))
                 .thenComparing(Tenant::id))
@@ -549,9 +561,9 @@ public class ContractService implements ContractUseCase {
     }
 
     private boolean isTenantSelectableForProperty(Tenant tenant, UUID propertyId, Set<UUID> visibleLinkedIds,
-                                                  Set<UUID> hiddenLinkedIds) {
+                                                  Set<UUID> hiddenLinkedIds, boolean acrossProperties) {
         if (hiddenLinkedIds.contains(tenant.id())) return false;
-        if (visibleLinkedIds.contains(tenant.id())) return true;
+        if (acrossProperties || visibleLinkedIds.contains(tenant.id())) return true;
         boolean hasDirectLinks = !tenantRepository.findLinkedPropertyIds(tenant.id()).isEmpty();
         boolean hasContractHistory = tenantHasContractHistory(tenant.id());
         if (hasDirectLinks || hasContractHistory) {
@@ -567,6 +579,28 @@ public class ContractService implements ContractUseCase {
     private boolean tenantHasContractHistory(UUID tenantId) {
         return !contractRepository.findByPrimaryTenantId(tenantId).isEmpty()
             || !contractRepository.findByOccupantTenantId(tenantId).isEmpty();
+    }
+
+    private java.util.function.Predicate<Tenant> activeTenantAccountFilter() {
+        Set<UUID> activeUserIds = userRepository.findByRole(UserRole.TENANT).stream()
+            .filter(user -> user.status() == User.UserStatus.ACTIVE)
+            .map(User::id)
+            .collect(java.util.stream.Collectors.toSet());
+        return tenant -> activeUserIds.contains(tenant.userId());
+    }
+
+    /** Cùng quy tắc với {@link #tenantResidesAnywhere} nhưng tính cho mọi người thuê bằng một lượt đọc hợp đồng. */
+    private Set<UUID> residingTenantIds() {
+        LocalDate today = LocalDate.now();
+        Set<UUID> residing = new HashSet<>();
+        for (Contract contract : contractRepository.findAll()) {
+            if (!contract.isResiding()) continue;
+            residing.add(contract.getPrimaryTenantId());
+            contract.getOccupants().stream()
+                .filter(occupant -> occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(today))
+                .forEach(occupant -> residing.add(occupant.tenantId()));
+        }
+        return residing;
     }
 
     private boolean tenantResidesAnywhere(UUID tenantId) {
