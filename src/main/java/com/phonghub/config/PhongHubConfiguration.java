@@ -877,10 +877,15 @@ public class PhongHubConfiguration {
         com.phonghub.application.port.out.ChatRoomRepositoryPort chatRoomRepository,
         com.phonghub.application.port.out.ChatMessageRepositoryPort chatMessageRepository,
         UserRepositoryPort userRepository,
-        com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher
+        com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher,
+        FileStoragePort fileStoragePort,
+        StorageProperties storageProperties,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.chat.max-video-bytes:10485760}") long maxVideoBytes
     ) {
+        // Ảnh theo STORAGE_MAX_FILE_SIZE_BYTES; video giới hạn riêng nhưng không vượt giới hạn chung của tệp (#251)
         return new com.phonghub.application.service.ChatService(
-            chatRoomRepository, chatMessageRepository, userRepository, sseChatEventPublisher,
+            chatRoomRepository, chatMessageRepository, userRepository, sseChatEventPublisher, fileStoragePort,
+            storageProperties.getMaxFileSizeBytes(), Math.min(maxVideoBytes, storageProperties.getMaxFileSizeBytes()),
             java.time.Clock.systemUTC()
         );
     }

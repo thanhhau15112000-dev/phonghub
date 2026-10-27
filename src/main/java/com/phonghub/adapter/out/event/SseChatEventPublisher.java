@@ -50,7 +50,9 @@ public class SseChatEventPublisher implements ChatEventPublisherPort {
 
     @Override
     public void publishNewMessage(ChatRoom room, ChatMessage message) {
-        sendToReaders(room, () -> SseEmitter.event().name("new_message").data(message));
+        // Cùng dạng với REST: không lộ khóa tệp trong kho (#251)
+        sendToReaders(room, () -> SseEmitter.event().name("new_message")
+            .data(com.phonghub.adapter.in.web.api.ChatMessageResponse.from(message)));
     }
 
     @Override

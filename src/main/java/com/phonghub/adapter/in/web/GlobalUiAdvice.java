@@ -27,9 +27,13 @@ public class GlobalUiAdvice {
     private final Optional<NotificationUseCase> notificationUseCase;
     private final Optional<NotificationInboxUseCase> notificationInbox;
     private final Optional<com.phonghub.application.port.in.ChatMessageUseCase> chatMessageUseCase;
+    private final long chatMaxImageBytes;
+    private final long chatMaxVideoBytes;
 
     public GlobalUiAdvice(
         @Value("${phonghub.demo.enabled:true}") boolean demoEnabled,
+        @Value("${phonghub.storage.max-file-size-bytes:10485760}") long chatMaxImageBytes,
+        @Value("${phonghub.chat.max-video-bytes:10485760}") long chatMaxVideoBytes,
         Optional<DemoActorPort> demoActorPort,
         Optional<NotificationUseCase> notificationUseCase,
         Optional<NotificationInboxUseCase> notificationInbox,
@@ -40,6 +44,14 @@ public class GlobalUiAdvice {
         this.notificationUseCase = notificationUseCase;
         this.notificationInbox = notificationInbox;
         this.chatMessageUseCase = chatMessageUseCase;
+        this.chatMaxImageBytes = chatMaxImageBytes;
+        this.chatMaxVideoBytes = Math.min(chatMaxVideoBytes, chatMaxImageBytes);
+    }
+
+    /** Giới hạn dung lượng ảnh/video trong chat để widget kiểm tra trước khi gửi (#251, như #207). */
+    @ModelAttribute("chatMediaLimits")
+    public Map<String, Long> chatMediaLimits() {
+        return Map.of("imageBytes", chatMaxImageBytes, "videoBytes", chatMaxVideoBytes);
     }
 
     /**
