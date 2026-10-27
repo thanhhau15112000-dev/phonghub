@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<!-- Bộ chọn người dùng chung (#249): ô tìm + danh sách thả xuống lấy từ một API trả
+     [{userId, fullName, role, maskedContact}]. Máy chủ tìm theo họ tên, tên đăng nhập, email, 4 số cuối số điện thoại và
+     chỉ trả liên hệ đã che; chọn xong thì form gửi userId, máy chủ kiểm tra lại id đó nằm trong danh sách được phép.
+     Ô gõ tay tên đăng nhập/email của trang vẫn giữ: chưa chọn ai thì form gửi ô gõ tay như trước. -->
+
+<div th:fragment="field(idName, sourceUrl, placeholder, emptyText)" class="user-picker"
+     th:attr="data-source=${sourceUrl},data-empty=${emptyText}">
+    <style>
+        .user-picker [hidden] { display: none !important; }
+        .user-picker { width: 100%; max-width: 420px; }
+        .user-picker .up-results { border: 1px solid var(--border-color); border-radius: 6px; margin-top: 6px; max-height: 260px; overflow: auto; background: var(--bg-surface, #fff); }
+        .user-picker .up-group { padding: 6px 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--text-secondary); background: var(--bg-main, #f8fafc); }
+        .user-picker .up-row { display: block; width: 100%; text-align: left; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--border-color); background: transparent; cursor: pointer; font: inherit; color: inherit; }
+        .user-picker .up-row:last-child { border-bottom: 0; }
+        .user-picker .up-row:hover, .user-picker .up-row.up-active { background: var(--bg-hover, #f1f5f9); }
+        .user-picker .up-row small { display: block; color: var(--text-secondary); overflow-wrap: anywhere; }
+        .user-picker .up-note { padding: 8px 12px; font-size: 12px; color: var(--text-secondary); }
+        .user-picker .up-chosen { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-hover, #f8fafc); }
+        .user-picker .up-chosen small { color: var(--text-secondary); overflow-wrap: anywhere; }
+    </style>
+    <input type="hidden" class="up-id" th:name="${idName}">
+    <div class="up-search-box">
+        <input type="search" class="form-control up-search" autocomplete="off" role="combobox"
+               aria-autocomplete="list" aria-expanded="false" th:placeholder="${placeholder}" th:attr="aria-label=${placeholder}">
+        <div class="up-results" role="listbox" hidden></div>
+    </div>
+    <div class="up-chosen" hidden>
+        <span><strong class="up-chosen-name"></strong> <small class="up-chosen-detail"></small></span>
+        <button type="button" class="btn btn-sm btn-secondary up-clear">Bỏ chọn</button>
+    </div>
+</div>
+
+<script th:fragment="script">
+    (function () {
+        var ROLE_LABELS = { STAFF: 'Nhân viên', TECHNICIAN: 'Kỹ thuật viên', TENANT: 'Người thuê' };
+        var counter = 0;
+
+        /**
+         * options.typed: ô gõ tay của trang; chọn từ danh sách thì ô này thôi bắt buộc và bị khóa
+         *   (trừ khi options.keepTypedEnabled), bỏ chọn thì trở lại như cũ.
+         * options.onChange(person | null): báo cho trang khi chọn hoặc bỏ chọn.
+         */
+        window.wireUserPicker = function (root, options) {
+            if (!root) return;
+            options = options || {};
+            var source = root.dataset.source;
+            var emptyText = root.dataset.empty || 'Chưa có ai để chọn.';
+            var idInput = root.querySelector('.up-id');
+            var searchBox = root.querySelector('.up-search-box');
+            var search = root.querySelector('.up-search');
+            var results = root.querySelector('.up-results');
+            var chosenBox = root.querySelector('.up-chosen');
+            var typed = options.typed || null;
+            var typedRequired = typed ? typed.required : false;
+            var listId = 'up-list-' + (++counter);
+            var rows = [];
+            var active = -1;
+            var timer = null;
+            var requestNo = 0;
+
+            results.id = listId;
+            search.setAttribute('aria-controls', listId);
+
+            function roleLabel(role) { return ROLE_LABELS[role] || role || ''; }
+            function setOpen(open) {
+                results.hidden = !open;
+                search.setAttribute('aria-expanded', open ? 'true' : 'false');
+                if (!open) setActive(-1);
+            }
+            function setActive(index) {
+                rows.forEach(function (row, i) { row.classList.toggle('up-active', i === index); });
+                active = index;
+                if (index >= 0 && rows[index]) {
+                    search.setAttribute('aria-activedescendant', rows[index].id);
+                    rows[index].scrollIntoView({ block: 'nearest' });
+                } else {
+                    search.removeAttribute('aria-activedescendant');
+                }
+            }
+            function note(text) {
+                var div = document.createElement('div');
+                div.className = 'up-note';
+                div.textContent = text;
+                results.appendChild(div);
+            }
+            function render(people, term) {
+                results.innerHTML = '';
+                rows = [];
+                active = -1;
+                if (!people.length) {
+                    note(term ? 'Không thấy ai khớp. Bạn vẫn có thể gõ đúng tên đăng nhập hoặc email ở ô bên dưới.' : emptyText);
+                    setOpen(true);
+                    return;
+                }
+                var lastRole = null;
+                people.forEach(function (person, i) {
+                    if (person.role !== lastRole) {
+                        var group = document.createElement('div');
+                        group.className = 'up-group';
+                        group.setAttribute('role', 'presentation');
+                        group.textContent = roleLabel(person.role);
+                        results.appendChild(group);
+                        lastRole = person.role;
+                    }
+                    var row = document.createElement('button');
+                    row.type = 'button';
+                    row.className = 'up-row';
+                    row.id = listId + '-' + i;
+                    row.tabIndex = -1;
+                    row.setAttribute('role', 'option');
+                    var name = document.createElement('strong');
+                    name.textContent = person.fullName || '(chưa có họ tên)';
+                    var detail = document.createElement('small');
+                    detail.textContent = [roleLabel(person.role), person.maskedContact].filter(Boolean).join(' · ');
+                    row.appendChild(name);
+                    row.appendChild(detail);
+                    // mousedown để chọn trước khi ô tìm mất focus
+                    row.addEventListener('mousedown', function (event) { event.preventDefault(); choose(person); });
+                    results.appendChild(row);
+                    rows.push(row);
+                });
+                setOpen(true);
+            }
+            function load() {
+                var term = search.value.trim();
+                var mine = ++requestNo;
+                var url = source + (source.indexOf('?') >= 0 ? '&' : '?') + 'limit=20&q=' + encodeURIComponent(term);
+                fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+                    .then(function (res) {
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        return res.json();
+                    })
+                    .then(function (people) { if (mine === requestNo) render(people, term); })
+                    .catch(function () {
+                        if (mine !== requestNo) return;
+                        results.innerHTML = '';
+                        rows = [];
+                        note('Không tải được danh sách. Bạn vẫn có thể gõ tên đăng nhập hoặc email ở ô bên dưới.');
+                        setOpen(true);
+                    });
+            }
+            function scheduleLoad() {
+                clearTimeout(timer);
+                timer = setTimeout(load, 200);
+            }
+            function choose(person) {
+                idInput.value = person.userId;
+                root.querySelector('.up-chosen-name').textContent = person.fullName || '(chưa có họ tên)';
+                root.querySelector('.up-chosen-detail').textContent =
+                    [roleLabel(person.role), person.maskedContact].filter(Boolean).join(' · ');
+                chosenBox.hidden = false;
+                searchBox.hidden = true;
+                setOpen(false);
+                if (typed) {
+                    typed.required = false;
+                    typed.disabled = !options.keepTypedEnabled;
+                }
+                if (options.onChange) options.onChange(person);
+                root.querySelector('.up-clear').focus();
+            }
+            function clear() {
+                idInput.value = '';
+                chosenBox.hidden = true;
+                searchBox.hidden = false;
+                search.value = '';
+                if (typed) {
+                    typed.disabled = false;
+                    typed.required = typedRequired;
+                }
+                if (options.onChange) options.onChange(null);
+                search.focus();
+            }
+
+            search.addEventListener('focus', function () { if (results.hidden) load(); });
+            search.addEventListener('input', scheduleLoad);
+            search.addEventListener('blur', function () { setTimeout(function () { setOpen(false); }, 150); });
+            search.addEventListener('keydown', function (event) {
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    if (results.hidden) { load(); return; }
+                    if (!rows.length) return;
+                    var step = event.key === 'ArrowDown' ? 1 : -1;
+                    setActive((active + step + rows.length) % rows.length);
+                } else if (event.key === 'Enter') {
+                    // Enter trong ô tìm không gửi form: chọn dòng đang sáng, hoặc dòng duy nhất
+                    event.preventDefault();
+                    if (active >= 0 && rows[active]) rows[active].dispatchEvent(new MouseEvent('mousedown', { cancelable: true }));
+                    else if (rows.length === 1) rows[0].dispatchEvent(new MouseEvent('mousedown', { cancelable: true }));
+                } else if (event.key === 'Escape') {
+                    if (!results.hidden) { event.preventDefault(); setOpen(false); }
+                    else search.value = '';
+                }
+            });
+            root.querySelector('.up-clear').addEventListener('click', clear);
+        };
+    })();
+</script>
+</body>
+</html>
