@@ -220,6 +220,20 @@ class ChatMediaServiceUnitTest {
     }
 
     @Test
+    @DisplayName("Old messages from before #201 give their stored media URL only to readers of the room")
+    void legacyMediaUrl() {
+        ChatMessage legacy = messages.save(new ChatMessage(UUID.randomUUID(), direct.id(), alice.id(), "Alice", "Ảnh cũ",
+            "https://demo.supabase.co/storage/v1/object/public/chat-media/old.jpg", "IMAGE", Instant.now(), null));
+        ChatMessage text = chat.sendMessage(alice, direct.id(), "Chỉ có chữ");
+        ChatRoom other = chat.getOrCreateDirectRoom(alice, carol.id());
+
+        assertEquals(legacy.mediaUrl(), chat.legacyMediaUrl(bob, direct.id(), legacy.id()));
+        assertThrows(UnauthorizedChatAccessException.class, () -> chat.legacyMediaUrl(carol, direct.id(), legacy.id()));
+        assertThrows(ChatMessageNotFoundException.class, () -> chat.legacyMediaUrl(alice, other.id(), legacy.id()));
+        assertThrows(ChatMessageNotFoundException.class, () -> chat.legacyMediaUrl(alice, direct.id(), text.id()));
+    }
+
+    @Test
     @DisplayName("Attachment ids must belong to the message and the message to the room")
     void attachmentMustMatchRoom() {
         ChatMessage sent = chat.sendMediaMessage(alice, direct.id(), null, List.of(new MediaUpload("image/jpeg", jpeg())));

@@ -1849,7 +1849,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Mô tả | Nhắn tin văn bản, gửi ảnh và video trong kênh chung hoặc nhắn riêng 1-1, nhận tin theo thời gian thực, xem trạng thái "Đã xem" và số tin chưa đọc. |
 | Tiền điều kiện | Đã đăng nhập. |
 | Hậu điều kiện | Tin được lưu và chỉ đẩy tới thành viên của phòng chat. |
-| Kênh | Khung chat nổi trên mọi trang; API `/api/chat/…` (luồng SSE `/api/chat/stream`; gửi ảnh/video `POST /api/chat/rooms/{id}/attachments`; xem tệp `GET /api/chat/rooms/{id}/messages/{messageId}/attachments/{attachmentId}`) |
+| Kênh | Khung chat nổi trên mọi trang; API `/api/chat/…` (luồng SSE `/api/chat/stream`; gửi ảnh/video `POST /api/chat/rooms/{id}/attachments`; xem tệp `GET /api/chat/rooms/{id}/messages/{messageId}/attachments/{attachmentId}`; tệp ở tin cũ `GET /api/chat/rooms/{id}/messages/{messageId}/legacy-media`) |
 
 **Luồng chính**
 1. Người dùng mở khung chat; hệ thống hiện kênh chung đầu tiên, rồi các cuộc trò chuyện riêng.
@@ -1872,7 +1872,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 - BR1. Ảnh và video (#251, đảo lại #201): mỗi tin tối đa 5 tệp, trong đó tối đa 1 video. Ảnh JPEG/PNG/WebP, kiểm tra chữ ký tệp, bỏ EXIF và vị trí, xoay đúng chiều, tối đa `STORAGE_MAX_FILE_SIZE_BYTES`. Video MP4/WebM/MOV, chỉ kiểm tra chữ ký, không chuyển mã, tối đa `phonghub.chat.max-video-bytes` (mặc định 10 MB, không vượt giới hạn chung). Video không bỏ được thông tin đi kèm trong tệp (ví dụ vị trí) nên khung chat nhắc khi chọn video.
 - BR2. Máy chủ gửi tín hiệu giữ kết nối mỗi 25 giây để kết nối không bị cắt khi rảnh.
 - BR3. Tệp lưu ở kho riêng tư với khóa `chat/{roomId}/{uuid}.{đuôi}`; cơ sở dữ liệu (bảng `chat_message_attachments`, V59) chỉ lưu khóa. REST và SSE không trả khóa, chỉ trả đường dẫn xem tệp của phòng chat. Quyền xem tệp = quyền đọc phòng. Kho cho URL có chữ ký thì chuyển hướng (hết hạn sau 10 phút); kho in-memory (profile docker) thì máy chủ trả tệp trực tiếp, hỗ trợ `Range` (206) để tua video.
-- BR4. Kênh chung gửi được ảnh/video với người được gửi tin ở kênh đó. Tin cũ trước #201 (tệp ở bucket công khai) chỉ hiện ghi chú "Tệp đính kèm cũ không còn xem được".
+- BR4. Kênh chung gửi được ảnh/video với người được gửi tin ở kênh đó. Tin cũ trước #201 (tệp ở bucket công khai `chat-media` trên Supabase) vẫn xem được qua `legacy-media`: kiểm tra quyền đọc phòng như tệp mới rồi mới chuyển tới URL cũ; API không trả URL cũ. Tệp không ở bucket đó (ví dụ `/uploads/chat-media/…` của bản chạy cục bộ, đã gỡ cùng #201) hoặc đã mất thì hiện ghi chú "Tệp đính kèm cũ không còn xem được".
 
 #### UC-65. Xem thông báo
 

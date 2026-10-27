@@ -1308,14 +1308,39 @@
                 text.textContent = msg.content;
                 bubble.appendChild(text);
             }
-            // Tin cũ trước #201 có tệp ở bucket công khai: không mở lại tệp đó, chỉ hiện ghi chú
+            // Tin cũ trước #201: mở tệp qua endpoint kiểm tra quyền; không mở được thì hiện ghi chú
             if (msg.legacyMedia) {
                 const note = document.createElement('div');
                 note.style.fontSize = '11.5px';
                 note.style.fontStyle = 'italic';
                 note.style.opacity = '0.8';
                 note.textContent = 'Tệp đính kèm cũ không còn xem được';
-                bubble.appendChild(note);
+                if (msg.legacyMediaUrl && msg.legacyMediaType === 'VIDEO') {
+                    const video = document.createElement('video');
+                    video.controls = true;
+                    video.preload = 'metadata';
+                    video.playsInline = true;
+                    video.src = msg.legacyMediaUrl;
+                    video.style.cssText = 'display: block; max-width: 220px; max-height: 260px; border-radius: 10px; background: #0f172a; margin-top: 4px;';
+                    video.addEventListener('error', () => video.replaceWith(note));
+                    bubble.appendChild(video);
+                } else if (msg.legacyMediaUrl && msg.legacyMediaType === 'IMAGE') {
+                    const link = document.createElement('a');
+                    link.href = msg.legacyMediaUrl;
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                    link.title = 'Mở ảnh';
+                    const img = document.createElement('img');
+                    img.src = msg.legacyMediaUrl;
+                    img.alt = 'Ảnh đính kèm';
+                    img.loading = 'lazy';
+                    img.style.cssText = 'display: block; max-width: 220px; max-height: 260px; border-radius: 10px; background: #cbd5e1; margin-top: 4px;';
+                    img.addEventListener('error', () => link.replaceWith(note));
+                    link.appendChild(img);
+                    bubble.appendChild(link);
+                } else {
+                    bubble.appendChild(note);
+                }
             }
             row.appendChild(bubble);
 

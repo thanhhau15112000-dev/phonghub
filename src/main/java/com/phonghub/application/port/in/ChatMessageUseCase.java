@@ -22,6 +22,9 @@ public interface ChatMessageUseCase {
     /** Nội dung tệp đính kèm khi kho không cho trình duyệt mở trực tiếp (profile docker/test), cùng kiểm tra quyền. */
     AttachmentFile attachmentFile(CurrentUser currentUser, UUID roomId, UUID messageId, UUID attachmentId);
 
+    /** URL đã lưu của tệp ở tin cũ (trước #201), sau khi kiểm tra quyền đọc phòng chat. */
+    String legacyMediaUrl(CurrentUser currentUser, UUID roomId, UUID messageId);
+
     List<ChatMessage> getMessages(CurrentUser currentUser, UUID roomId, Instant before, int limit);
     void markAsRead(CurrentUser currentUser, UUID roomId);
     int getTotalUnreadCount(CurrentUser currentUser);

@@ -8,6 +8,7 @@ import com.phonghub.application.port.in.ChatRoomSummary;
 import com.phonghub.application.port.in.ChatRoomUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.domain.exception.ChatMessageNotFoundException;
 import com.phonghub.domain.exception.InvalidCredentialsException;
 import com.phonghub.domain.model.ChatMessage;
 import com.phonghub.domain.model.ChatRoom;
@@ -21,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -45,17 +47,23 @@ public class ChatApiController {
     private final ChatMessageUseCase chatMessageUseCase;
     private final CurrentUserPort currentUserPort;
     private final SseChatEventPublisher sseChatEventPublisher;
+    /** Tin cũ trước #201 chỉ được chuyển tới bucket công khai cũ trên Supabase của chính hệ thống. */
+    private final String legacyMediaPrefix;
 
     public ChatApiController(
         ChatRoomUseCase chatRoomUseCase,
         ChatMessageUseCase chatMessageUseCase,
         CurrentUserPort currentUserPort,
-        SseChatEventPublisher sseChatEventPublisher
+        SseChatEventPublisher sseChatEventPublisher,
+        @Value("${supabase.url:}") String supabaseUrl
     ) {
         this.chatRoomUseCase = chatRoomUseCase;
         this.chatMessageUseCase = chatMessageUseCase;
         this.currentUserPort = currentUserPort;
         this.sseChatEventPublisher = sseChatEventPublisher;
+        this.legacyMediaPrefix = supabaseUrl == null || supabaseUrl.isBlank()
+            ? null
+            : supabaseUrl.trim().replaceAll("/+$", "") + "/storage/v1/object/public/";
     }
 
     private CurrentUser requireUser() {
@@ -171,6 +179,21 @@ public class ChatApiController {
             .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
             .header("X-Content-Type-Options", "nosniff")
             .body(new ByteArrayResource(file.content()));
+    }
+
+    /**
+     * Tệp ở tin cũ trước #201: kiểm tra quyền đọc phòng như tệp mới, rồi chuyển tới URL đã lưu nếu nó nằm ở bucket công
+     * khai cũ trên Supabase. Tệp cục bộ cũ ({@code /uploads/chat-media/…}, đã gỡ cùng #201) thì báo không tìm thấy.
+     */
+    @GetMapping("/rooms/{roomId}/messages/{messageId}/legacy-media")
+    public ResponseEntity<Void> legacyMedia(@PathVariable UUID roomId, @PathVariable UUID messageId) {
+        CurrentUser user = requireUser();
+        String stored = chatMessageUseCase.legacyMediaUrl(user, roomId, messageId);
+        if (legacyMediaPrefix == null || !stored.startsWith(legacyMediaPrefix)) {
+            throw new ChatMessageNotFoundException("Tệp đính kèm cũ không còn trên kho lưu trữ.");
+        }
+        return ResponseEntity.status(HttpStatus.FOUND).header(HttpHeaders.LOCATION, stored)
+            .header(HttpHeaders.CACHE_CONTROL, "no-store").build();
     }
 
     @PostMapping("/rooms/{roomId}/read")

@@ -8,8 +8,8 @@ import java.util.UUID;
 
 /**
  * Tin nhắn chat trả qua REST và SSE (#251). Không đưa khóa đối tượng trong kho ra ngoài: tệp đính kèm chỉ có đường dẫn
- * tới endpoint của phòng chat, endpoint đó kiểm tra quyền đọc phòng rồi mới trả tệp. Tin cũ gửi trước #201 chỉ báo
- * {@code legacyMedia}, không trả lại URL bucket công khai.
+ * tới endpoint của phòng chat, endpoint đó kiểm tra quyền đọc phòng rồi mới trả tệp. Tin cũ gửi trước #201 cũng chỉ có
+ * {@code legacyMediaUrl} trỏ tới endpoint kiểm tra quyền, không trả URL bucket công khai.
  */
 public record ChatMessageResponse(
     UUID id,
@@ -18,6 +18,8 @@ public record ChatMessageResponse(
     String senderName,
     String content,
     boolean legacyMedia,
+    String legacyMediaType,
+    String legacyMediaUrl,
     List<Attachment> attachments,
     Instant createdAt,
     Instant deletedAt
@@ -28,8 +30,12 @@ public record ChatMessageResponse(
         List<Attachment> attachments = message.attachments().stream()
             .map(attachment -> toAttachment(message, attachment))
             .toList();
+        String legacyUrl = message.hasMedia()
+            ? "/api/chat/rooms/" + message.chatRoomId() + "/messages/" + message.id() + "/legacy-media"
+            : null;
         return new ChatMessageResponse(message.id(), message.chatRoomId(), message.senderId(), message.senderName(),
-            message.content(), message.hasMedia(), attachments, message.createdAt(), message.deletedAt());
+            message.content(), message.hasMedia(), message.hasMedia() ? message.mediaType() : null, legacyUrl, attachments,
+            message.createdAt(), message.deletedAt());
     }
 
     private static Attachment toAttachment(ChatMessage message, ChatAttachment attachment) {

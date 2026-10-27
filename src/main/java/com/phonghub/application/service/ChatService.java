@@ -338,6 +338,16 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         }
     }
 
+    @Override
+    public String legacyMediaUrl(CurrentUser currentUser, UUID roomId, UUID messageId) {
+        assertAuthenticated(currentUser);
+        ChatRoom room = getRoomById(currentUser, roomId);
+        return chatMessageRepositoryPort.findById(messageId)
+            .filter(message -> message.chatRoomId().equals(room.id()) && message.hasMedia())
+            .map(ChatMessage::mediaUrl)
+            .orElseThrow(() -> new ChatMessageNotFoundException("Không tìm thấy tệp đính kèm."));
+    }
+
     /** Quyền xem tệp = quyền đọc phòng chat; tin hoặc tệp không thuộc phòng thì báo không tìm thấy. */
     private ChatAttachment findAttachment(CurrentUser currentUser, UUID roomId, UUID messageId, UUID attachmentId) {
         assertAuthenticated(currentUser);
