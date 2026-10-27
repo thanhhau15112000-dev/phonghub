@@ -652,6 +652,16 @@
             return msg.attachments.some(a => a.mediaType === 'VIDEO') ? '[Video]' : '[Hình ảnh]';
         }
 
+        // Ghi chú thay cho ảnh/video không tải được (tệp đã mất, kho lỗi, tin cũ)
+        function mediaNote(text) {
+            const note = document.createElement('div');
+            note.style.fontSize = '11.5px';
+            note.style.fontStyle = 'italic';
+            note.style.opacity = '0.8';
+            note.textContent = text;
+            return note;
+        }
+
         // Chức năng thu nhỏ chat thành nút tròn Avatar (Chat Head) ở cột bên phải
         function minimizeActiveChat() {
             if (!activeFloatingRoomId) return;
@@ -1278,6 +1288,7 @@
                         video.src = a.url;
                         video.style.cssText = 'display: block; max-width: 220px; max-height: 260px; border-radius: 10px; background: #0f172a;';
                         video.addEventListener('loadedmetadata', keepAtBottom);
+                        video.addEventListener('error', () => video.replaceWith(mediaNote('Không tải được video')));
                         media.appendChild(video);
                     } else {
                         const link = document.createElement('a');
@@ -1292,6 +1303,7 @@
                         img.style.cssText = 'display: block; object-fit: cover; border-radius: 10px; background: #cbd5e1; '
                             + (attachments.length > 1 ? 'width: 104px; height: 104px;' : 'max-width: 220px; max-height: 260px;');
                         img.addEventListener('load', keepAtBottom);
+                        img.addEventListener('error', () => link.replaceWith(mediaNote('Không tải được ảnh')));
                         link.appendChild(img);
                         media.appendChild(link);
                     }
@@ -1310,11 +1322,7 @@
             }
             // Tin cũ trước #201: mở tệp qua endpoint kiểm tra quyền; không mở được thì hiện ghi chú
             if (msg.legacyMedia) {
-                const note = document.createElement('div');
-                note.style.fontSize = '11.5px';
-                note.style.fontStyle = 'italic';
-                note.style.opacity = '0.8';
-                note.textContent = 'Tệp đính kèm cũ không còn xem được';
+                const note = mediaNote('Tệp đính kèm cũ không còn xem được');
                 if (msg.legacyMediaUrl && msg.legacyMediaType === 'VIDEO') {
                     const video = document.createElement('video');
                     video.controls = true;
