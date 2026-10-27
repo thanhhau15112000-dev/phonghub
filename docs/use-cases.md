@@ -760,11 +760,11 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Mô tả | Gán nhân viên hoặc kỹ thuật viên vào nhà trọ, cấp hoặc thu quyền, gỡ phân công. |
 | Tiền điều kiện | Nhà trọ của mình; người được gán đã có tài khoản `STAFF` hoặc `TECHNICIAN`. |
 | Hậu điều kiện | Người được gán thấy nhà trọ trong phạm vi của mình, với đúng các quyền được cấp. |
-| Kênh | Web `/properties/{id}/staff`; API `/api/properties/{id}/staff` |
+| Kênh | Web `/properties/{id}/staff`; API `/api/properties/{id}/staff`, danh sách chọn `GET /api/properties/{id}/staff/candidates?q=` |
 
 **Luồng chính**
-1. Tác nhân nhập tên đăng nhập hoặc email của người cần gán.
-2. Hệ thống kiểm tra vai trò của tài khoản (BR1) và tạo phân công.
+1. Tác nhân chọn người cần gán trong danh sách thả xuống (BR3), hoặc gõ đúng tên đăng nhập hoặc email như trước.
+2. Hệ thống kiểm tra vai trò của tài khoản (BR1); nếu chọn từ danh sách thì kiểm tra người đó đúng là một dòng của danh sách (BR3). Hệ thống tạo phân công.
 3. Với nhân viên, tác nhân bật hoặc tắt từng quyền: *quản lý hợp đồng*, *thu tiền*, *xem giấy tờ*.
 4. Hệ thống lưu và ghi nhật ký.
 
@@ -772,12 +772,14 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 - 1a. Gỡ phân công: tác nhân chọn "Gỡ", hệ thống xóa phân công; người đó mất quyền truy cập nhà trọ ngay.
 
 **Ngoại lệ**
-- E1. Tài khoản không phải `STAFF` hoặc `TECHNICIAN`: từ chối.
+- E1. Tài khoản không phải `STAFF` hoặc `TECHNICIAN`: từ chối. Gõ tay sai thì báo lỗi chung, không lộ tài khoản nào tồn tại.
 - E2. Cấp quyền tiền, hợp đồng hoặc giấy tờ cho kỹ thuật viên: từ chối.
+- E3. Gửi `userId` ngoài danh sách (bị khóa, vai trò khác, không tồn tại): từ chối (E-400). Người đã được phân công vào nhà trọ này: báo xung đột (E-409), chỉnh quyền ở bảng nhân sự.
 
 **Quy tắc nghiệp vụ**
 - BR1. Chỉ phân công được tài khoản `STAFF` hoặc `TECHNICIAN`.
 - BR2. Kỹ thuật viên phải được phân công vào nhà trọ thì mới hiện trong danh sách giao việc ở UC-58.
+- BR3. Danh sách thả xuống (#249) gồm mọi tài khoản `STAFF`/`TECHNICIAN` đang hoạt động, kể cả người đang làm cho chủ trọ khác, trừ người đã ở nhà trọ này; chia nhóm theo vai trò. Tìm theo họ tên (không dấu), tên đăng nhập, email hoặc 4 số cuối số điện thoại. Mỗi dòng chỉ có họ tên, vai trò và email hoặc số điện thoại đã che (`ng***@gmail.com`, `09******12`); không hiện người đó đang làm ở nhà trọ nào.
 
 #### UC-14. Soạn nội quy nhà trọ
 
@@ -986,6 +988,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 **Quy tắc nghiệp vụ**
 - BR1. CCCD 9 hoặc 12 chữ số; số điện thoại 10 chữ số bắt đầu bằng 0.
 - BR2. Nhân viên được phân công có thể dùng màn hình này như chủ trọ. Tạo người thuê luôn tạo hoặc gắn tài khoản; hồ sơ cũ chưa có tài khoản có thể được cấp qua nút "Cấp tài khoản".
+- BR3. Ở trang sửa hồ sơ chưa có tài khoản, "Liên kết tài khoản có sẵn" cho chọn từ danh sách thả xuống (#249, `GET /api/properties/{id}/tenants/{tenantId}/account-candidates?q=`) hoặc gõ email như trước. Danh sách chỉ gồm tài khoản `TENANT` đang hoạt động chưa gắn hồ sơ người thuê nào, mỗi dòng chỉ có họ tên và liên hệ đã che; máy chủ kiểm tra lại tài khoản được chọn.
 
 #### UC-25. Tìm kiếm, ẩn, khôi phục người thuê
 
