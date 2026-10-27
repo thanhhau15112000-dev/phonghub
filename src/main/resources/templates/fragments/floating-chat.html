@@ -1,5 +1,7 @@
 <div th:fragment="floatingChatWidget" th:if="${currentUser != null}" id="phonghubFloatingChatContainer"
-     th:data-user-id="${currentUser.id()}" th:data-user-name="${currentUser.fullName()}">
+     th:data-user-id="${currentUser.id()}" th:data-user-name="${currentUser.fullName()}"
+     th:data-chat-max-image-bytes="${chatMediaLimits != null ? chatMediaLimits['imageBytes'] : 10485760}"
+     th:data-chat-max-video-bytes="${chatMediaLimits != null ? chatMediaLimits['videoBytes'] : 10485760}">
     <style>
         /* Tương tác mượt mà cho các phần tử chat PhongHub (Theme: Trắng viền xám) */
         #phonghubMessengerToggleBtn:hover {
@@ -249,7 +251,18 @@
 
         <!-- Khung nhập văn bản bên dưới: Nền trắng, ô nhập xám nhạt có viền -->
         <div id="phonghubDockedFooter" style="padding: 8px 10px; background-color: #ffffff; border-top: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 4px;">
+            <!-- Ảnh/video chờ gửi (#251): xem trước, bỏ bớt được trước khi gửi -->
+            <div id="phonghubAttachPreview" style="display: none; gap: 6px; flex-wrap: wrap; padding: 2px 0 4px;"></div>
+            <div id="phonghubAttachStatus" role="status" aria-live="polite" style="display: none; font-size: 11.5px; line-height: 1.35;"></div>
             <form id="phonghubDockedSendForm" style="width: 100%; display: flex; align-items: center; margin: 0; gap: 6px;">
+                <input type="file" id="phonghubAttachInput" multiple hidden
+                       accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime">
+                <button type="button" id="phonghubAttachBtn" title="Gửi ảnh hoặc video" aria-label="Gửi ảnh hoặc video"
+                        style="background: none; border: none; color: #0084ff; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                    </svg>
+                </button>
                 <input type="text" id="phonghubDockedInput" placeholder="Aa" autocomplete="off"
                        style="flex: 1; background-color: #f1f5f9; color: #0f172a; border-radius: 20px; border: 1px solid #cbd5e1; padding: 7px 12px; font-size: 13.5px; outline: none; transition: border-color 0.15s ease;">
                 <!-- Nút Thích hoặc Nút Gửi -->
@@ -274,6 +287,12 @@
     (function() {
         let currentUserId = '';
         let activeFloatingRoomId = null;
+        // Ảnh/video đang chờ gửi trong khung chat đang mở (#251)
+        let pendingAttachments = [];
+        let attachmentUploading = false;
+        const CHAT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+        const CHAT_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
+        const CHAT_MAX_ATTACHMENTS = 5;
         let activeRecipientName = '';
         let activeRecipientAvatar = '';
         let activeRoomType = 'DIRECT';
@@ -337,14 +356,18 @@
             const iconLike = document.getElementById('phonghubSendIconLike');
             const iconFly = document.getElementById('phonghubSendIconFly');
 
-            // Chuyển đổi icon Thích 👍 sang icon Gửi ✈️ khi người dùng gõ văn bản
+            // Chuyển đổi icon Thích 👍 sang icon Gửi ✈️ khi người dùng gõ văn bản hoặc có ảnh/video chờ gửi
             if (dockedInput) {
-                dockedInput.addEventListener('input', () => {
-                    const hasText = dockedInput.value.trim().length > 0;
-                    if (iconLike && iconFly) {
-                        iconLike.style.display = hasText ? 'none' : 'flex';
-                        iconFly.style.display = hasText ? 'flex' : 'none';
-                    }
+                dockedInput.addEventListener('input', updateSendIcon);
+            }
+
+            const attachBtn = document.getElementById('phonghubAttachBtn');
+            const attachInput = document.getElementById('phonghubAttachInput');
+            if (attachBtn && attachInput) {
+                attachBtn.addEventListener('click', () => { if (!attachmentUploading) attachInput.click(); });
+                attachInput.addEventListener('change', () => {
+                    addPendingAttachments(Array.from(attachInput.files || []));
+                    attachInput.value = '';
                 });
             }
 
@@ -425,15 +448,20 @@
                     e.preventDefault();
                     if (!activeFloatingRoomId) return;
 
+                    if (attachmentUploading) return;
                     let content = dockedInput.value.trim();
+                    if (pendingAttachments.length) {
+                        dockedInput.value = '';
+                        const sent = await postAttachments(content);
+                        if (!sent && !dockedInput.value) dockedInput.value = content;
+                        updateSendIcon();
+                        return;
+                    }
                     if (!content) {
                         content = '👍';
                     }
                     dockedInput.value = '';
-                    if (iconLike && iconFly) {
-                        iconLike.style.display = 'flex';
-                        iconFly.style.display = 'none';
-                    }
+                    updateSendIcon();
                     await postMessage(content);
                 });
             }
@@ -456,6 +484,182 @@
 
             refreshUnreadBadge();
             initGlobalSse();
+        }
+
+        function updateSendIcon() {
+            const input = document.getElementById('phonghubDockedInput');
+            const iconLike = document.getElementById('phonghubSendIconLike');
+            const iconFly = document.getElementById('phonghubSendIconFly');
+            const ready = (input && input.value.trim().length > 0) || pendingAttachments.length > 0;
+            if (iconLike && iconFly) {
+                iconLike.style.display = ready ? 'none' : 'flex';
+                iconFly.style.display = ready ? 'flex' : 'none';
+            }
+        }
+
+        function megabytes(bytes) {
+            return Math.max(1, Math.floor(bytes / (1024 * 1024)));
+        }
+
+        function showAttachStatus(text, kind) {
+            const box = document.getElementById('phonghubAttachStatus');
+            if (!box) return;
+            box.textContent = text || '';
+            box.style.display = text ? 'block' : 'none';
+            box.style.color = kind === 'error' ? '#b91c1c' : '#475569';
+        }
+
+        /** Kiểm tra trước ở trình duyệt (như #207) để tệp quá lớn không bị máy chủ cắt kết nối; máy chủ vẫn kiểm tra lại. */
+        function addPendingAttachments(files) {
+            const container = document.getElementById('phonghubFloatingChatContainer');
+            const maxImageBytes = Number(container && container.dataset.chatMaxImageBytes) || 10485760;
+            const maxVideoBytes = Number(container && container.dataset.chatMaxVideoBytes) || 10485760;
+            const problems = [];
+            let addedVideo = false;
+            files.forEach(file => {
+                const type = (file.type || '').toLowerCase();
+                const isVideo = CHAT_VIDEO_TYPES.includes(type);
+                if (!isVideo && !CHAT_IMAGE_TYPES.includes(type)) {
+                    problems.push(`"${file.name}": chỉ gửi được ảnh JPEG/PNG/WebP hoặc video MP4/WebM/MOV.`);
+                } else if (pendingAttachments.length >= CHAT_MAX_ATTACHMENTS) {
+                    problems.push(`Mỗi tin gửi tối đa ${CHAT_MAX_ATTACHMENTS} ảnh hoặc video.`);
+                } else if (isVideo && pendingAttachments.some(p => p.isVideo)) {
+                    problems.push('Mỗi tin chỉ gửi được 1 video.');
+                } else if (file.size > (isVideo ? maxVideoBytes : maxImageBytes)) {
+                    problems.push(`"${file.name}" vượt quá dung lượng cho phép (tối đa ${megabytes(isVideo ? maxVideoBytes : maxImageBytes)} MB).`);
+                } else {
+                    pendingAttachments.push({ file, isVideo, url: URL.createObjectURL(file) });
+                    addedVideo = addedVideo || isVideo;
+                }
+            });
+            renderPendingAttachments();
+            if (problems.length) {
+                showAttachStatus(Array.from(new Set(problems)).join(' '), 'error');
+            } else if (addedVideo) {
+                showAttachStatus('Video được gửi nguyên bản, không bỏ được thông tin đi kèm trong tệp (ví dụ vị trí).');
+            } else {
+                showAttachStatus('');
+            }
+        }
+
+        function renderPendingAttachments() {
+            const strip = document.getElementById('phonghubAttachPreview');
+            if (!strip) return;
+            strip.innerHTML = '';
+            strip.style.display = pendingAttachments.length ? 'flex' : 'none';
+            pendingAttachments.forEach((item, index) => {
+                const cell = document.createElement('div');
+                cell.style.cssText = 'position: relative; width: 52px; height: 52px; border-radius: 8px; overflow: hidden; border: 1px solid #cbd5e1; background: #0f172a; flex-shrink: 0;';
+                if (item.isVideo) {
+                    const video = document.createElement('video');
+                    video.src = item.url;
+                    video.muted = true;
+                    video.preload = 'metadata';
+                    video.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
+                    const badge = document.createElement('span');
+                    badge.textContent = '▶';
+                    badge.style.cssText = 'position: absolute; left: 4px; bottom: 2px; color: #fff; font-size: 11px; text-shadow: 0 1px 2px #000;';
+                    cell.appendChild(video);
+                    cell.appendChild(badge);
+                } else {
+                    const img = document.createElement('img');
+                    img.src = item.url;
+                    img.alt = item.file.name;
+                    img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
+                    cell.appendChild(img);
+                }
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.textContent = '✕';
+                remove.title = 'Bỏ tệp này';
+                remove.setAttribute('aria-label', `Bỏ ${item.file.name}`);
+                remove.disabled = attachmentUploading;
+                remove.style.cssText = 'position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; border: none; background: rgba(15,23,42,0.75); color: #fff; font-size: 10px; line-height: 18px; padding: 0; cursor: pointer;';
+                remove.addEventListener('click', () => {
+                    URL.revokeObjectURL(item.url);
+                    pendingAttachments.splice(index, 1);
+                    renderPendingAttachments();
+                    showAttachStatus('');
+                    updateSendIcon();
+                });
+                cell.appendChild(remove);
+                strip.appendChild(cell);
+            });
+            updateSendIcon();
+        }
+
+        function clearPendingAttachments() {
+            pendingAttachments.forEach(item => URL.revokeObjectURL(item.url));
+            pendingAttachments = [];
+            renderPendingAttachments();
+            showAttachStatus('');
+        }
+
+        /** Gửi ảnh/video kèm chữ bằng XHR để hiện tiến độ tải lên. Trả về true khi đã gửi. */
+        function postAttachments(content) {
+            const roomId = activeFloatingRoomId;
+            const form = new FormData();
+            pendingAttachments.forEach(item => form.append('files', item.file));
+            if (content) form.append('content', content);
+            attachmentUploading = true;
+            renderPendingAttachments();
+            const attachBtn = document.getElementById('phonghubAttachBtn');
+            const submitBtn = document.getElementById('phonghubDockedSubmitBtn');
+            if (attachBtn) attachBtn.disabled = true;
+            if (submitBtn) submitBtn.disabled = true;
+            showAttachStatus('Đang tải lên...');
+            return new Promise(resolve => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', `/api/chat/rooms/${roomId}/attachments`);
+                xhr.setRequestHeader('Accept', 'application/json');
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) showAttachStatus(`Đang tải lên ${Math.round(e.loaded * 100 / e.total)}%...`);
+                });
+                const finish = (ok, message) => {
+                    attachmentUploading = false;
+                    if (attachBtn) attachBtn.disabled = false;
+                    if (submitBtn) submitBtn.disabled = false;
+                    if (ok) {
+                        clearPendingAttachments();
+                    } else {
+                        renderPendingAttachments();
+                        showAttachStatus(message, 'error');
+                    }
+                    resolve(ok);
+                };
+                xhr.addEventListener('load', () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        try {
+                            const saved = JSON.parse(xhr.responseText);
+                            if (activeFloatingRoomId === roomId) appendDockedMessageUI(saved);
+                        } catch (err) {
+                            console.error('Không đọc được phản hồi gửi ảnh/video:', err);
+                        }
+                        finish(true);
+                        return;
+                    }
+                    let detail = '';
+                    try { detail = JSON.parse(xhr.responseText).detail || ''; } catch (ignored) { /* không phải JSON */ }
+                    finish(false, detail || 'Không gửi được ảnh/video, vui lòng thử lại.');
+                });
+                xhr.addEventListener('error', () => finish(false, 'Mất kết nối khi tải lên, vui lòng thử lại.'));
+                xhr.send(form);
+            });
+        }
+
+        function attachmentLabel(msg) {
+            if (!msg.attachments || !msg.attachments.length) return '';
+            return msg.attachments.some(a => a.mediaType === 'VIDEO') ? '[Video]' : '[Hình ảnh]';
+        }
+
+        // Ghi chú thay cho ảnh/video không tải được (tệp đã mất, kho lỗi, tin cũ)
+        function mediaNote(text) {
+            const note = document.createElement('div');
+            note.style.fontSize = '11.5px';
+            note.style.fontStyle = 'italic';
+            note.style.opacity = '0.8';
+            note.textContent = text;
+            return note;
         }
 
         // Chức năng thu nhỏ chat thành nút tròn Avatar (Chat Head) ở cột bên phải
@@ -592,7 +796,7 @@
             const avatarColor = isGlobal ? 'linear-gradient(135deg, #0084ff, #4f46e5)' : getAvatarColor(msg.senderName);
             const senderDisplayName = isGlobal ? `${msg.senderName} (Kênh chung)` : (msg.senderName || 'Tin nhắn mới');
 
-            const previewText = msg.content || '';
+            const previewText = msg.content || attachmentLabel(msg);
 
             toast.innerHTML = `
                 <div style="width: 40px; height: 40px; border-radius: 50%; background: ${avatarColor}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
@@ -928,6 +1132,7 @@
 
         // Mở khung chat docked Messenger (Theme Màu trắng viền xám)
         window.openDockedChat = async function(roomId, recipientName, recipientAvatar, roomType) {
+            if (String(activeFloatingRoomId) !== String(roomId)) clearPendingAttachments();
             activeFloatingRoomId = roomId;
             activeRecipientName = recipientName;
             activeRecipientAvatar = recipientAvatar;
@@ -1066,15 +1271,84 @@
                 bubble.style.backgroundColor = '#e2e8f0';
                 bubble.style.color = '#0f172a';
             }
-            bubble.textContent = msg.content || '';
-            // Chat chỉ còn văn bản: tin cũ có ảnh/video chỉ hiện chữ kèm ghi chú, không tải tệp
-            if (msg.mediaUrl) {
-                const note = document.createElement('div');
-                note.style.fontSize = '11.5px';
-                note.style.fontStyle = 'italic';
-                note.style.opacity = '0.8';
-                note.textContent = 'Tệp đính kèm không còn được hỗ trợ';
-                bubble.appendChild(note);
+            const attachments = msg.attachments || [];
+            if (attachments.length) {
+                // Ảnh/video (#251) mở qua endpoint của phòng chat: máy chủ kiểm tra quyền rồi mới trả tệp
+                const media = document.createElement('div');
+                media.style.cssText = 'display: flex; flex-wrap: wrap; gap: 4px;' + (msg.content ? ' margin-bottom: 6px;' : '');
+                const keepAtBottom = () => {
+                    if (pane.scrollHeight - pane.scrollTop - pane.clientHeight < 320) scrollMessagesToBottom();
+                };
+                attachments.forEach(a => {
+                    if (a.mediaType === 'VIDEO') {
+                        const video = document.createElement('video');
+                        video.controls = true;
+                        video.preload = 'metadata';
+                        video.playsInline = true;
+                        video.src = a.url;
+                        video.style.cssText = 'display: block; max-width: 220px; max-height: 260px; border-radius: 10px; background: #0f172a;';
+                        video.addEventListener('loadedmetadata', keepAtBottom);
+                        video.addEventListener('error', () => video.replaceWith(mediaNote('Không tải được video')));
+                        media.appendChild(video);
+                    } else {
+                        const link = document.createElement('a');
+                        link.href = a.url;
+                        link.target = '_blank';
+                        link.rel = 'noopener';
+                        link.title = 'Mở ảnh';
+                        const img = document.createElement('img');
+                        img.src = a.url;
+                        img.alt = 'Ảnh đính kèm';
+                        img.loading = 'lazy';
+                        img.style.cssText = 'display: block; object-fit: cover; border-radius: 10px; background: #cbd5e1; '
+                            + (attachments.length > 1 ? 'width: 104px; height: 104px;' : 'max-width: 220px; max-height: 260px;');
+                        img.addEventListener('load', keepAtBottom);
+                        img.addEventListener('error', () => link.replaceWith(mediaNote('Không tải được ảnh')));
+                        link.appendChild(img);
+                        media.appendChild(link);
+                    }
+                });
+                bubble.appendChild(media);
+                if (!msg.content) {
+                    bubble.style.padding = '2px';
+                    bubble.style.backgroundColor = 'transparent';
+                    bubble.style.boxShadow = 'none';
+                }
+            }
+            if (msg.content) {
+                const text = document.createElement('div');
+                text.textContent = msg.content;
+                bubble.appendChild(text);
+            }
+            // Tin cũ trước #201: mở tệp qua endpoint kiểm tra quyền; không mở được thì hiện ghi chú
+            if (msg.legacyMedia) {
+                const note = mediaNote('Tệp đính kèm cũ không còn xem được');
+                if (msg.legacyMediaUrl && msg.legacyMediaType === 'VIDEO') {
+                    const video = document.createElement('video');
+                    video.controls = true;
+                    video.preload = 'metadata';
+                    video.playsInline = true;
+                    video.src = msg.legacyMediaUrl;
+                    video.style.cssText = 'display: block; max-width: 220px; max-height: 260px; border-radius: 10px; background: #0f172a; margin-top: 4px;';
+                    video.addEventListener('error', () => video.replaceWith(note));
+                    bubble.appendChild(video);
+                } else if (msg.legacyMediaUrl && msg.legacyMediaType === 'IMAGE') {
+                    const link = document.createElement('a');
+                    link.href = msg.legacyMediaUrl;
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                    link.title = 'Mở ảnh';
+                    const img = document.createElement('img');
+                    img.src = msg.legacyMediaUrl;
+                    img.alt = 'Ảnh đính kèm';
+                    img.loading = 'lazy';
+                    img.style.cssText = 'display: block; max-width: 220px; max-height: 260px; border-radius: 10px; background: #cbd5e1; margin-top: 4px;';
+                    img.addEventListener('error', () => link.replaceWith(note));
+                    link.appendChild(img);
+                    bubble.appendChild(link);
+                } else {
+                    bubble.appendChild(note);
+                }
             }
             row.appendChild(bubble);
 

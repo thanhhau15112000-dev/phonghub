@@ -1846,28 +1846,33 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Mục | Nội dung |
 |---|---|
 | Tác nhân chính | Người dùng đã đăng nhập |
-| Mô tả | Nhắn tin văn bản trong kênh chung hoặc nhắn riêng 1-1, nhận tin theo thời gian thực, xem trạng thái "Đã xem" và số tin chưa đọc. |
+| Mô tả | Nhắn tin văn bản, gửi ảnh và video trong kênh chung hoặc nhắn riêng 1-1, nhận tin theo thời gian thực, xem trạng thái "Đã xem" và số tin chưa đọc. |
 | Tiền điều kiện | Đã đăng nhập. |
 | Hậu điều kiện | Tin được lưu và chỉ đẩy tới thành viên của phòng chat. |
-| Kênh | Khung chat nổi trên mọi trang; API `/api/chat/…` (luồng SSE `/api/chat/stream`) |
+| Kênh | Khung chat nổi trên mọi trang; API `/api/chat/…` (luồng SSE `/api/chat/stream`; gửi ảnh/video `POST /api/chat/rooms/{id}/attachments`; xem tệp `GET /api/chat/rooms/{id}/messages/{messageId}/attachments/{attachmentId}`; tệp ở tin cũ `GET /api/chat/rooms/{id}/messages/{messageId}/legacy-media`) |
 
 **Luồng chính**
 1. Người dùng mở khung chat; hệ thống hiện kênh chung đầu tiên, rồi các cuộc trò chuyện riêng.
 2. Người dùng chọn người nhận trong danh bạ để mở (hoặc tạo) cuộc trò chuyện riêng.
-3. Người dùng nhập nội dung và gửi.
+3. Người dùng nhập nội dung và gửi. Muốn gửi ảnh/video thì bấm nút ảnh, chọn tệp, xem trước và bỏ bớt nếu cần, có thể kèm chữ (BR1).
 4. Hệ thống lưu tin, đánh dấu người gửi đã đọc, đẩy tin qua kết nối thời gian thực tới các thành viên của phòng.
 5. Người nhận mở cuộc trò chuyện; hệ thống đánh dấu đã đọc và báo "Đã xem" cho người gửi.
 
 **Luồng thay thế**
 - 4a. Mất kết nối (mạng, máy ngủ): khung chat tự kết nối lại, tải lại tin đã lỡ, số tin chưa đọc và trạng thái "Đã xem".
+- 4b. Tin có ảnh/video: khung chat hiện tiến độ tải lên; người nhận thấy ảnh (bấm để mở to) và video có nút phát, tua được.
 
 **Ngoại lệ**
 - E1. Nội dung trống: báo lỗi.
-- E2. Mở phòng chat mà mình không phải thành viên: E-403.
+- E2. Mở phòng chat mà mình không phải thành viên: E-403. Mở link ảnh/video của phòng đó cũng E-403.
+- E3. Tệp sai định dạng (gif, avi, mkv, tệp đổi đuôi), quá dung lượng, quá 5 tệp hoặc quá 1 video: E-400 kèm thông báo tiếng Việt, không tạo tin. Khung chat kiểm tra trước khi gửi để tệp quá lớn không bị máy chủ cắt kết nối.
+- E4. Kho lưu trữ lỗi: E-503 "Không lưu được ảnh/video vào kho lưu trữ…", không tạo tin rỗng; tệp đã tải lên kho trong lần gửi đó bị xóa lại.
 
 **Quy tắc nghiệp vụ**
-- BR1. Chỉ gửi văn bản; không gửi ảnh hoặc video. Tin đính kèm cũ chỉ hiện chữ "Tệp đính kèm không còn được hỗ trợ".
+- BR1. Ảnh và video (#251, đảo lại #201): mỗi tin tối đa 5 tệp, trong đó tối đa 1 video. Ảnh JPEG/PNG/WebP, kiểm tra chữ ký tệp, bỏ EXIF và vị trí, xoay đúng chiều, tối đa `STORAGE_MAX_FILE_SIZE_BYTES`. Video MP4/WebM/MOV, chỉ kiểm tra chữ ký, không chuyển mã, tối đa `phonghub.chat.max-video-bytes` (mặc định 10 MB, không vượt giới hạn chung). Video không bỏ được thông tin đi kèm trong tệp (ví dụ vị trí) nên khung chat nhắc khi chọn video.
 - BR2. Máy chủ gửi tín hiệu giữ kết nối mỗi 25 giây để kết nối không bị cắt khi rảnh.
+- BR3. Tệp lưu ở kho riêng tư với khóa `chat/{roomId}/{uuid}.{đuôi}`; cơ sở dữ liệu (bảng `chat_message_attachments`, V59) chỉ lưu khóa. REST và SSE không trả khóa, chỉ trả đường dẫn xem tệp của phòng chat. Quyền xem tệp = quyền đọc phòng. Kho cho URL có chữ ký thì chuyển hướng (hết hạn sau 10 phút); kho in-memory (profile docker) thì máy chủ trả tệp trực tiếp, hỗ trợ `Range` (206) để tua video.
+- BR4. Kênh chung gửi được ảnh/video với người được gửi tin ở kênh đó. Tin cũ trước #201 (tệp ở bucket công khai `chat-media` trên Supabase) vẫn xem được qua `legacy-media`: kiểm tra quyền đọc phòng như tệp mới rồi mới chuyển tới URL cũ; API không trả URL cũ. Tệp không ở bucket đó (ví dụ `/uploads/chat-media/…` của bản chạy cục bộ, đã gỡ cùng #201) hoặc đã mất thì hiện ghi chú "Tệp đính kèm cũ không còn xem được".
 
 #### UC-65. Xem thông báo
 
