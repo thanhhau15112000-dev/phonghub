@@ -12,6 +12,8 @@ phonghub:
       hmac-key: ${TENANT_DATA_HMAC_KEY}
 
 spring:
+  thymeleaf:
+    cache: true
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
