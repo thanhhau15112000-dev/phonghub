@@ -17,8 +17,13 @@ public interface MaintenanceAttachmentUseCase {
 
     URI signedUrl(UUID ticketId, UUID attachmentId);
 
+    /** Nội dung tệp để server trả thẳng khi kho tệp không cấp được link http(s) (kho trong bộ nhớ ở docker/test). */
+    AttachmentContent content(UUID ticketId, UUID attachmentId);
+
     void delete(UUID ticketId, UUID attachmentId);
 
     /** Tệp tải lên kèm loại nội dung trình duyệt khai báo; nội dung thật được kiểm tra lại bằng magic bytes. */
+    record AttachmentContent(String contentType, byte[] content) {}
+
     record AttachmentFile(String contentType, byte[] content) {}
 }

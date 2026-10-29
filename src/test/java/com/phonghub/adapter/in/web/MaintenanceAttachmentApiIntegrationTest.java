@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -91,7 +92,13 @@ class MaintenanceAttachmentApiIntegrationTest extends SeededWebTest {
 
         for (String ok : new String[]{TENANT_1, OWNER_1, STAFF_1}) {
             mockMvc.perform(get(path).header("X-User-Id", ok)).andExpect(status().isOk());
-            mockMvc.perform(get(path + "/" + attachment).header("X-User-Id", ok)).andExpect(status().isFound());
+            // Kho trong bộ nhớ không có link http(s): server trả thẳng nội dung ảnh, không chuyển tới memory://
+            mockMvc.perform(get(path + "/" + attachment).header("X-User-Id", ok))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "image/png"))
+                .andExpect(header().string("Cache-Control", "private, no-store"))
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertEquals((byte) 0x89,
+                    result.getResponse().getContentAsByteArray()[0], "body is the stored PNG, not a redirect"));
         }
         for (String denied : new String[]{OWNER_2, STAFF_2, TECH_1}) {
             mockMvc.perform(get(path).header("X-User-Id", denied)).andExpect(status().isForbidden());
@@ -103,7 +110,7 @@ class MaintenanceAttachmentApiIntegrationTest extends SeededWebTest {
             .contentType(MediaType.APPLICATION_JSON).content("{\"technicianId\":\"" + TECH_1 + "\"}"))
             .andExpect(status().isOk());
         mockMvc.perform(get(path).header("X-User-Id", TECH_1)).andExpect(status().isOk());
-        mockMvc.perform(get(path + "/" + attachment).header("X-User-Id", TECH_1)).andExpect(status().isFound());
+        mockMvc.perform(get(path + "/" + attachment).header("X-User-Id", TECH_1)).andExpect(status().isOk());
         upload(id, "image/png", PNG, TECH_1).andExpect(status().isForbidden());
         upload(id, "image/png", PNG, OWNER_2).andExpect(status().isForbidden());
         // Đường dẫn của phiếu khác không cho tải tệp của phiếu này.
