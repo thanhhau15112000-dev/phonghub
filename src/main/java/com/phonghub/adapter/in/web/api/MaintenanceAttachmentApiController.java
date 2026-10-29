@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.UUID;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -60,8 +61,14 @@ public class MaintenanceAttachmentApiController {
     }
 
     @GetMapping("/{attachmentId}")
-    public ResponseEntity<Void> download(@PathVariable UUID ticketId, @PathVariable UUID attachmentId) {
+    public ResponseEntity<byte[]> download(@PathVariable UUID ticketId, @PathVariable UUID attachmentId) {
         URI target = useCase.signedUrl(ticketId, attachmentId);
+        if (!"https".equalsIgnoreCase(target.getScheme()) && !"http".equalsIgnoreCase(target.getScheme())) {
+            // Kho trong bộ nhớ (docker/test) chỉ có link nội bộ memory://, trình duyệt không mở được
+            MaintenanceAttachmentUseCase.AttachmentContent file = useCase.content(ticketId, attachmentId);
+            return ResponseEntity.ok().contentType(MediaType.parseMediaType(file.contentType()))
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-store").body(file.content());
+        }
         return ResponseEntity.status(302).header(HttpHeaders.LOCATION, target.toString())
             .header(HttpHeaders.CACHE_CONTROL, "no-store").build();
     }

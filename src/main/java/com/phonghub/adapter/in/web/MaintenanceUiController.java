@@ -345,8 +345,14 @@ public class MaintenanceUiController {
     }
 
     @GetMapping("/{id}/attachments/{attachmentId}")
-    public ResponseEntity<Void> downloadAttachment(@PathVariable UUID id, @PathVariable UUID attachmentId) {
+    public ResponseEntity<byte[]> downloadAttachment(@PathVariable UUID id, @PathVariable UUID attachmentId) {
         java.net.URI target = attachmentUseCase.signedUrl(id, attachmentId);
+        if (!"https".equalsIgnoreCase(target.getScheme()) && !"http".equalsIgnoreCase(target.getScheme())) {
+            // Kho trong bộ nhớ (docker/test) chỉ có link nội bộ memory://, trình duyệt không mở được
+            MaintenanceAttachmentUseCase.AttachmentContent file = attachmentUseCase.content(id, attachmentId);
+            return ResponseEntity.ok().contentType(org.springframework.http.MediaType.parseMediaType(file.contentType()))
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-store").body(file.content());
+        }
         return ResponseEntity.status(302).header(HttpHeaders.LOCATION, target.toString())
             .header(HttpHeaders.CACHE_CONTROL, "no-store").build();
     }

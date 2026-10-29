@@ -40,6 +40,12 @@ public class TransactionalMaintenanceAttachmentUseCase implements MaintenanceAtt
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public AttachmentContent content(UUID ticketId, UUID attachmentId) {
+        return delegate.content(ticketId, attachmentId);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(UUID ticketId, UUID attachmentId) {
         delegate.delete(ticketId, attachmentId);
