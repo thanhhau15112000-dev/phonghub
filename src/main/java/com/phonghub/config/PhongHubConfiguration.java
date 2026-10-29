@@ -84,9 +84,20 @@ import org.springframework.context.annotation.Configuration;
 public class PhongHubConfiguration {
 
     @Bean
-    public FilterRegistrationBean<RateLimitFilter> rateLimitFilter(RateLimitProperties props) {
+    public FilterRegistrationBean<com.phonghub.adapter.in.web.MdcLoggingFilter> mdcLoggingFilter() {
+        FilterRegistrationBean<com.phonghub.adapter.in.web.MdcLoggingFilter> bean =
+            new FilterRegistrationBean<>(new com.phonghub.adapter.in.web.MdcLoggingFilter());
+        bean.setOrder(org.springframework.core.Ordered.HIGHEST_PRECEDENCE);
+        return bean;
+    }
+
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> rateLimitFilter(
+        RateLimitProperties props,
+        org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> meterRegistryProvider
+    ) {
         FilterRegistrationBean<RateLimitFilter> bean = new FilterRegistrationBean<>(
-            new RateLimitFilter(props, new FixedWindowRateLimiter(Clock.systemUTC())));
+            new RateLimitFilter(props, new FixedWindowRateLimiter(Clock.systemUTC()), meterRegistryProvider.getIfAvailable()));
         bean.setOrder(-150);
         return bean;
     }
@@ -868,8 +879,10 @@ public class PhongHubConfiguration {
     }
 
     @Bean
-    public com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher() {
-        return new com.phonghub.adapter.out.event.SseChatEventPublisher();
+    public com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher(
+        org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> meterRegistryProvider
+    ) {
+        return new com.phonghub.adapter.out.event.SseChatEventPublisher(meterRegistryProvider.getIfAvailable());
     }
 
     @Bean

@@ -1,0 +1,98 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Thanh toán SePay & Job Định kỳ",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 1 },
+      "id": 2,
+      "title": "SePay Webhook Thành công",
+      "type": "stat",
+      "targets": [
+        { "expr": "sum(phonghub_sepay_ipn_total{status=\"success\"})", "legendFormat": "Thành công" }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 1 },
+      "id": 3,
+      "title": "SePay Webhook Lỗi / Sai chữ ký",
+      "type": "stat",
+      "targets": [
+        { "expr": "sum(phonghub_sepay_ipn_total{status!=\"success\"})", "legendFormat": "Thất bại" }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 1 },
+      "id": 4,
+      "title": "Lần chạy Scheduled Job (Thành công vs Lỗi)",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "sum(phonghub_scheduled_job_executions_total) by (job, status)", "legendFormat": "{{job}} ({{status}})" }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "reqps"
+        }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 7 },
+      "id": 5,
+      "title": "Tần suất gọi SePay IPN Webhook theo thời gian",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "sum(rate(phonghub_sepay_ipn_total[1m])) by (status)", "legendFormat": "SePay IPN {{status}}" }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["phonghub", "payment"],
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "PhongHub - Thanh toán & Job Định kỳ",
+  "uid": "phonghub-payments"
+}
+
