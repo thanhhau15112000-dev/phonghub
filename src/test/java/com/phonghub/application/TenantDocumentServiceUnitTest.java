@@ -269,4 +269,67 @@ class TenantDocumentServiceUnitTest {
         assertThrows(TenantProfileLockedException.class, () -> lockedService.uploadOwnIdentityCard(PNG_FILE, null));
         assertTrue(documents.findByTenantId(tenant.id()).isEmpty());
     }
+
+    @Test
+    void tenantUploadsOwnDriverLicenseFromProfile() {
+        signInAsTenant(tenant);
+
+        var summary = service.uploadOwnDriverLicense("123456789", PNG_FILE, PNG_FILE);
+
+        var stored = documents.findByTenantIdAndType(tenant.id(), DocumentType.GPLX).orElseThrow();
+        assertNull(stored.propertyId(), "uploaded from the profile, not tied to any property");
+        assertTrue(stored.frontImageKey().startsWith("tenants/" + tenant.id() + "/tenant-documents/"));
+        assertTrue(stored.hasBackImage());
+        assertFalse(Arrays.equals(PNG, storage.get(stored.frontImageKey())), "image is encrypted at rest");
+        assertEquals("****6789", summary.maskedNumber());
+        var own = service.ownDocuments();
+        assertTrue(own.profileLinked());
+        assertEquals(List.of(DocumentType.GPLX), own.documents().stream()
+            .map(TenantDocumentUseCase.DocumentSummary::type).toList());
+        verifyNoInteractions(authorization);
+    }
+
+    @Test
+    void driverLicenseFromProfileIsListedForThePropertyOfALaterContract() {
+        signInAsTenant(tenant);
+        service.uploadOwnDriverLicense("123456789", PNG_FILE, null);
+
+        when(currentUser.getCurrentUser()).thenReturn(owner);
+        var listed = service.list(propertyId, tenant.id());
+
+        assertEquals(1, listed.size());
+        assertEquals(DocumentType.GPLX, listed.getFirst().type());
+        assertEquals("****6789", listed.getFirst().maskedNumber());
+    }
+
+    @Test
+    void replacingDriverLicenseCanKeepOrUpdateNumber() {
+        signInAsTenant(tenant);
+        service.uploadOwnDriverLicense("123456789", PNG_FILE, null);
+
+        // Replace keeping same number by passing null/blank
+        var replacedKeep = service.uploadOwnDriverLicense(null, PNG_FILE, null);
+        assertEquals("****6789", replacedKeep.maskedNumber());
+
+        // Replace with new number
+        var replacedNew = service.uploadOwnDriverLicense("987654321", PNG_FILE, null);
+        assertEquals("****4321", replacedNew.maskedNumber());
+    }
+
+    @Test
+    void newDriverLicenseRequiresNumber() {
+        signInAsTenant(tenant);
+        assertThrows(IllegalArgumentException.class, () -> service.uploadOwnDriverLicense(null, PNG_FILE, null));
+        assertThrows(IllegalArgumentException.class, () -> service.uploadOwnDriverLicense("   ", PNG_FILE, null));
+    }
+
+    @Test
+    void driverLicenseRejectsDuplicateNumberForOtherTenant() {
+        signInAsTenant(tenant);
+        service.uploadOwnDriverLicense("123456789", PNG_FILE, null);
+
+        signInAsTenant(otherTenant);
+        assertThrows(DuplicateDocumentNumberException.class,
+            () -> service.uploadOwnDriverLicense("123 456 789", PNG_FILE, null));
+    }
 }
