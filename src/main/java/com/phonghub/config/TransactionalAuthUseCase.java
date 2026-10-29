@@ -25,6 +25,12 @@ public class TransactionalAuthUseCase implements AuthUseCase {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public java.util.Map<String, String> validateCreateUser(CreateUserCommand command) {
+        return delegate.validateCreateUser(command);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public AdminCreateUserResult adminCreateUser(CreateUserCommand command) {
         return delegate.adminCreateUser(command);

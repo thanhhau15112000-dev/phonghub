@@ -492,9 +492,12 @@ class ProductionAuthSecurityTest {
                 .param("email", "duplicate@phonghub.local")
                 .param("fullName", "Tenant Two")
                 .param("role", "TENANT"))
-            .andExpect(status().is3xxRedirection())
-            .andExpect(redirectedUrl("/admin/users"))
-            .andExpect(flash().attribute("errorMessage", "Email đã được sử dụng bởi một tài khoản khác: duplicate@phonghub.local"));
+            .andExpect(status().isOk())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.view().name("admin/users"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "createFieldErrors", org.hamcrest.Matchers.hasEntry("email", "Email đã được dùng.")))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "createForm", org.hamcrest.Matchers.hasEntry("fullName", "Tenant Two")));
     }
 
     @Test
@@ -509,9 +512,12 @@ class ProductionAuthSecurityTest {
                 .param("email", "unique@phonghub.local")
                 .param("fullName", "Tenant Two")
                 .param("role", "TENANT"))
-            .andExpect(status().is3xxRedirection())
-            .andExpect(redirectedUrl("/admin/users"))
-            .andExpect(flash().attribute("errorMessage", "Tên đăng nhập đã tồn tại trong hệ thống: duplicateuser"));
+            .andExpect(status().isOk())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.view().name("admin/users"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "createFieldErrors", org.hamcrest.Matchers.hasEntry("username", "Tên đăng nhập đã được dùng.")))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "createForm", org.hamcrest.Matchers.hasEntry("email", "unique@phonghub.local")));
     }
 
     @Test
