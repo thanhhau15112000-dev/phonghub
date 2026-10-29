@@ -136,10 +136,13 @@ public class HandoverUiController {
             model.addAttribute("canManage", canManage);
             model.addAttribute("ownerOrAdmin", ownerOrAdmin);
             model.addAttribute("primaryTenant", primaryTenant);
-            // Người thuê chính xác nhận check-in cần ảnh CCCD; ảnh tải ở Hồ sơ cá nhân cũng được tính (#244).
-            model.addAttribute("identityCardOnFile", primaryTenant && type == HandoverType.CHECK_IN
-                && tenantDocumentUseCase.ownDocuments().documents().stream()
-                    .anyMatch(document -> document.type() == DocumentType.CCCD));
+            // Người thuê chính xác nhận check-in cần ảnh CCCD; ảnh tải ở Hồ sơ cá nhân cũng được tính (#244, #252).
+            TenantDocumentUseCase.OwnDocuments ownDocs = primaryTenant && type == HandoverType.CHECK_IN
+                ? tenantDocumentUseCase.ownDocuments() : null;
+            model.addAttribute("identityCardOnFile", ownDocs != null
+                && ownDocs.documents().stream().anyMatch(document -> document.type() == DocumentType.CCCD));
+            model.addAttribute("driverLicenseOnFile", ownDocs != null
+                && ownDocs.documents().stream().anyMatch(document -> document.type() == DocumentType.GPLX));
             model.addAttribute("houseRules", rules);
             model.addAttribute("photoKinds", HandoverPhotoKind.values());
             model.addAttribute("assetStatuses", AssetStatus.values());

@@ -572,7 +572,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 2. Hệ thống kiểm tra định dạng (số điện thoại 10 số, bắt đầu bằng 0) và lưu.
 
 **Luồng thay thế**
-- 1a. Người thuê có mục "Ảnh CCCD" trên trang hồ sơ: xem trạng thái (số che, có mặt sau, ngày cập nhật) và tải hoặc thay ảnh CCCD theo UC-27 (#244).
+- 1a. Người thuê có mục "Ảnh CCCD" và "Giấy phép lái xe (GPLX)" trên trang hồ sơ: xem trạng thái (số che, có mặt sau, ngày cập nhật) và tải hoặc thay ảnh CCCD, GPLX theo UC-27 (#244, #252).
 
 **Ngoại lệ**
 - E1. Sửa hồ sơ của người khác (không phải quản trị viên): E-403.
@@ -1039,7 +1039,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Mô tả | Tải lên ảnh mặt trước/sau và số của CCCD hoặc giấy phép lái xe (GPLX); xóa giấy tờ. |
 | Tiền điều kiện | Người thuê thuộc nhà trọ trên đường dẫn; hồ sơ chưa bị khóa. |
 | Hậu điều kiện | Ảnh và số giấy tờ được mã hóa khi lưu; danh sách chỉ hiện số đã che. |
-| Kênh | Web `/properties/{id}/tenants/{tenantId}/documents`, `/account/profile` mục "Ảnh CCCD" (người thuê, #244); API `/api/properties/{id}/tenants/{tenantId}/documents/{type}` |
+| Kênh | Web `/properties/{id}/tenants/{tenantId}/documents`, `/account/profile` mục "Ảnh CCCD" (#244) và "Giấy phép lái xe (GPLX)" (#252); API `/api/properties/{id}/tenants/{tenantId}/documents/{type}` |
 
 **Luồng chính**
 1. Tác nhân chọn loại giấy tờ (`CCCD`, `GPLX`), nhập số và chọn ảnh.
@@ -1048,7 +1048,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 
 **Luồng thay thế**
 - 1a. Xóa giấy tờ (chỉ người quản lý): hệ thống xóa ảnh và số.
-- 1b. Người thuê tải CCCD ở Hồ sơ cá nhân (`/account/profile`), kể cả khi chưa có hợp đồng nào: giấy tờ lưu theo người thuê, chưa gắn nhà trọ. Khi được lập hợp đồng, chủ trọ thấy ngay ảnh này ở trang giấy tờ của nhà trọ, không phải tải lại.
+- 1b. Người thuê tải CCCD hoặc GPLX ở Hồ sơ cá nhân (`/account/profile`), kể cả khi chưa có hợp đồng nào: giấy tờ lưu theo người thuê, chưa gắn nhà trọ. Khi được lập hợp đồng, chủ trọ thấy ngay ảnh này ở trang giấy tờ của nhà trọ, không phải tải lại (#244, #252).
 
 **Ngoại lệ**
 - E1. Người thuê xóa giấy tờ: từ chối, người thuê không tự xóa được.
@@ -1342,7 +1342,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 4. Hệ thống kiểm tra tiền điều kiện, lưu xác nhận, chuyển sang `PENDING_APPROVAL` và báo người quản lý. Với check-out, đồng thời lập hóa đơn chốt điện/nước theo tiêu thụ từ lần ghi gần nhất của hợp đồng nếu có đơn giá.
 
 **Luồng thay thế**
-- 2a. Chưa có ảnh CCCD (check-in): người thuê chọn "Tải ảnh CCCD ở Hồ sơ cá nhân" để làm UC-27, rồi quay lại bước 3. Đã tải từ trước ở hồ sơ thì trang hiện "Đã có ảnh CCCD trong Hồ sơ cá nhân".
+- 2a. Chưa có ảnh CCCD (check-in): người thuê chọn "Tải ảnh CCCD ở Hồ sơ cá nhân" để làm UC-27, rồi quay lại bước 3. Đã tải từ trước ở hồ sơ thì trang hiện "Đã có ảnh CCCD trong Hồ sơ cá nhân" (nếu đã có thêm GPLX thì hiện thêm huy hiệu "Đã có GPLX trong Hồ sơ cá nhân", #252).
 
 **Ngoại lệ**
 - E1. Người ở cùng hoặc người không phải người thuê chính: E-403.

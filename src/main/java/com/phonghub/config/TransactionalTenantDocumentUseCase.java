@@ -58,4 +58,10 @@ public class TransactionalTenantDocumentUseCase implements TenantDocumentUseCase
     public DocumentSummary uploadOwnIdentityCard(DocumentFile front, DocumentFile back) {
         return delegate.uploadOwnIdentityCard(front, back);
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public DocumentSummary uploadOwnDriverLicense(String licenseNumber, DocumentFile front, DocumentFile back) {
+        return delegate.uploadOwnDriverLicense(licenseNumber, front, back);
+    }
 }
