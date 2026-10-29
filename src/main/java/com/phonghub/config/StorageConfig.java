@@ -31,6 +31,8 @@ public class StorageConfig {
     @Bean
     @Profile({"test", "docker & !prod"})
     public FileStoragePort inMemoryFileStoragePort() {
+        org.slf4j.LoggerFactory.getLogger(StorageConfig.class).warn(
+            "Kho tệp đang lưu trong bộ nhớ: ảnh/video sẽ mất khi khởi động lại ứng dụng. Chỉ dùng cho máy cá nhân hoặc test.");
         return new InMemoryFileStorageAdapter();
     }
 }
