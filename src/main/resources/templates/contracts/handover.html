@@ -103,46 +103,8 @@
                 Đã duyệt lúc <strong th:text="${#temporals.format(details.handover().approvedAt(), 'dd/MM/yyyy HH:mm')}">01/01/2026</strong>
             </div>
 
-            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
-                <form th:if="${canManage and details.handover().status().name() == 'DRAFT'}" th:action="@{${base} + '/send'}" method="post" style="margin: 0;">
-                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <button type="submit" class="btn btn-primary">Gửi cho khách thuê</button>
-                </form>
-                <form th:if="${primaryTenant and details.handover().status().name() == 'PENDING_TENANT'}" th:action="@{${base} + '/confirm'}" method="post" style="margin: 0;">
-                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <button type="submit" class="btn btn-primary">Tôi xác nhận biên bản</button>
-                </form>
-                <a th:if="${primaryTenant and checkOut and details.handover().status().name() == 'PENDING_TENANT'}"
-                   th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${contract.getPrimaryTenantId()} + '/documents'}"
-                   class="btn btn-secondary">Tải giấy tờ</a>
-                <th:block th:if="${primaryTenant and !checkOut and details.handover().status().name() == 'PENDING_TENANT'}">
-                    <span th:if="${identityCardOnFile}" class="badge badge-ACTIVE" style="align-self: center;">Đã có ảnh CCCD trong Hồ sơ cá nhân</span>
-                    <a th:unless="${identityCardOnFile}" th:href="@{/account/profile#cccd}" class="btn btn-secondary">Tải ảnh CCCD ở Hồ sơ cá nhân</a>
-                </th:block>
-                <form th:if="${canManage and details.handover().status().name() == 'PENDING_APPROVAL'}" th:action="@{${base} + '/approve'}" method="post" style="display: flex; gap: 6px; margin: 0; flex-wrap: wrap;">
-                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <input th:if="${checkOut}" type="number" min="0" step="1000" name="finalDeduction" class="form-control"
-                           th:value="${details.proposedDeduction()}" title="Khoản khấu trừ chốt" style="width: 150px;">
-                    <div th:if="${checkOut and settlement != null and !#lists.isEmpty(settlement.openInvoices())}"
-                         style="flex-basis: 100%; padding: 8px 10px; border: 1px solid var(--border-color);">
-                        <strong>Công nợ cần xử lý trước khi duyệt</strong>
-                        <p style="margin: 4px 0; font-size: 12px;">Chọn từng hóa đơn để cấn trừ toàn bộ số còn nợ vào phần tiền cọc còn lại sau khấu trừ tài sản. Nếu cọc thiếu, thanh toán phần thiếu rồi tải lại trang.</p>
-                        <label th:each="debt : ${settlement.openInvoices()}" style="display: block; font-size: 13px; margin-top: 4px;">
-                            <input type="checkbox" name="depositOffsetInvoiceIds" th:value="${debt.id()}">
-                            <span th:text="${(debt.type().name() == 'CHECK_OUT' ? 'Chốt điện/nước ' : (debt.type().name() == 'MAINTENANCE' ? 'Phí sửa chữa ' : 'Hóa đơn ')) + #numbers.formatInteger(debt.month(), 2) + '/' + debt.year() + ' · còn ' + #numbers.formatDecimal(debt.remainingAmount(), 0, 'POINT', 0, 'COMMA') + ' đ · hạn ' + #temporals.format(debt.dueDate(), 'dd/MM/yyyy')}">Khoản còn nợ</span>
-                        </label>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Duyệt</button>
-                </form>
-                <form th:if="${canManage and details.handover().status().name() == 'PENDING_APPROVAL'}" th:action="@{${base} + '/reject'}" method="post" style="display: flex; gap: 6px; margin: 0;">
-                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <input type="text" name="reason" class="form-control" placeholder="Lý do từ chối" required style="width: 220px;">
-                    <button type="submit" class="btn btn-danger">Từ chối</button>
-                </form>
-                <form th:if="${canManage and details.handover().status().name() == 'REJECTED'}" th:action="@{${base} + '/reopen'}" method="post" style="margin: 0;">
-                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <button type="submit" class="btn btn-secondary">Mở lại để chỉnh sửa</button>
-                </form>
+            <div th:if="${details.handover().status().name() != 'APPROVED'}" style="margin-top: 12px;">
+                <a href="#handover-actions" class="btn btn-sm btn-secondary">Xem và xác nhận &darr;</a>
             </div>
         </div>
 
@@ -361,6 +323,65 @@
                 <pre style="white-space: pre-wrap; font-size: 13px;" th:text="${details.handover().houseRulesText()}">Nội quy</pre>
             </div>
             <p th:if="${details.handover().houseRulesText() == null}" style="font-size: 13px;">Nhà trọ chưa có nội quy chung tại thời điểm gửi.</p>
+        </div>
+
+        <!-- Thao tác gửi / xác nhận / duyệt đặt ở cuối trang sau khi đã xem toàn bộ nội dung (#253) -->
+        <div class="card" id="handover-actions" style="margin-bottom: 24px;">
+            <h2>Xác nhận biên bản</h2>
+            <p th:if="${details.handover().status().name() == 'DRAFT'}" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+                Vui lòng kiểm tra lại chỉ số, hiện trạng, ảnh bàn giao và danh sách tài sản ở trên trước khi gửi cho khách thuê.
+            </p>
+            <p th:if="${details.handover().status().name() == 'PENDING_TENANT'}" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+                Tôi đã kiểm tra kỹ toàn bộ chỉ số điện nước, tình trạng phòng, ảnh bàn giao và danh sách tài sản phía trên.
+            </p>
+            <p th:if="${details.handover().status().name() == 'PENDING_APPROVAL'}" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+                Người thuê đã xác nhận biên bản. Vui lòng rà soát lại thông tin và quyết toán cọc (nếu có) trước khi phê duyệt.
+            </p>
+            <p th:if="${details.handover().status().name() == 'APPROVED'}" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+                Biên bản bàn giao đã được phê duyệt và hoàn tất.
+            </p>
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <form th:if="${canManage and details.handover().status().name() == 'DRAFT'}" th:action="@{${base} + '/send'}" method="post" style="margin: 0;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <button type="submit" class="btn btn-primary">Gửi cho khách thuê</button>
+                </form>
+                <form th:if="${primaryTenant and details.handover().status().name() == 'PENDING_TENANT'}" th:action="@{${base} + '/confirm'}" method="post" style="margin: 0;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <button type="submit" class="btn btn-primary">Tôi xác nhận biên bản</button>
+                </form>
+                <a th:if="${primaryTenant and checkOut and details.handover().status().name() == 'PENDING_TENANT'}"
+                   th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${contract.getPrimaryTenantId()} + '/documents'}"
+                   class="btn btn-secondary">Tải giấy tờ</a>
+                <th:block th:if="${primaryTenant and !checkOut and details.handover().status().name() == 'PENDING_TENANT'}">
+                    <span th:if="${identityCardOnFile}" class="badge badge-ACTIVE" style="align-self: center;">Đã có ảnh CCCD trong Hồ sơ cá nhân</span>
+                    <a th:unless="${identityCardOnFile}" th:href="@{/account/profile#cccd}" class="btn btn-secondary">Tải ảnh CCCD ở Hồ sơ cá nhân</a>
+                </th:block>
+                <form th:if="${canManage and details.handover().status().name() == 'PENDING_APPROVAL'}" th:action="@{${base} + '/approve'}" method="post" style="display: flex; gap: 6px; margin: 0; flex-wrap: wrap;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <input th:if="${checkOut}" type="number" min="0" step="1000" name="finalDeduction" class="form-control"
+                           th:value="${details.proposedDeduction()}" title="Khoản khấu trừ chốt" style="width: 150px;">
+                    <div th:if="${checkOut and settlement != null and !#lists.isEmpty(settlement.openInvoices())}"
+                         style="flex-basis: 100%; padding: 8px 10px; border: 1px solid var(--border-color);">
+                        <strong>Công nợ cần xử lý trước khi duyệt</strong>
+                        <p style="margin: 4px 0; font-size: 12px;">Chọn từng hóa đơn để cấn trừ toàn bộ số còn nợ vào phần tiền cọc còn lại sau khấu trừ tài sản. Nếu cọc thiếu, thanh toán phần thiếu rồi tải lại trang.</p>
+                        <label th:each="debt : ${settlement.openInvoices()}" style="display: block; font-size: 13px; margin-top: 4px;">
+                            <input type="checkbox" name="depositOffsetInvoiceIds" th:value="${debt.id()}">
+                            <span th:text="${(debt.type().name() == 'CHECK_OUT' ? 'Chốt điện/nước ' : (debt.type().name() == 'MAINTENANCE' ? 'Phí sửa chữa ' : 'Hóa đơn ')) + #numbers.formatInteger(debt.month(), 2) + '/' + debt.year() + ' · còn ' + #numbers.formatDecimal(debt.remainingAmount(), 0, 'POINT', 0, 'COMMA') + ' đ · hạn ' + #temporals.format(debt.dueDate(), 'dd/MM/yyyy')}">Khoản còn nợ</span>
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Duyệt</button>
+                </form>
+                <form th:if="${canManage and details.handover().status().name() == 'PENDING_APPROVAL'}" th:action="@{${base} + '/reject'}" method="post" style="display: flex; gap: 6px; margin: 0;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <input type="text" name="reason" class="form-control" placeholder="Lý do từ chối" required style="width: 220px;">
+                    <button type="submit" class="btn btn-danger">Từ chối</button>
+                </form>
+                <form th:if="${canManage and details.handover().status().name() == 'REJECTED'}" th:action="@{${base} + '/reopen'}" method="post" style="margin: 0;">
+                    <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <button type="submit" class="btn btn-secondary">Mở lại để chỉnh sửa</button>
+                </form>
+            </div>
         </div>
     </th:block>
 
