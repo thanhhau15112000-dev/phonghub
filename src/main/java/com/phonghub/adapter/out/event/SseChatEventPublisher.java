@@ -11,6 +11,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Supplier;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 public class SseChatEventPublisher implements ChatEventPublisherPort {
@@ -19,6 +20,20 @@ public class SseChatEventPublisher implements ChatEventPublisherPort {
     private static final long RECONNECT_DELAY_MS = 3_000;
 
     private final Map<UUID, List<SseEmitter>> userEmitters = new ConcurrentHashMap<>();
+
+    public SseChatEventPublisher() {
+        this(null);
+    }
+
+    public SseChatEventPublisher(MeterRegistry meterRegistry) {
+        if (meterRegistry != null) {
+            meterRegistry.gauge("phonghub.chat.sse.active_connections", this, SseChatEventPublisher::getActiveConnectionCount);
+        }
+    }
+
+    public int getActiveConnectionCount() {
+        return userEmitters.values().stream().mapToInt(List::size).sum();
+    }
 
     public SseEmitter subscribe(UUID userId) {
         // Timeout 30 phút, client sẽ tự reconnect

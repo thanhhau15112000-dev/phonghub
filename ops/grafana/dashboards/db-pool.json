@@ -1,0 +1,80 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Hikari Connection Pool",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 1 },
+      "id": 2,
+      "title": "Kết nối DB Pool (Active vs Idle vs Max)",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "hikaricp_connections_active", "legendFormat": "Active Connections" },
+        { "expr": "hikaricp_connections_idle", "legendFormat": "Idle Connections" },
+        { "expr": "hikaricp_connections_max", "legendFormat": "Max Connections" }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "id": 3,
+      "title": "Threads đang chờ kết nối (Pending Threads)",
+      "type": "stat",
+      "targets": [
+        { "expr": "sum(hikaricp_connections_pending)", "legendFormat": "Pending Threads" }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 9 },
+      "id": 4,
+      "title": "Thời gian chờ mượn kết nối (Acquire Time)",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "rate(hikaricp_connections_acquire_seconds_sum[1m]) / rate(hikaricp_connections_acquire_seconds_count[1m])", "legendFormat": "Avg Acquire Time" }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["phonghub", "database"],
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "PhongHub - DB Pool (HikariCP)",
+  "uid": "phonghub-db-pool"
+}
+

@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.MDC;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 public class CurrentUserInterceptor implements HandlerInterceptor {
@@ -68,6 +69,7 @@ public class CurrentUserInterceptor implements HandlerInterceptor {
                 if (userOpt.isPresent()) {
                     demoActorPort.setCurrentUser(userOpt.get());
                     request.setAttribute("currentUser", userOpt.get());
+                    MDC.put(MdcLoggingFilter.MDC_USER_ID_HASH, MdcLoggingFilter.sha256Hex(userOpt.get().id().toString()));
                     return true;
                 }
             }
@@ -82,6 +84,7 @@ public class CurrentUserInterceptor implements HandlerInterceptor {
                 demoActorPort.setCurrentUser(authUser);
             }
             request.setAttribute("currentUser", authUser);
+            MDC.put(MdcLoggingFilter.MDC_USER_ID_HASH, MdcLoggingFilter.sha256Hex(authUser.id().toString()));
             return true;
         }
 
@@ -93,6 +96,9 @@ public class CurrentUserInterceptor implements HandlerInterceptor {
                     demoActorPort.setCurrentUser(current);
                 }
                 request.setAttribute("currentUser", current);
+                if (current != null && current.id() != null) {
+                    MDC.put(MdcLoggingFilter.MDC_USER_ID_HASH, MdcLoggingFilter.sha256Hex(current.id().toString()));
+                }
             } catch (Exception ignored) {
                 // In production without authentication, interceptor does not enforce fallback
             }

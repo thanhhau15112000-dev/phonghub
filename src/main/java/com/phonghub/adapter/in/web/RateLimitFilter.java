@@ -15,6 +15,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -29,10 +30,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private final RateLimitProperties props;
     private final FixedWindowRateLimiter limiter;
+    private final MeterRegistry meterRegistry;
 
     public RateLimitFilter(RateLimitProperties props, FixedWindowRateLimiter limiter) {
+        this(props, limiter, null);
+    }
+
+    public RateLimitFilter(RateLimitProperties props, FixedWindowRateLimiter limiter, MeterRegistry meterRegistry) {
         this.props = props;
         this.limiter = limiter;
+        this.meterRegistry = meterRegistry;
     }
 
     @Override
@@ -85,6 +92,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (decision.allowed()) {
             chain.doFilter(forwarded, response);
             return;
+        }
+        if (meterRegistry != null) {
+            meterRegistry.counter("phonghub.ratelimit.rejected", "path", path).increment();
         }
         reject(request, response, decision.retryAfterSeconds());
     }

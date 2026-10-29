@@ -56,5 +56,73 @@ services:
       redis:
         condition: service_healthy
 
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: phonghub-prometheus
+    profiles: ["observability"]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - app
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: phonghub-grafana
+    profiles: ["observability"]
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: "grafana-opensearch-datasource"
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+  opensearch:
+    image: opensearchproject/opensearch:2.17.1
+    container_name: phonghub-opensearch
+    profiles: ["observability"]
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - phonghub_opensearch_data:/usr/share/opensearch/data
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.17.1
+    container_name: phonghub-opensearch-dashboards
+    profiles: ["observability"]
+    ports:
+      - "5601:5601"
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    depends_on:
+      - opensearch
+
+  fluent-bit:
+    image: fluent/fluent-bit:3.1.9
+    container_name: phonghub-fluent-bit
+    profiles: ["observability"]
+    ports:
+      - "24224:24224"
+      - "5170:5170"
+    volumes:
+      - ./ops/fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./ops/fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
+    depends_on:
+      - opensearch
+
 volumes:
   phonghub_pgdata:
+  phonghub_opensearch_data:
