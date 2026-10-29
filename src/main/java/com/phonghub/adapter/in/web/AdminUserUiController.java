@@ -6,6 +6,7 @@ import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateEmailException;
+import com.phonghub.domain.exception.DuplicateIdentityCardException;
 import com.phonghub.domain.exception.DuplicateUsernameException;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
@@ -161,59 +162,101 @@ public class AdminUserUiController {
     @PostMapping("/{userId}/tenant-profile")
     public String attachTenantProfile(
         @PathVariable UUID userId,
-        @RequestParam String identityCardNumber,
-        @RequestParam String phone,
+        @RequestParam(defaultValue = "") String identityCardNumber,
+        @RequestParam(defaultValue = "") String phone,
+        Model model,
         RedirectAttributes redirectAttributes
     ) {
         if (!isAdmin(currentUserPort.getCurrentUser())) {
             redirectAttributes.addFlashAttribute("tableErrorMessage", "Chỉ quản trị viên mới có thể bổ sung hồ sơ người thuê.");
             return "redirect:/";
         }
-        try {
-            authUseCase.adminAttachTenantProfile(userId, identityCardNumber, phone);
-            redirectAttributes.addFlashAttribute("tableSuccessMessage", "Đã gắn hồ sơ CCCD với tài khoản người thuê.");
-        } catch (DomainException | IllegalArgumentException ex) {
-            redirectAttributes.addFlashAttribute("tableErrorMessage", userFacingMessage(ex));
+        Map<String, String> fieldErrors = new java.util.LinkedHashMap<>();
+        if (!phone.trim().matches("^0\\d{9}$")) {
+            fieldErrors.put("phone", "Số điện thoại gồm 10 chữ số, bắt đầu bằng 0.");
         }
-        return "redirect:/admin/users";
+        if (!identityCardNumber.trim().matches("^(\\d{9}|\\d{12})$")) {
+            fieldErrors.put("identityCardNumber", "CCCD gồm 9 hoặc 12 chữ số.");
+        }
+        String generalError = null;
+        if (fieldErrors.isEmpty()) {
+            try {
+                authUseCase.adminAttachTenantProfile(userId, identityCardNumber, phone);
+                redirectAttributes.addFlashAttribute("tableSuccessMessage", "Đã gắn hồ sơ CCCD với tài khoản người thuê.");
+                return "redirect:/admin/users";
+            } catch (DuplicateIdentityCardException ex) {
+                fieldErrors.put("identityCardNumber", "CCCD này đã gắn với một tài khoản người thuê.");
+            } catch (DomainException | IllegalArgumentException ex) {
+                generalError = userFacingMessage(ex);
+            }
+        }
+        // Giữ lại giá trị đã nhập và báo lỗi ngay dưới dòng tài khoản (#247)
+        model.addAttribute("profileFormUserId", userId);
+        model.addAttribute("profileForm", Map.of("phone", phone, "identityCardNumber", identityCardNumber));
+        model.addAttribute("profileFieldErrors", fieldErrors);
+        if (generalError != null) {
+            model.addAttribute("tableErrorMessage", generalError);
+        }
+        return listUsers(null, 1, 5, null, model, redirectAttributes);
     }
 
     @PostMapping
     public String createUser(
-        @RequestParam String username,
-        @RequestParam String email,
-        @RequestParam String fullName,
+        @RequestParam(defaultValue = "") String username,
+        @RequestParam(defaultValue = "") String email,
+        @RequestParam(defaultValue = "") String fullName,
         @RequestParam(required = false) String phone,
-        @RequestParam UserRole role,
+        @RequestParam(required = false) UserRole role,
         @RequestParam(required = false) String identityCardNumber,
+        Model model,
         RedirectAttributes redirectAttributes
     ) {
         if (!isAdmin(currentUserPort.getCurrentUser())) {
             redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên mới có thể tạo tài khoản.");
             return "redirect:/";
         }
-        if (!CREATABLE_ROLES.contains(role)) {
-            redirectAttributes.addFlashAttribute("errorMessage", "Vai trò được chọn không được phép tạo từ giao diện này.");
-            return "redirect:/admin/users";
-        }
+        AuthUseCase.CreateUserCommand command =
+            new AuthUseCase.CreateUserCommand(username, email, fullName, phone, role, identityCardNumber);
 
-        try {
-            AuthUseCase.AdminCreateUserResult created = authUseCase.adminCreateUser(
-                new AuthUseCase.CreateUserCommand(username, email, fullName, phone, role, identityCardNumber)
-            );
-            redirectAttributes.addFlashAttribute("createdUser", created);
-            return "redirect:/admin/users";
-        } catch (DomainException | IllegalArgumentException ex) {
-            String msg = userFacingMessage(ex);
-            redirectAttributes.addFlashAttribute("errorMessage", msg);
-            redirectAttributes.addFlashAttribute("createErrorMessage", msg);
-            return "redirect:/admin/users";
-        } catch (Exception ex) {
-            String msg = "Không thể tạo tài khoản: " + (ex.getMessage() != null ? ex.getMessage() : "Lỗi hệ thống.");
-            redirectAttributes.addFlashAttribute("errorMessage", msg);
-            redirectAttributes.addFlashAttribute("createErrorMessage", msg);
-            return "redirect:/admin/users";
+        // Kiểm tra hết các trường trong một lần để báo lỗi theo từng trường và giữ nguyên dữ liệu đã nhập (#247)
+        Map<String, String> fieldErrors = new java.util.LinkedHashMap<>(authUseCase.validateCreateUser(command));
+        if (role != null && !CREATABLE_ROLES.contains(role)) {
+            fieldErrors.put("role", "Vai trò được chọn không được phép tạo từ giao diện này.");
         }
+        String generalError = null;
+        if (fieldErrors.isEmpty()) {
+            try {
+                AuthUseCase.AdminCreateUserResult created = authUseCase.adminCreateUser(command);
+                redirectAttributes.addFlashAttribute("createdUser", created);
+                return "redirect:/admin/users";
+            } catch (DuplicateEmailException ex) {
+                fieldErrors.put("email", "Email đã được dùng.");
+            } catch (DuplicateUsernameException ex) {
+                fieldErrors.put("username", "Tên đăng nhập đã được dùng.");
+            } catch (DuplicateIdentityCardException ex) {
+                fieldErrors.put("identityCardNumber", "CCCD này đã gắn với một tài khoản người thuê.");
+            } catch (DomainException | IllegalArgumentException ex) {
+                generalError = userFacingMessage(ex);
+            } catch (Exception ex) {
+                generalError = "Không thể tạo tài khoản: " + (ex.getMessage() != null ? ex.getMessage() : "Lỗi hệ thống.");
+            }
+        }
+        // Không redirect: trả thẳng trang với dữ liệu đã nhập để CCCD không phải đi qua flash/session hay URL
+        Map<String, String> form = new java.util.LinkedHashMap<>();
+        form.put("username", username);
+        form.put("email", email);
+        form.put("fullName", fullName);
+        form.put("phone", phone == null ? "" : phone);
+        form.put("role", role == null ? "" : role.name());
+        form.put("identityCardNumber", identityCardNumber == null ? "" : identityCardNumber);
+        model.addAttribute("createForm", form);
+        model.addAttribute("createFieldErrors", fieldErrors);
+        if (generalError != null) {
+            model.addAttribute("createErrorMessage", generalError);
+        } else if (!fieldErrors.isEmpty()) {
+            model.addAttribute("createErrorMessage", "Vui lòng sửa các trường được đánh dấu rồi tạo lại.");
+        }
+        return listUsers(null, 1, 5, null, model, redirectAttributes);
     }
 
     @PostMapping("/{userId}/reset-password")
@@ -287,6 +330,7 @@ public class AdminUserUiController {
         @RequestParam(required = false) String phone,
         @RequestParam UserRole role,
         @RequestParam User.UserStatus status,
+        Model model,
         RedirectAttributes redirectAttributes
     ) {
         CurrentUser admin = currentUserPort.getCurrentUser();
@@ -294,17 +338,37 @@ public class AdminUserUiController {
             redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên mới có thể quản lý tài khoản.");
             return "redirect:/";
         }
-        try {
-            User saved = userUseCase.adminUpdateUser(new UserUseCase.AdminUpdateUserCommand(
-                userId, fullName, phone, role, status));
-            String msg = "Đã cập nhật tài khoản " + saved.fullName() + ".";
-            redirectAttributes.addFlashAttribute("successMessage", msg);
-            redirectAttributes.addFlashAttribute("tableSuccessMessage", msg);
-            return "redirect:/admin/users";
-        } catch (DomainException | IllegalArgumentException ex) {
-            redirectAttributes.addFlashAttribute("errorMessage", userFacingMessage(ex));
-            return "redirect:/admin/users/" + userId + "/edit";
+        Map<String, String> fieldErrors = new java.util.LinkedHashMap<>();
+        if (fullName.isBlank()) {
+            fieldErrors.put("fullName", "Vui lòng nhập họ và tên.");
         }
+        if (phone != null && !phone.isBlank() && !phone.trim().matches("^0\\d{9}$")) {
+            fieldErrors.put("phone", "Số điện thoại gồm 10 chữ số, bắt đầu bằng 0.");
+        }
+        String generalError = null;
+        if (fieldErrors.isEmpty()) {
+            try {
+                User saved = userUseCase.adminUpdateUser(new UserUseCase.AdminUpdateUserCommand(
+                    userId, fullName, phone, role, status));
+                String msg = "Đã cập nhật tài khoản " + saved.fullName() + ".";
+                redirectAttributes.addFlashAttribute("successMessage", msg);
+                redirectAttributes.addFlashAttribute("tableSuccessMessage", msg);
+                return "redirect:/admin/users";
+            } catch (DomainException | IllegalArgumentException ex) {
+                generalError = userFacingMessage(ex);
+            }
+        }
+        // Trả lại form với giá trị vừa nhập thay vì quay về dữ liệu cũ trong DB (#247)
+        Map<String, String> form = new java.util.LinkedHashMap<>();
+        form.put("fullName", fullName);
+        form.put("phone", phone == null ? "" : phone);
+        form.put("role", role.name());
+        form.put("status", status.name());
+        model.addAttribute("form", form);
+        model.addAttribute("fieldErrors", fieldErrors);
+        model.addAttribute("errorMessage", generalError != null ? generalError
+            : "Vui lòng sửa các trường được đánh dấu rồi lưu lại.");
+        return editUserForm(userId, model, redirectAttributes);
     }
 
     @PostMapping("/{userId}/delete")

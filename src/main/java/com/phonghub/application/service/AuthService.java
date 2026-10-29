@@ -391,6 +391,63 @@ public class AuthService implements AuthUseCase {
     }
 
     @Override
+    public Map<String, String> validateCreateUser(CreateUserCommand command) {
+        CurrentUser caller = currentUserPort.getCurrentUser();
+        authorizationService.assertAdmin(caller);
+
+        Map<String, String> errors = new java.util.LinkedHashMap<>();
+        String username = command.username() == null ? "" : command.username().trim().toLowerCase();
+        if (username.isEmpty()) {
+            errors.put("username", "Vui lòng nhập tên đăng nhập.");
+        } else if (!username.matches("^[a-z0-9._-]{3,50}$")) {
+            errors.put("username", "Tên đăng nhập phải từ 3 đến 50 ký tự, chỉ gồm chữ thường, chữ số, '.', '_' hoặc '-'.");
+        } else if (userRepository.findByUsername(username).isPresent()) {
+            errors.put("username", "Tên đăng nhập đã được dùng.");
+        }
+
+        String email = command.email() == null ? "" : command.email().trim().toLowerCase();
+        if (email.isEmpty()) {
+            errors.put("email", "Vui lòng nhập email.");
+        } else if (!email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+            errors.put("email", "Email không đúng định dạng.");
+        } else if (userRepository.findByEmail(email).isPresent()) {
+            errors.put("email", "Email đã được dùng.");
+        }
+
+        if (command.fullName() == null || command.fullName().isBlank()) {
+            errors.put("fullName", "Vui lòng nhập họ và tên.");
+        }
+
+        boolean tenant = command.role() == UserRole.TENANT;
+        String phone = command.phone() == null ? "" : command.phone().trim();
+        if (phone.isEmpty()) {
+            if (tenant) {
+                errors.put("phone", "Tài khoản người thuê bắt buộc có số điện thoại.");
+            }
+        } else if (!phone.matches("^0\\d{9}$")) {
+            errors.put("phone", "Số điện thoại gồm 10 chữ số, bắt đầu bằng 0.");
+        } else if (userRepository.findAll().stream().anyMatch(u -> phone.equals(u.phone()))) {
+            errors.put("phone", "Số điện thoại đã được dùng.");
+        }
+
+        if (command.role() == null) {
+            errors.put("role", "Vui lòng chọn vai trò.");
+        }
+        if (tenant) {
+            String card = command.identityCardNumber() == null ? "" : command.identityCardNumber().trim();
+            if (card.isEmpty()) {
+                errors.put("identityCardNumber", "Tài khoản người thuê bắt buộc có CCCD.");
+            } else if (!card.matches("^(\\d{9}|\\d{12})$")) {
+                errors.put("identityCardNumber", "CCCD gồm 9 hoặc 12 chữ số.");
+            } else if (tenantRepository != null
+                && tenantRepository.findByIdentityCardNumber(card).filter(t -> t.userId() != null).isPresent()) {
+                errors.put("identityCardNumber", "CCCD này đã gắn với một tài khoản người thuê.");
+            }
+        }
+        return errors;
+    }
+
+    @Override
     public List<User> listTenantAccountsMissingProfiles() {
         CurrentUser caller = currentUserPort.getCurrentUser();
         authorizationService.assertAdmin(caller);
