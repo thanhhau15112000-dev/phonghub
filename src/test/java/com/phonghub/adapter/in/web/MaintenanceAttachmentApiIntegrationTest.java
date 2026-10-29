@@ -130,7 +130,10 @@ class MaintenanceAttachmentApiIntegrationTest extends SeededWebTest {
             .getContentAsString(), "$.id");
 
         mockMvc.perform(delete(path + "/" + second).header("X-User-Id", TENANT_1)).andExpect(status().isForbidden());
+        // #228: tệp người thuê gửi là bằng chứng, chủ trọ/nhân viên/chủ trọ khác không xóa được
         mockMvc.perform(delete(path + "/" + first).header("X-User-Id", OWNER_2)).andExpect(status().isForbidden());
+        mockMvc.perform(delete(path + "/" + first).header("X-User-Id", OWNER_1)).andExpect(status().isForbidden());
+        mockMvc.perform(delete(path + "/" + first).header("X-User-Id", STAFF_1)).andExpect(status().isForbidden());
         mockMvc.perform(delete(path + "/" + first).header("X-User-Id", TENANT_1)).andExpect(status().isNoContent());
         mockMvc.perform(delete(path + "/" + second).header("X-User-Id", STAFF_1)).andExpect(status().isNoContent());
         mockMvc.perform(get(path).header("X-User-Id", OWNER_1)).andExpect(jsonPath("$.length()").value(0));
