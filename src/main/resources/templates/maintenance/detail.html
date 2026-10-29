@@ -420,7 +420,7 @@
                           style="margin: 0;" onsubmit="return confirm('Xóa tệp này?');">
                         <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                         <button type="submit" class="btn btn-sm btn-danger"
-                                th:if="${currentUser.role().name() != 'TECHNICIAN' and (currentUser.id() == a.uploadedBy() or currentUser.role().name() != 'TENANT')}">Xóa</button>
+                                th:if="${deletableAttachmentIds.contains(a.id())}">Xóa</button>
                     </form>
                 </div>
             </div>
@@ -494,7 +494,15 @@
     </div>
 
     <!-- Sửa / hủy phiếu chưa xử lý (#89): người báo phiếu hoặc người quản lý nhà trọ -->
-    <div th:if="${currentUser.role().name() != 'TECHNICIAN' and ticket.isEditable()}" class="card" style="margin-bottom: 20px;" id="edit-request">
+    <div th:if="${requestLockedForViewer}" class="card" style="margin-bottom: 20px;" id="request-locked">
+        <h2>Nội dung do người thuê gửi</h2>
+        <p style="font-size: 13px; color: var(--text-secondary);">
+            Tiêu đề, mô tả, ảnh và video do người thuê gửi lúc <span th:text="${#temporals.format(ticket.getCreatedAt(), 'dd/MM/yyyy HH:mm')}">...</span>
+            chỉ để xem, không sửa hay xóa được. Cần dừng phiếu thì dùng "Từ chối" kèm lý do.
+        </p>
+    </div>
+
+    <div th:if="${currentUser.role().name() != 'TECHNICIAN' and !requestLockedForViewer and ticket.isEditable()}" class="card" style="margin-bottom: 20px;" id="edit-request">
         <h2>Sửa hoặc hủy yêu cầu</h2>
         <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
             Chỉ sửa/hủy được khi kỹ thuật viên chưa bắt đầu xử lý. Đổi mức độ sẽ tính lại hạn xử lý theo mức mới.

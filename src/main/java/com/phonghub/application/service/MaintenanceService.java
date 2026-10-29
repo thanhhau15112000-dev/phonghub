@@ -356,6 +356,11 @@ public class MaintenanceService implements MaintenanceUseCase {
             throw new UnauthorizedPropertyAccessException("Kỹ thuật viên không sửa hoặc hủy phiếu bảo trì");
         }
         authorizationService.assertCanManageProperty(user, ticket.getPropertyId());
+        if (ticket.getRequestedByTenantId() != null) {
+            // Nội dung người thuê gửi là bằng chứng ban đầu của sự cố (#228): người quản lý chỉ xem, muốn dừng thì từ chối kèm lý do
+            throw new UnauthorizedPropertyAccessException(
+                "Phiếu do người thuê gửi nên chỉ người thuê được sửa hoặc hủy. Hãy dùng \"Từ chối\" kèm lý do nếu cần dừng phiếu.");
+        }
     }
 
     private boolean hasResidingContract(UUID roomId) {

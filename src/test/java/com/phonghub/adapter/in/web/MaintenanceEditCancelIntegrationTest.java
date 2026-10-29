@@ -59,9 +59,13 @@ class MaintenanceEditCancelIntegrationTest extends SeededWebTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.title").value("Vòi nước rỉ mạnh"))
             .andExpect(jsonPath("$.priority").value("HIGH"));
+        // #228: nội dung người thuê gửi chỉ xem được, người quản lý không sửa
         mockMvc.perform(patch("/api/maintenance/" + ticketId).header("X-User-Id", STAFF_1)
                 .contentType(MediaType.APPLICATION_JSON).content(edit("Vòi nước rỉ (staff sửa)", "MEDIUM")))
-            .andExpect(status().isOk());
+            .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/maintenance/" + ticketId).header("X-User-Id", OWNER_1)
+                .contentType(MediaType.APPLICATION_JSON).content(edit("Vòi nước rỉ (chủ trọ sửa)", "MEDIUM")))
+            .andExpect(status().isForbidden());
 
         mockMvc.perform(patch("/api/maintenance/" + ticketId).header("X-User-Id", OWNER_2)
                 .contentType(MediaType.APPLICATION_JSON).content(edit("x", "LOW")))
@@ -84,6 +88,8 @@ class MaintenanceEditCancelIntegrationTest extends SeededWebTest {
     void apiCancel() throws Exception {
         mockMvc.perform(post("/api/maintenance/" + ticketId + "/cancel").header("X-User-Id", OWNER_2))
             .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/maintenance/" + ticketId + "/cancel").header("X-User-Id", OWNER_1))
+            .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/maintenance/" + ticketId + "/cancel").header("X-User-Id", TENANT_1)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Đã tự sửa được\"}"))
             .andExpect(status().isOk())
@@ -91,7 +97,7 @@ class MaintenanceEditCancelIntegrationTest extends SeededWebTest {
         mockMvc.perform(get("/api/maintenance/" + ticketId + "/timeline").header("X-User-Id", OWNER_1))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[*].note", hasItem("Hủy phiếu: Đã tự sửa được")));
-        mockMvc.perform(post("/api/maintenance/" + ticketId + "/cancel").header("X-User-Id", OWNER_1))
+        mockMvc.perform(post("/api/maintenance/" + ticketId + "/cancel").header("X-User-Id", TENANT_1))
             .andExpect(status().isConflict());
         mockMvc.perform(post("/api/maintenance/" + IN_PROGRESS + "/cancel").header("X-User-Id", OWNER_1))
             .andExpect(status().isConflict());
@@ -104,9 +110,13 @@ class MaintenanceEditCancelIntegrationTest extends SeededWebTest {
     @Test
     @DisplayName("Giao diện: phiếu chưa xử lý có mục sửa/hủy; sau khi hủy hiện 'Yêu cầu đã bị hủy', không còn mục xử lý")
     void uiEditAndCancel() throws Exception {
-        String page = mockMvc.perform(get("/maintenance/" + ticketId).header("X-User-Id", OWNER_1))
+        String page = mockMvc.perform(get("/maintenance/" + ticketId).header("X-User-Id", TENANT_1))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertTrue(page.contains("Sửa hoặc hủy yêu cầu"));
+        String ownerView = mockMvc.perform(get("/maintenance/" + ticketId).header("X-User-Id", OWNER_1))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertFalse(ownerView.contains("Sửa hoặc hủy yêu cầu"), "#228: người quản lý không có form sửa phiếu của người thuê");
+        assertTrue(ownerView.contains("Nội dung do người thuê gửi"));
         String techView = mockMvc.perform(get("/maintenance/" + IN_PROGRESS).header("X-User-Id", OWNER_1))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertFalse(techView.contains("Sửa hoặc hủy yêu cầu"), "phiếu đang xử lý không còn sửa/hủy");
@@ -119,6 +129,8 @@ class MaintenanceEditCancelIntegrationTest extends SeededWebTest {
         mockMvc.perform(post("/maintenance/" + ticketId + "/cancel").header("X-User-Id", OWNER_2))
             .andExpect(flash().attribute("errorMessage", containsString("không có quyền")));
         mockMvc.perform(post("/maintenance/" + ticketId + "/cancel").header("X-User-Id", OWNER_1).param("reason", "Trùng phiếu"))
+            .andExpect(flash().attribute("errorMessage", containsString("không có quyền")));
+        mockMvc.perform(post("/maintenance/" + ticketId + "/cancel").header("X-User-Id", TENANT_1).param("reason", "Trùng phiếu"))
             .andExpect(flash().attribute("successMessage", containsString("Đã hủy phiếu")));
 
         String cancelled = mockMvc.perform(get("/maintenance/" + ticketId).header("X-User-Id", OWNER_1))

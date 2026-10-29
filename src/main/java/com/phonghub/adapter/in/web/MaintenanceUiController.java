@@ -268,6 +268,10 @@ public class MaintenanceUiController {
             model.addAttribute("understaffedCancelAfter",
                 formatDuration(timeoutPolicy.understaffedCancelAfter()));
             model.addAttribute("attachments", attachmentUseCase.list(id));
+            model.addAttribute("deletableAttachmentIds", attachmentUseCase.deletableIds(id));
+            // Phiếu do người thuê gửi: người quản lý và kỹ thuật viên chỉ xem nội dung (#228)
+            model.addAttribute("requestLockedForViewer", ticket.getRequestedByTenantId() != null
+                && currentUser.role() != UserRole.TENANT);
             java.util.List<com.phonghub.domain.model.MaintenanceTicketEvent> timeline = maintenanceUseCase.getTimeline(id);
             java.util.Map<UUID, String> actorNames = new java.util.HashMap<>();
             for (com.phonghub.domain.model.MaintenanceTicketEvent event : timeline) {
