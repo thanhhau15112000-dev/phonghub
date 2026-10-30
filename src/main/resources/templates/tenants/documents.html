@@ -70,9 +70,14 @@
                             </form>
                             <form th:if="${canDelete}"
                                   th:action="@{'/properties/' + ${property.id()} + '/tenants/' + ${tenant.id()} + '/documents/' + ${d.type()} + '/delete'}"
-                                  method="post" style="margin: 0;" onsubmit="return confirm('Xóa giấy tờ này?');">
+                                  method="post" style="margin: 0;">
                                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                <button type="submit" class="btn btn-sm btn-danger">Xóa</button>
+                                <button type="button" class="btn btn-sm btn-danger"
+                                        data-confirm="Bạn có chắc chắn muốn xóa loại giấy tờ này không?"
+                                        data-confirm-title="Xóa giấy tờ tùy thân"
+                                        th:data-confirm-target="'Giấy tờ: ' + ${d.type()}"
+                                        data-confirm-consequence="Ảnh và thông tin số giấy tờ sẽ bị xóa hoàn toàn khỏi hệ thống."
+                                        data-confirm-btn="Xóa giấy tờ">Xóa</button>
                             </form>
                         </div>
                     </td>

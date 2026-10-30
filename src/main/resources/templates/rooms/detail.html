@@ -232,10 +232,14 @@
                                         th:attr="onclick=|document.getElementById('editAsset-${a.id()}').showModal()|">Sửa</button>
                                 <button type="button" class="btn btn-sm btn-secondary"
                                         th:attr="onclick=|document.getElementById('eventAsset-${a.id()}').showModal()|">Ghi nhận</button>
-                                <form th:action="@{'/rooms/' + ${room.getId()} + '/assets/' + ${a.id()} + '/delete'}" method="post" style="margin: 0;"
-                                      onsubmit="return confirm('Xóa tài sản này khỏi phòng?');">
+                                <form th:action="@{'/rooms/' + ${room.getId()} + '/assets/' + ${a.id()} + '/delete'}" method="post" style="margin: 0;">
                                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                    <button type="submit" class="btn btn-sm btn-danger">Xóa</button>
+                                    <button type="button" class="btn btn-sm btn-danger"
+                                            data-confirm="Bạn có chắc chắn muốn xóa tài sản này khỏi phòng?"
+                                            data-confirm-title="Xóa tài sản"
+                                            th:data-confirm-target="'Tài sản: ' + ${a.name()}"
+                                            data-confirm-consequence="Tài sản sẽ bị xóa hoàn toàn khỏi danh sách quản lý của phòng này."
+                                            data-confirm-btn="Xóa tài sản">Xóa</button>
                                 </form>
                             </div>
                         </td>
@@ -487,8 +491,12 @@
         </p>
         <form th:action="@{'/rooms/' + ${room.getId()} + '/archive'}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-            <button type="submit" class="btn btn-sm btn-danger"
-                    onclick="return confirm('Ngừng sử dụng phòng này? Có thể dùng lại sau.');">Ngừng sử dụng phòng</button>
+            <button type="button" class="btn btn-sm btn-danger"
+                    data-confirm="Bạn có chắc chắn muốn ngừng sử dụng phòng này không?"
+                    data-confirm-title="Ngừng sử dụng phòng"
+                    th:data-confirm-target="'Phòng: ' + ${room.getRoomNumber()}"
+                    data-confirm-consequence="Phòng sẽ chuyển sang trạng thái đã ẩn, không xuất hiện trong danh sách phòng trống và không thể tạo hợp đồng mới. Có thể mở lại sau."
+                    data-confirm-btn="Ngừng sử dụng">Ngừng sử dụng phòng</button>
         </form>
     </div>
 

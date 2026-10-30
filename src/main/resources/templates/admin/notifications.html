@@ -116,10 +116,15 @@
                         <!-- Nút cấp lại mật khẩu nhanh -->
                         <form th:if="${!n.isResolved() and n.type().name() == 'PASSWORD_RESET_REQUEST' and n.targetUserId() != null}"
                               th:action="@{/admin/notifications/{id}/reset-password(id=${n.id()})}"
-                              method="post" style="display: inline-block; margin-right: 4px;"
-                              onsubmit="return confirm('Bạn có chắc chắn muốn cấp lại mật khẩu mới cho tài khoản ' + '[[${n.targetUsername()}]]' + '?');">
+                              method="post" style="display: inline-block; margin-right: 4px;">
                             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                            <button type="submit" class="btn btn-primary btn-sm" style="font-size: 12px; padding: 4px 8px;">Cấp lại mật khẩu</button>
+                            <button type="button" class="btn btn-primary btn-sm" style="font-size: 12px; padding: 4px 8px;"
+                                    data-confirm="Bạn có chắc chắn muốn cấp lại mật khẩu mới cho tài khoản này không?"
+                                    data-confirm-title="Cấp lại mật khẩu"
+                                    th:data-confirm-target="'Tài khoản: ' + ${n.targetUsername()}"
+                                    data-confirm-consequence="Mật khẩu cũ sẽ bị hủy. Mật khẩu mới sẽ được tạo và hiển thị trong thông báo."
+                                    data-confirm-btn="Cấp lại mật khẩu"
+                                    data-confirm-variant="primary">Cấp lại mật khẩu</button>
                         </form>
 
                         <!-- Đánh dấu đã giải quyết -->
@@ -132,10 +137,14 @@
 
                         <!-- Nút xóa thông báo -->
                         <form th:action="@{/admin/notifications/{id}/delete(id=${n.id()})}"
-                              method="post" style="display: inline-block;"
-                              onsubmit="return confirm('Bạn có chắc muốn xóa thông báo này?');">
+                              method="post" style="display: inline-block;">
                             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                            <button type="submit" class="btn btn-sm btn-danger" style="font-size: 12px; padding: 4px 8px;" title="Xóa thông báo">Xóa</button>
+                            <button type="button" class="btn btn-sm btn-danger" style="font-size: 12px; padding: 4px 8px;" title="Xóa thông báo"
+                                    data-confirm="Bạn có chắc muốn xóa thông báo này?"
+                                    data-confirm-title="Xóa thông báo"
+                                    th:data-confirm-target="'Thông báo: ' + ${n.title()}"
+                                    data-confirm-consequence="Thông báo sẽ bị xóa vĩnh viễn khỏi danh sách hệ thống."
+                                    data-confirm-btn="Xóa thông báo">Xóa</button>
                         </form>
                     </td>
                 </tr>
