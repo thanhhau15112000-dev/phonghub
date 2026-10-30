@@ -73,9 +73,14 @@
                     </td>
                     <td>
                         <form th:action="@{'/properties/' + ${property.id()} + '/staff/' + ${m.user().id()} + '/remove'}"
-                              method="post" style="margin: 0;" onsubmit="return confirm('Gỡ nhân sự này khỏi nhà trọ?');">
+                              method="post" style="margin: 0;">
                             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                            <button type="submit" class="btn btn-sm btn-danger">Gỡ</button>
+                            <button type="button" class="btn btn-sm btn-danger"
+                                    data-confirm="Bạn có chắc chắn muốn gỡ nhân sự này khỏi nhà trọ?"
+                                    data-confirm-title="Gỡ nhân sự"
+                                    th:data-confirm-target="'Nhân sự: ' + ${m.user().fullName()} + ' (' + ${m.user().username()} + ')'"
+                                    data-confirm-consequence="Nhân sự sẽ mất toàn bộ quyền quản trị và xử lý công việc đối với nhà trọ này."
+                                    data-confirm-btn="Gỡ nhân sự">Gỡ</button>
                         </form>
                     </td>
                 </tr>

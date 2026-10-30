@@ -93,9 +93,15 @@
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span style="font-size: 11px; color: var(--text-secondary);" th:text="${#temporals.format(n.createdAt(), 'dd/MM HH:mm')}">28/09 10:00</span>
-                            <form th:if="${!n.isResolved() and n.type().name() == 'PASSWORD_RESET_REQUEST' and n.targetUserId() != null}" th:action="@{/admin/notifications/{id}/reset-password(id=${n.id()})}" method="post" style="display: inline;" onsubmit="return confirm('Cấp lại mật khẩu mới cho ' + '[[${n.targetUsername()}]]' + '?');">
+                            <form th:if="${!n.isResolved() and n.type().name() == 'PASSWORD_RESET_REQUEST' and n.targetUserId() != null}" th:action="@{/admin/notifications/{id}/reset-password(id=${n.id()})}" method="post" style="display: inline;">
                                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                <button type="submit" class="btn btn-primary btn-sm" style="font-size: 11px; padding: 2px 6px;">Cấp lại</button>
+                                <button type="button" class="btn btn-primary btn-sm" style="font-size: 11px; padding: 2px 6px;"
+                                        data-confirm="Bạn có chắc chắn muốn cấp lại mật khẩu mới cho tài khoản này không?"
+                                        data-confirm-title="Cấp lại mật khẩu"
+                                        th:data-confirm-target="'Tài khoản: ' + ${n.targetUsername()}"
+                                        data-confirm-consequence="Mật khẩu cũ sẽ bị hủy. Mật khẩu mới sẽ được tạo và gửi cho người dùng."
+                                        data-confirm-btn="Cấp lại mật khẩu"
+                                        data-confirm-variant="primary">Cấp lại</button>
                             </form>
                         </div>
                     </div>
@@ -229,6 +235,267 @@
                 });
             }
         });
+    </script>
+    <!-- Standard Action Confirmation Dialog (#224) -->
+    <dialog id="appConfirmDialog" class="modal-dialog" aria-labelledby="appConfirmTitle" aria-describedby="appConfirmMessage">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div id="appConfirmIconDanger" style="width: 32px; height: 32px; border-radius: 6px; background-color: #fee2e2; color: #dc2626; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                </div>
+                <div id="appConfirmIconPrimary" style="display: none; width: 32px; height: 32px; border-radius: 6px; background-color: #ecfdf5; color: #047857; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <h3 id="appConfirmTitle" style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary);">Xác nhận thao tác</h3>
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('appConfirmDialog').close()" aria-label="Đóng">✕</button>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+            <p id="appConfirmMessage" style="margin: 0 0 10px; font-size: 13.5px; line-height: 1.5; color: var(--text-primary);"></p>
+
+            <div id="appConfirmTargetWrapper" style="display: none; padding: 10px 12px; background: var(--bg-subtle, #f8fafc); border: 1px solid var(--border-color, #e2e8f0); border-radius: 6px; font-size: 13px; margin-bottom: 12px;">
+                <span style="color: var(--text-secondary); display: block; font-size: 11px; margin-bottom: 2px; text-transform: uppercase; font-weight: 600;">Đối tượng</span>
+                <strong id="appConfirmTarget" style="color: var(--text-primary); word-break: break-word;"></strong>
+            </div>
+
+            <div id="appConfirmConsequenceWrapper" style="display: none; padding: 8px 12px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; font-size: 12px; color: #92400e; margin-bottom: 12px;">
+                <strong style="display: block; margin-bottom: 2px;">Lưu ý / Hậu quả:</strong>
+                <span id="appConfirmConsequence"></span>
+            </div>
+
+            <div id="appConfirmReasonGroup" class="form-group" style="display: none; margin-bottom: 12px;">
+                <label class="form-label" for="appConfirmReasonInput" id="appConfirmReasonLabel">Lý do thực hiện *</label>
+                <input type="text" id="appConfirmReasonInput" class="form-control" maxlength="500" placeholder="Nhập lý do...">
+            </div>
+
+            <div id="appConfirmPhraseGroup" class="form-group" style="display: none; margin-bottom: 12px;">
+                <label class="form-label" for="appConfirmPhraseInput">
+                    Nhập cụm từ <strong id="appConfirmRequiredPhrase" style="color: #dc2626;"></strong> để xác nhận:
+                </label>
+                <input type="text" id="appConfirmPhraseInput" class="form-control" autocomplete="off" placeholder="Gõ đúng cụm từ trên...">
+            </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px;">
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('appConfirmDialog').close()">Hủy</button>
+            <button type="button" id="appConfirmSubmitBtn" class="btn btn-danger-filled">Xác nhận</button>
+        </div>
+    </dialog>
+
+    <script>
+        (function() {
+            function initAppConfirmDialog() {
+                const dialog = document.getElementById('appConfirmDialog');
+                if (!dialog) return;
+
+                const titleEl = document.getElementById('appConfirmTitle');
+                const msgEl = document.getElementById('appConfirmMessage');
+                const targetWrapper = document.getElementById('appConfirmTargetWrapper');
+                const targetEl = document.getElementById('appConfirmTarget');
+                const consequenceWrapper = document.getElementById('appConfirmConsequenceWrapper');
+                const consequenceEl = document.getElementById('appConfirmConsequence');
+                const reasonGroup = document.getElementById('appConfirmReasonGroup');
+                const reasonInput = document.getElementById('appConfirmReasonInput');
+                const reasonLabel = document.getElementById('appConfirmReasonLabel');
+                const phraseGroup = document.getElementById('appConfirmPhraseGroup');
+                const phraseLabel = document.getElementById('appConfirmRequiredPhrase');
+                const phraseInput = document.getElementById('appConfirmPhraseInput');
+                const submitBtn = document.getElementById('appConfirmSubmitBtn');
+                const iconDanger = document.getElementById('appConfirmIconDanger');
+                const iconPrimary = document.getElementById('appConfirmIconPrimary');
+
+                let currentOptions = null;
+                let lastActiveElement = null;
+
+                function normalizeText(s) {
+                    return (s || '').trim().normalize('NFC').toUpperCase();
+                }
+
+                function updateSubmitState() {
+                    if (!currentOptions) return;
+                    let valid = true;
+                    if (currentOptions.confirmPhrase) {
+                        if (normalizeText(phraseInput.value) !== normalizeText(currentOptions.confirmPhrase)) {
+                            valid = false;
+                        }
+                    }
+                    if (currentOptions.requireReason) {
+                        if (!reasonInput.value.trim()) {
+                            valid = false;
+                        }
+                    }
+                    submitBtn.disabled = !valid;
+                }
+
+                phraseInput.addEventListener('input', updateSubmitState);
+                reasonInput.addEventListener('input', updateSubmitState);
+
+                const handleKeydown = function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (!submitBtn.disabled) {
+                            submitBtn.click();
+                        }
+                    }
+                };
+                phraseInput.addEventListener('keydown', handleKeydown);
+                reasonInput.addEventListener('keydown', handleKeydown);
+
+                // Backdrop click to close
+                dialog.addEventListener('click', function(e) {
+                    const rect = dialog.getBoundingClientRect();
+                    const isInDialog = (rect.top <= e.clientY && e.clientY <= rect.top + rect.height
+                        && rect.left <= e.clientX && e.clientX <= rect.left + rect.width);
+                    if (!isInDialog) {
+                        dialog.close();
+                    }
+                });
+
+                // Khôi phục tiêu điểm khi dialog đóng (Accessibility WCAG)
+                dialog.addEventListener('close', function() {
+                    if (lastActiveElement && typeof lastActiveElement.focus === 'function') {
+                        if (document.contains(lastActiveElement)) {
+                            lastActiveElement.focus();
+                        }
+                    }
+                    lastActiveElement = null;
+                });
+
+                window.openConfirmModal = function(options) {
+                    lastActiveElement = document.activeElement;
+                    currentOptions = options || {};
+
+                    titleEl.textContent = currentOptions.title || 'Xác nhận thao tác';
+                    msgEl.textContent = currentOptions.message || 'Bạn có chắc chắn muốn thực hiện thao tác này?';
+
+                    if (currentOptions.target) {
+                        targetEl.textContent = currentOptions.target;
+                        targetWrapper.style.display = 'block';
+                    } else {
+                        targetWrapper.style.display = 'none';
+                        targetEl.textContent = '';
+                    }
+
+                    if (currentOptions.consequence) {
+                        consequenceEl.textContent = currentOptions.consequence;
+                        consequenceWrapper.style.display = 'block';
+                    } else {
+                        consequenceWrapper.style.display = 'none';
+                        consequenceEl.textContent = '';
+                    }
+
+                    if (currentOptions.requireReason || currentOptions.showReason) {
+                        reasonGroup.style.display = 'block';
+                        reasonInput.value = currentOptions.defaultReason || '';
+                        reasonInput.placeholder = currentOptions.reasonPlaceholder || 'Nhập lý do thực hiện...';
+                        reasonLabel.textContent = currentOptions.requireReason ? 'Lý do thực hiện *' : 'Lý do thực hiện';
+                    } else {
+                        reasonGroup.style.display = 'none';
+                        reasonInput.value = '';
+                    }
+
+                    if (currentOptions.confirmPhrase) {
+                        phraseGroup.style.display = 'block';
+                        phraseLabel.textContent = currentOptions.confirmPhrase;
+                        phraseInput.value = '';
+                    } else {
+                        phraseGroup.style.display = 'none';
+                        phraseInput.value = '';
+                    }
+
+                    submitBtn.textContent = currentOptions.confirmText || 'Xác nhận';
+                    if (currentOptions.confirmVariant === 'primary') {
+                        submitBtn.className = 'btn btn-primary';
+                        if (iconPrimary) iconPrimary.style.display = 'inline-flex';
+                        if (iconDanger) iconDanger.style.display = 'none';
+                    } else {
+                        submitBtn.className = 'btn btn-danger-filled';
+                        if (iconDanger) iconDanger.style.display = 'inline-flex';
+                        if (iconPrimary) iconPrimary.style.display = 'none';
+                    }
+
+                    updateSubmitState();
+
+                    submitBtn.onclick = function() {
+                        if (submitBtn.disabled) return;
+                        submitBtn.disabled = true;
+                        submitBtn.textContent = 'Đang xử lý...';
+                        dialog.close();
+
+                        if (typeof currentOptions.onConfirm === 'function') {
+                            currentOptions.onConfirm({ reason: reasonInput.value.trim() });
+                        } else if (currentOptions.form) {
+                            const targetForm = typeof currentOptions.form === 'string'
+                                ? document.querySelector(currentOptions.form)
+                                : currentOptions.form;
+                            if (targetForm) {
+                                if (currentOptions.requireReason || (currentOptions.showReason && reasonInput.value.trim())) {
+                                    let hiddenReason = targetForm.querySelector('input[name="reason"]');
+                                    if (!hiddenReason) {
+                                        hiddenReason = document.createElement('input');
+                                        hiddenReason.type = 'hidden';
+                                        hiddenReason.name = 'reason';
+                                        targetForm.appendChild(hiddenReason);
+                                    }
+                                    hiddenReason.value = reasonInput.value.trim();
+                                }
+                                targetForm.submit();
+                            }
+                        }
+                    };
+
+                    dialog.showModal();
+                    if (currentOptions.confirmPhrase) {
+                        phraseInput.focus();
+                    } else if (currentOptions.requireReason) {
+                        reasonInput.focus();
+                    } else {
+                        submitBtn.focus();
+                    }
+                };
+
+                window.openConfirmDialog = window.openConfirmModal;
+
+                // Delegating listener for buttons with data-confirm
+                document.addEventListener('click', function(e) {
+                    const trigger = e.target.closest('[data-confirm]');
+                    if (!trigger) return;
+
+                    // If the trigger belongs to a form and form validity fails, trigger validity alert
+                    if (trigger.form && !trigger.form.checkValidity()) {
+                        trigger.form.reportValidity();
+                        return;
+                    }
+
+                    e.preventDefault();
+                    window.openConfirmModal({
+                        title: trigger.getAttribute('data-confirm-title') || 'Xác nhận thao tác',
+                        message: trigger.getAttribute('data-confirm'),
+                        target: trigger.getAttribute('data-confirm-target'),
+                        consequence: trigger.getAttribute('data-confirm-consequence'),
+                        confirmText: trigger.getAttribute('data-confirm-btn') || 'Xác nhận',
+                        confirmPhrase: trigger.getAttribute('data-confirm-phrase'),
+                        requireReason: trigger.hasAttribute('data-confirm-require-reason') && trigger.getAttribute('data-confirm-require-reason') !== 'false',
+                        reasonPlaceholder: trigger.getAttribute('data-confirm-reason-placeholder'),
+                        confirmVariant: trigger.getAttribute('data-confirm-variant') || 'danger',
+                        form: trigger.form || trigger.closest('form')
+                    });
+                });
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initAppConfirmDialog);
+            } else {
+                initAppConfirmDialog();
+            }
+        })();
     </script>
     <div th:replace="~{fragments/floating-chat :: floatingChatWidget}"></div>
 </footer>

@@ -321,7 +321,12 @@
             <label class="form-label" for="waiveReason">Miễn khoản phí này (chủ trọ chịu chi phí)</label>
             <div style="display: flex; gap: 8px;">
                 <input type="text" id="waiveReason" name="reason" class="form-control" placeholder="Lý do miễn phí" required>
-                <button type="submit" class="btn btn-danger">Miễn phí</button>
+                <button type="button" class="btn btn-danger"
+                        data-confirm="Bạn có chắc chắn muốn miễn phí sửa chữa cho phiếu bảo trì này?"
+                        data-confirm-title="Miễn phí sửa chữa"
+                        th:data-confirm-target="'Phiếu #' + ${ticket.getId()} + ' · Chi phí: ' + ${#numbers.formatDecimal(ticket.getRepairCost(), 0, 'POINT', 0, 'COMMA') + ' đ'}"
+                        data-confirm-consequence="Chủ trọ sẽ chịu toàn bộ chi phí này thay cho người thuê. Thao tác này không thể hoàn tác."
+                        data-confirm-btn="Xác nhận miễn phí">Miễn phí</button>
             </div>
         </form>
     </div>
@@ -380,10 +385,15 @@
                     <small style="color: var(--text-secondary);"
                            th:text="${a.kind().name() == 'VIDEO' ? 'Video' : 'Ảnh'} + ' · ' + ${#numbers.formatDecimal(a.sizeBytes() / 1024.0, 0, 0)} + ' KB'">Ảnh</small>
                     <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/attachments/' + ${a.id()} + '/delete'}" method="post"
-                          style="margin: 0;" onsubmit="return confirm('Xóa tệp này?');">
+                          style="margin: 0;">
                         <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                        <button type="submit" class="btn btn-sm btn-danger"
-                                th:if="${deletableAttachmentIds.contains(a.id())}">Xóa</button>
+                        <button type="button" class="btn btn-sm btn-danger"
+                                th:if="${deletableAttachmentIds.contains(a.id())}"
+                                data-confirm="Bạn có chắc chắn muốn xóa tệp này khỏi phiếu bảo trì?"
+                                data-confirm-title="Xóa tệp đính kèm"
+                                th:data-confirm-target="(${a.kind().name() == 'VIDEO' ? 'Video' : 'Ảnh'}) + ' · ' + ${#numbers.formatDecimal(a.sizeBytes() / 1024.0, 0, 0)} + ' KB'"
+                                data-confirm-consequence="Tệp đính kèm sẽ bị xóa hoàn toàn và không thể khôi phục."
+                                data-confirm-btn="Xóa tệp">Xóa</button>
                     </form>
                 </div>
             </div>
@@ -563,7 +573,12 @@
         <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/cancel'}" method="post" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <input type="text" name="reason" class="form-control" style="flex: 1; min-width: 200px;" maxlength="500" placeholder="Lý do hủy (không bắt buộc)">
-            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Hủy phiếu bảo trì này?');">Hủy phiếu</button>
+            <button type="button" class="btn btn-sm btn-danger"
+                    data-confirm="Bạn có chắc chắn muốn hủy phiếu bảo trì này không?"
+                    data-confirm-title="Hủy phiếu bảo trì"
+                    th:data-confirm-target="'Phiếu #' + ${ticket.getId()} + ': ' + ${ticket.getTitle()}"
+                    data-confirm-consequence="Phiếu sẽ chuyển sang trạng thái ĐÃ HỦY và dừng toàn bộ quá trình xử lý."
+                    data-confirm-btn="Hủy phiếu">Hủy phiếu</button>
         </form>
     </div>
 

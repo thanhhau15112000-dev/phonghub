@@ -44,8 +44,12 @@
                         onclick="document.getElementById('editDraftModal').showModal()">Sửa điều khoản</button>
                 <form th:if="${contract.getStatus().name() == 'DRAFT'}" th:action="@{'/contracts/' + ${contract.getId()} + '/cancel'}" method="post">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <button type="submit" class="btn btn-danger"
-                            onclick="return confirm('Hủy hợp đồng nháp này? Hợp đồng sẽ chuyển sang trạng thái Đã hủy và không kích hoạt được nữa.');">Hủy hợp đồng nháp</button>
+                    <button type="button" class="btn btn-danger"
+                            data-confirm="Bạn có chắc chắn muốn hủy hợp đồng nháp này không?"
+                            data-confirm-title="Hủy hợp đồng nháp"
+                            th:data-confirm-target="'Hợp đồng phòng ' + ${room.getRoomNumber()}"
+                            data-confirm-consequence="Hợp đồng sẽ chuyển sang trạng thái Đã hủy và không thể kích hoạt lại."
+                            data-confirm-btn="Hủy hợp đồng">Hủy hợp đồng nháp</button>
                 </form>
 
                 <!-- Hợp đồng còn người ở (đang hiệu lực hoặc hết hạn chưa trả phòng, #87): gia hạn hoặc mở check-out sớm -->
@@ -374,16 +378,20 @@
                         <a th:if="${inv.isPayable()}" th:href="@{'/invoices/' + ${inv.getId()} + '/pay'}" class="btn btn-sm btn-primary">Thanh toán</a>
                         <a th:if="${inv.getPaidAmount().signum() > 0}" th:href="@{'/invoices/' + ${inv.getId()} + '/receipt'}" class="btn btn-sm">Biên lai</a>
                         <!-- Hủy hóa đơn tiền thuê chưa có tiền (#89); hủy xong có thể phát hành lại kỳ đó -->
-                        <details th:if="${canVoidInvoice and inv.isPayable() and inv.getPaidAmount().signum() == 0 and inv.getType().name() == 'RENT'}"
-                                 class="invoice-void" style="display: inline-block; margin-left: 4px;">
-                            <summary class="btn btn-sm btn-danger" style="list-style: none; cursor: pointer;">Hủy</summary>
-                            <form th:action="@{'/contracts/' + ${contract.getId()} + '/invoices/' + ${inv.getId()} + '/void'}" method="post"
-                                  style="display: flex; gap: 6px; margin-top: 6px;">
-                                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                <input type="text" name="reason" class="form-control" required maxlength="500" placeholder="Lý do hủy" style="min-width: 160px;">
-                                <button type="submit" class="btn btn-sm btn-danger">Xác nhận hủy</button>
-                            </form>
-                        </details>
+                        <form th:if="${canVoidInvoice and inv.isPayable() and inv.getPaidAmount().signum() == 0 and inv.getType().name() == 'RENT'}"
+                              th:action="@{'/contracts/' + ${contract.getId()} + '/invoices/' + ${inv.getId()} + '/void'}" method="post"
+                              style="display: inline-block; margin-left: 4px;">
+                            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                            <button type="button" class="btn btn-sm btn-danger"
+                                    data-confirm="Bạn có chắc chắn muốn hủy hóa đơn tiền thuê này không?"
+                                    data-confirm-title="Hủy hóa đơn tiền thuê"
+                                    th:data-confirm-target="${uiText.invoiceLabel(inv)} + ' · ' + ${#numbers.formatDecimal(inv.getTotalAmount(), 0, 'POINT', 0, 'COMMA')} + ' đ'"
+                                    data-confirm-consequence="Hóa đơn sẽ chuyển sang trạng thái ĐÃ HỦY và không thể thanh toán được nữa. Bạn có thể phát hành lại hóa đơn cho kỳ này sau."
+                                    data-confirm-phrase="HỦY HÓA ĐƠN"
+                                    data-confirm-require-reason="true"
+                                    data-confirm-reason-placeholder="Nhập lý do hủy hóa đơn (bắt buộc)..."
+                                    data-confirm-btn="Xác nhận hủy">Hủy</button>
+                        </form>
                     </td>
                 </tr>
             </tbody>
