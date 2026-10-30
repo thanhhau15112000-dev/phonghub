@@ -1,11 +1,11 @@
 package com.phonghub.adapter.in.web.api;
 
-import com.phonghub.adapter.out.event.SseChatEventPublisher;
 import com.phonghub.application.port.in.ChatContactSummary;
 import com.phonghub.application.port.in.ChatMessageUseCase;
 import com.phonghub.application.port.in.ChatMessageUseCase.MediaUpload;
 import com.phonghub.application.port.in.ChatRoomSummary;
 import com.phonghub.application.port.in.ChatRoomUseCase;
+import com.phonghub.application.port.out.ChatSubscriptionPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.domain.exception.ChatMessageNotFoundException;
@@ -46,7 +46,7 @@ public class ChatApiController {
     private final ChatRoomUseCase chatRoomUseCase;
     private final ChatMessageUseCase chatMessageUseCase;
     private final CurrentUserPort currentUserPort;
-    private final SseChatEventPublisher sseChatEventPublisher;
+    private final ChatSubscriptionPort chatSubscriptionPort;
     /** Tin cũ trước #201 chỉ được chuyển tới bucket công khai cũ trên Supabase của chính hệ thống. */
     private final String legacyMediaPrefix;
 
@@ -54,13 +54,13 @@ public class ChatApiController {
         ChatRoomUseCase chatRoomUseCase,
         ChatMessageUseCase chatMessageUseCase,
         CurrentUserPort currentUserPort,
-        SseChatEventPublisher sseChatEventPublisher,
+        ChatSubscriptionPort chatSubscriptionPort,
         @Value("${supabase.url:}") String supabaseUrl
     ) {
         this.chatRoomUseCase = chatRoomUseCase;
         this.chatMessageUseCase = chatMessageUseCase;
         this.currentUserPort = currentUserPort;
-        this.sseChatEventPublisher = sseChatEventPublisher;
+        this.chatSubscriptionPort = chatSubscriptionPort;
         this.legacyMediaPrefix = supabaseUrl == null || supabaseUrl.isBlank()
             ? null
             : supabaseUrl.trim().replaceAll("/+$", "") + "/storage/v1/object/public/";
@@ -81,7 +81,7 @@ public class ChatApiController {
         return ResponseEntity.ok()
             .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-transform")
             .header("X-Accel-Buffering", "no")
-            .body(sseChatEventPublisher.subscribe(user.id()));
+            .body(chatSubscriptionPort.subscribe(user.id()));
     }
 
     @GetMapping("/rooms")
