@@ -147,14 +147,14 @@
             <div th:if="${#lists.isEmpty(details.photos())}" class="empty-state"><p>Chưa có ảnh nào.</p></div>
             <ul th:if="${!#lists.isEmpty(details.photos())}" style="list-style: none; padding: 0; display: flex; gap: 8px; flex-wrap: wrap;">
                 <li th:each="p : ${details.photos()}" style="border: 1px solid var(--border-color); padding: 6px; font-size: 12px;">
-                    <div th:text="${p.kind() == T(com.phonghub.domain.model.HandoverPhotoKind).ROOM ? 'Phòng' : (p.kind() == T(com.phonghub.domain.model.HandoverPhotoKind).METER_ELECTRIC ? 'Đồng hồ điện' : 'Đồng hồ nước')}">Phòng</div>
+                    <div th:text="${p.kind().name() == 'ROOM' ? 'Phòng' : (p.kind().name() == 'METER_ELECTRIC' ? 'Đồng hồ điện' : 'Đồng hồ nước')}">Phòng</div>
                     <a th:href="@{${base} + '/photos/' + ${p.id()}}" target="_blank" rel="noopener noreferrer">Xem ảnh</a>
                     <form th:if="${canManage and details.handover().status().name() == 'DRAFT'}" th:action="@{${base} + '/photos/' + ${p.id()} + '/delete'}" method="post" style="display: inline; margin: 0;">
                         <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                         <button type="button" class="btn btn-sm btn-danger" style="padding: 0 6px;"
                                 data-confirm="Bạn có chắc chắn muốn xóa ảnh này khỏi biên bản bàn giao?"
                                 data-confirm-title="Xóa ảnh bàn giao"
-                                th:data-confirm-target="'Ảnh: ' + (${p.kind() == T(com.phonghub.domain.model.HandoverPhotoKind).ROOM ? 'Phòng' : (p.kind() == T(com.phonghub.domain.model.HandoverPhotoKind).METER_ELECTRIC ? 'Đồng hồ điện' : 'Đồng hồ nước')})"
+                                th:data-confirm-target="'Ảnh: ' + (${p.kind().name() == 'ROOM' ? 'Phòng' : (p.kind().name() == 'METER_ELECTRIC' ? 'Đồng hồ điện' : 'Đồng hồ nước')})"
                                 data-confirm-consequence="Ảnh sẽ bị xóa hoàn toàn khỏi hệ thống và không thể khôi phục."
                                 data-confirm-btn="Xóa ảnh">Xóa</button>
                     </form>

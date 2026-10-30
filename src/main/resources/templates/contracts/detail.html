@@ -47,7 +47,7 @@
                     <button type="button" class="btn btn-danger"
                             data-confirm="Bạn có chắc chắn muốn hủy hợp đồng nháp này không?"
                             data-confirm-title="Hủy hợp đồng nháp"
-                            th:data-confirm-target="'Hợp đồng: ' + ${contract.getCode()}"
+                            th:data-confirm-target="'Hợp đồng phòng ' + ${room.getRoomNumber()}"
                             data-confirm-consequence="Hợp đồng sẽ chuyển sang trạng thái Đã hủy và không thể kích hoạt lại."
                             data-confirm-btn="Hủy hợp đồng">Hủy hợp đồng nháp</button>
                 </form>
