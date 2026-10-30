@@ -312,12 +312,17 @@
                 const iconPrimary = document.getElementById('appConfirmIconPrimary');
 
                 let currentOptions = null;
+                let lastActiveElement = null;
+
+                function normalizeText(s) {
+                    return (s || '').trim().normalize('NFC').toUpperCase();
+                }
 
                 function updateSubmitState() {
                     if (!currentOptions) return;
                     let valid = true;
                     if (currentOptions.confirmPhrase) {
-                        if (phraseInput.value.trim().toUpperCase() !== currentOptions.confirmPhrase.trim().toUpperCase()) {
+                        if (normalizeText(phraseInput.value) !== normalizeText(currentOptions.confirmPhrase)) {
                             valid = false;
                         }
                     }
@@ -353,7 +358,18 @@
                     }
                 });
 
+                // Khôi phục tiêu điểm khi dialog đóng (Accessibility WCAG)
+                dialog.addEventListener('close', function() {
+                    if (lastActiveElement && typeof lastActiveElement.focus === 'function') {
+                        if (document.contains(lastActiveElement)) {
+                            lastActiveElement.focus();
+                        }
+                    }
+                    lastActiveElement = null;
+                });
+
                 window.openConfirmModal = function(options) {
+                    lastActiveElement = document.activeElement;
                     currentOptions = options || {};
 
                     titleEl.textContent = currentOptions.title || 'Xác nhận thao tác';
@@ -409,6 +425,8 @@
 
                     submitBtn.onclick = function() {
                         if (submitBtn.disabled) return;
+                        submitBtn.disabled = true;
+                        submitBtn.textContent = 'Đang xử lý...';
                         dialog.close();
 
                         if (typeof currentOptions.onConfirm === 'function') {
