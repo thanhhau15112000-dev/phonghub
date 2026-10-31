@@ -29,7 +29,7 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 
 @Configuration
-@Profile("prod")
+@Profile({"prod", "docker & !local-demo"})
 @EnableWebSecurity
 @EnableConfigurationProperties(SupabaseProperties.class)
 public class ProductionSecurityConfig {

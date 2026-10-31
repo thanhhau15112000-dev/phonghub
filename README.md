@@ -72,15 +72,17 @@ git pull --ff-only origin staging
 JDK chỉ bắt buộc khi chạy test hoặc chạy backend bằng Maven/IDE trên máy host.
 Nếu chỉ chạy toàn bộ stack bằng Docker Compose, image builder dùng JDK bên
 trong Docker. Node.js/`npm` chỉ cần khi làm riêng Cloudflare Worker; Worker
-hiện không nằm trong đường deploy Spring production. Tài khoản Supabase không
-cần cho local.
+hiện không nằm trong đường deploy Spring production. Profile `docker` cần cấu
+hình Supabase; profile `local-demo` là lựa chọn cá nhân không dùng Supabase.
 
 ## Setup local cho thành viên mới
 
 ### Cấu hình mặc định
 
-Local dùng PostgreSQL trong Docker, không cần tạo `.env`. Các giá trị mặc định
-được khai báo trong `compose.yaml` và `application-docker.yml`:
+Local dùng PostgreSQL trong Docker. Profile `docker` mặc định dùng xác thực
+Supabase; cần tạo `.env` từ `.env.example`, điền các biến Supabase và khóa bảo
+vệ dữ liệu tenant trước khi khởi động. Các giá trị PostgreSQL/Redis local được
+khai báo trong `compose.yaml` và `application-docker.yml`:
 
 | Biến | Chạy backend trên host | Chạy app trong Compose |
 | --- | --- | --- |
@@ -92,9 +94,8 @@ Local dùng PostgreSQL trong Docker, không cần tạo `.env`. Các giá trị 
 | `PHONGHUB_REDIS_HOST` | `localhost` | `redis` |
 | `PHONGHUB_REDIS_PORT` | `16379` | `6379` |
 
-Không copy `.env.example` thành `.env` để chạy local. File đó là template cho
-staging/production và chứa cấu hình kết nối Supabase; secret thật không được
-đưa vào Git.
+Compose mặc định chỉ publish app, PostgreSQL và Redis trên loopback
+(`127.0.0.1`). Không đưa secret thật vào Git.
 
 ## Chạy local với Docker
 
@@ -114,7 +115,9 @@ GET http://localhost:8080/health
 ```
 
 Khi khởi động profile `docker`, Flyway tự chạy migration schema và fixture
-local. Database được lưu trong Docker volume `phonghub_pgdata`.
+local. Database được lưu trong Docker volume `phonghub_pgdata`. UI/API yêu cầu
+xác thực Supabase; thiếu cấu hình Supabase thì ứng dụng fail-fast thay vì mở
+quyền truy cập.
 
 ### Chạy database bằng Docker, backend bằng Maven
 
@@ -128,6 +131,13 @@ PowerShell:
 
 ```powershell
 $env:SPRING_PROFILES_ACTIVE = "docker"
+.\mvnw.cmd spring-boot:run
+```
+
+Để chạy mock demo trên máy host, đặt profile tường minh:
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE = "docker,local-demo"
 .\mvnw.cmd spring-boot:run
 ```
 
@@ -151,7 +161,7 @@ chmod +x mvnw
 Có thể chạy project bằng IntelliJ IDEA/Eclipse/VS Code với profile `docker`;
 entry point là `com.phonghub.PhongHubApplication`.
 
-### Tài khoản và dữ liệu demo local
+### Dữ liệu demo local
 
 Profile `docker` có sẵn dữ liệu fixture cho các actor sau:
 
@@ -165,10 +175,19 @@ Profile `docker` có sẵn dữ liệu fixture cho các actor sau:
 | `TECHNICIAN` | `tech1` | `tech1@phonghub.local` |
 | `TENANT` | `tenant1` | `tenant1@phonghub.local` |
 
-Local bật `LocalDemoAuthenticationAdapter` và cho phép chuyển actor demo. Có
-thể chọn role trực tiếp ở dropdown trên giao diện; endpoint tương ứng là
-`/switch-user?userId=<demo-user-id>`. Đây là cơ chế demo local, không gọi
-Supabase Auth và không được dùng để đánh giá security của production.
+Các fixture này chỉ là row trong PostgreSQL local, không tự tạo tài khoản
+Supabase. Profile `docker` không bật actor switcher. Muốn dùng fixture với xác
+thực giả lập cho demo cá nhân, phải chủ động chọn profile `local-demo`:
+
+```powershell
+$env:PHONGHUB_SPRING_PROFILES_ACTIVE = "docker,local-demo"
+docker compose up --build
+```
+
+`local-demo` cho phép đổi actor và dùng mock password; chỉ dùng trên máy cá
+nhân. Khi chạy bằng Maven, app chỉ bind vào loopback; khi chạy bằng Compose,
+app/DB/Redis chỉ publish trên loopback. Không bật profile này trên staging hoặc
+môi trường nhiều người dùng.
 
 Compose lưu database trong volume `phonghub_pgdata`, nên `docker compose down`
 không xóa dữ liệu. Lệnh sau xóa cả volume và toàn bộ dữ liệu local, chỉ dùng
@@ -188,8 +207,15 @@ staging hoặc production.
 - PostgreSQL và Redis (session store) chạy trong Docker.
 - Flyway chạy `db/migration` và fixture tại `db/seed/docker`.
 - Dữ liệu fixture được lưu trong volume Docker.
-- Local demo actor switching vẫn được bật để kiểm thử các role nhanh; đây là
-  cơ chế xác thực local, không dùng cho production.
+- Xác thực dùng Supabase; UI dùng session và API dùng Bearer JWT như production.
+- Không bật actor switching hoặc local mock identity mặc định.
+
+### `local-demo`
+
+- Chỉ dùng cùng profile `docker` để chạy fixture và giả lập nhanh nhiều role
+  trên máy cá nhân.
+- Cho phép mock login và đổi actor; không phải cơ chế xác thực an toàn, không
+  dùng trên staging hoặc môi trường nhiều người dùng.
 
 ### `test`
 

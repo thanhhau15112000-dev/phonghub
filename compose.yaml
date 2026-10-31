@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${PHONGHUB_DB_USER:-phonghub}
       POSTGRES_PASSWORD: ${PHONGHUB_DB_PASSWORD:-phonghub_local_only}
     ports:
-      - "${PHONGHUB_DB_PORT:-55432}:5432"
+      - "127.0.0.1:${PHONGHUB_DB_PORT:-55432}:5432"
     volumes:
       - phonghub_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
     image: redis:7-alpine
     container_name: phonghub-redis
     ports:
-      - "${PHONGHUB_REDIS_PORT:-16379}:6379"
+      - "127.0.0.1:${PHONGHUB_REDIS_PORT:-16379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -33,7 +33,8 @@ services:
       dockerfile: Dockerfile
     container_name: phonghub-app
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      SPRING_PROFILES_ACTIVE: ${PHONGHUB_SPRING_PROFILES_ACTIVE:-docker}
+      SERVER_ADDRESS: 0.0.0.0
       PHONGHUB_DB_HOST: db
       PHONGHUB_DB_PORT: 5432
       PHONGHUB_DB_NAME: ${PHONGHUB_DB_NAME:-phonghub}
@@ -44,12 +45,18 @@ services:
       TENANT_DATA_KEY_ID: ${TENANT_DATA_KEY_ID:?TENANT_DATA_KEY_ID is required}
       TENANT_DATA_ENCRYPTION_KEY: ${TENANT_DATA_ENCRYPTION_KEY:?TENANT_DATA_ENCRYPTION_KEY is required}
       TENANT_DATA_HMAC_KEY: ${TENANT_DATA_HMAC_KEY:?TENANT_DATA_HMAC_KEY is required}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_JWKS_URI: ${SUPABASE_JWKS_URI:-}
+      SUPABASE_JWT_ISSUER: ${SUPABASE_JWT_ISSUER:-}
+      SUPABASE_JWT_AUDIENCE: ${SUPABASE_JWT_AUDIENCE:-authenticated}
       SEPAY_SANDBOX_CHECKOUT_ENABLED: ${SEPAY_SANDBOX_CHECKOUT_ENABLED:-false}
       SEPAY_MERCHANT_ID: ${SEPAY_MERCHANT_ID:-}
       SEPAY_SECRET_KEY: ${SEPAY_SECRET_KEY:-}
       SEPAY_PUBLIC_BASE_URL: ${SEPAY_PUBLIC_BASE_URL:-}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       db:
         condition: service_healthy

@@ -10,11 +10,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 
 /**
- * Xác thực local phục vụ việc kiểm thử API/UI với dữ liệu PostgreSQL trong Docker.
- * Không được bật trong profile prod.
+ * Xác thực giả lập chỉ phục vụ demo local với dữ liệu PostgreSQL trong Docker.
+ * Chỉ bật bằng profile local-demo; không được dùng trên môi trường nhiều người dùng.
  */
 @Configuration
-@Profile("docker & !prod")
+@Profile("docker & local-demo")
 public class LocalDatabaseAuthenticationConfig {
 
     @Bean

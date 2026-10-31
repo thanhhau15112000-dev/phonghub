@@ -336,19 +336,19 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
-    @Profile("prod")
+    @Profile({"prod", "docker & !local-demo"})
     public CurrentUserPort currentUserPort() {
         return new SecurityCurrentUserAdapter();
     }
 
     @Bean
-    @Profile("prod")
+    @Profile({"prod", "docker & !local-demo"})
     public RestClient restClient() {
         return RestClient.create();
     }
 
     @Bean
-    @Profile("prod")
+    @Profile({"prod", "docker & !local-demo"})
     public IdentityProviderPort identityProviderPort(
         RestClient restClient,
         SupabaseProperties supabaseProperties

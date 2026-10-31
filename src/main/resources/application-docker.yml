@@ -13,7 +13,7 @@ spring:
 
 phonghub:
   demo:
-    enabled: true
+    enabled: false
   security:
     tenant-data:
       key-id: ${TENANT_DATA_KEY_ID}
@@ -23,3 +23,11 @@ phonghub:
     auto-generate: false
   sepay:
     allow-unsigned-webhook: true
+
+supabase:
+  url: ${SUPABASE_URL:}
+  anon-key: ${SUPABASE_ANON_KEY:}
+  service-role-key: ${SUPABASE_SERVICE_ROLE_KEY:}
+  jwks-uri: ${SUPABASE_JWKS_URI:}
+  jwt-issuer: ${SUPABASE_JWT_ISSUER:}
+  jwt-audience: ${SUPABASE_JWT_AUDIENCE:authenticated}
