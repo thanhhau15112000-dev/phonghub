@@ -123,9 +123,14 @@
                             <th:block th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and p.approvalStatus() != null and p.approvalStatus().name() == 'PENDING'}">
                                 <form th:action="@{'/properties/' + ${p.id()} + '/verify'}" method="post">
                                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                    <button type="submit" class="btn btn-sm btn-success"
+                                    <button type="button" class="btn btn-sm btn-success"
                                             title="Phê duyệt nhà trọ"
-                                            onclick="return confirm('Bạn có chắc chắn muốn duyệt nhà trọ này không?');">
+                                            data-confirm="Bạn có chắc chắn muốn duyệt nhà trọ này không?"
+                                            data-confirm-title="Phê duyệt nhà trọ"
+                                            th:data-confirm-target="'Nhà trọ: ' + ${p.name()}"
+                                            data-confirm-consequence="Nhà trọ sẽ được kích hoạt công khai và có thể hoạt động bình thường."
+                                            data-confirm-btn="Duyệt nhà trọ"
+                                            data-confirm-variant="primary">
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                         <span>Duyệt</span>
                                     </button>

@@ -255,11 +255,13 @@ public class AuthUiController {
         model.addAttribute("currentUser", current);
         model.addAttribute("user", user);
         if (current.isTenant()) {
-            // Ảnh CCCD tải ở đây được dùng cho mọi hợp đồng và biên bản check-in của người thuê (#244).
+            // Ảnh CCCD và GPLX tải ở đây được dùng cho mọi hợp đồng và biên bản check-in của người thuê (#244, #252).
             TenantDocumentUseCase.OwnDocuments own = tenantDocumentUseCase.ownDocuments();
             model.addAttribute("ownDocuments", own);
             model.addAttribute("identityCard", own.documents().stream()
                 .filter(document -> document.type() == DocumentType.CCCD).findFirst().orElse(null));
+            model.addAttribute("driverLicense", own.documents().stream()
+                .filter(document -> document.type() == DocumentType.GPLX).findFirst().orElse(null));
         }
         return "account/profile";
     }

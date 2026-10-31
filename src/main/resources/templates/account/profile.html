@@ -126,6 +126,63 @@
             </form>
         </th:block>
     </div>
+
+    <!-- #252: người thuê tải GPLX ở hồ sơ; hợp đồng và biên bản check-in dùng luôn thông tin này -->
+    <div class="card" id="gplx" th:if="${ownDocuments != null}">
+        <h2 style="margin: 0 0 4px;">Giấy phép lái xe (GPLX)</h2>
+        <p style="color: var(--text-secondary); font-size: 13px; margin: 0 0 16px;">
+            Không bắt buộc. Tải ảnh và số giấy phép lái xe để dùng cho hợp đồng thuê và lưu trữ hồ sơ khi cần đăng ký xe.
+        </p>
+
+        <div th:if="${driverLicenseSuccessMessage != null}" class="inline-alert inline-alert-success" style="margin-bottom: 16px;">
+            <span th:text="${driverLicenseSuccessMessage}">Đã lưu giấy phép lái xe.</span>
+        </div>
+        <div th:if="${driverLicenseErrorMessage != null}" class="inline-alert inline-alert-danger" style="margin-bottom: 16px;">
+            <span th:text="${driverLicenseErrorMessage}">Không lưu được giấy phép lái xe.</span>
+        </div>
+
+        <div th:if="${!ownDocuments.profileLinked()}" class="inline-alert inline-alert-danger" style="margin-bottom: 0;">
+            <span>Tài khoản chưa gắn hồ sơ người thuê có CCCD. Vui lòng liên hệ chủ trọ hoặc quản trị viên để bổ sung.</span>
+        </div>
+
+        <th:block th:if="${ownDocuments.profileLinked()}">
+            <div style="background: var(--bg-surface-subtle, rgba(0,0,0,0.02)); border: 1px solid var(--border-color, #e5e7eb); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px;">
+                <th:block th:if="${driverLicense != null}">
+                    <strong>Đã có GPLX</strong>
+                    <span th:text="${' · số ' + driverLicense.maskedNumber()}"> · số ****1234</span>
+                    <span th:text="${driverLicense.hasBackImage() ? ' · mặt trước và mặt sau' : ' · mặt trước'}"> · mặt trước</span>
+                    <span th:text="${' · cập nhật ' + #temporals.format(driverLicense.updatedAt(), 'dd/MM/yyyy HH:mm')}"> · cập nhật 01/01/2026 10:00</span>
+                </th:block>
+                <span th:if="${driverLicense == null}">Chưa có giấy phép lái xe.</span>
+            </div>
+
+            <form th:action="@{/account/profile/driver-license}" method="post" enctype="multipart/form-data">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <div class="form-group" style="max-width: 320px; margin-bottom: 12px;">
+                    <label class="form-label" for="driverLicenseNumber">Số GPLX <span th:if="${driverLicense == null}">*</span></label>
+                    <input id="driverLicenseNumber" type="text" name="licenseNumber" class="form-control"
+                           autocomplete="off"
+                           th:placeholder="${driverLicense != null ? driverLicense.maskedNumber() : 'Nhập số GPLX'}"
+                           th:required="${driverLicense == null}">
+                </div>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <div class="form-group">
+                        <label class="form-label" for="gplxFront">Ảnh mặt trước *</label>
+                        <input id="gplxFront" type="file" name="front" class="form-control" accept="image/jpeg,image/png,image/webp" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="gplxBack">Ảnh mặt sau</label>
+                        <input id="gplxBack" type="file" name="back" class="form-control" accept="image/jpeg,image/png,image/webp">
+                    </div>
+                </div>
+                <small style="display: block; margin-bottom: 12px; color: var(--text-secondary); font-size: 12px;">
+                    Chỉ nhận ảnh JPEG, PNG, WebP. Ảnh được xóa dữ liệu vị trí rồi mã hóa trước khi lưu.
+                </small>
+                <button type="submit" class="btn btn-primary"
+                        th:text="${driverLicense != null ? 'Thay GPLX' : 'Lưu GPLX'}">Lưu GPLX</button>
+            </form>
+        </th:block>
+    </div>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>

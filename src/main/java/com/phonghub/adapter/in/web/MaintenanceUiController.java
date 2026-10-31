@@ -268,6 +268,10 @@ public class MaintenanceUiController {
             model.addAttribute("understaffedCancelAfter",
                 formatDuration(timeoutPolicy.understaffedCancelAfter()));
             model.addAttribute("attachments", attachmentUseCase.list(id));
+            model.addAttribute("deletableAttachmentIds", attachmentUseCase.deletableIds(id));
+            // Phiếu do người thuê gửi: người quản lý và kỹ thuật viên chỉ xem nội dung (#228)
+            model.addAttribute("requestLockedForViewer", ticket.getRequestedByTenantId() != null
+                && currentUser.role() != UserRole.TENANT);
             java.util.List<com.phonghub.domain.model.MaintenanceTicketEvent> timeline = maintenanceUseCase.getTimeline(id);
             java.util.Map<UUID, String> actorNames = new java.util.HashMap<>();
             for (com.phonghub.domain.model.MaintenanceTicketEvent event : timeline) {
@@ -345,10 +349,20 @@ public class MaintenanceUiController {
     }
 
     @GetMapping("/{id}/attachments/{attachmentId}")
-    public ResponseEntity<Void> downloadAttachment(@PathVariable UUID id, @PathVariable UUID attachmentId) {
-        java.net.URI target = attachmentUseCase.signedUrl(id, attachmentId);
-        return ResponseEntity.status(302).header(HttpHeaders.LOCATION, target.toString())
-            .header(HttpHeaders.CACHE_CONTROL, "no-store").build();
+    public ResponseEntity<byte[]> downloadAttachment(@PathVariable UUID id, @PathVariable UUID attachmentId) {
+        try {
+            java.net.URI target = attachmentUseCase.signedUrl(id, attachmentId);
+            if (!"https".equalsIgnoreCase(target.getScheme()) && !"http".equalsIgnoreCase(target.getScheme())) {
+                // Kho trong bộ nhớ (docker/test) chỉ có link nội bộ memory://, trình duyệt không mở được
+                MaintenanceAttachmentUseCase.AttachmentContent file = attachmentUseCase.content(id, attachmentId);
+                return ResponseEntity.ok().contentType(org.springframework.http.MediaType.parseMediaType(file.contentType()))
+                    .header(HttpHeaders.CACHE_CONTROL, "private, no-store").body(file.content());
+            }
+            return ResponseEntity.status(302).header(HttpHeaders.LOCATION, target.toString())
+                .header(HttpHeaders.CACHE_CONTROL, "no-store").build();
+        } catch (DomainException ex) {
+            return MediaErrorResponses.from(ex);
+        }
     }
 
     @PostMapping("/{id}/attachments/{attachmentId}/delete")

@@ -29,6 +29,12 @@ public interface TenantDocumentUseCase {
      */
     DocumentSummary uploadOwnIdentityCard(DocumentFile front, DocumentFile back);
 
+    /**
+     * Người thuê tự tải hoặc thay GPLX của mình ở Hồ sơ cá nhân (#252). Giấy tờ tra theo người thuê nên dùng
+     * chung cho mọi nhà trọ và hợp đồng của họ, kể cả hợp đồng lập sau này.
+     */
+    DocumentSummary uploadOwnDriverLicense(String licenseNumber, DocumentFile front, DocumentFile back);
+
     /** {@code profileLinked} false: tài khoản người thuê chưa gắn hồ sơ có CCCD nên chưa tải được giấy tờ. */
     record OwnDocuments(boolean profileLinked, List<DocumentSummary> documents) {}
 

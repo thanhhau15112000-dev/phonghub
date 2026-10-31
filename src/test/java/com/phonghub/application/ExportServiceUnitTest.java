@@ -14,6 +14,7 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
+import com.phonghub.application.port.in.ExportUseCase;
 import com.phonghub.application.port.in.ExportUseCase.Dataset;
 import com.phonghub.application.port.in.ExportUseCase.ExportFile;
 import com.phonghub.application.port.in.ExportUseCase.ExportRequest;
@@ -24,6 +25,11 @@ import com.phonghub.application.port.out.TableExportPort;
 import com.phonghub.application.port.out.TableExportPort.Table;
 import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.application.service.ExportService;
+import com.phonghub.application.port.in.ExportUseCase.ExportFilter;
+import com.phonghub.application.port.in.ExportUseCase.InvoiceState;
+import com.phonghub.application.port.in.ExportUseCase.Preview;
+import com.phonghub.domain.exception.ExportLimitExceededException;
+import com.phonghub.domain.exception.NoExportDataException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
@@ -155,7 +161,7 @@ class ExportServiceUnitTest {
 
         ExportFile file = service.export(new ExportRequest(Dataset.INVOICES, Format.XLSX, null, null, null));
 
-        assertEquals("hoa-don_2025-11_2026-10.xlsx", file.filename());
+        assertEquals("hoa-don_2025-11_2026-10_3-dong.xlsx", file.filename());
         assertEquals("test/xlsx", file.contentType());
         Table table = xlsx.last;
         assertEquals("Hóa đơn 11/2025 - 10/2026", table.title());
@@ -175,7 +181,7 @@ class ExportServiceUnitTest {
 
         ExportFile file = service.export(new ExportRequest(Dataset.DEBTS, Format.PDF, null, null, null));
 
-        assertEquals("cong-no_2026-10-15.pdf", file.filename());
+        assertEquals("cong-no_2026-10-15_1-dong.pdf", file.filename());
         Table table = pdf.last;
         assertEquals(1, table.rows().size());
         List<Object> row = table.rows().get(0);
@@ -219,14 +225,196 @@ class ExportServiceUnitTest {
         assertTrue(audit.getRecordedEvents().isEmpty(), "bị từ chối thì không ghi nhận xuất dữ liệu");
     }
 
+
+    private static ExportFilter filter(java.util.function.UnaryOperator<Builder> f) {
+        return f.apply(new Builder()).build();
+    }
+
+    /** Dựng {@link ExportFilter} gọn trong test. */
+    private static final class Builder {
+        Set<UUID> propertyIds;
+        String room;
+        String tenant;
+        Set<InvoiceState> states;
+        LocalDate dueFrom;
+        LocalDate dueTo;
+        boolean outstanding;
+        Set<ContractStatus> contractStatuses;
+        LocalDate endFrom;
+        LocalDate endTo;
+
+        Builder states(InvoiceState... v) {
+            states = Set.of(v);
+            return this;
+        }
+
+        ExportFilter build() {
+            return new ExportFilter(propertyIds, room, tenant, states, null, dueFrom, dueTo, outstanding,
+                contractStatuses, null, null, endFrom, endTo);
+        }
+    }
+
+    private ExportRequest invoiceRequest() {
+        return new ExportRequest(Dataset.INVOICES, Format.XLSX, null, null, null);
+    }
+
+    @Test
+    @DisplayName("#227: lọc hóa đơn theo trạng thái, hạn thanh toán, còn nợ, phòng và tên người thuê (không phân biệt dấu)")
+    void invoiceFilters() {
+        login(ownerId, UserRole.OWNER);
+
+        service.export(invoiceRequest(), filter(b -> b.states(InvoiceState.OVERDUE)), null);
+        assertEquals(1, xlsx.last.rows().size(), "chỉ hóa đơn 09/2026 quá hạn");
+        assertEquals("09/2026", xlsx.last.rows().get(0).get(3));
+
+        service.export(invoiceRequest(), filter(b -> b.states(InvoiceState.PAID, InvoiceState.UNPAID)), null);
+        assertEquals(2, xlsx.last.rows().size());
+
+        Builder due = new Builder();
+        due.dueFrom = LocalDate.of(2026, 9, 1);
+        due.dueTo = LocalDate.of(2026, 9, 30);
+        service.export(invoiceRequest(), due.build(), null);
+        assertEquals(1, xlsx.last.rows().size());
+
+        Builder open = new Builder();
+        open.outstanding = true;
+        service.export(invoiceRequest(), open.build(), null);
+        assertEquals(2, xlsx.last.rows().size(), "bỏ hóa đơn đã trả đủ");
+
+        Builder who = new Builder();
+        who.tenant = "nguyen thue";
+        who.room = "a1";
+        service.export(invoiceRequest(), who.build(), null);
+        assertEquals(3, xlsx.last.rows().size());
+
+        Builder other = new Builder();
+        other.tenant = "khong co ai";
+        assertThrows(NoExportDataException.class, () -> service.export(invoiceRequest(), other.build(), null));
+    }
+
+    @Test
+    @DisplayName("#227: lọc hợp đồng theo trạng thái và ngày kết thúc")
+    void contractFilters() {
+        login(ownerId, UserRole.OWNER);
+        ExportRequest request = new ExportRequest(Dataset.CONTRACTS, Format.XLSX, null, null, null);
+
+        Builder active = new Builder();
+        active.contractStatuses = Set.of(ContractStatus.ACTIVE);
+        service.export(request, active.build(), null);
+        assertEquals(1, xlsx.last.rows().size());
+
+        Builder ended = new Builder();
+        ended.contractStatuses = Set.of(ContractStatus.TERMINATED);
+        assertThrows(NoExportDataException.class, () -> service.export(request, ended.build(), null));
+
+        Builder end = new Builder();
+        end.endFrom = LocalDate.of(2027, 1, 1);
+        assertThrows(NoExportDataException.class, () -> service.export(request, end.build(), null));
+    }
+
+    @Test
+    @DisplayName("#227: xem trước phân trang đúng cột và id; chọn dòng thì chỉ xuất các dòng đó")
+    void previewAndSelection() {
+        login(ownerId, UserRole.OWNER);
+
+        Preview first = service.preview(invoiceRequest(), ExportFilter.none(), 0, 2);
+        assertEquals(3, first.total());
+        assertEquals(2, first.rows().size());
+        assertEquals(11, first.columns().size());
+        assertEquals(first.columns().size(), first.rows().get(0).cells().size());
+        Preview second = service.preview(invoiceRequest(), ExportFilter.none(), 1, 2);
+        assertEquals(1, second.rows().size());
+        assertEquals(0, service.preview(invoiceRequest(), ExportFilter.none(), 9, 2).rows().size());
+
+        String picked = first.rows().get(1).id();
+        ExportFile file = service.export(invoiceRequest(), ExportFilter.none(), Set.of(picked));
+        assertEquals(1, xlsx.last.rows().size());
+        assertTrue(file.filename().contains("_1-dong."));
+        assertEquals(first.rows().get(1).cells().get(3), xlsx.last.rows().get(0).get(3).toString());
+    }
+
+    @Test
+    @DisplayName("#227: id ngoài phạm vi hoặc nhà trọ ngoài phạm vi thì từ chối cả yêu cầu, không xuất phần còn lại")
+    void selectionOutsideScopeRejected() {
+        login(ownerId, UserRole.OWNER);
+        Preview mine = service.preview(invoiceRequest(), ExportFilter.none(), 0, 10);
+
+        login(UUID.randomUUID(), UserRole.OWNER);
+        xlsx.last = null;
+        assertThrows(UnauthorizedPropertyAccessException.class,
+            () -> service.export(invoiceRequest(), ExportFilter.none(), Set.of(mine.rows().get(0).id())));
+        assertEquals(null, xlsx.last);
+
+        login(ownerId, UserRole.OWNER);
+        Set<String> mixed = Set.of(mine.rows().get(0).id(), invoices.findAll().stream()
+            .filter(i -> i.getContractId().equals(c1.getId()) == false).findFirst().orElseThrow().getId().toString());
+        assertThrows(UnauthorizedPropertyAccessException.class,
+            () -> service.export(invoiceRequest(), ExportFilter.none(), mixed), "một id lạ thì từ chối tất cả");
+
+        Builder foreign = new Builder();
+        foreign.propertyIds = Set.of(p2);
+        assertThrows(UnauthorizedPropertyAccessException.class,
+            () -> service.export(invoiceRequest(), foreign.build(), null));
+    }
+
+    @Test
+    @DisplayName("#227: chọn nhiều nhà trọ trong phạm vi chỉ lấy các nhà đó")
+    void multiplePropertiesNarrowScope() {
+        login(UUID.randomUUID(), UserRole.ADMIN);
+        ExportRequest request = new ExportRequest(Dataset.CONTRACTS, Format.XLSX, null, null, null);
+        service.export(request, ExportFilter.none(), null);
+        assertEquals(2, xlsx.last.rows().size());
+
+        Builder one = new Builder();
+        one.propertyIds = Set.of(p2);
+        service.export(request, one.build(), null);
+        assertEquals(1, xlsx.last.rows().size());
+        assertEquals("Nhà Hai", xlsx.last.rows().get(0).get(0));
+    }
+
+    @Test
+    @DisplayName("#227: vượt giới hạn số dòng mỗi lần xuất thì từ chối và không ghi nhật ký; đúng giới hạn thì xuất được")
+    void rowLimit() {
+        login(ownerId, UserRole.OWNER);
+        for (int i = 0; i < ExportUseCase.MAX_ROWS - 3; i++) {
+            invoices.save(invoice(c1, 8, "1", "0", InvoiceStatus.ISSUED, LocalDate.of(2026, 10, 25)));
+        }
+        service.export(invoiceRequest());
+        assertEquals(ExportUseCase.MAX_ROWS, xlsx.last.rows().size(), "đúng giới hạn vẫn xuất được");
+
+        invoices.save(invoice(c1, 8, "1", "0", InvoiceStatus.ISSUED, LocalDate.of(2026, 10, 25)));
+        int events = audit.getRecordedEvents().size();
+        assertThrows(ExportLimitExceededException.class, () -> service.export(invoiceRequest()));
+        assertEquals(events, audit.getRecordedEvents().size(), "bị từ chối thì không ghi nhật ký");
+        assertEquals(ExportUseCase.MAX_ROWS + 1, service.preview(invoiceRequest(), ExportFilter.none(), 0, 5).total(),
+            "xem trước vẫn cho biết tổng số để người dùng lọc hẹp lại");
+    }
+
+    @Test
+    @DisplayName("#227: không có dòng nào thì không tạo tệp và không ghi nhật ký xuất, với cả ba tập dữ liệu và hai định dạng")
+    void emptyResultIsRejected() {
+        login(ownerId, UserRole.OWNER);
+        YearMonth empty = YearMonth.of(2020, 1);
+        for (Format format : Format.values()) {
+            assertThrows(NoExportDataException.class,
+                () -> service.export(new ExportRequest(Dataset.INVOICES, format, null, empty, empty)));
+        }
+        invoices.clear();
+        assertThrows(NoExportDataException.class,
+            () -> service.export(new ExportRequest(Dataset.DEBTS, Format.XLSX, null, null, null)));
+        assertTrue(audit.getRecordedEvents().isEmpty(), "xuất rỗng thì không ghi DATA_EXPORTED");
+        assertEquals(null, xlsx.last, "không gọi bộ xuất tệp");
+    }
+
     @Test
     @DisplayName("staff: hóa đơn cần quyền thu tiền, hợp đồng cần quyền quản lý hợp đồng")
     void staffPermissions() {
         login(staffId, UserRole.STAFF);
         assignments.save(new StaffPropertyAssignment(UUID.randomUUID(), staffId, p1, false, true, NOW));
 
-        service.export(new ExportRequest(Dataset.INVOICES, Format.XLSX, null, null, null));
-        assertTrue(xlsx.last.rows().isEmpty(), "chưa có quyền thu tiền thì không có hóa đơn nào");
+        assertThrows(NoExportDataException.class,
+            () -> service.export(new ExportRequest(Dataset.INVOICES, Format.XLSX, null, null, null)),
+            "chưa có quyền thu tiền thì không có hóa đơn nào để xuất");
         service.export(new ExportRequest(Dataset.CONTRACTS, Format.XLSX, null, null, null));
         assertEquals(1, xlsx.last.rows().size());
         assertThrows(UnauthorizedPropertyAccessException.class,

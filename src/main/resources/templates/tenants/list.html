@@ -67,9 +67,14 @@
                             </details>
                             <form th:if="${!v.hidden() and !v.hasActiveContract()}"
                                   th:action="@{'/properties/' + ${property.id()} + '/tenants/' + ${v.tenant().id()} + '/hide'}"
-                                  method="post" style="margin: 0;" onsubmit="return confirm('Ẩn người thuê này khỏi danh sách?');">
+                                  method="post" style="margin: 0;">
                                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                <button type="submit" class="btn btn-sm btn-danger">Ẩn</button>
+                                <button type="button" class="btn btn-sm btn-danger"
+                                        data-confirm="Bạn có chắc chắn muốn ẩn người thuê này khỏi danh sách?"
+                                        data-confirm-title="Ẩn người thuê"
+                                        th:data-confirm-target="'Người thuê: ' + ${v.tenant().fullName()}"
+                                        data-confirm-consequence="Người thuê sẽ bị ẩn khỏi danh sách chính. Có thể khôi phục lại bất kỳ lúc nào."
+                                        data-confirm-btn="Ẩn người thuê">Ẩn</button>
                             </form>
                             <form th:if="${v.hidden()}"
                                   th:action="@{'/properties/' + ${property.id()} + '/tenants/' + ${v.tenant().id()} + '/restore'}"

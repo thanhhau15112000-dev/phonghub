@@ -24,12 +24,12 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Khởi động cả ứng dụng với profile docker trên CSDL trống: Flyway phải tạo schema trước khi Hibernate kiểm tra
+ * Khởi động cả ứng dụng với profile docker (xác thực local-demo, không cần Supabase) trên CSDL trống: Flyway phải tạo schema trước khi Hibernate kiểm tra
  * ánh xạ entity (validate), sau đó repository JPA đọc được dữ liệu mẫu.
  */
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest
-@ActiveProfiles("docker")
+@ActiveProfiles({"docker", "local-demo"})
 class DockerProfileJpaBootPostgresTest {
 
     @Container

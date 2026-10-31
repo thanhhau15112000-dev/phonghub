@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository;
 import com.phonghub.domain.model.Invoice;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -35,12 +36,16 @@ class InvoiceDueDateIntegrationTest extends SeededWebTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private InMemoryInvoiceRepository invoices;
+    @Autowired private InMemoryNotificationRepository notifications;
 
     // Kho hóa đơn dùng chung giữa các test cùng context: dọn cả trước lẫn sau để chỉ còn kỳ do test này tạo.
+    // Dọn cả thông báo: chuông thông báo trên header của mọi trang có thể chứa "Quá hạn" do test khác để lại
+    // (ví dụ phiếu bảo trì quá hạn xử lý), làm câu kiểm tra "trang không báo quá hạn" sai theo thứ tự chạy (#259).
     @BeforeEach
     @AfterEach
-    void clearInvoices() {
+    void clearInvoicesAndNotifications() {
         invoices.clear();
+        notifications.clear();
     }
 
     @Test

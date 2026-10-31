@@ -1,6 +1,8 @@
 package com.phonghub.adapter.in.web;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -13,6 +15,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
@@ -493,9 +496,12 @@ class ProductionAuthSecurityTest {
                 .param("email", "duplicate@phonghub.local")
                 .param("fullName", "Tenant Two")
                 .param("role", "TENANT"))
-            .andExpect(status().is3xxRedirection())
-            .andExpect(redirectedUrl("/admin/users"))
-            .andExpect(flash().attribute("errorMessage", "Email đã được sử dụng bởi một tài khoản khác: duplicate@phonghub.local"));
+            .andExpect(status().isOk())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.view().name("admin/users"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "createFieldErrors", org.hamcrest.Matchers.hasEntry("email", "Email đã được dùng.")))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "createForm", org.hamcrest.Matchers.hasEntry("fullName", "Tenant Two")));
     }
 
     @Test
@@ -510,9 +516,12 @@ class ProductionAuthSecurityTest {
                 .param("email", "unique@phonghub.local")
                 .param("fullName", "Tenant Two")
                 .param("role", "TENANT"))
-            .andExpect(status().is3xxRedirection())
-            .andExpect(redirectedUrl("/admin/users"))
-            .andExpect(flash().attribute("errorMessage", "Tên đăng nhập đã tồn tại trong hệ thống: duplicateuser"));
+            .andExpect(status().isOk())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.view().name("admin/users"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "createFieldErrors", org.hamcrest.Matchers.hasEntry("username", "Tên đăng nhập đã được dùng.")))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "createForm", org.hamcrest.Matchers.hasEntry("email", "unique@phonghub.local")));
     }
 
     @Test
@@ -620,7 +629,12 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(get("/account/profile").session(session))
             .andExpect(status().isOk())
             .andExpect(model().attributeExists("user"))
-            .andExpect(model().attributeExists("currentUser"));
+            .andExpect(model().attributeExists("currentUser"))
+            .andExpect(content().string(containsString("id=\"accountMenuButton\"")))
+            .andExpect(content().string(containsString("class=\"account-menu-name\">Admin User</span>")))
+            .andExpect(content().string(containsString("Chi tiết hồ sơ")))
+            .andExpect(content().string(containsString("action=\"/session/logout\"")))
+            .andExpect(content().string(not(containsString("id=\"demoUserSwitcher\""))));
     }
 
     @Test
@@ -679,6 +693,15 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(post(property + "/archive")).andExpect(status().isUnauthorized());
         mockMvc.perform(post(property + "/restore")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/properties").param("archived", "true")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void userPickerCandidateEndpointsRequireAuthenticationInProd() throws Exception {
+        String property = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+        mockMvc.perform(get(property + "/staff/candidates").param("q", "staff"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(property + "/tenants/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/account-candidates"))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test

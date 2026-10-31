@@ -9,6 +9,7 @@ import com.phonghub.application.port.out.MaintenanceAttachmentRepositoryPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
 import com.phonghub.domain.exception.AttachmentLimitException;
+import com.phonghub.domain.exception.FileStorageUnavailableException;
 import com.phonghub.domain.exception.MaintenanceTicketException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.MaintenanceAttachment;
@@ -19,12 +20,17 @@ import com.phonghub.domain.model.UserRole;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(MaintenanceAttachmentService.class);
     private static final Duration SIGNED_URL_TTL = Duration.ofMinutes(10);
 
     private final MaintenanceAttachmentRepositoryPort attachmentRepository;
@@ -108,7 +114,13 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
             for (int i = 0; i < sanitized.size(); i++) {
                 FileSanitizer.SanitizedFile file = sanitized.get(i);
                 String key = PrivateFileStorageService.objectKey(ticket.getPropertyId(), "maintenance", file.extension());
-                storagePort.put(key, file.contentType(), file.content());
+                try {
+                    storagePort.put(key, file.contentType(), file.content());
+                } catch (RuntimeException ex) {
+                    log.error("Không lưu được tệp phiếu bảo trì {} vào kho lưu trữ (key {})", ticketId, key, ex);
+                    throw new FileStorageUnavailableException(
+                        "Không lưu được tệp vào kho lưu trữ, vui lòng thử lại sau. Nếu lỗi lặp lại, hãy báo quản trị viên.", ex);
+                }
                 storedKeys.add(key);
                 saved.add(attachmentRepository.save(new MaintenanceAttachment(UUID.randomUUID(), ticketId, kinds.get(i),
                     key, file.contentType(), file.content().length, user.id(), null)));
@@ -131,7 +143,28 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
     @Override
     public URI signedUrl(UUID ticketId, UUID attachmentId) {
         assertCanView(currentUserPort.getCurrentUser(), findTicket(ticketId));
-        return storagePort.createSignedUrl(find(ticketId, attachmentId).storageKey(), SIGNED_URL_TTL);
+        MaintenanceAttachment attachment = find(ticketId, attachmentId);
+        try {
+            return storagePort.createSignedUrl(attachment.storageKey(), SIGNED_URL_TTL);
+        } catch (RuntimeException ex) {
+            throw unavailable(attachment, ex);
+        }
+    }
+
+    @Override
+    public AttachmentContent content(UUID ticketId, UUID attachmentId) {
+        assertCanView(currentUserPort.getCurrentUser(), findTicket(ticketId));
+        MaintenanceAttachment attachment = find(ticketId, attachmentId);
+        try {
+            return new AttachmentContent(attachment.contentType(), storagePort.get(attachment.storageKey()));
+        } catch (RuntimeException ex) {
+            throw unavailable(attachment, ex);
+        }
+    }
+
+    private static FileStorageUnavailableException unavailable(MaintenanceAttachment attachment, RuntimeException cause) {
+        log.error("Không lấy được tệp phiếu bảo trì {} từ kho lưu trữ (key {})", attachment.id(), attachment.storageKey(), cause);
+        return new FileStorageUnavailableException("Không mở được tệp từ kho lưu trữ, vui lòng thử lại sau.", cause);
     }
 
     @Override
@@ -140,7 +173,19 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
         MaintenanceTicket ticket = findTicket(ticketId);
         MaintenanceAttachment attachment = find(ticketId, attachmentId);
         boolean uploader = user != null && user.id().equals(attachment.uploadedBy());
-        if (!uploader) {
+        if (isTenantEvidence(ticket, attachment)) {
+            // Ảnh/video người thuê gửi kèm phiếu là bằng chứng (#228): chỉ chính người thuê xóa, khi phiếu chưa xử lý xong
+            if (!uploader) {
+                if (user == null) {
+                    throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
+                }
+                assertCanView(user, ticket);
+                throw new UnauthorizedPropertyAccessException("Tệp do người thuê gửi chỉ người thuê được xóa.");
+            }
+            if (ticket.isWorkFinished()) {
+                throw new MaintenanceTicketException("Không xóa được tệp của phiếu đã xử lý xong hoặc đã đóng");
+            }
+        } else if (!uploader) {
             authorizationService.assertCanManageProperty(user, ticket.getPropertyId());
         } else {
             assertCanView(user, ticket);
@@ -149,6 +194,35 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
         deleteQuietly(attachment.storageKey());
         auditPort.recordEvent(AuditPort.AuditEvent.of("MAINTENANCE_ATTACHMENT_REMOVED", user.id(), "MAINTENANCE_TICKET",
             ticketId.toString(), Map.of("kind", attachment.kind().name())));
+    }
+
+    @Override
+    public Set<UUID> deletableIds(UUID ticketId) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        MaintenanceTicket ticket = findTicket(ticketId);
+        assertCanView(user, ticket);
+        Set<UUID> result = new HashSet<>();
+        for (MaintenanceAttachment attachment : attachmentRepository.findByTicketId(ticketId)) {
+            boolean uploader = user.id().equals(attachment.uploadedBy());
+            if (isTenantEvidence(ticket, attachment)) {
+                if (uploader && !ticket.isWorkFinished()) {
+                    result.add(attachment.id());
+                }
+            } else if (user.role() != UserRole.TECHNICIAN && (uploader || user.role() != UserRole.TENANT)) {
+                result.add(attachment.id());
+            }
+        }
+        return result;
+    }
+
+    /** Tệp do chính người thuê đã báo phiếu tải lên. */
+    private boolean isTenantEvidence(MaintenanceTicket ticket, MaintenanceAttachment attachment) {
+        if (ticket.getRequestedByTenantId() == null || attachment.uploadedBy() == null) {
+            return false;
+        }
+        return tenantRepository.findById(ticket.getRequestedByTenantId())
+            .map(tenant -> attachment.uploadedBy().equals(tenant.userId()))
+            .orElse(false);
     }
 
     /** Người thuê đã tạo phiếu (hoặc đang ở phòng đó) và owner/staff/admin của nhà trọ được tải lên. */

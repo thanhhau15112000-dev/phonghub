@@ -23,9 +23,14 @@
             <form th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() == 'PENDING'}"
                   th:action="@{'/properties/' + ${property.id()} + '/verify'}" method="post" style="display: inline;">
                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                <button type="submit" class="btn btn-sm btn-primary"
+                <button type="button" class="btn btn-sm btn-primary"
                         style="background-color: var(--status-available, #047857); border-color: var(--status-available, #047857); color: white;"
-                        onclick="return confirm('Bạn có chắc chắn muốn duyệt nhà trọ này không?');">Duyệt nhà trọ</button>
+                        data-confirm="Bạn có chắc chắn muốn duyệt nhà trọ này không?"
+                        data-confirm-title="Phê duyệt nhà trọ"
+                        th:data-confirm-target="'Nhà trọ: ' + ${property.name()}"
+                        data-confirm-consequence="Nhà trọ sẽ được kích hoạt công khai và chủ trọ có thể bắt đầu quản lý phòng, hợp đồng."
+                        data-confirm-btn="Duyệt nhà trọ"
+                        data-confirm-variant="primary">Duyệt nhà trọ</button>
             </form>
             <!-- Nút Từ chối cho Quản trị viên khi nhà trọ PENDING -->
             <button th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() == 'PENDING'}"
@@ -429,8 +434,12 @@
         </p>
         <form th:action="@{'/properties/' + ${property.id()} + '/archive'}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-            <button type="submit" class="btn btn-sm btn-danger"
-                    onclick="return confirm('Ẩn nhà trọ này? Có thể khôi phục lại sau.');">Ẩn nhà trọ</button>
+            <button type="button" class="btn btn-sm btn-danger"
+                    data-confirm="Bạn có chắc chắn muốn ẩn nhà trọ này?"
+                    data-confirm-title="Ẩn nhà trọ"
+                    th:data-confirm-target="'Nhà trọ: ' + ${property.name()}"
+                    data-confirm-consequence="Nhà trọ đã ẩn không hiện trong danh sách và không tạo thêm phòng, hợp đồng. Dữ liệu cũ vẫn được giữ và có thể khôi phục lại sau."
+                    data-confirm-btn="Ẩn nhà trọ">Ẩn nhà trọ</button>
         </form>
     </div>
 

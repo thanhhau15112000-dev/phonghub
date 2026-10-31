@@ -86,10 +86,13 @@ class MaintenanceBranchFlowIntegrationTest extends SeededWebTest {
         return tickets.findById(UUID.fromString(id)).orElseThrow();
     }
 
-    /** Số thông báo của người dùng về đúng phiếu này (các test dùng chung kho thông báo nên lọc theo đường dẫn phiếu). */
+    /**
+     * Số thông báo của người dùng về đúng phiếu này (các test dùng chung kho thông báo nên lọc theo đường dẫn phiếu).
+     * Thông báo hệ thống cho quản trị viên không có người nhận cụ thể (targetUserId null) do test khác để lại thì bỏ qua.
+     */
     private long notificationsFor(String ticketId, String userId, String titleFragment) {
         return notifications.findAll().stream()
-            .filter(n -> n.targetUserId().toString().equals(userId) && n.title().contains(titleFragment)
+            .filter(n -> userId.equals(String.valueOf(n.targetUserId())) && n.title().contains(titleFragment)
                 && n.link() != null && n.link().endsWith(ticketId)).count();
     }
 

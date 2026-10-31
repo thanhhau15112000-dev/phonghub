@@ -4,6 +4,7 @@ import com.phonghub.application.port.in.MaintenanceAttachmentUseCase;
 import com.phonghub.domain.model.MaintenanceAttachment;
 import java.net.URI;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +38,18 @@ public class TransactionalMaintenanceAttachmentUseCase implements MaintenanceAtt
     @Transactional(readOnly = true)
     public URI signedUrl(UUID ticketId, UUID attachmentId) {
         return delegate.signedUrl(ticketId, attachmentId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AttachmentContent content(UUID ticketId, UUID attachmentId) {
+        return delegate.content(ticketId, attachmentId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Set<UUID> deletableIds(UUID ticketId) {
+        return delegate.deletableIds(ticketId);
     }
 
     @Override

@@ -139,10 +139,13 @@ public class HandoverUiController {
             model.addAttribute("canManage", canManage);
             model.addAttribute("ownerOrAdmin", ownerOrAdmin);
             model.addAttribute("primaryTenant", primaryTenant);
-            // Người thuê chính xác nhận check-in cần ảnh CCCD; ảnh tải ở Hồ sơ cá nhân cũng được tính (#244).
-            model.addAttribute("identityCardOnFile", primaryTenant && type == HandoverType.CHECK_IN
-                && tenantDocumentUseCase.ownDocuments().documents().stream()
-                    .anyMatch(document -> document.type() == DocumentType.CCCD));
+            // Người thuê chính xác nhận check-in cần ảnh CCCD; ảnh tải ở Hồ sơ cá nhân cũng được tính (#244, #252).
+            TenantDocumentUseCase.OwnDocuments ownDocs = primaryTenant && type == HandoverType.CHECK_IN
+                ? tenantDocumentUseCase.ownDocuments() : null;
+            model.addAttribute("identityCardOnFile", ownDocs != null
+                && ownDocs.documents().stream().anyMatch(document -> document.type() == DocumentType.CCCD));
+            model.addAttribute("driverLicenseOnFile", ownDocs != null
+                && ownDocs.documents().stream().anyMatch(document -> document.type() == DocumentType.GPLX));
             model.addAttribute("houseRules", rules);
             model.addAttribute("photoKinds", HandoverPhotoKind.values());
             model.addAttribute("assetStatuses", AssetStatus.values());
@@ -226,21 +229,20 @@ public class HandoverUiController {
         @PathVariable UUID photoId
     ) {
         HandoverType type = typeOf(kind);
-        URI target;
         try {
-            target = handoverUseCase.photoSignedUrl(type, contractId, photoId);
-        } catch (UnauthorizedPropertyAccessException ex) {
-            // Ảnh được mở bằng thẻ img hoặc tab mới: người ngoài hợp đồng nhận 403 thay vì bị chuyển trang
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).header(HttpHeaders.CACHE_CONTROL, "no-store").build();
+            URI target = handoverUseCase.photoSignedUrl(type, contractId, photoId);
+            if (!"https".equalsIgnoreCase(target.getScheme()) && !"http".equalsIgnoreCase(target.getScheme())) {
+                // Kho in-memory (profile docker/test) chỉ có URL nội bộ memory:// mà trình duyệt không mở được
+                HandoverUseCase.PhotoFile file = handoverUseCase.photoFile(type, contractId, photoId);
+                return ResponseEntity.ok().contentType(MediaType.parseMediaType(file.contentType()))
+                    .header(HttpHeaders.CACHE_CONTROL, "no-store").body(file.content());
+            }
+            return ResponseEntity.status(302).header(HttpHeaders.LOCATION, target.toString())
+                .header(HttpHeaders.CACHE_CONTROL, "no-store").build();
+        } catch (DomainException ex) {
+            // Ảnh mở bằng thẻ img hoặc tab mới: trả trang thông báo/đăng nhập, không để tab trống (#230)
+            return MediaErrorResponses.from(ex);
         }
-        if (!"https".equalsIgnoreCase(target.getScheme()) && !"http".equalsIgnoreCase(target.getScheme())) {
-            // Kho in-memory (profile docker/test) chỉ có URL nội bộ memory:// mà trình duyệt không mở được
-            HandoverUseCase.PhotoFile file = handoverUseCase.photoFile(type, contractId, photoId);
-            return ResponseEntity.ok().contentType(MediaType.parseMediaType(file.contentType()))
-                .header(HttpHeaders.CACHE_CONTROL, "no-store").body(file.content());
-        }
-        return ResponseEntity.status(302).header(HttpHeaders.LOCATION, target.toString())
-            .header(HttpHeaders.CACHE_CONTROL, "no-store").build();
     }
 
     @PostMapping("/items/{itemId}")

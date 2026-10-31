@@ -3,6 +3,8 @@ package com.phonghub.adapter.in.web;
 import com.phonghub.domain.exception.ContractNotFoundException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
+import com.phonghub.domain.exception.ExportLimitExceededException;
+import com.phonghub.domain.exception.NoExportDataException;
 import com.phonghub.domain.exception.NotificationNotFoundException;
 import com.phonghub.domain.exception.DocumentRevealDeniedException;
 import com.phonghub.domain.exception.DuplicateAssetCodeException;
@@ -128,6 +130,15 @@ public class RestExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler({NoExportDataException.class, ExportLimitExceededException.class})
+    public ProblemDetail handleNoExportData(DomainException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+        problem.setTitle("No Export Data");
+        problem.setType(URI.create("https://phonghub.local/errors/no-export-data"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
     @ExceptionHandler(DuplicateActiveContractException.class)
     public ProblemDetail handleDuplicateActiveContract(DuplicateActiveContractException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
@@ -239,7 +250,8 @@ public class RestExceptionHandler {
         UserNotFoundException.class,
         TenantNotFoundException.class,
         NotificationNotFoundException.class,
-        com.phonghub.domain.exception.ChatRoomNotFoundException.class
+        com.phonghub.domain.exception.ChatRoomNotFoundException.class,
+        com.phonghub.domain.exception.ChatMessageNotFoundException.class
     })
     public ProblemDetail handleNotFound(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());

@@ -33,6 +33,11 @@ spring:
     mode: HTML
     encoding: UTF-8
 
+logging:
+  structured:
+    format:
+      console: ${LOGGING_STRUCTURED_FORMAT_CONSOLE:ecs}
+
 server:
   port: ${PORT:8080}
   address: 0.0.0.0
@@ -47,9 +52,21 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+    prometheus:
+      enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
 
 phonghub:
+  management:
+    metrics-token: ${PHONGHUB_METRICS_TOKEN:phonghub-metrics-secret-token}
   demo:
     enabled: false
   handover:

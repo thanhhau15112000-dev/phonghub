@@ -84,9 +84,20 @@ import org.springframework.context.annotation.Configuration;
 public class PhongHubConfiguration {
 
     @Bean
-    public FilterRegistrationBean<RateLimitFilter> rateLimitFilter(RateLimitProperties props) {
+    public FilterRegistrationBean<com.phonghub.adapter.in.web.MdcLoggingFilter> mdcLoggingFilter() {
+        FilterRegistrationBean<com.phonghub.adapter.in.web.MdcLoggingFilter> bean =
+            new FilterRegistrationBean<>(new com.phonghub.adapter.in.web.MdcLoggingFilter());
+        bean.setOrder(org.springframework.core.Ordered.HIGHEST_PRECEDENCE);
+        return bean;
+    }
+
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> rateLimitFilter(
+        RateLimitProperties props,
+        org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> meterRegistryProvider
+    ) {
         FilterRegistrationBean<RateLimitFilter> bean = new FilterRegistrationBean<>(
-            new RateLimitFilter(props, new FixedWindowRateLimiter(Clock.systemUTC())));
+            new RateLimitFilter(props, new FixedWindowRateLimiter(Clock.systemUTC()), meterRegistryProvider.getIfAvailable()));
         bean.setOrder(-150);
         return bean;
     }
@@ -868,8 +879,10 @@ public class PhongHubConfiguration {
     }
 
     @Bean
-    public com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher() {
-        return new com.phonghub.adapter.out.event.SseChatEventPublisher();
+    public com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher(
+        org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> meterRegistryProvider
+    ) {
+        return new com.phonghub.adapter.out.event.SseChatEventPublisher(meterRegistryProvider.getIfAvailable());
     }
 
     @Bean
@@ -877,10 +890,15 @@ public class PhongHubConfiguration {
         com.phonghub.application.port.out.ChatRoomRepositoryPort chatRoomRepository,
         com.phonghub.application.port.out.ChatMessageRepositoryPort chatMessageRepository,
         UserRepositoryPort userRepository,
-        com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher
+        com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher,
+        FileStoragePort fileStoragePort,
+        StorageProperties storageProperties,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.chat.max-video-bytes:10485760}") long maxVideoBytes
     ) {
+        // Ảnh theo STORAGE_MAX_FILE_SIZE_BYTES; video giới hạn riêng nhưng không vượt giới hạn chung của tệp (#251)
         return new com.phonghub.application.service.ChatService(
-            chatRoomRepository, chatMessageRepository, userRepository, sseChatEventPublisher,
+            chatRoomRepository, chatMessageRepository, userRepository, sseChatEventPublisher, fileStoragePort,
+            storageProperties.getMaxFileSizeBytes(), Math.min(maxVideoBytes, storageProperties.getMaxFileSizeBytes()),
             java.time.Clock.systemUTC()
         );
     }

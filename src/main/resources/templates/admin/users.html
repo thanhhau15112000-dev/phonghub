@@ -4,6 +4,10 @@
 <body>
 <header th:replace="~{fragments/layout :: header}"></header>
 
+<style>
+    .field-error { display: block; color: #b91c1c; font-size: 12px; margin-top: 4px; }
+    .form-control.is-invalid { border-color: #b91c1c; }
+</style>
 <main class="container">
     <div class="page-title-row">
         <div>
@@ -31,11 +35,18 @@
                             <form th:action="@{'/admin/users/' + ${tenantUser.id()} + '/tenant-profile'}" method="post" class="table-actions">
                                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
                                 <input type="tel" name="phone" class="form-control" required pattern="^0\d{9}$" maxlength="10"
-                                       inputmode="numeric" aria-label="Số điện thoại" th:value="${tenantUser.phone()}" placeholder="Số điện thoại">
+                                       inputmode="numeric" aria-label="Số điện thoại" placeholder="Số điện thoại"
+                                       th:value="${profileFormUserId == tenantUser.id() ? profileForm['phone'] : tenantUser.phone()}"
+                                       th:classappend="${profileFormUserId == tenantUser.id() and profileFieldErrors['phone'] != null ? 'is-invalid' : ''}">
                                 <input type="text" name="identityCardNumber" class="form-control" required pattern="(\d{9}|\d{12})"
-                                       maxlength="12" inputmode="numeric" aria-label="CCCD" placeholder="Số CCCD">
+                                       maxlength="12" inputmode="numeric" aria-label="CCCD" placeholder="Số CCCD"
+                                       th:value="${profileFormUserId == tenantUser.id() ? profileForm['identityCardNumber'] : ''}"
+                                       th:classappend="${profileFormUserId == tenantUser.id() and profileFieldErrors['identityCardNumber'] != null ? 'is-invalid' : ''}">
                                 <button type="submit" class="btn btn-sm btn-primary">Gắn hồ sơ</button>
                             </form>
+                            <div th:if="${profileFormUserId == tenantUser.id()}">
+                                <small class="field-error" th:each="e : ${profileFieldErrors.values()}" th:text="${e}">Lỗi</small>
+                            </div>
                         </td>
                     </tr>
                 </tbody>
@@ -53,30 +64,34 @@
             <div class="form-row">
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label" for="username">Tên đăng nhập *</label>
-                    <input id="username" type="text" name="username" class="form-control" required>
+                    <input id="username" type="text" name="username" class="form-control" required th:classappend="${createFieldErrors != null and createFieldErrors['username'] != null ? 'is-invalid' : ''}" th:value="${createForm != null ? createForm['username'] : ''}">
+                    <small class="field-error" th:if="${createFieldErrors != null and createFieldErrors['username'] != null}" th:text="${createFieldErrors['username']}">Lỗi</small>
                 </div>
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label" for="email">Email Auth *</label>
-                    <input id="email" type="email" name="email" class="form-control" required>
+                    <input id="email" type="email" name="email" class="form-control" required th:classappend="${createFieldErrors != null and createFieldErrors['email'] != null ? 'is-invalid' : ''}" th:value="${createForm != null ? createForm['email'] : ''}">
+                    <small class="field-error" th:if="${createFieldErrors != null and createFieldErrors['email'] != null}" th:text="${createFieldErrors['email']}">Lỗi</small>
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group" style="flex: 2;">
                     <label class="form-label" for="fullName">Họ và tên *</label>
-                    <input id="fullName" type="text" name="fullName" class="form-control" required>
+                    <input id="fullName" type="text" name="fullName" class="form-control" required th:classappend="${createFieldErrors != null and createFieldErrors['fullName'] != null ? 'is-invalid' : ''}" th:value="${createForm != null ? createForm['fullName'] : ''}">
+                    <small class="field-error" th:if="${createFieldErrors != null and createFieldErrors['fullName'] != null}" th:text="${createFieldErrors['fullName']}">Lỗi</small>
                 </div>
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label" for="phone">Số điện thoại <span id="tenantPhoneRequired" style="display:none;">*</span></label>
                     <input id="phone" type="tel" name="phone" class="form-control"
                            placeholder="Ví dụ: 0912345678" pattern="^0\d{9}$"
-                           title="Số điện thoại gồm 10 chữ số bắt đầu bằng 0">
+                           title="Số điện thoại gồm 10 chữ số bắt đầu bằng 0" th:classappend="${createFieldErrors != null and createFieldErrors['phone'] != null ? 'is-invalid' : ''}" th:value="${createForm != null ? createForm['phone'] : ''}">
+                    <small class="field-error" th:if="${createFieldErrors != null and createFieldErrors['phone'] != null}" th:text="${createFieldErrors['phone']}">Lỗi</small>
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group" style="flex: 1; max-width: 300px;">
                     <label class="form-label" for="role">Vai trò *</label>
                     <select id="role" name="role" class="form-control" required>
-                        <option th:each="role : ${roles}" th:value="${role}" th:text="${uiText.role(role)}">Người thuê</option>
+                        <option th:each="role : ${roles}" th:value="${role}" th:text="${uiText.role(role)}" th:selected="${createForm != null and createForm['role'] == role.name()}">Người thuê</option>
                     </select>
                 </div>
             </div>
@@ -84,7 +99,8 @@
                 <label class="form-label" for="identityCardNumber">CCCD người thuê *</label>
                 <input id="identityCardNumber" type="text" name="identityCardNumber" class="form-control"
                        pattern="(\d{9}|\d{12})" inputmode="numeric" maxlength="12"
-                       title="CCCD gồm 9 hoặc 12 chữ số">
+                       title="CCCD gồm 9 hoặc 12 chữ số" th:classappend="${createFieldErrors != null and createFieldErrors['identityCardNumber'] != null ? 'is-invalid' : ''}" th:value="${createForm != null ? createForm['identityCardNumber'] : ''}">
+                <small class="field-error" th:if="${createFieldErrors != null and createFieldErrors['identityCardNumber'] != null}" th:text="${createFieldErrors['identityCardNumber']}">Lỗi</small>
                 <small>Tài khoản người thuê luôn được gắn với một hồ sơ CCCD duy nhất.</small>
             </div>
             <button type="submit" class="btn btn-primary">Tạo tài khoản và sinh mật khẩu tạm thời</button>
@@ -435,6 +451,8 @@
         };
         role.addEventListener('change', sync);
         sync();
+        const firstInvalid = document.querySelector('.form-control.is-invalid');
+        if (firstInvalid) firstInvalid.focus();
     });
 </script>
 </body>

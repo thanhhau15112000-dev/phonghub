@@ -120,6 +120,9 @@ public class TenantDocumentService implements TenantDocumentUseCase {
         if (command == null || command.type() == null) {
             throw new IllegalArgumentException("Cần chọn loại giấy tờ.");
         }
+        if (command.type() != DocumentType.CCCD && (command.number() == null || command.number().isBlank())) {
+            throw new IllegalArgumentException("Cần nhập số giấy phép lái xe.");
+        }
         CurrentUser user = currentUserPort.getCurrentUser();
         authorizationService.assertCanAccessTenantDocuments(user, command.propertyId(), command.tenantId());
         assertNotLocked(command.tenantId());
@@ -165,6 +168,21 @@ public class TenantDocumentService implements TenantDocumentUseCase {
         return summarize(saved, tenant);
     }
 
+    @Override
+    public DocumentSummary uploadOwnDriverLicense(String licenseNumber, DocumentFile front, DocumentFile back) {
+        CurrentUser user = requireTenantUser();
+        Tenant tenant = tenantRepository.findByUserId(user.id()).orElseThrow(() -> new IllegalArgumentException(
+            "Tài khoản chưa gắn hồ sơ người thuê có CCCD. Vui lòng liên hệ chủ trọ hoặc quản trị viên để bổ sung."));
+        assertNotLocked(tenant.id());
+        TenantDocument previous = documentRepository.findByTenantIdAndType(tenant.id(), DocumentType.GPLX)
+            .orElse(null);
+        UUID propertyId = previous == null ? null : previous.propertyId();
+        TenantDocument saved = saveDocument(propertyId, tenant, DocumentType.GPLX, licenseNumber, front, back, previous, user);
+        audit("TENANT_DOCUMENT_UPLOADED", user, propertyId, tenant.id(),
+            Map.of("type", DocumentType.GPLX.name(), "replaced", previous != null, "source", "PROFILE"));
+        return summarize(saved, tenant);
+    }
+
     /** Kiểm tra, mã hóa và lưu ảnh rồi ghi hoặc thay bản ghi giấy tờ; ảnh cũ chỉ bị xóa sau khi lưu thành công. */
     private TenantDocument saveDocument(
         UUID propertyId,
@@ -178,7 +196,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
     ) {
         Prepared front = prepareImage(frontFile, true);
         Prepared back = prepareImage(backFile, false);
-        TenantDataProtectionPort.ProtectedValue protectedNumber = protectNumber(type, number, tenant);
+        TenantDataProtectionPort.ProtectedValue protectedNumber = protectNumber(type, number, tenant, previous);
 
         String frontKey = store(propertyId, tenant.id(), front);
         String backKey = back == null ? null : store(propertyId, tenant.id(), back);
@@ -194,7 +212,7 @@ public class TenantDocumentService implements TenantDocumentUseCase {
                 protectedNumber == null ? null : protectedNumber.nonce(),
                 protectedNumber == null ? null : protectedNumber.fingerprint(),
                 protectedNumber == null ? null : protectedNumber.keyId(),
-                lastFour(type, number, tenant),
+                lastFour(type, number, tenant, previous),
                 frontKey,
                 front.contentType(),
                 backKey,
@@ -319,11 +337,21 @@ public class TenantDocumentService implements TenantDocumentUseCase {
         return new Prepared(sanitized.contentType(), sanitized.content());
     }
 
-    private TenantDataProtectionPort.ProtectedValue protectNumber(DocumentType type, String number, Tenant tenant) {
+    private TenantDataProtectionPort.ProtectedValue protectNumber(
+        DocumentType type, String number, Tenant tenant, TenantDocument previous
+    ) {
         if (type == DocumentType.CCCD) {
             return null;
         }
         if (number == null || number.isBlank()) {
+            if (previous != null && previous.numberCiphertext() != null) {
+                return new TenantDataProtectionPort.ProtectedValue(
+                    previous.numberCiphertext(),
+                    previous.numberNonce(),
+                    previous.numberHmac(),
+                    previous.numberKeyId()
+                );
+            }
             throw new IllegalArgumentException("Cần nhập số giấy phép lái xe.");
         }
         TenantDataProtectionPort.ProtectedValue value = protector.protect(number);
@@ -333,10 +361,18 @@ public class TenantDocumentService implements TenantDocumentUseCase {
         return value;
     }
 
-    private String lastFour(DocumentType type, String number, Tenant tenant) {
-        String value = type == DocumentType.CCCD
-            ? tenant.identityCardNumber()
-            : number.trim().replaceAll("\\s+", "");
+    private String lastFour(DocumentType type, String number, Tenant tenant, TenantDocument previous) {
+        if (type == DocumentType.CCCD) {
+            String value = tenant.identityCardNumber();
+            return value.length() <= 4 ? value : value.substring(value.length() - 4);
+        }
+        if ((number == null || number.isBlank()) && previous != null) {
+            return previous.numberLast4();
+        }
+        if (number == null || number.isBlank()) {
+            return null;
+        }
+        String value = number.trim().replaceAll("\\s+", "");
         return value.length() <= 4 ? value : value.substring(value.length() - 4);
     }
 

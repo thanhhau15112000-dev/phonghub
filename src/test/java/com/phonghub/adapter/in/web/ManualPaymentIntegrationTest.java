@@ -92,7 +92,7 @@ class ManualPaymentIntegrationTest extends SeededWebTest {
             .andExpect(status().isConflict());
         assertEquals(0, new BigDecimal("3500000").compareTo(invoices.findById(invoice.getId()).orElseThrow().getPaidAmount()),
             "xác nhận lần hai không cộng tiền thêm");
-        assertNotNull(notifications.findAll().stream().filter(n -> n.targetUserId().toString().equals(TENANT_1)
+        assertNotNull(notifications.findAll().stream().filter(n -> TENANT_1.equals(String.valueOf(n.targetUserId()))
             && n.title().contains("Thanh toán đã được xác nhận")).findAny().orElse(null));
         claim(invoice, TENANT_1, "1000", "CASH").andExpect(status().isConflict());
     }
