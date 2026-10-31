@@ -301,6 +301,18 @@
             <div th:if="${feeInvoice != null}" style="margin-bottom: 4px;">
                 <span style="color: var(--text-secondary);">Hạn thanh toán:</span>
                 <span th:text="${uiText.date(feeInvoice.getDueDate())}">2026-10-09</span>
+                <span th:if="${feeInvoice.isPayable() and !feeInvoice.isOverdue(today)}" style="color: var(--text-secondary);"
+                      th:text="'(còn ' + ${T(java.time.temporal.ChronoUnit).DAYS.between(today, feeInvoice.getDueDate()) + 1} + ' ngày)'">(còn 3 ngày)</span>
+            </div>
+            <div th:if="${feeInvoice != null and feeInvoice.hasMaintenancePenaltyPolicy() and feeInvoice.isPayable() and feeInvoice.lateFeeItem().isEmpty()}"
+                 class="alert alert-warning" style="margin: 8px 0;">
+                Quá hạn sẽ cộng 10% tổng tiền sửa chữa
+                (<strong th:text="${#numbers.formatDecimal(feeInvoice.maintenanceLateFeePreview(), 0, 'POINT', 0, 'COMMA') + ' đ'}">50,000 đ</strong>).
+            </div>
+            <div th:if="${feeInvoice != null and feeInvoice.lateFeeItem().isPresent() and feeInvoice.hasMaintenancePenaltyPolicy()}"
+                 class="alert alert-error" style="margin: 8px 0;">
+                Đã quá hạn: cộng phạt <strong th:text="${#numbers.formatDecimal(feeInvoice.lateFeeItem().get().totalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">50,000 đ</strong>.
+                Tổng cần trả: <strong th:text="${#numbers.formatDecimal(feeInvoice.getTotalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">550,000 đ</strong>.
             </div>
             <div th:if="${feeInvoice != null}">
                 <span style="color: var(--text-secondary);">Nội dung chuyển khoản:</span>
@@ -475,10 +487,10 @@
     </div>
 
     <!-- Người thuê xác nhận kết quả sửa chữa (#83, #253) -->
-    <div th:if="${currentUser.role().name() == 'TENANT' and ticket.getStatus().name() == 'RESOLVED'}" class="card" style="margin-bottom: 20px;" id="tenant-confirm">
+    <div th:if="${currentUser.role().name() == 'TENANT' and (ticket.getStatus().name() == 'RESOLVED' or ticket.getStatus().name() == 'AWAITING_PAYMENT')}" class="card" style="margin-bottom: 20px;" id="tenant-confirm">
         <h2>Xác nhận kết quả sửa chữa</h2>
         <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">Hãy kiểm tra lại và xác nhận đã sửa xong, hoặc cho biết chỗ chưa đạt để kỹ thuật viên sửa tiếp.</p>
-        <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/verify'}" method="post" style="margin-bottom: 12px;">
+        <form th:if="${ticket.getStatus().name() == 'RESOLVED'}" th:action="@{'/maintenance/' + ${ticket.getId()} + '/verify'}" method="post" style="margin-bottom: 12px;">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <button type="submit" class="btn btn-primary">Xác nhận đã sửa xong</button>
         </form>

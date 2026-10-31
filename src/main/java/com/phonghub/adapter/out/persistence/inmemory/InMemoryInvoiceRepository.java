@@ -72,6 +72,14 @@ public class InMemoryInvoiceRepository implements InvoiceRepositoryPort {
     }
 
     @Override
+    public List<UUID> findOverdueMaintenanceInvoiceIds(java.time.LocalDate today) {
+        return store.values().stream()
+            .filter(i -> i.getType() == InvoiceType.MAINTENANCE && !i.isConsolidated() && i.isOverdue(today))
+            .map(Invoice::getId)
+            .toList();
+    }
+
+    @Override
     public Optional<Invoice> findByPaymentCodeForUpdate(String paymentCode) {
         return store.values().stream()
             .filter(i -> paymentCode.equals(i.getPaymentCode()))

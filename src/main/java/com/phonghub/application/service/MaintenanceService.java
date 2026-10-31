@@ -464,7 +464,7 @@ public class MaintenanceService implements MaintenanceUseCase {
         } else if (feeContract != null && savedTicket.getStatus() == MaintenanceStatus.AWAITING_PAYMENT) {
             Invoice fee = Invoice.issueMaintenanceFee(
                 feeContract, savedTicket.getId(), savedTicket.getRepairCost(),
-                invoiceRepository.newUniquePaymentCode(), LocalDate.now()
+                invoiceRepository.newUniquePaymentCode(), LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"))
             );
             invoiceRepository.save(fee);
             audit("MAINTENANCE_FEE_ISSUED", currentUser, savedTicket, Map.of(
@@ -744,6 +744,19 @@ public class MaintenanceService implements MaintenanceUseCase {
     public MaintenanceTicket reopenTicket(UUID ticketId, String feedback) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         MaintenanceTicket ticket = tenantOwnedTicket(currentUser, ticketId);
+        if (ticket.getStatus() == MaintenanceStatus.AWAITING_PAYMENT) {
+            // Chưa trả đủ mà báo chưa đạt: hủy khoản phí chưa có đồng nào để dừng hạn và không bị phạt khi sửa lại;
+            // kỹ thuật viên hoàn tất lần sau sẽ phát hành lại một khoản phí với hạn 3 ngày mới.
+            invoiceRepository.findActiveByTicketId(ticketId).ifPresent(fee -> {
+                if (fee.isConsolidated() || fee.getPaidAmount().signum() > 0) {
+                    throw new DomainException(
+                        "Khoản phí đã được thanh toán một phần hoặc gộp vào hóa đơn tháng nên chưa thể báo chưa đạt. "
+                            + "Hãy liên hệ chủ trọ.");
+                }
+                fee.voidInvoice();
+                invoiceRepository.save(fee);
+            });
+        }
         ticket.reopenByTenant(feedback);
         ticket.attributeEventsTo(currentUser.id());
         MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);

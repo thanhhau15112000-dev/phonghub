@@ -44,7 +44,7 @@ class MonthlyInvoiceIssuer {
      */
     Invoice issue(Contract contract, YearMonth period, LocalDate issuedOn) {
         List<Invoice> rollable = invoiceRepository.findByContractId(contract.getId()).stream()
-            .filter(Invoice::isRollableFee)
+            .filter(fee -> fee.isRollableFee(issuedOn))
             .sorted(Comparator.comparing(Invoice::getCreatedAt))
             .toList();
         List<Invoice.RolledFee> rolledFees = rollable.stream()

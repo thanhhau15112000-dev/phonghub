@@ -153,6 +153,43 @@ class MaintenanceFeeFlowIntegrationTest {
     }
 
     @Test
+    @DisplayName("#234: người thuê báo chưa đạt khi chưa trả: khoản phí bị hủy, sửa lại xong thì phát hành một khoản phí mới hạn 3 ngày")
+    void tenantReopensWhileAwaitingPayment() throws Exception {
+        MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Hỏng khóa cửa", "TENANT_USAGE");
+        accept(ticket.getId());
+        resolve(ticket.getId(), "300000", null);
+        Invoice first = invoiceRepository.findActiveByTicketId(ticket.getId()).orElseThrow();
+        assertEquals(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).plusDays(3), first.getDueDate());
+
+        mockMvc.perform(asUser(post("/maintenance/" + ticket.getId() + "/reopen").param("feedback", "khóa vẫn kẹt"), TENANT))
+            .andExpect(flash().attributeExists("successMessage"));
+        assertEquals(InvoiceStatus.VOIDED, invoiceRepository.findById(first.getId()).orElseThrow().getStatus());
+        assertTrue(invoiceRepository.findActiveByTicketId(ticket.getId()).isEmpty());
+        assertTrue(reload(ticket.getId()).getStatus() != MaintenanceStatus.AWAITING_PAYMENT);
+
+        mockMvc.perform(asUser(post("/maintenance/" + ticket.getId() + "/accept"), ADMIN));
+        resolve(ticket.getId(), "300000", null);
+        Invoice second = invoiceRepository.findActiveByTicketId(ticket.getId()).orElseThrow();
+        assertTrue(!second.getId().equals(first.getId()));
+        assertEquals(MaintenanceStatus.AWAITING_PAYMENT, reload(ticket.getId()).getStatus());
+    }
+
+    @Test
+    @DisplayName("#234: đã trả một phần thì không báo chưa đạt được, khoản phí giữ nguyên")
+    void tenantCannotReopenAfterPartialPayment() throws Exception {
+        MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Hỏng khóa cửa", "TENANT_USAGE");
+        accept(ticket.getId());
+        resolve(ticket.getId(), "300000", null);
+        Invoice fee = invoiceRepository.findActiveByTicketId(ticket.getId()).orElseThrow();
+        payByWebhook(fee.getPaymentCode(), "100000");
+
+        mockMvc.perform(asUser(post("/maintenance/" + ticket.getId() + "/reopen").param("feedback", "chưa đạt"), TENANT))
+            .andExpect(flash().attributeExists("errorMessage"));
+        assertEquals(MaintenanceStatus.AWAITING_PAYMENT, reload(ticket.getId()).getStatus());
+        assertEquals(InvoiceStatus.PARTIALLY_PAID, invoiceRepository.findById(fee.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
     @DisplayName("Tenant-reported usage damage: quote creates a fee invoice, SePay payment completes the ticket")
     void tenantUsageFeeEndToEnd() throws Exception {
         MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Vỡ kính cửa sổ", "TENANT_USAGE");

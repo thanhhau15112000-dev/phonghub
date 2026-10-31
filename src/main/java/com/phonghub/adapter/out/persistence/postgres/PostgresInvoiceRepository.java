@@ -269,6 +269,16 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
     }
 
     @Override
+    public List<UUID> findOverdueMaintenanceInvoiceIds(java.time.LocalDate today) {
+        return jdbcTemplate.query("""
+            SELECT id FROM invoices
+            WHERE invoice_type = 'MAINTENANCE' AND status IN ('ISSUED', 'PARTIALLY_PAID', 'OVERDUE')
+              AND consolidated_into_invoice_id IS NULL AND due_date < :today
+            ORDER BY due_date
+            """, Map.of("today", java.sql.Date.valueOf(today)), (rs, rowNum) -> UUID.fromString(rs.getString(1)));
+    }
+
+    @Override
     public boolean existsByPaymentCode(String paymentCode) {
         Integer count = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM invoices WHERE payment_code = :code", Map.of("code", paymentCode), Integer.class

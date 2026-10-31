@@ -7,6 +7,7 @@ import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.application.port.out.LateFeePolicyRepositoryPort;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
+import com.phonghub.domain.model.InvoiceType;
 import com.phonghub.domain.model.LateFeePolicy;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -37,7 +38,9 @@ public class LateFeeAssessmentService implements LateFeeAssessmentUseCase {
 
     @Override
     public List<UUID> findInvoicesToAssess(LocalDate today) {
-        return invoiceRepository.findOverdueRentInvoiceIds(today);
+        List<UUID> ids = new java.util.ArrayList<>(invoiceRepository.findOverdueRentInvoiceIds(today));
+        ids.addAll(invoiceRepository.findOverdueMaintenanceInvoiceIds(today));
+        return ids;
     }
 
     @Override
@@ -48,6 +51,9 @@ public class LateFeeAssessmentService implements LateFeeAssessmentUseCase {
             return false;
         }
         Invoice invoice = locked.get();
+        if (invoice.getType() == InvoiceType.MAINTENANCE) {
+            return assessMaintenanceFee(invoice, today);
+        }
         Optional<Contract> contract = contractRepository.findById(invoice.getContractId());
         if (contract.isEmpty()) {
             return false;
@@ -68,6 +74,20 @@ public class LateFeeAssessmentService implements LateFeeAssessmentUseCase {
         auditPort.recordEvent(AuditPort.AuditEvent.of("LATE_FEE_APPLIED", null, "INVOICE", invoice.getId().toString(),
             Map.of("propertyId", propertyId.toString(), "amount", fee.toPlainString(), "daysOverdue", daysOverdue,
                 "penaltyDays", penaltyDays, "feeType", policy.get().feeType().name())));
+        return true;
+    }
+
+    /** Phí sửa chữa người thuê chịu: phạt 10% tổng tiền sửa chữa một lần, không phụ thuộc cấu hình phạt của nhà trọ. */
+    private boolean assessMaintenanceFee(Invoice invoice, LocalDate today) {
+        BigDecimal before = invoice.getTotalAmount();
+        if (!invoice.applyMaintenanceLateFee(today)) {
+            return false;
+        }
+        invoiceRepository.save(invoice);
+        auditPort.recordEvent(AuditPort.AuditEvent.of("LATE_FEE_APPLIED", null, "INVOICE", invoice.getId().toString(),
+            Map.of("invoiceType", InvoiceType.MAINTENANCE.name(), "amount",
+                invoice.getTotalAmount().subtract(before).toPlainString(),
+                "daysOverdue", ChronoUnit.DAYS.between(invoice.getDueDate(), today), "feeType", "PERCENT_10")));
         return true;
     }
 }
