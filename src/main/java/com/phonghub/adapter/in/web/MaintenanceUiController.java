@@ -281,6 +281,13 @@ public class MaintenanceUiController {
                 }
             }
             model.addAttribute("timeline", timeline);
+            for (var attachment : attachmentUseCase.list(id)) {
+                UUID uploader = attachment.uploadedBy();
+                if (uploader != null && !actorNames.containsKey(uploader)) {
+                    actorNames.put(uploader, userRepository.findById(uploader)
+                        .map(com.phonghub.domain.model.User::fullName).orElse("Tài khoản đã xóa"));
+                }
+            }
             model.addAttribute("actorNames", actorNames);
             model.addAttribute("now", java.time.Instant.now());
             model.addAttribute("liableParties", LiableParty.values());
@@ -318,6 +325,7 @@ public class MaintenanceUiController {
         @PathVariable UUID id,
         @RequestParam(name = "file", required = false) MultipartFile file,
         @RequestParam(name = "files", required = false) List<MultipartFile> files,
+        @RequestParam(name = "phase", required = false) com.phonghub.domain.model.MaintenanceAttachment.Phase phase,
         RedirectAttributes redirectAttributes
     ) {
         try {
@@ -326,8 +334,12 @@ public class MaintenanceUiController {
             if (uploads.stream().noneMatch(upload -> upload != null && !upload.isEmpty())) {
                 throw new IllegalArgumentException("Cần chọn ít nhất một tệp để tải lên.");
             }
-            attachmentUseCase.uploadAll(id, toAttachmentFiles(uploads));
-            redirectAttributes.addFlashAttribute("successMessage", "Đã đính kèm tệp.");
+            com.phonghub.domain.model.MaintenanceAttachment.Phase target = phase == null
+                ? com.phonghub.domain.model.MaintenanceAttachment.Phase.REPORT : phase;
+            attachmentUseCase.uploadAll(id, toAttachmentFiles(uploads), target);
+            redirectAttributes.addFlashAttribute("successMessage",
+                target == com.phonghub.domain.model.MaintenanceAttachment.Phase.RESULT
+                    ? "Đã đính kèm ảnh kết quả sửa chữa." : "Đã đính kèm tệp.");
         } catch (DomainException | IllegalArgumentException | java.io.IOException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
                 ? "Bạn chưa được cấp quyền thao tác với phiếu này."
@@ -606,9 +618,17 @@ public class MaintenanceUiController {
         @RequestParam(defaultValue = "0") BigDecimal repairCost,
         @RequestParam(name = "releaseRoomToAvailable", defaultValue = "false") boolean releaseRoomToAvailable,
         @RequestParam(required = false) LiableParty liableParty,
+        @RequestParam(name = "files", required = false) List<MultipartFile> resultFiles,
         RedirectAttributes redirectAttributes
     ) {
+        List<com.phonghub.domain.model.MaintenanceAttachment> uploadedResults = List.of();
         try {
+            // Tệp kết quả lưu trước: lỗi tệp thì báo rõ và phiếu chưa chuyển trạng thái. Hoàn tất lỗi thì gỡ tệp vừa tải.
+            List<MaintenanceAttachmentUseCase.AttachmentFile> resultUploads = toAttachmentFiles(resultFiles);
+            if (!resultUploads.isEmpty()) {
+                uploadedResults = attachmentUseCase.uploadAll(id, resultUploads,
+                    com.phonghub.domain.model.MaintenanceAttachment.Phase.RESULT);
+            }
             MaintenanceTicket resolved = maintenanceUseCase.resolveTicket(new MaintenanceUseCase.ResolveMaintenanceTicketCommand(
                 id, resolutionNotes, repairCost, releaseRoomToAvailable, liableParty
             ));
@@ -624,7 +644,14 @@ public class MaintenanceUiController {
                     : " Phòng vẫn có người ở theo hợp đồng nên giữ nguyên trạng thái.";
             }
             redirectAttributes.addFlashAttribute("successMessage", message + roomNote);
-        } catch (DomainException | IllegalArgumentException ex) {
+        } catch (DomainException | IllegalArgumentException | java.io.IOException ex) {
+            for (com.phonghub.domain.model.MaintenanceAttachment uploaded : uploadedResults) {
+                try {
+                    attachmentUseCase.delete(id, uploaded.id());
+                } catch (RuntimeException ignored) {
+                    // best effort: tệp còn lại vẫn xóa được thủ công
+                }
+            }
             redirectAttributes.addFlashAttribute("errorMessage", ex instanceof UnauthorizedPropertyAccessException
                 ? "Bạn chưa được cấp quyền thao tác tại nhà trọ này. Vui lòng liên hệ người quản lý."
                 : ex.getMessage());
