@@ -3,6 +3,7 @@ package com.phonghub.adapter.in.web;
 import com.phonghub.domain.exception.ContractNotFoundException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
+import com.phonghub.domain.exception.NoExportDataException;
 import com.phonghub.domain.exception.NotificationNotFoundException;
 import com.phonghub.domain.exception.DocumentRevealDeniedException;
 import com.phonghub.domain.exception.DuplicateAssetCodeException;
@@ -124,6 +125,15 @@ public class RestExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
         problem.setTitle("Unauthorized Chat Access");
         problem.setType(URI.create("https://phonghub.local/errors/forbidden"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(NoExportDataException.class)
+    public ProblemDetail handleNoExportData(NoExportDataException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+        problem.setTitle("No Export Data");
+        problem.setType(URI.create("https://phonghub.local/errors/no-export-data"));
         problem.setProperty("timestamp", Instant.now());
         return problem;
     }

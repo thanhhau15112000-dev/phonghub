@@ -11,6 +11,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository;
+import com.phonghub.domain.model.Invoice;
+import com.phonghub.domain.model.InvoiceStatus;
+import com.phonghub.domain.model.InvoiceType;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import java.io.ByteArrayInputStream;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -31,6 +41,22 @@ class ExportWebIntegrationTest extends SeededWebTest {
     private static final String XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
     @Autowired private MockMvc mockMvc;
+    @Autowired private InMemoryInvoiceRepository invoices;
+
+    /** Dữ liệu mẫu chưa có hóa đơn; xuất rỗng bị chặn (#227) nên cần một hóa đơn còn nợ của tháng hiện tại. */
+    @BeforeEach
+    void seedInvoice() {
+        LocalDate today = LocalDate.now();
+        invoices.save(new Invoice(UUID.randomUUID(), DataSeeder.CONTRACT_1_ID, DataSeeder.ROOM_101_ID,
+            DataSeeder.TENANT_RECORD_ID, today.getMonthValue(), today.getYear(), new BigDecimal("3000000"),
+            new BigDecimal("3000000"), BigDecimal.ZERO, today.plusDays(5), InvoiceStatus.ISSUED, null, InvoiceType.RENT,
+            null, null, Instant.now(), Instant.now()));
+    }
+
+    @AfterEach
+    void clearInvoices() {
+        invoices.clear();
+    }
 
     @Test
     @DisplayName("API: owner tải danh sách hợp đồng Excel, CCCD bị che, tệp đính kèm có tên")
@@ -114,5 +140,19 @@ class ExportWebIntegrationTest extends SeededWebTest {
         String tenant = mockMvc.perform(get("/contracts").header("X-User-Id", TENANT_1))
             .andReturn().getResponse().getContentAsString();
         assertFalse(tenant.contains("id=\"export-link\""));
+    }
+
+    @Test
+    @DisplayName("#227: khoảng kỳ không có hóa đơn thì API trả 422, giao diện quay về trang xuất kèm thông báo, không có tệp")
+    void emptyResultIsRejected() throws Exception {
+        invoices.clear();
+        mockMvc.perform(get("/api/exports/invoices").param("from", "2000-01").param("to", "2000-01")
+                .header("X-User-Id", OWNER_1))
+            .andExpect(status().isUnprocessableEntity());
+        mockMvc.perform(get("/exports/download").param("dataset", "invoices").param("from", "2000-01")
+                .param("to", "2000-01").header("X-User-Id", OWNER_1))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/exports"))
+            .andExpect(flash().attribute("errorMessage", "Không có dữ liệu phù hợp để xuất."));
     }
 }

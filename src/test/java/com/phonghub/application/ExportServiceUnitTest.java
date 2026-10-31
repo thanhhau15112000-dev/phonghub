@@ -24,6 +24,7 @@ import com.phonghub.application.port.out.TableExportPort;
 import com.phonghub.application.port.out.TableExportPort.Table;
 import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.application.service.ExportService;
+import com.phonghub.domain.exception.NoExportDataException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
@@ -220,13 +221,30 @@ class ExportServiceUnitTest {
     }
 
     @Test
+    @DisplayName("#227: không có dòng nào thì không tạo tệp và không ghi nhật ký xuất, với cả ba tập dữ liệu và hai định dạng")
+    void emptyResultIsRejected() {
+        login(ownerId, UserRole.OWNER);
+        YearMonth empty = YearMonth.of(2020, 1);
+        for (Format format : Format.values()) {
+            assertThrows(NoExportDataException.class,
+                () -> service.export(new ExportRequest(Dataset.INVOICES, format, null, empty, empty)));
+        }
+        invoices.clear();
+        assertThrows(NoExportDataException.class,
+            () -> service.export(new ExportRequest(Dataset.DEBTS, Format.XLSX, null, null, null)));
+        assertTrue(audit.getRecordedEvents().isEmpty(), "xuất rỗng thì không ghi DATA_EXPORTED");
+        assertEquals(null, xlsx.last, "không gọi bộ xuất tệp");
+    }
+
+    @Test
     @DisplayName("staff: hóa đơn cần quyền thu tiền, hợp đồng cần quyền quản lý hợp đồng")
     void staffPermissions() {
         login(staffId, UserRole.STAFF);
         assignments.save(new StaffPropertyAssignment(UUID.randomUUID(), staffId, p1, false, true, NOW));
 
-        service.export(new ExportRequest(Dataset.INVOICES, Format.XLSX, null, null, null));
-        assertTrue(xlsx.last.rows().isEmpty(), "chưa có quyền thu tiền thì không có hóa đơn nào");
+        assertThrows(NoExportDataException.class,
+            () -> service.export(new ExportRequest(Dataset.INVOICES, Format.XLSX, null, null, null)),
+            "chưa có quyền thu tiền thì không có hóa đơn nào để xuất");
         service.export(new ExportRequest(Dataset.CONTRACTS, Format.XLSX, null, null, null));
         assertEquals(1, xlsx.last.rows().size());
         assertThrows(UnauthorizedPropertyAccessException.class,

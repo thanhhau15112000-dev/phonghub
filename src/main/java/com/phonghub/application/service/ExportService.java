@@ -12,6 +12,7 @@ import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.TableExportPort;
 import com.phonghub.application.port.out.TableExportPort.Table;
 import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.domain.exception.NoExportDataException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
@@ -115,6 +116,9 @@ public class ExportService implements ExportUseCase {
             }
         }
 
+        if (table.rows().isEmpty()) {
+            throw new NoExportDataException();
+        }
         TableExportPort exporter = request.format() == Format.PDF ? pdfExporter : xlsxExporter;
         byte[] content = exporter.render(table);
         if (auditPort != null) {
