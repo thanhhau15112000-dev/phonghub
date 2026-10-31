@@ -9,6 +9,7 @@
 <body>
 
 <header th:fragment="header" class="header-bar">
+    <div th:if="${demoEnabled}" role="alert" style="flex-basis: 100%; width: 100%; background: #b45309; color: #fff; text-align: center; font-size: 13px; font-weight: 600; padding: 6px 12px;">Chế độ demo: không kiểm tra mật khẩu</div>
     <div class="header-navigation">
         <a th:href="@{/}" class="brand">PhongHub</a>
         <button type="button" id="navToggle" class="nav-toggle" aria-label="Mở menu" aria-expanded="false">
