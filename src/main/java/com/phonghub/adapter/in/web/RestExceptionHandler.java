@@ -3,6 +3,7 @@ package com.phonghub.adapter.in.web;
 import com.phonghub.domain.exception.ContractNotFoundException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
+import com.phonghub.domain.exception.ExportLimitExceededException;
 import com.phonghub.domain.exception.NoExportDataException;
 import com.phonghub.domain.exception.NotificationNotFoundException;
 import com.phonghub.domain.exception.DocumentRevealDeniedException;
@@ -129,8 +130,8 @@ public class RestExceptionHandler {
         return problem;
     }
 
-    @ExceptionHandler(NoExportDataException.class)
-    public ProblemDetail handleNoExportData(NoExportDataException ex) {
+    @ExceptionHandler({NoExportDataException.class, ExportLimitExceededException.class})
+    public ProblemDetail handleNoExportData(DomainException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
         problem.setTitle("No Export Data");
         problem.setType(URI.create("https://phonghub.local/errors/no-export-data"));

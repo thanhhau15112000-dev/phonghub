@@ -12,6 +12,7 @@ import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.TableExportPort;
 import com.phonghub.application.port.out.TableExportPort.Table;
 import com.phonghub.application.port.out.TenantRepositoryPort;
+import com.phonghub.domain.exception.ExportLimitExceededException;
 import com.phonghub.domain.exception.NoExportDataException;
 import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
@@ -31,7 +32,12 @@ import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.text.Normalizer;
+import java.text.NumberFormat;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -89,13 +95,80 @@ public class ExportService implements ExportUseCase {
 
     @Override
     public ExportFile export(ExportRequest request) {
-        CurrentUser user = currentUserPort.getCurrentUser();
-        List<Property> scope = scope(user, request);
-        Data data = load(scope);
-        LocalDate today = LocalDate.now(clock.withZone(ZONE));
+        return export(request, ExportFilter.none(), null);
+    }
 
-        Table table;
-        String name;
+    @Override
+    public ExportFile export(ExportRequest request, ExportFilter filter, Set<String> selectedIds) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        ExportFilter f = filter == null ? ExportFilter.none() : filter;
+        List<Property> scope = narrow(scope(user, request), f);
+        LocalDate today = LocalDate.now(clock.withZone(ZONE));
+        Data data = load(scope);
+
+        Built built;
+        if (selectedIds == null || selectedIds.isEmpty()) {
+            built = build(data, request, f, today, scope);
+        } else {
+            // Mọi id phải nằm trong tập dữ liệu thuộc phạm vi của người xuất, tính lại ở server; không tin trình duyệt.
+            Built universe = build(data, request, ExportFilter.none(), today, scope);
+            if (!new LinkedHashSet<>(universe.ids()).containsAll(selectedIds)) {
+                throw new UnauthorizedPropertyAccessException("Có dòng được chọn không thuộc phạm vi bạn được xuất.");
+            }
+            built = universe.only(selectedIds);
+        }
+
+        int rows = built.table().rows().size();
+        if (rows == 0) {
+            throw new NoExportDataException();
+        }
+        if (rows > MAX_ROWS) {
+            throw new ExportLimitExceededException(MAX_ROWS);
+        }
+        TableExportPort exporter = request.format() == Format.PDF ? pdfExporter : xlsxExporter;
+        byte[] content = exporter.render(built.table());
+        if (auditPort != null) {
+            audit(user, request, scope, rows);
+        }
+        return new ExportFile(built.name() + "_" + rows + "-dong." + exporter.extension(), exporter.contentType(),
+            content);
+    }
+
+    @Override
+    public Preview preview(ExportRequest request, ExportFilter filter, int page, int size) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        ExportFilter f = filter == null ? ExportFilter.none() : filter;
+        List<Property> scope = narrow(scope(user, request), f);
+        LocalDate today = LocalDate.now(clock.withZone(ZONE));
+        Built built = build(load(scope), request, f, today, scope);
+        int pageSize = Math.max(1, Math.min(size, 200));
+        int total = built.ids().size();
+        int from = (int) Math.min((long) Math.max(page, 0) * pageSize, total);
+        int to = Math.min(from + pageSize, total);
+        List<PreviewRow> rows = new ArrayList<>();
+        for (int i = from; i < to; i++) {
+            rows.add(new PreviewRow(built.ids().get(i), built.table().rows().get(i).stream().map(this::cell).toList()));
+        }
+        return new Preview(built.table().headers(), rows, total, Math.max(page, 0), pageSize);
+    }
+
+    /** Bảng đã dựng cùng id từng dòng (hóa đơn: id hóa đơn; công nợ và hợp đồng: id hợp đồng). */
+    private record Built(Table table, List<String> ids, String name) {
+        Built only(Set<String> selected) {
+            List<List<Object>> rows = new ArrayList<>();
+            List<String> keep = new ArrayList<>();
+            for (int i = 0; i < ids.size(); i++) {
+                if (selected.contains(ids.get(i))) {
+                    rows.add(table.rows().get(i));
+                    keep.add(ids.get(i));
+                }
+            }
+            return new Built(new Table(table.title(), table.subtitle(), table.headers(), rows), keep, name);
+        }
+    }
+
+    private Built build(Data data, ExportRequest request, ExportFilter f, LocalDate today, List<Property> scope) {
+        String subtitle = subtitle(scope, today);
         switch (request.dataset()) {
             case INVOICES -> {
                 YearMonth to = request.to() != null ? request.to() : YearMonth.from(today);
@@ -103,28 +176,80 @@ public class ExportService implements ExportUseCase {
                 if (from.isAfter(to)) {
                     throw new IllegalArgumentException("Tháng bắt đầu không được sau tháng kết thúc.");
                 }
-                table = invoices(data, from, to, today, subtitle(scope, today));
-                name = "hoa-don_" + from + "_" + to;
+                return invoices(data, f, from, to, today, subtitle, "hoa-don_" + from + "_" + to);
             }
             case DEBTS -> {
-                table = debts(data, today, subtitle(scope, today));
-                name = "cong-no_" + today;
+                return debts(data, f, today, subtitle, "cong-no_" + today);
             }
             default -> {
-                table = contracts(data, subtitle(scope, today));
-                name = "hop-dong_" + today;
+                return contracts(data, f, subtitle, "hop-dong_" + today);
             }
         }
+    }
 
-        if (table.rows().isEmpty()) {
-            throw new NoExportDataException();
+    /** Thu hẹp phạm vi theo các nhà trọ được chọn; có nhà ngoài phạm vi thì từ chối cả yêu cầu. */
+    private static List<Property> narrow(List<Property> scope, ExportFilter f) {
+        if (f.propertyIds() == null || f.propertyIds().isEmpty()) {
+            return scope;
         }
-        TableExportPort exporter = request.format() == Format.PDF ? pdfExporter : xlsxExporter;
-        byte[] content = exporter.render(table);
-        if (auditPort != null) {
-            audit(user, request, scope, table.rows().size());
+        Set<UUID> allowed = scope.stream().map(Property::id).collect(Collectors.toSet());
+        if (!allowed.containsAll(f.propertyIds())) {
+            throw new UnauthorizedPropertyAccessException("Có nhà trọ được chọn nằm ngoài phạm vi bạn được xuất.");
         }
-        return new ExportFile(name + "." + exporter.extension(), exporter.contentType(), content);
+        return scope.stream().filter(p -> f.propertyIds().contains(p.id())).toList();
+    }
+
+    private String cell(Object value) {
+        if (value == null) {
+            return "";
+        }
+        if (value instanceof LocalDate d) {
+            return d.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        }
+        if (value instanceof BigDecimal b) {
+            return NumberFormat.getIntegerInstance(Locale.forLanguageTag("vi-VN")).format(b);
+        }
+        return String.valueOf(value);
+    }
+
+    private static boolean contains(String haystack, String needle) {
+        if (needle == null || needle.isBlank()) {
+            return true;
+        }
+        return fold(haystack).contains(fold(needle));
+    }
+
+    private static String fold(String value) {
+        String n = Normalizer.normalize(value == null ? "" : value, Normalizer.Form.NFD)
+            .replaceAll("\\p{M}", "").replace('đ', 'd').replace('Đ', 'D');
+        return n.toLowerCase(Locale.ROOT).trim();
+    }
+
+    private static boolean inRange(LocalDate value, LocalDate from, LocalDate to) {
+        if (from == null && to == null) {
+            return true;
+        }
+        return value != null && (from == null || !value.isBefore(from)) && (to == null || !value.isAfter(to));
+    }
+
+    private static boolean contractMatches(Data data, Contract c, ExportFilter f) {
+        Tenant tenant = data.tenant(c);
+        return contains(data.roomNumber(c), f.roomNumber())
+            && contains(tenant == null ? "" : tenant.fullName(), f.tenantName());
+    }
+
+    private static InvoiceState state(Invoice invoice, LocalDate today) {
+        if (invoice.isOverdue(today)) {
+            return InvoiceState.OVERDUE;
+        }
+        return switch (invoice.getStatus()) {
+            case DRAFT -> InvoiceState.DRAFT;
+            case ISSUED -> InvoiceState.UNPAID;
+            case PARTIALLY_PAID -> InvoiceState.PARTIAL;
+            case PAID -> InvoiceState.PAID;
+            case OVERDUE -> InvoiceState.OVERDUE;
+            case VOIDED -> InvoiceState.VOIDED;
+        };
     }
 
     /**
@@ -221,14 +346,22 @@ public class ExportService implements ExportUseCase {
             tenants);
     }
 
-    private Table invoices(Data data, YearMonth from, YearMonth to, LocalDate today, String subtitle) {
+    private Built invoices(Data data, ExportFilter f, YearMonth from, YearMonth to, LocalDate today,
+                           String subtitle, String name) {
         record Line(Contract contract, Invoice invoice) {}
         List<Line> lines = new ArrayList<>();
         for (Contract contract : data.contracts()) {
+            if (!contractMatches(data, contract, f)) {
+                continue;
+            }
             for (Invoice invoice : invoiceRepository.findByContractId(contract.getId())) {
                 YearMonth period = YearMonth.of(invoice.getYear(), invoice.getMonth());
                 // Khoản phí đã gộp nằm trong hóa đơn tháng: xuất riêng sẽ bị tính trùng.
-                if (!invoice.isConsolidated() && !period.isBefore(from) && !period.isAfter(to)) {
+                if (!invoice.isConsolidated() && !period.isBefore(from) && !period.isAfter(to)
+                    && (f.states() == null || f.states().isEmpty() || f.states().contains(state(invoice, today)))
+                    && (f.types() == null || f.types().isEmpty() || f.types().contains(invoice.getType()))
+                    && inRange(invoice.getDueDate(), f.dueFrom(), f.dueTo())
+                    && (!f.onlyOutstanding() || invoice.remainingAmount().signum() > 0)) {
                     lines.add(new Line(contract, invoice));
                 }
             }
@@ -237,8 +370,10 @@ public class ExportService implements ExportUseCase {
             .thenComparing(Line::contract, data.order()));
 
         List<List<Object>> rows = new ArrayList<>();
+        List<String> ids = new ArrayList<>();
         for (Line line : lines) {
             Invoice i = line.invoice();
+            ids.add(i.getId().toString());
             Tenant tenant = data.tenant(line.contract());
             rows.add(row(data.propertyName(line.contract()), data.roomNumber(line.contract()),
                 tenant == null ? "" : tenant.fullName(), String.format("%02d/%d", i.getMonth(), i.getYear()),
@@ -250,19 +385,25 @@ public class ExportService implements ExportUseCase {
                 }, i.getTotalAmount(),
                 i.getPaidAmount(), i.remainingAmount(), i.getDueDate(), invoiceStatus(i, today), i.getPaymentCode()));
         }
-        return new Table("Hóa đơn " + format(from) + " - " + format(to), subtitle,
+        return new Built(new Table("Hóa đơn " + format(from) + " - " + format(to), subtitle,
             List.of("Nhà trọ", "Phòng", "Người thuê", "Kỳ", "Loại", "Tổng tiền", "Đã trả", "Còn lại", "Hạn thanh toán",
                 "Trạng thái", "Mã thanh toán"),
-            rows);
+            rows), ids, name);
     }
 
-    private Table debts(Data data, LocalDate today, String subtitle) {
+    private Built debts(Data data, ExportFilter f, LocalDate today, String subtitle, String name) {
         record Debt(Contract contract, long invoices, BigDecimal remaining, BigDecimal overdue, LocalDate oldestDue) {}
         List<Debt> debts = new ArrayList<>();
         for (Contract contract : data.contracts()) {
+            if (!contractMatches(data, contract, f)) {
+                continue;
+            }
             List<Invoice> unpaid = invoiceRepository.findByContractId(contract.getId()).stream()
                 .filter(Invoice::isPayable)
                 .filter(i -> i.remainingAmount().signum() > 0)
+                .filter(i -> f.states() == null || f.states().isEmpty() || f.states().contains(state(i, today)))
+                .filter(i -> f.types() == null || f.types().isEmpty() || f.types().contains(i.getType()))
+                .filter(i -> inRange(i.getDueDate(), f.dueFrom(), f.dueTo()))
                 .toList();
             if (unpaid.isEmpty()) {
                 continue;
@@ -277,23 +418,33 @@ public class ExportService implements ExportUseCase {
         debts.sort(Comparator.comparing(Debt::remaining).reversed().thenComparing(Debt::contract, data.order()));
 
         List<List<Object>> rows = new ArrayList<>();
+        List<String> ids = new ArrayList<>();
         for (Debt debt : debts) {
+            ids.add(debt.contract().getId().toString());
             Tenant tenant = data.tenant(debt.contract());
             rows.add(row(data.propertyName(debt.contract()), data.roomNumber(debt.contract()),
                 tenant == null ? "" : tenant.fullName(), tenant == null ? "" : tenant.phone(), debt.invoices(),
                 debt.remaining(), debt.overdue(), debt.oldestDue()));
         }
-        return new Table("Công nợ đến ngày " + today.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")), subtitle,
+        return new Built(new Table("Công nợ đến ngày " + today.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+            subtitle,
             List.of("Nhà trọ", "Phòng", "Người thuê", "Điện thoại", "Số hóa đơn nợ", "Tổng còn nợ", "Đã quá hạn",
                 "Hạn sớm nhất"),
-            rows);
+            rows), ids, name);
     }
 
-    private Table contracts(Data data, String subtitle) {
+    private Built contracts(Data data, ExportFilter f, String subtitle, String name) {
         List<List<Object>> rows = new ArrayList<>();
+        List<String> ids = new ArrayList<>();
         data.contracts().stream()
+            .filter(c -> contractMatches(data, c, f))
+            .filter(c -> f.contractStatuses() == null || f.contractStatuses().isEmpty()
+                || f.contractStatuses().contains(c.getStatus()))
+            .filter(c -> inRange(c.getStartDate(), f.startFrom(), f.startTo()))
+            .filter(c -> inRange(c.getEndDate(), f.endFrom(), f.endTo()))
             .sorted(data.order().thenComparing(Contract::getStartDate))
             .forEach(c -> {
+                ids.add(c.getId().toString());
                 Tenant tenant = data.tenant(c);
                 rows.add(row(data.propertyName(c), data.roomNumber(c), tenant == null ? "" : tenant.fullName(),
                     // Không bao giờ xuất số CCCD đầy đủ.
@@ -301,10 +452,10 @@ public class ExportService implements ExportUseCase {
                     c.getStartDate(), c.getEndDate(), c.getRentAmount(), c.getDepositAmount(), c.getPaymentDay(),
                     contractStatus(c.getStatus())));
             });
-        return new Table("Danh sách hợp đồng", subtitle,
+        return new Built(new Table("Danh sách hợp đồng", subtitle,
             List.of("Nhà trọ", "Phòng", "Người thuê", "CCCD (đã che)", "Điện thoại", "Bắt đầu", "Kết thúc", "Tiền thuê",
                 "Tiền cọc", "Ngày thanh toán", "Trạng thái"),
-            rows);
+            rows), ids, name);
     }
 
     private String subtitle(List<Property> scope, LocalDate today) {

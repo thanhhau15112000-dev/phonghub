@@ -10,7 +10,7 @@
     <div class="page-title-row">
         <div>
             <h1>Xuất dữ liệu</h1>
-            <p style="color: var(--text-secondary); font-size: 13px;">Tải hóa đơn, công nợ hoặc hợp đồng trong phạm vi bạn được quản lý ra Excel hoặc PDF. Số CCCD luôn được che.</p>
+            <p style="color: var(--text-secondary); font-size: 13px;">Lọc hóa đơn, công nợ hoặc hợp đồng trong phạm vi bạn được quản lý, xem trước, chọn dòng rồi tải ra Excel hoặc PDF. Số CCCD luôn được che.</p>
         </div>
     </div>
 
@@ -28,21 +28,81 @@
                     <option value="contracts">Hợp đồng</option>
                 </select>
             </div>
-            <div class="form-group" style="min-width: 200px; margin: 0;">
-                <label class="form-label" for="propertyId">Nhà trọ</label>
-                <select id="propertyId" name="propertyId" class="form-control">
-                    <option value="">Tất cả trong phạm vi</option>
+            <div class="form-group" style="min-width: 220px; margin: 0;">
+                <label class="form-label" for="propertyIds">Nhà trọ (chọn nhiều)</label>
+                <select id="propertyIds" name="propertyIds" class="form-control" multiple size="3">
                     <option th:each="p : ${properties}" th:value="${p.id()}" th:text="${p.name()}">Nhà trọ</option>
                 </select>
+                <small style="color: var(--text-secondary);">Không chọn = tất cả trong phạm vi</small>
             </div>
-            <div class="form-group" style="margin: 0;">
-                <label class="form-label" for="from">Từ tháng (hóa đơn)</label>
+            <div class="form-group" style="min-width: 110px; margin: 0;">
+                <label class="form-label" for="roomNumber">Phòng</label>
+                <input id="roomNumber" name="roomNumber" class="form-control" placeholder="A101">
+            </div>
+            <div class="form-group" style="min-width: 160px; margin: 0;">
+                <label class="form-label" for="tenantName">Người thuê</label>
+                <input id="tenantName" name="tenantName" class="form-control" placeholder="Tên người thuê">
+            </div>
+
+            <div class="form-group" data-for="invoices" style="margin: 0;">
+                <label class="form-label" for="from">Từ tháng</label>
                 <input id="from" type="month" name="from" class="form-control" th:value="${currentMonth.minusMonths(11)}">
             </div>
-            <div class="form-group" style="margin: 0;">
-                <label class="form-label" for="to">Đến tháng (hóa đơn)</label>
+            <div class="form-group" data-for="invoices" style="margin: 0;">
+                <label class="form-label" for="to">Đến tháng</label>
                 <input id="to" type="month" name="to" class="form-control" th:value="${currentMonth}">
             </div>
+
+            <fieldset class="form-group" data-for="invoices debts" style="margin: 0; border: 1px solid var(--border, #ddd); padding: 6px 10px;">
+                <legend style="font-size: 12px;">Trạng thái hóa đơn</legend>
+                <label><input type="checkbox" name="states" value="UNPAID"> Chưa trả</label>
+                <label><input type="checkbox" name="states" value="PARTIAL"> Trả một phần</label>
+                <label data-for="invoices"><input type="checkbox" name="states" value="PAID"> Đã trả</label>
+                <label><input type="checkbox" name="states" value="OVERDUE"> Quá hạn</label>
+                <label data-for="invoices"><input type="checkbox" name="states" value="VOIDED"> Đã hủy</label>
+            </fieldset>
+            <fieldset class="form-group" data-for="invoices debts" style="margin: 0; border: 1px solid var(--border, #ddd); padding: 6px 10px;">
+                <legend style="font-size: 12px;">Loại hóa đơn</legend>
+                <label><input type="checkbox" name="types" value="RENT"> Tiền thuê</label>
+                <label><input type="checkbox" name="types" value="MAINTENANCE"> Phí sửa chữa</label>
+                <label><input type="checkbox" name="types" value="CHECK_OUT"> Chốt điện/nước</label>
+                <label><input type="checkbox" name="types" value="CANCELLATION"> Phí hủy hợp đồng</label>
+            </fieldset>
+            <div class="form-group" data-for="invoices debts" style="margin: 0;">
+                <label class="form-label" for="dueFrom">Hạn thanh toán từ</label>
+                <input id="dueFrom" type="date" name="dueFrom" class="form-control">
+            </div>
+            <div class="form-group" data-for="invoices debts" style="margin: 0;">
+                <label class="form-label" for="dueTo">đến</label>
+                <input id="dueTo" type="date" name="dueTo" class="form-control">
+            </div>
+            <label data-for="invoices" style="margin: 0 0 8px;"><input type="checkbox" name="onlyOutstanding" value="true"> Chỉ hóa đơn còn nợ</label>
+
+            <fieldset class="form-group" data-for="contracts" style="margin: 0; border: 1px solid var(--border, #ddd); padding: 6px 10px;">
+                <legend style="font-size: 12px;">Trạng thái hợp đồng</legend>
+                <label><input type="checkbox" name="contractStatuses" value="ACTIVE"> Đang hiệu lực</label>
+                <label><input type="checkbox" name="contractStatuses" value="EXPIRED"> Hết hạn</label>
+                <label><input type="checkbox" name="contractStatuses" value="TERMINATED"> Đã kết thúc</label>
+                <label><input type="checkbox" name="contractStatuses" value="DRAFT"> Nháp</label>
+                <label><input type="checkbox" name="contractStatuses" value="CANCELLED"> Đã hủy</label>
+            </fieldset>
+            <div class="form-group" data-for="contracts" style="margin: 0;">
+                <label class="form-label" for="startFrom">Bắt đầu từ</label>
+                <input id="startFrom" type="date" name="startFrom" class="form-control">
+            </div>
+            <div class="form-group" data-for="contracts" style="margin: 0;">
+                <label class="form-label" for="startTo">đến</label>
+                <input id="startTo" type="date" name="startTo" class="form-control">
+            </div>
+            <div class="form-group" data-for="contracts" style="margin: 0;">
+                <label class="form-label" for="endFrom">Kết thúc từ</label>
+                <input id="endFrom" type="date" name="endFrom" class="form-control">
+            </div>
+            <div class="form-group" data-for="contracts" style="margin: 0;">
+                <label class="form-label" for="endTo">đến</label>
+                <input id="endTo" type="date" name="endTo" class="form-control">
+            </div>
+
             <div class="form-group" style="min-width: 120px; margin: 0;">
                 <label class="form-label" for="format">Định dạng</label>
                 <select id="format" name="format" class="form-control">
@@ -50,14 +110,169 @@
                     <option value="pdf">PDF</option>
                 </select>
             </div>
-            <button type="submit" class="btn btn-primary">Tải xuống</button>
+            <button type="submit" class="btn btn-primary" id="filterBtn">Lọc</button>
         </form>
         <p style="font-size: 12px; color: var(--text-secondary); margin-top: 12px;">
             Hóa đơn và công nợ cần quyền thu tiền; hợp đồng cần quyền quản lý hợp đồng tại nhà trọ.
+            Mỗi lần xuất tối đa <span th:text="${maxRows}">5000</span> dòng.
         </p>
+    </div>
+
+    <div class="card" id="resultCard" th:attr="data-max-rows=${maxRows}" style="display: none; margin-top: 16px;">
+        <div id="resultMessage" style="margin-bottom: 8px;"></div>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 8px;">
+            <label><input type="checkbox" id="selectAll"> Chọn tất cả <span id="totalLabel"></span> dòng của kết quả lọc</label>
+            <span id="selectedLabel" style="font-weight: 600;"></span>
+            <form th:action="@{/exports/download}" method="post" id="downloadForm" style="margin-left: auto;">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <span id="downloadFields"></span>
+                <button type="submit" class="btn btn-primary" id="downloadBtn" disabled>Tải xuống</button>
+            </form>
+        </div>
+        <div style="overflow-x: auto;">
+            <table class="table" id="resultTable"><thead></thead><tbody></tbody></table>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+            <button type="button" class="btn" id="prevBtn">Trang trước</button>
+            <span id="pageLabel"></span>
+            <button type="button" class="btn" id="nextBtn">Trang sau</button>
+        </div>
     </div>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>
+
+<script th:inline="none">
+(function () {
+    var PAGE_SIZE = 50;
+    var MAX_ROWS = parseInt(document.getElementById('resultCard').dataset.maxRows, 10) || 5000;
+    var form = document.getElementById('exportForm');
+    var dataset = document.getElementById('dataset');
+    var card = document.getElementById('resultCard');
+    var msg = document.getElementById('resultMessage');
+    var thead = document.querySelector('#resultTable thead');
+    var tbody = document.querySelector('#resultTable tbody');
+    var selectAll = document.getElementById('selectAll');
+    var selectedLabel = document.getElementById('selectedLabel');
+    var totalLabel = document.getElementById('totalLabel');
+    var pageLabel = document.getElementById('pageLabel');
+    var prevBtn = document.getElementById('prevBtn');
+    var nextBtn = document.getElementById('nextBtn');
+    var downloadBtn = document.getElementById('downloadBtn');
+    var downloadForm = document.getElementById('downloadForm');
+    var downloadFields = document.getElementById('downloadFields');
+    var state = { page: 0, total: 0, picked: new Set(), query: null };
+
+    function syncDatasetFields() {
+        var current = dataset.value;
+        document.querySelectorAll('[data-for]').forEach(function (el) {
+            var show = el.getAttribute('data-for').split(' ').indexOf(current) >= 0;
+            el.style.display = show ? '' : 'none';
+            el.querySelectorAll('input,select').forEach(function (i) { i.disabled = !show; });
+            if (el.tagName === 'INPUT' || el.tagName === 'SELECT') { el.disabled = !show; }
+        });
+    }
+
+    function buildParams() {
+        var params = new URLSearchParams();
+        new FormData(form).forEach(function (value, key) {
+            if (value !== '' && key !== 'dataset') { params.append(key, value); }
+        });
+        return params;
+    }
+
+    function setMessage(text, isError) {
+        msg.textContent = text || '';
+        msg.style.color = isError ? 'var(--danger, #b00020)' : '';
+    }
+
+    function updateSelection() {
+        var count = selectAll.checked ? state.total : state.picked.size;
+        selectedLabel.textContent = 'Đã chọn ' + count + ' dòng';
+        var tooMany = count > MAX_ROWS;
+        downloadBtn.disabled = count === 0 || tooMany;
+        if (tooMany) { setMessage('Vượt ' + MAX_ROWS + ' dòng mỗi lần xuất. Hãy lọc hẹp lại hoặc chọn bớt dòng.', true); }
+    }
+
+    function render(data) {
+        state.total = data.total;
+        totalLabel.textContent = data.total;
+        thead.innerHTML = '';
+        var tr = document.createElement('tr');
+        ['', '#'].concat(data.columns).forEach(function (c) {
+            var th = document.createElement('th'); th.textContent = c; tr.appendChild(th);
+        });
+        thead.appendChild(tr);
+        tbody.innerHTML = '';
+        data.rows.forEach(function (row, index) {
+            var r = document.createElement('tr');
+            var box = document.createElement('td');
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = selectAll.checked || state.picked.has(row.id);
+            cb.disabled = selectAll.checked;
+            cb.addEventListener('change', function () {
+                if (cb.checked) { state.picked.add(row.id); } else { state.picked.delete(row.id); }
+                updateSelection();
+            });
+            box.appendChild(cb); r.appendChild(box);
+            var n = document.createElement('td'); n.textContent = data.page * data.size + index + 1; r.appendChild(n);
+            row.cells.forEach(function (cell) {
+                var td = document.createElement('td'); td.textContent = cell; r.appendChild(td);
+            });
+            tbody.appendChild(r);
+        });
+        var pages = Math.max(1, Math.ceil(data.total / data.size));
+        pageLabel.textContent = 'Trang ' + (data.page + 1) + '/' + pages;
+        prevBtn.disabled = data.page <= 0;
+        nextBtn.disabled = data.page + 1 >= pages;
+        card.style.display = '';
+        setMessage(data.total === 0 ? 'Không có dữ liệu phù hợp để xuất.' : '', data.total === 0);
+        updateSelection();
+    }
+
+    function load(page) {
+        var params = state.query || buildParams();
+        state.query = params;
+        var url = '/exports/preview?dataset=' + encodeURIComponent(dataset.value) + '&' + params.toString()
+            + '&page=' + page + '&size=' + PAGE_SIZE;
+        fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+            .then(function (res) {
+                return res.json().then(function (body) { return { ok: res.ok, body: body }; });
+            })
+            .then(function (result) {
+                if (!result.ok) { card.style.display = ''; setMessage(result.body.message || 'Không xem trước được.', true); return; }
+                state.page = result.body.page;
+                render(result.body);
+            })
+            .catch(function () { card.style.display = ''; setMessage('Không xem trước được. Vui lòng thử lại.', true); });
+    }
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        state.query = null; state.picked = new Set(); selectAll.checked = false;
+        load(0);
+    });
+    dataset.addEventListener('change', function () {
+        syncDatasetFields(); card.style.display = 'none'; state.query = null; state.picked = new Set(); selectAll.checked = false;
+    });
+    selectAll.addEventListener('change', function () { load(state.page); });
+    prevBtn.addEventListener('click', function () { load(state.page - 1); });
+    nextBtn.addEventListener('click', function () { load(state.page + 1); });
+
+    downloadForm.addEventListener('submit', function () {
+        downloadFields.innerHTML = '';
+        function hidden(name, value) {
+            var i = document.createElement('input'); i.type = 'hidden'; i.name = name; i.value = value; downloadFields.appendChild(i);
+        }
+        hidden('dataset', dataset.value);
+        (state.query || buildParams()).forEach(function (value, key) { hidden(key, value); });
+        if (selectAll.checked) { hidden('selectAll', 'true'); }
+        else { state.picked.forEach(function (id) { hidden('ids', id); }); }
+    });
+
+    syncDatasetFields();
+})();
+</script>
 </body>
 </html>
