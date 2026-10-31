@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
@@ -154,5 +156,71 @@ class ExportWebIntegrationTest extends SeededWebTest {
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/exports"))
             .andExpect(flash().attribute("errorMessage", "Không có dữ liệu phù hợp để xuất."));
+    }
+
+    @Test
+    @DisplayName("#227 API: xem trước có id từng dòng; bộ lọc trạng thái áp dụng; không khớp thì 422")
+    void previewAndFilters() throws Exception {
+        mockMvc.perform(get("/api/exports/invoices/preview").header("X-User-Id", OWNER_1))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(1))
+            .andExpect(jsonPath("$.rows[0].id").isNotEmpty())
+            .andExpect(jsonPath("$.columns.length()").value(11));
+
+        mockMvc.perform(get("/api/exports/invoices").param("states", "UNPAID").header("X-User-Id", OWNER_1))
+            .andExpect(status().isOk());
+        mockMvc.perform(get("/api/exports/invoices").param("states", "PAID", "VOIDED").header("X-User-Id", OWNER_1))
+            .andExpect(status().isUnprocessableEntity());
+        mockMvc.perform(get("/api/exports/invoices").param("tenantName", "không có ai").header("X-User-Id", OWNER_1))
+            .andExpect(status().isUnprocessableEntity());
+        mockMvc.perform(get("/api/exports/invoices/preview").header("X-User-Id", TECH_1))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("#227 API: POST xuất đúng các dòng đã chọn; id lạ thì 403 và không xuất")
+    void exportSelected() throws Exception {
+        String body = mockMvc.perform(get("/api/exports/invoices/preview").header("X-User-Id", OWNER_1))
+            .andReturn().getResponse().getContentAsString();
+        String id = com.jayway.jsonpath.JsonPath.read(body, "$.rows[0].id");
+
+        mockMvc.perform(post("/api/exports/invoices").header("X-User-Id", OWNER_1)
+                .contentType("application/json")
+                .content("{\"params\":{\"format\":\"pdf\"},\"ids\":[\"" + id + "\"]}"))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Content-Type", "application/pdf"));
+
+        mockMvc.perform(post("/api/exports/invoices").header("X-User-Id", OWNER_1)
+                .contentType("application/json")
+                .content("{\"ids\":[\"" + id + "\",\"" + UUID.randomUUID() + "\"]}"))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/exports/invoices").header("X-User-Id", OWNER_2)
+                .contentType("application/json")
+                .content("{\"ids\":[\"" + id + "\"]}"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("#227 giao diện: trang có bộ lọc và nút tải; xem trước JSON; chọn tất cả hoặc chọn dòng; id lạ quay về kèm lỗi")
+    void uiPreviewAndSelection() throws Exception {
+        String page = mockMvc.perform(get("/exports").header("X-User-Id", OWNER_1))
+            .andReturn().getResponse().getContentAsString();
+        assertTrue(page.contains("id=\"downloadForm\"") && page.contains("id=\"selectAll\""));
+
+        String json = mockMvc.perform(get("/exports/preview").header("X-User-Id", OWNER_1))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1))
+            .andReturn().getResponse().getContentAsString();
+        String id = com.jayway.jsonpath.JsonPath.read(json, "$.rows[0].id");
+        mockMvc.perform(get("/exports/preview").header("X-User-Id", TENANT_1))
+            .andExpect(status().isForbidden()).andExpect(jsonPath("$.message").isNotEmpty());
+
+        mockMvc.perform(post("/exports/download").param("selectAll", "true").header("X-User-Id", OWNER_1))
+            .andExpect(status().isOk()).andExpect(header().string("Content-Type", XLSX));
+        mockMvc.perform(post("/exports/download").param("ids", id).param("format", "pdf").header("X-User-Id", OWNER_1))
+            .andExpect(status().isOk()).andExpect(header().string("Content-Type", "application/pdf"));
+        mockMvc.perform(post("/exports/download").param("ids", UUID.randomUUID().toString())
+                .header("X-User-Id", OWNER_1))
+            .andExpect(redirectedUrl("/exports"))
+            .andExpect(flash().attributeExists("errorMessage"));
     }
 }

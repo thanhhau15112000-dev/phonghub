@@ -1923,23 +1923,33 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
    - **Người thuê:** phòng đang thuê, hợp đồng, hóa đơn còn nợ.
    - **Quản trị viên:** số nhà trọ theo trạng thái duyệt, nhà trọ chờ duyệt, số tài khoản theo vai trò, tỷ lệ lấp đầy (không có số liệu tiền).
 
-#### UC-67. Xuất dữ liệu (Excel, PDF, CSV)
+#### UC-67. Xuất dữ liệu (Excel, PDF)
 
 | Mục | Nội dung |
 |---|---|
 | Tác nhân chính | Chủ trọ; Nhân viên có quyền quản lý hợp đồng hoặc quyền thu tiền |
-| Mô tả | Xuất danh sách hóa đơn theo khoảng tháng, công nợ, hợp đồng. |
-| Tiền điều kiện | Có quyền xem tiền của nhà trọ được chọn. |
-| Hậu điều kiện | File được tải về; nhật ký `DATA_EXPORTED` ghi tập dữ liệu và nhà trọ. |
-| Kênh | Web `/exports`; API `GET /api/exports/{dataset}` |
+| Mô tả | Lọc hóa đơn, công nợ hoặc hợp đồng theo nhiều tiêu chí, xem trước, chọn dòng rồi xuất ra Excel hoặc PDF. |
+| Tiền điều kiện | Có quyền xem tiền (hóa đơn, công nợ) hoặc quyền quản lý hợp đồng (hợp đồng) ở nhà trọ được chọn. |
+| Hậu điều kiện | File chỉ gồm các dòng đã chọn, tên file ghi khoảng thời gian và số dòng; nhật ký `DATA_EXPORTED` ghi tập dữ liệu, nhà trọ, định dạng và số dòng. |
+| Kênh | Web `/exports`, `/exports/preview`, `/exports/download` (GET xuất theo bộ lọc, POST xuất theo dòng đã chọn); API `GET /api/exports/{dataset}`, `GET /api/exports/{dataset}/preview`, `POST /api/exports/{dataset}` |
 
 **Luồng chính**
-1. Tác nhân chọn tập dữ liệu (hóa đơn, công nợ, hợp đồng), nhà trọ, khoảng tháng, định dạng.
-2. Hệ thống kiểm tra quyền và tạo file.
+1. Tác nhân chọn tập dữ liệu (hóa đơn, công nợ, hợp đồng) và bộ lọc: nhà trọ (chọn nhiều), phòng, người thuê (không phân biệt dấu); hóa đơn và công nợ thêm khoảng tháng, trạng thái, loại, hạn thanh toán, chỉ hóa đơn còn nợ; hợp đồng thêm trạng thái, ngày bắt đầu và ngày kết thúc.
+2. Tác nhân bấm "Lọc"; hệ thống hiện bảng xem trước có phân trang, đúng các cột sẽ xuất, mỗi dòng có ô chọn.
+3. Tác nhân chọn từng dòng hoặc "Chọn tất cả" (toàn bộ kết quả lọc, mọi trang) và bấm "Tải xuống".
+4. Hệ thống kiểm tra quyền, tính lại dữ liệu ở máy chủ, tạo file và ghi nhật ký.
 
 **Ngoại lệ**
 - E1. Tháng bắt đầu sau tháng kết thúc: báo lỗi.
-- E2. Quản trị viên hoặc kỹ thuật viên: E-403.
+- E2. Quản trị viên (hóa đơn, công nợ) hoặc kỹ thuật viên: E-403.
+- E3. Không có dòng nào: "Không có dữ liệu phù hợp để xuất", không tạo file và không ghi nhật ký; API trả `422`.
+- E4. Vượt 5.000 dòng mỗi lần: báo lọc hẹp lại hoặc chọn bớt dòng; API trả `422`.
+- E5. Có nhà trọ hoặc id dòng nằm ngoài phạm vi của người xuất: E-403 cho cả yêu cầu, không xuất phần còn lại.
+
+**Quy tắc nghiệp vụ**
+- BR1. "Chọn tất cả" do máy chủ tính lại theo bộ lọc, không tin danh sách id do trình duyệt tự liệt kê.
+- BR2. Id hóa đơn là id hóa đơn; id công nợ và hợp đồng là id hợp đồng. Khoản phí đã gộp vào hóa đơn tháng không xuất riêng.
+- BR3. Số CCCD luôn được che trong file.
 
 #### UC-68. Xem nhật ký hoạt động
 
