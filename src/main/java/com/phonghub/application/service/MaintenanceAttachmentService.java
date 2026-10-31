@@ -75,18 +75,33 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
 
     @Override
     public List<MaintenanceAttachment> uploadAll(UUID ticketId, List<AttachmentFile> files) {
+        return uploadAll(ticketId, files, MaintenanceAttachment.Phase.REPORT);
+    }
+
+    @Override
+    public List<MaintenanceAttachment> uploadAll(UUID ticketId, List<AttachmentFile> files, MaintenanceAttachment.Phase phase) {
         if (files == null || files.isEmpty()) {
             throw new IllegalArgumentException("Cần chọn ít nhất một tệp để tải lên.");
         }
+        MaintenanceAttachment.Phase target = phase == null ? MaintenanceAttachment.Phase.REPORT : phase;
         CurrentUser user = currentUserPort.getCurrentUser();
         MaintenanceTicket ticket = findTicket(ticketId);
-        assertCanUpload(user, ticket);
-        if (ticket.isWorkFinished()) {
-            throw new MaintenanceTicketException("Không đính kèm thêm được vào phiếu đã xử lý xong hoặc đã đóng");
+        if (target == MaintenanceAttachment.Phase.RESULT) {
+            assertCanUploadResult(user, ticket);
+            if (!acceptsResultFiles(ticket)) {
+                throw new MaintenanceTicketException("Không đính kèm thêm được ảnh kết quả vào phiếu ở trạng thái "
+                    + ticket.getStatus() + ".");
+            }
+        } else {
+            assertCanUpload(user, ticket);
+            if (ticket.isWorkFinished()) {
+                throw new MaintenanceTicketException("Không đính kèm thêm được vào phiếu đã xử lý xong hoặc đã đóng");
+            }
         }
 
         // Kiểm tra loại, số lượng và dung lượng của cả lượt trước khi ghi tệp nào vào kho
-        List<MaintenanceAttachment> existing = attachmentRepository.findByTicketId(ticketId);
+        List<MaintenanceAttachment> existing = attachmentRepository.findByTicketId(ticketId).stream()
+            .filter(attachment -> attachment.phase() == target).toList();
         long images = existing.stream().filter(a -> a.kind() == MaintenanceAttachment.Kind.IMAGE).count();
         long videos = existing.stream().filter(a -> a.kind() == MaintenanceAttachment.Kind.VIDEO).count();
         List<FileSanitizer.SanitizedFile> sanitized = new ArrayList<>();
@@ -123,14 +138,14 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
                 }
                 storedKeys.add(key);
                 saved.add(attachmentRepository.save(new MaintenanceAttachment(UUID.randomUUID(), ticketId, kinds.get(i),
-                    key, file.contentType(), file.content().length, user.id(), null)));
+                    key, file.contentType(), file.content().length, user.id(), null, target)));
             }
         } catch (RuntimeException ex) {
             storedKeys.forEach(this::deleteQuietly);
             throw ex;
         }
         saved.forEach(attachment -> auditPort.recordEvent(AuditPort.AuditEvent.of("MAINTENANCE_ATTACHMENT_ADDED", user.id(),
-            "MAINTENANCE_TICKET", ticketId.toString(), Map.of("kind", attachment.kind().name(), "size", attachment.sizeBytes()))));
+            "MAINTENANCE_TICKET", ticketId.toString(), Map.of("kind", attachment.kind().name(), "phase", attachment.phase().name(), "size", attachment.sizeBytes()))));
         return List.copyOf(saved);
     }
 
@@ -190,6 +205,9 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
         } else {
             assertCanView(user, ticket);
         }
+        if (attachment.phase() == MaintenanceAttachment.Phase.RESULT && uploader && !acceptsResultFiles(ticket)) {
+            throw new MaintenanceTicketException("Không xóa được ảnh kết quả của phiếu đã nghiệm thu hoặc đã đóng");
+        }
         attachmentRepository.delete(attachmentId);
         deleteQuietly(attachment.storageKey());
         auditPort.recordEvent(AuditPort.AuditEvent.of("MAINTENANCE_ATTACHMENT_REMOVED", user.id(), "MAINTENANCE_TICKET",
@@ -208,7 +226,12 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
                 if (uploader && !ticket.isWorkFinished()) {
                     result.add(attachment.id());
                 }
-            } else if (user.role() != UserRole.TECHNICIAN && (uploader || user.role() != UserRole.TENANT)) {
+            } else if (user.role() == UserRole.TECHNICIAN) {
+                // Kỹ thuật viên chỉ xóa ảnh kết quả do chính mình tải, khi người thuê chưa nghiệm thu
+                if (uploader && attachment.phase() == MaintenanceAttachment.Phase.RESULT && acceptsResultFiles(ticket)) {
+                    result.add(attachment.id());
+                }
+            } else if (uploader || user.role() != UserRole.TENANT) {
                 result.add(attachment.id());
             }
         }
@@ -223,6 +246,29 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
         return tenantRepository.findById(ticket.getRequestedByTenantId())
             .map(tenant -> attachment.uploadedBy().equals(tenant.userId()))
             .orElse(false);
+    }
+
+    /** Còn nhận ảnh kết quả: từ lúc giao việc tới khi người thuê nghiệm thu; sau đó (VERIFIED) hoặc phiếu đóng thì khóa. */
+    private static boolean acceptsResultFiles(MaintenanceTicket ticket) {
+        return switch (ticket.getStatus()) {
+            case ASSIGNED, IN_PROGRESS, AWAITING_PAYMENT, RESOLVED -> true;
+            default -> false;
+        };
+    }
+
+    /** Ảnh kết quả: kỹ thuật viên được giao phiếu hoặc người quản lý nhà trọ; người thuê không được tải. */
+    private void assertCanUploadResult(CurrentUser user, MaintenanceTicket ticket) {
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
+        }
+        if (user.role() == UserRole.TENANT) {
+            throw new UnauthorizedPropertyAccessException("Người thuê không tải được ảnh kết quả sửa chữa.");
+        }
+        if (user.role() == UserRole.TECHNICIAN) {
+            assertCanView(user, ticket);
+            return;
+        }
+        authorizationService.assertCanManageProperty(user, ticket.getPropertyId());
     }
 
     /** Người thuê đã tạo phiếu (hoặc đang ở phòng đó) và owner/staff/admin của nhà trọ được tải lên. */

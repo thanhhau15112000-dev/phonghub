@@ -23,7 +23,8 @@ public class PostgresMaintenanceAttachmentRepository implements MaintenanceAttac
         rs.getString("content_type"),
         rs.getLong("size_bytes"),
         rs.getObject("uploaded_by", UUID.class),
-        rs.getTimestamp("created_at").toInstant());
+        rs.getTimestamp("created_at").toInstant(),
+        MaintenanceAttachment.Phase.valueOf(rs.getString("phase")));
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -36,8 +37,8 @@ public class PostgresMaintenanceAttachmentRepository implements MaintenanceAttac
         try {
             jdbcTemplate.update("""
                 INSERT INTO maintenance_attachments (id, ticket_id, kind, storage_key, content_type, size_bytes,
-                    uploaded_by, created_at)
-                VALUES (:id, :ticketId, :kind, :key, :contentType, :size, :uploadedBy, :createdAt)
+                    uploaded_by, created_at, phase)
+                VALUES (:id, :ticketId, :kind, :key, :contentType, :size, :uploadedBy, :createdAt, :phase)
                 """, new MapSqlParameterSource()
                 .addValue("id", attachment.id())
                 .addValue("ticketId", attachment.ticketId())
@@ -46,7 +47,8 @@ public class PostgresMaintenanceAttachmentRepository implements MaintenanceAttac
                 .addValue("contentType", attachment.contentType())
                 .addValue("size", attachment.sizeBytes())
                 .addValue("uploadedBy", attachment.uploadedBy())
-                .addValue("createdAt", Timestamp.from(attachment.createdAt())));
+                .addValue("createdAt", Timestamp.from(attachment.createdAt()))
+                .addValue("phase", attachment.phase().name()));
         } catch (DuplicateKeyException ex) {
             throw new AttachmentLimitException("Phiếu đã có video");
         }

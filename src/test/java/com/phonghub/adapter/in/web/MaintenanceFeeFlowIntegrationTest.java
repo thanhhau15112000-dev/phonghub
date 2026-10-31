@@ -57,6 +57,7 @@ class MaintenanceFeeFlowIntegrationTest {
     @Autowired private InMemoryMaintenanceTicketRepository ticketRepository;
     @Autowired private InMemoryInvoiceRepository invoiceRepository;
     @Autowired private InMemoryPaymentRepository paymentRepository;
+    @Autowired private com.phonghub.application.port.out.MaintenanceAttachmentRepositoryPort attachmentRepository;
 
     private long webhookSeq = 770000;
 
@@ -187,6 +188,47 @@ class MaintenanceFeeFlowIntegrationTest {
             .andExpect(flash().attributeExists("errorMessage"));
         assertEquals(MaintenanceStatus.AWAITING_PAYMENT, reload(ticket.getId()).getStatus());
         assertEquals(InvoiceStatus.PARTIALLY_PAID, invoiceRepository.findById(fee.getId()).orElseThrow().getStatus());
+    }
+
+    private static final byte[] PNG = java.util.Base64.getDecoder().decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
+    @Test
+    @DisplayName("#232: hoàn tất phiếu kèm ảnh kết quả lưu loại RESULT, người thuê thấy ở phần Ảnh hoàn thành; không kèm ảnh vẫn hoàn tất")
+    void resolveWithResultPhotos() throws Exception {
+        MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Hỏng vòi nước", "NATURAL_WEAR");
+        accept(ticket.getId());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .multipart("/maintenance/" + ticket.getId() + "/resolve")
+                .file(new org.springframework.mock.web.MockMultipartFile("files", "ket-qua.png", "image/png", PNG))
+                .param("resolutionNotes", "Đã thay vòi")
+                .param("repairCost", "0")
+                .param("releaseRoomToAvailable", "false").header("X-User-Id", ADMIN))
+            .andExpect(flash().attributeExists("successMessage"));
+
+        assertEquals(MaintenanceStatus.RESOLVED, reload(ticket.getId()).getStatus());
+        var saved = attachmentRepository.findByTicketId(ticket.getId());
+        assertEquals(1, saved.stream().filter(a -> a.phase() == com.phonghub.domain.model.MaintenanceAttachment.Phase.RESULT).count());
+
+        mockMvc.perform(asUser(get("/maintenance/" + ticket.getId()), TENANT))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Ảnh hoàn thành")));
+
+        // Tenant không tải được ảnh kết quả
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .multipart("/maintenance/" + ticket.getId() + "/attachments")
+                .file(new org.springframework.mock.web.MockMultipartFile("files", "x.png", "image/png", PNG))
+                .param("phase", "RESULT").header("X-User-Id", TENANT))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("#232: hoàn tất phiếu không kèm ảnh vẫn được")
+    void resolveWithoutPhotos() throws Exception {
+        MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Hỏng vòi nước", "NATURAL_WEAR");
+        accept(ticket.getId());
+        resolve(ticket.getId(), "0", null);
+        assertEquals(MaintenanceStatus.RESOLVED, reload(ticket.getId()).getStatus());
     }
 
     @Test

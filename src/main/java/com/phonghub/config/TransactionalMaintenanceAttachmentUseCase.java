@@ -29,6 +29,12 @@ public class TransactionalMaintenanceAttachmentUseCase implements MaintenanceAtt
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<MaintenanceAttachment> uploadAll(UUID ticketId, List<AttachmentFile> files, MaintenanceAttachment.Phase phase) {
+        return delegate.uploadAll(ticketId, files, phase);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<MaintenanceAttachment> list(UUID ticketId) {
         return delegate.list(ticketId);

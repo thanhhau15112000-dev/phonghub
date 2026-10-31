@@ -2044,7 +2044,8 @@ Các use case dưới đây **chưa có** trên `staging` (25/10/2026), hoặc m
 | Thông báo tiến độ xử lý phiếu (được giao, đang sửa, đã xong) | Chưa có; phiếu chỉ gửi thông báo khi bị từ chối hoặc quá hạn | #204 |
 | Nhân viên hoặc chủ trọ xác nhận thanh toán tiền mặt / chuyển khoản sai nội dung | Chưa có; tiền chỉ vào qua SePay (UC-51) | #205 |
 | Giao diện đặt đơn giá điện nước (UC-16) và ghi chỉ số của người quản lý (UC-46) | Chỉ có API | — |
-| Kỹ thuật viên gửi ảnh hoàn thành; nhân viên kiểm tra kết quả trước khi người thuê nghiệm thu | Chưa có | — |
+| Kỹ thuật viên gửi ảnh hoàn thành | Đã có (#232): kỹ thuật viên được giao và người quản lý tải ảnh/video kết quả (loại RESULT) khi sửa hoặc trong form hoàn tất, khóa sau khi người thuê nghiệm thu. Chưa có: đánh số đợt sửa | #232 |
+| Nhân viên kiểm tra kết quả trước khi người thuê nghiệm thu | Chưa có | — |
 | Báo người thuê khi có hóa đơn mới; hạn và phạt khi người thuê không gửi chỉ số | Chưa có (chỉ nhắc sắp đến hạn, UC-53) | — |
 | Kênh chat chung chỉ đọc với người thuê | Chưa có trên `staging` (PR đang mở) | #129 |
 | AI: trợ lý trong chat, phân tích hóa đơn, đánh giá tài sản; MCP cho quản trị viên | Chưa có | #154–#157, #197 |

@@ -39,19 +39,23 @@ public class MaintenanceAttachmentApiController {
     public ResponseEntity<?> upload(
         @PathVariable UUID ticketId,
         @RequestParam(name = "file", required = false) MultipartFile file,
-        @RequestParam(name = "files", required = false) List<MultipartFile> files
+        @RequestParam(name = "files", required = false) List<MultipartFile> files,
+        @RequestParam(name = "phase", required = false) MaintenanceAttachment.Phase phase
     ) throws IOException {
+        MaintenanceAttachment.Phase target = phase == null ? MaintenanceAttachment.Phase.REPORT : phase;
         List<MultipartFile> uploads = files == null ? new ArrayList<>() : new ArrayList<>(files);
         if (file != null && !file.isEmpty()) uploads.add(file);
         if (uploads.stream().noneMatch(upload -> upload != null && !upload.isEmpty())) {
             throw new IllegalArgumentException("Cần chọn ít nhất một tệp để tải lên.");
         }
         List<AttachmentResponse> saved = new ArrayList<>();
+        List<MaintenanceAttachmentUseCase.AttachmentFile> batch = new ArrayList<>();
         for (MultipartFile upload : uploads) {
             if (upload != null && !upload.isEmpty()) {
-                saved.add(AttachmentResponse.from(useCase.upload(ticketId, upload.getContentType(), upload.getBytes())));
+                batch.add(new MaintenanceAttachmentUseCase.AttachmentFile(upload.getContentType(), upload.getBytes()));
             }
         }
+        useCase.uploadAll(ticketId, batch, target).forEach(attachment -> saved.add(AttachmentResponse.from(attachment)));
         Object body = file != null && files == null && saved.size() == 1 ? saved.getFirst() : List.copyOf(saved);
         URI location = file != null && files == null && saved.size() == 1
             ? URI.create("/api/maintenance/" + ticketId + "/attachments/" + saved.getFirst().id())
@@ -80,10 +84,10 @@ public class MaintenanceAttachmentApiController {
     }
 
     /** Không trả khóa tệp trong kho; tải qua đường dẫn có chữ ký của chính endpoint này. */
-    public record AttachmentResponse(UUID id, String kind, String contentType, long sizeBytes, UUID uploadedBy,
+    public record AttachmentResponse(UUID id, String kind, String phase, String contentType, long sizeBytes, UUID uploadedBy,
                                      Instant createdAt) {
         static AttachmentResponse from(MaintenanceAttachment attachment) {
-            return new AttachmentResponse(attachment.id(), attachment.kind().name(), attachment.contentType(),
+            return new AttachmentResponse(attachment.id(), attachment.kind().name(), attachment.phase().name(), attachment.contentType(),
                 attachment.sizeBytes(), attachment.uploadedBy(), attachment.createdAt());
         }
     }
