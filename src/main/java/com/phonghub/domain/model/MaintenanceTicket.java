@@ -516,7 +516,7 @@ public class MaintenanceTicket {
      * REPORTED để quản lý giao việc.
      */
     public void reopenByTenant(String feedback) {
-        if (status != MaintenanceStatus.RESOLVED) {
+        if (status != MaintenanceStatus.RESOLVED && status != MaintenanceStatus.AWAITING_PAYMENT) {
             throw new InvalidMaintenanceStateException(
                 "Chỉ phản hồi chưa đạt được khi phiếu đã sửa xong. Trạng thái hiện tại: " + status);
         }
@@ -526,11 +526,12 @@ public class MaintenanceTicket {
         if (feedback.trim().length() > 1000) {
             throw new IllegalArgumentException("Phản hồi tối đa 1000 ký tự.");
         }
+        MaintenanceStatus previous = status;
         this.status = assignedTechnicianId != null ? MaintenanceStatus.ASSIGNED : MaintenanceStatus.REPORTED;
         this.assignedAt = assignedTechnicianId != null ? Instant.now() : null;
         this.understaffedNotifiedAt = null;
         this.updatedAt = Instant.now();
-        recordEvent(MaintenanceStatus.RESOLVED, "Người thuê phản hồi chưa đạt: " + feedback.trim());
+        recordEvent(previous, "Người thuê phản hồi chưa đạt: " + feedback.trim());
     }
 
     /** Repository khôi phục báo giá đã lưu khi đọc phiếu. */

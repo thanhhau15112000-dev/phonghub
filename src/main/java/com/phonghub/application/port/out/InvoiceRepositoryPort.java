@@ -30,6 +30,9 @@ public interface InvoiceRepositoryPort {
     /** Id hóa đơn tiền thuê còn phải thanh toán, chưa gộp và đã quá hạn trước {@code today}. */
     List<UUID> findOverdueRentInvoiceIds(java.time.LocalDate today);
 
+    /** Hóa đơn phí sửa chữa quá hạn, chưa gộp vào hóa đơn tháng. */
+    List<UUID> findOverdueMaintenanceInvoiceIds(java.time.LocalDate today);
+
     default String newUniquePaymentCode() {
         for (int i = 0; i < 10; i++) {
             String code = com.phonghub.domain.model.PaymentCode.generate();

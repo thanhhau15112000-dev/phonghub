@@ -68,6 +68,13 @@ public record InvoiceItem(
     public static final String LATE_FEE_NAME = "Phạt trả trễ";
 
     /** Dòng phạt trả trễ (#80): một dòng riêng, không gắn chỉ số, đơn giá hay hóa đơn nguồn. */
+    /** Dòng phạt trễ hạn phí sửa chữa người thuê chịu (10% tổng tiền sửa chữa). */
+    public static final String MAINTENANCE_LATE_FEE_NAME = "Phạt trễ hạn phí sửa chữa (10%)";
+
+    public static InvoiceItem maintenanceLateFee(BigDecimal amount) {
+        return new InvoiceItem(null, MAINTENANCE_LATE_FEE_NAME, BigDecimal.ONE, amount, amount, null, null, null);
+    }
+
     public static InvoiceItem lateFee(BigDecimal amount) {
         return new InvoiceItem(null, LATE_FEE_NAME, BigDecimal.ONE, amount, amount, null, null, null);
     }
@@ -78,7 +85,8 @@ public record InvoiceItem(
     }
 
     public boolean isLateFee() {
-        return (LATE_FEE_NAME.equals(name) || name.startsWith(LATE_FEE_NAME + " ("))
+        return (LATE_FEE_NAME.equals(name) || name.startsWith(LATE_FEE_NAME + " (")
+                || MAINTENANCE_LATE_FEE_NAME.equals(name))
             && rateId == null && readingId == null && sourceInvoiceId == null;
     }
 
