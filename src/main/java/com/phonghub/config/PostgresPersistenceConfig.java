@@ -2,12 +2,11 @@ package com.phonghub.config;
 
 import com.phonghub.adapter.in.security.SecurityCurrentUserAdapter;
 import com.phonghub.adapter.out.audit.PostgresAuditAdapter;
-import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
+import com.phonghub.adapter.out.persistence.jpa.JpaPersistenceConfiguration;
 import com.phonghub.adapter.out.persistence.postgres.PostgresMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPaymentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresSepayGatewayOrderRepository;
-import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetEventRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverItemRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresMeterReadingRepository;
@@ -18,7 +17,6 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyHouseRulesR
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomConditionRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantDocumentRepository;
-import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresStaffPropertyAssignmentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresStatisticsQueryAdapter;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantRepository;
@@ -26,14 +24,12 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresUserRepository;
 import com.phonghub.adapter.out.supabase.auth.SupabaseIdentityProviderAdapter;
 import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.application.port.out.AuditPort;
-import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.application.port.out.PaymentRepositoryPort;
 import com.phonghub.application.port.out.SepayGatewayOrderRepositoryPort;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
-import com.phonghub.application.port.out.PropertyRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetEventRepositoryPort;
 import com.phonghub.application.port.out.HandoverItemRepositoryPort;
 import com.phonghub.application.port.out.MeterReadingRepositoryPort;
@@ -44,7 +40,6 @@ import com.phonghub.application.port.out.PropertyHouseRulesRepositoryPort;
 import com.phonghub.application.port.out.RoomAssetRepositoryPort;
 import com.phonghub.application.port.out.RoomConditionRepositoryPort;
 import com.phonghub.application.port.out.TenantDocumentRepositoryPort;
-import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.application.port.out.StaffPropertyAssignmentPort;
 import com.phonghub.application.port.out.StatisticsQueryPort;
 import com.phonghub.application.port.out.TenantRepositoryPort;
@@ -52,32 +47,47 @@ import com.phonghub.application.port.out.TenantDataProtectionPort;
 import com.phonghub.application.port.out.UserRepositoryPort;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import jakarta.persistence.EntityManagerFactory;
 import java.util.Arrays;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.jpa.autoconfigure.EntityManagerFactoryDependsOnPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.ObjectMapper;
 
 @Configuration
 @Profile({"prod", "docker"})
+@Import(JpaPersistenceConfiguration.class)
 public class PostgresPersistenceConfig {
+
+    /** Flyway tạo/nâng schema trước khi Hibernate kiểm tra ánh xạ entity (hbm2ddl validate). */
+    @Bean
+    public static EntityManagerFactoryDependsOnPostProcessor entityManagerFactoryDependsOnFlyway() {
+        return new EntityManagerFactoryDependsOnPostProcessor("flyway");
+    }
 
     @Bean
     public DataSource dataSource(
         @Value("${spring.datasource.url}") String url,
         @Value("${spring.datasource.username}") String username,
-        @Value("${spring.datasource.password}") String password
+        @Value("${spring.datasource.password}") String password,
+        Environment environment
     ) {
         HikariConfig config = new HikariConfig();
+        // Kích thước pool, timeout... theo spring.datasource.hikari.* (cùng tên thuộc tính của Spring Boot).
+        Binder.get(environment).bind("spring.datasource.hikari", Bindable.ofInstance(config));
         config.setJdbcUrl(url);
         config.setUsername(username);
         config.setPassword(password);
@@ -122,16 +132,6 @@ public class PostgresPersistenceConfig {
     @Bean
     public NamedParameterJdbcTemplate namedParameterJdbcTemplate(DataSource dataSource) {
         return new NamedParameterJdbcTemplate(dataSource);
-    }
-
-    @Bean
-    public PropertyRepositoryPort propertyRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        return new PostgresPropertyRepository(jdbcTemplate);
-    }
-
-    @Bean
-    public RoomRepositoryPort roomRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        return new PostgresRoomRepository(jdbcTemplate);
     }
 
     @Bean
@@ -203,11 +203,6 @@ public class PostgresPersistenceConfig {
     @Bean
     public RoomAssetEventRepositoryPort roomAssetEventRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         return new PostgresRoomAssetEventRepository(jdbcTemplate);
-    }
-
-    @Bean
-    public ContractRepositoryPort contractRepository(NamedParameterJdbcTemplate jdbcTemplate) {
-        return new PostgresContractRepository(jdbcTemplate);
     }
 
     @Bean
@@ -364,10 +359,11 @@ public class PostgresPersistenceConfig {
 
     @Bean
     public PlatformTransactionManager transactionManager(
-        DataSource dataSource,
+        EntityManagerFactory entityManagerFactory,
         CacheEvictingTransactionListener cacheEvictingTransactionListener
     ) {
-        DataSourceTransactionManager manager = new DataSourceTransactionManager(dataSource);
+        // JPA và NamedParameterJdbcTemplate dùng chung kết nối của transaction này.
+        JpaTransactionManager manager = new JpaTransactionManager(entityManagerFactory);
         // Transaction ghi commit xong thì xóa cache danh sách/dashboard (#88).
         manager.addListener(cacheEvictingTransactionListener);
         return manager;

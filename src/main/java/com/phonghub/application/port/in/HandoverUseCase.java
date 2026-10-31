@@ -54,6 +54,12 @@ public interface HandoverUseCase {
         return approve(type, contractId, finalDeduction, List.of());
     }
 
+    /**
+     * Bỏ qua phần còn lại của quy trình và đưa biên bản tới APPROVED (tạo nháp với chỉ số mẫu nếu chưa có).
+     * Không yêu cầu ảnh, CCCD hay xác nhận của người thuê; quyền như bước duyệt.
+     */
+    Handover skip(HandoverType type, UUID contractId);
+
     Handover reject(HandoverType type, UUID contractId, String reason);
 
     Handover reopen(HandoverType type, UUID contractId);

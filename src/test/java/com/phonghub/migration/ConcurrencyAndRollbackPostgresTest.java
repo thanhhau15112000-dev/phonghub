@@ -1,5 +1,7 @@
 package com.phonghub.migration;
 
+import com.phonghub.application.port.out.ContractRepositoryPort;
+import com.phonghub.application.port.out.RoomRepositoryPort;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -7,13 +9,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository;
-import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresHandoverRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresMaintenanceTicketRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPaymentRepository;
-import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyRepository;
-import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresUserRepository;
 import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
@@ -67,7 +66,6 @@ import org.postgresql.ds.PGSimpleDataSource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -89,6 +87,7 @@ class ConcurrencyAndRollbackPostgresTest {
 
     private PGSimpleDataSource ds;
     private NamedParameterJdbcTemplate jdbc;
+    private JpaTestContext jpa;
     private TenantDataProtectionPort protector;
     private TransactionTemplate tx;
     private Contract contract;
@@ -101,13 +100,14 @@ class ConcurrencyAndRollbackPostgresTest {
         ds.setPassword(POSTGRES.getPassword());
         Flyway.configure().dataSource(ds).locations(MAIN, FIXTURE).load().migrate();
         jdbc = new NamedParameterJdbcTemplate(ds);
+        jpa = JpaTestContext.over(ds);
         protector = new AesGcmTenantDataProtector("test-v1",
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
-        tx = new TransactionTemplate(new DataSourceTransactionManager(ds));
+        tx = new TransactionTemplate(jpa.transactionManager());
         try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
             ResultSet rs = st.executeQuery("SELECT id FROM contracts WHERE status = 'ACTIVE' LIMIT 1");
             rs.next();
-            contract = new PostgresContractRepository(jdbc).findById(UUID.fromString(rs.getString(1))).orElseThrow();
+            contract = jpa.contracts().findById(UUID.fromString(rs.getString(1))).orElseThrow();
         }
     }
 
@@ -115,8 +115,8 @@ class ConcurrencyAndRollbackPostgresTest {
         SepayProperties properties = new SepayProperties();
         properties.setWebhookApiKey(API_KEY);
         return new SepayPaymentService(new PostgresPaymentRepository(jdbc, protector), invoices,
-            new PostgresMaintenanceTicketRepository(jdbc), new PostgresContractRepository(jdbc),
-            new PostgresPropertyRepository(jdbc), new InMemoryNotificationRepository(),
+            new PostgresMaintenanceTicketRepository(jdbc), jpa.contracts(),
+            jpa.properties(), new InMemoryNotificationRepository(),
             new PostgresUserRepository(jdbc, protector), mock(CurrentUserPort.class), mock(AuthorizationService.class),
             properties);
     }
@@ -226,8 +226,8 @@ class ConcurrencyAndRollbackPostgresTest {
     @Test
     @DisplayName("kích hoạt hai hợp đồng của cùng một phòng cùng lúc: đúng một hợp đồng ACTIVE, phòng OCCUPIED")
     void concurrentActivationKeepsOneActiveContract() throws Exception {
-        PostgresRoomRepository rooms = new PostgresRoomRepository(jdbc);
-        PostgresContractRepository contracts = new PostgresContractRepository(jdbc);
+        RoomRepositoryPort rooms = jpa.rooms();
+        ContractRepositoryPort contracts = jpa.contracts();
         PostgresTenantRepository tenants = new PostgresTenantRepository(jdbc, protector);
         PostgresUserRepository users = new PostgresUserRepository(jdbc, protector);
         Room room = rooms.save(new Room(UUID.randomUUID(), contract.getPropertyId(), "CC-" + System.nanoTime() % 100000, 9,
@@ -242,7 +242,7 @@ class ConcurrencyAndRollbackPostgresTest {
 
         CurrentUserPort currentUser = mock(CurrentUserPort.class);
         when(currentUser.getCurrentUser()).thenReturn(new CurrentUser(UUID.randomUUID(), "admin@x", "Admin", UserRole.ADMIN));
-        ContractService service = new ContractService(contracts, rooms, new PostgresPropertyRepository(jdbc), tenants,
+        ContractService service = new ContractService(contracts, rooms, jpa.properties(), tenants,
             users, null, currentUser, mock(AuthorizationService.class), event -> { }, handovers);
 
         List<Object> results = runConcurrently(List.of(

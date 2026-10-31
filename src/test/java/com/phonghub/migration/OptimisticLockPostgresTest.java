@@ -1,9 +1,9 @@
 package com.phonghub.migration;
 
-import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
+import com.phonghub.application.port.out.ContractRepositoryPort;
+import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresMaintenanceTicketRepository;
-import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
 import com.phonghub.domain.exception.OptimisticLockConflictException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
@@ -80,7 +80,7 @@ class OptimisticLockPostgresTest {
     @DisplayName("room: bản lưu sau nhận xung đột; lưu lại bản mới tải thì thành công")
     void roomConflict() throws Exception {
         PGSimpleDataSource ds = migrated();
-        PostgresRoomRepository repo = new PostgresRoomRepository(new NamedParameterJdbcTemplate(ds));
+        RoomRepositoryPort repo = JpaTestContext.over(ds).rooms();
         assertSecondSaveConflicts(firstId(ds, "rooms"), id -> repo.findById(id).orElseThrow(), repo::save, Room::getVersion);
     }
 
@@ -90,7 +90,7 @@ class OptimisticLockPostgresTest {
         PGSimpleDataSource ds = migrated();
         UUID id = firstId(ds, "contracts");
         assumeTrue(id != null, "seed has no contract");
-        PostgresContractRepository repo = new PostgresContractRepository(new NamedParameterJdbcTemplate(ds));
+        ContractRepositoryPort repo = JpaTestContext.over(ds).contracts();
         assertSecondSaveConflicts(id, x -> repo.findById(x).orElseThrow(), repo::save, Contract::getVersion);
     }
 
@@ -99,7 +99,8 @@ class OptimisticLockPostgresTest {
     void invoiceConflict() throws Exception {
         PGSimpleDataSource ds = migrated();
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
-        Contract contract = new PostgresContractRepository(jdbc).findById(firstId(ds, "contracts")).orElseThrow();
+        JpaTestContext jpa = JpaTestContext.over(ds);
+        Contract contract = jpa.contracts().findById(firstId(ds, "contracts")).orElseThrow();
         assumeTrue(contract.isActive(), "seed contract is not active");
         PostgresInvoiceRepository repo = new PostgresInvoiceRepository(jdbc);
         Invoice created = repo.save(Invoice.issueMonthlyRent(

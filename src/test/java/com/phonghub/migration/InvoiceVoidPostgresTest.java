@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
@@ -38,8 +37,9 @@ class InvoiceVoidPostgresTest {
         Flyway.configure().dataSource(ds).locations("classpath:db/migration", "classpath:db/seed/docker")
             .load().migrate();
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
+        JpaTestContext jpa = JpaTestContext.over(ds);
         PostgresInvoiceRepository invoices = new PostgresInvoiceRepository(jdbc);
-        Contract contract = new PostgresContractRepository(jdbc).findById(UUID.fromString(
+        Contract contract = jpa.contracts().findById(UUID.fromString(
             jdbc.getJdbcTemplate().queryForObject("SELECT id::text FROM contracts WHERE status = 'ACTIVE' LIMIT 1",
                 String.class))).orElseThrow();
         YearMonth period = YearMonth.from(contract.getStartDate()).plusMonths(5);
