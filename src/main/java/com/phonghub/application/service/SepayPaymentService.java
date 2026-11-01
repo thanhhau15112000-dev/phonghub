@@ -71,6 +71,7 @@ public class SepayPaymentService implements SepayWebhookUseCase {
     private final InvoiceRepositoryPort invoiceRepository;
     private final MaintenanceTicketRepositoryPort ticketRepository;
     private MaintenanceNotifier maintenanceNotifier;
+    private com.phonghub.application.port.out.AuditPort auditPort = event -> {};
     private final ContractRepositoryPort contractRepository;
     private final PropertyRepositoryPort propertyRepository;
     private final NotificationRepositoryPort notificationRepository;
@@ -371,6 +372,7 @@ public class SepayPaymentService implements SepayWebhookUseCase {
         // 6. Gửi thông báo đến người quản lý nếu là tiền vào thành công
         if (status == PaymentStatus.SUCCESS) {
             sendPaymentNotification(tx, invoice);
+            auditPaymentReceived(tx, invoice, applied, excess);
         }
 
         return new WebhookProcessResult(true, "Xử lý giao dịch SePay thành công", tx);
@@ -485,6 +487,27 @@ public class SepayPaymentService implements SepayWebhookUseCase {
     }
 
     /** Bật thông báo khi phí sửa chữa được thu đủ qua SePay (#204, #234). */
+    public SepayPaymentService withAuditPort(com.phonghub.application.port.out.AuditPort port) {
+        this.auditPort = port != null ? port : event -> {};
+        return this;
+    }
+
+    private void auditPaymentReceived(PaymentTransaction tx, Invoice invoice, BigDecimal applied, BigDecimal excess) {
+        java.util.Map<String, Object> details = new java.util.HashMap<>();
+        details.put("amount", applied.toPlainString());
+        details.put("source", "SEPAY");
+        if (excess.signum() > 0) {
+            details.put("excess", excess.toPlainString());
+        }
+        if (tx.contractId() != null) {
+            details.put("contractId", tx.contractId().toString());
+        }
+        String target = invoice != null ? "INVOICE" : "PAYMENT";
+        String targetId = invoice != null ? invoice.getId().toString() : tx.id().toString();
+        auditPort.recordEvent(com.phonghub.application.port.out.AuditPort.AuditEvent.of(
+            "PAYMENT_RECEIVED", null, target, targetId, details));
+    }
+
     public SepayPaymentService withMaintenanceNotifier(MaintenanceNotifier notifier) {
         this.maintenanceNotifier = notifier;
         return this;

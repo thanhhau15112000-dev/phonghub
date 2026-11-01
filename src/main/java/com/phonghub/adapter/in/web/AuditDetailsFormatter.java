@@ -148,6 +148,7 @@ public final class AuditDetailsFormatter {
         Map.entry("PERCENT", "Phần trăm"),
         Map.entry("PER_KWH", "Theo số điện"),
         Map.entry("PER_PERSON", "Theo người"),
+        Map.entry("ROOM", "Ảnh phòng"),
         Map.entry("PER_ROOM_FLAT", "Theo phòng (cố định)"),
         Map.entry("RETENTION_EXPIRED", "Hết thời hạn lưu trữ"),
         Map.entry("UNKNOWN_USER", "Không có tài khoản này"),

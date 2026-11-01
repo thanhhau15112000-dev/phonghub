@@ -108,7 +108,7 @@ class HandoverUiIntegrationTest extends SeededWebTest {
                 .param("initialWaterMeter", "20").param("roomCondition", "Phòng sạch").param("keysProvided", "2 chìa"))
             .andExpect(flash().attributeExists("successMessage"));
         mockMvc.perform(get(PAGE).header("X-User-Id", OWNER_1))
-            .andExpect(content().string(containsString("DRAFT")))
+            .andExpect(content().string(containsString("Bản nháp")))
             .andExpect(content().string(containsString("Gửi cho khách thuê")))
             .andExpect(content().string(not(containsString("Duyệt</button>"))));
 
@@ -141,7 +141,7 @@ class HandoverUiIntegrationTest extends SeededWebTest {
             .andExpect(flash().attributeExists("successMessage"));
 
         mockMvc.perform(get(PAGE).header("X-User-Id", OWNER_1))
-            .andExpect(content().string(containsString("PENDING_APPROVAL")))
+            .andExpect(content().string(containsString("Chờ duyệt")))
             .andExpect(content().string(containsString("Duyệt</button>")))
             .andExpect(content().string(containsString("Từ chối</button>")));
         mockMvc.perform(post(PAGE + "/approve").header("X-User-Id", TENANT_1))
@@ -151,7 +151,7 @@ class HandoverUiIntegrationTest extends SeededWebTest {
         mockMvc.perform(post(PAGE + "/approve").header("X-User-Id", OWNER_1))
             .andExpect(flash().attributeExists("errorMessage"));
         mockMvc.perform(get(PAGE).header("X-User-Id", OWNER_1))
-            .andExpect(content().string(containsString("APPROVED")))
+            .andExpect(content().string(containsString("Đã duyệt")))
             .andExpect(content().string(containsString("Đã duyệt lúc")));
         org.junit.jupiter.api.Assertions.assertEquals(ContractStatus.ACTIVE,
             contracts.findById(DataSeeder.CONTRACT_1_ID).orElseThrow().getStatus());
