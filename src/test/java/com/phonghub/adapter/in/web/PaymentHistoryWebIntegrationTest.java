@@ -120,7 +120,8 @@ class PaymentHistoryWebIntegrationTest extends SeededWebTest {
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Lịch sử thanh toán")))
             .andExpect(content().string(containsString("Cấn trừ cọc")))
-            .andExpect(content().string(containsString("Chưa nhận được tiền")));
+            .andExpect(content().string(containsString("Chưa nhận được tiền")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("P.P"))));
     }
 
     @Test
