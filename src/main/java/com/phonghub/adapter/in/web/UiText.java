@@ -73,6 +73,19 @@ public final class UiText {
         };
     }
 
+    public String handoverStatus(com.phonghub.domain.model.HandoverStatus status) {
+        if (status == null) {
+            return "Chưa xác định";
+        }
+        return switch (status) {
+            case DRAFT -> "Bản nháp";
+            case PENDING_TENANT -> "Chờ người thuê xác nhận";
+            case PENDING_APPROVAL -> "Chờ duyệt";
+            case APPROVED -> "Đã duyệt";
+            case REJECTED -> "Bị từ chối";
+        };
+    }
+
     public String assetEventType(AssetEventType type) {
         if (type == null) {
             return "Chưa xác định";
@@ -250,6 +263,7 @@ public final class UiText {
             case "HANDOVER" -> "Biên bản bàn giao";
             case "SERVICE_RATE" -> "Đơn giá dịch vụ";
             case "INVOICE" -> "Hóa đơn";
+            case "PAYMENT" -> "Giao dịch";
             case "EXPORT" -> "Xuất dữ liệu";
             default -> targetType;
         };
@@ -367,6 +381,8 @@ public final class UiText {
             "MAINTENANCE_ATTACHMENT_REMOVED", "Xóa ảnh/video bảo trì"));
         groups.put("Hóa đơn", labels(
             "LATE_FEE_APPLIED", "Cộng phí trễ hạn",
+            "INVOICE_ISSUED", "Phát hành hóa đơn",
+            "PAYMENT_RECEIVED", "Nhận tiền chuyển khoản",
             "INVOICE_VOIDED", "Hủy hóa đơn"));
         groups.put("Người thuê và giấy tờ", labels(
             "TENANT_CREATED", "Thêm người thuê",

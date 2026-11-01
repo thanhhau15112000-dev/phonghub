@@ -89,7 +89,7 @@
             <div class="flex-between" style="margin-bottom: 12px;">
                 <h2 style="margin: 0;">Trạng thái</h2>
                 <span class="badge" th:classappend="${details.handover().status().name() == 'APPROVED'} ? 'badge-ACTIVE' : (${details.handover().status().name() == 'REJECTED'} ? 'badge-REJECTED' : 'badge-PENDING')"
-                      th:text="${details.handover().status()}">DRAFT</span>
+                      th:text="${uiText.handoverStatus(details.handover().status())}">Bản nháp</span>
             </div>
             <ol style="font-size: 13px; color: var(--text-secondary); padding-left: 18px;">
                 <li>Nháp: chủ trọ nhập chỉ số, tình trạng phòng và ảnh.</li>

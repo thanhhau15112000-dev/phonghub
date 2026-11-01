@@ -744,7 +744,8 @@ public class PhongHubConfiguration {
         AuthorizationService authorizationService,
         SepayProperties sepayProperties,
         SepayGatewayOrderRepositoryPort gatewayOrderRepository,
-        com.phonghub.application.service.MaintenanceNotifier maintenanceNotifier
+        com.phonghub.application.service.MaintenanceNotifier maintenanceNotifier,
+        AuditPort auditPort
     ) {
         SepayPaymentService service = new SepayPaymentService(
             paymentRepository,
@@ -758,7 +759,7 @@ public class PhongHubConfiguration {
             authorizationService,
             sepayProperties,
             gatewayOrderRepository
-        ).withMaintenanceNotifier(maintenanceNotifier);
+        ).withMaintenanceNotifier(maintenanceNotifier).withAuditPort(auditPort);
         return new TransactionalSepayWebhookUseCase(service);
     }
 

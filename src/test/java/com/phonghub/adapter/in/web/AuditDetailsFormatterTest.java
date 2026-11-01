@@ -24,6 +24,15 @@ class AuditDetailsFormatterTest {
     }
 
     @Test
+    @DisplayName("#292: loại ảnh biên bản hiện tiếng Việt, không để mã ROOM")
+    void photoKindIsTranslated() {
+        assertEquals(List.of(new Line("Loại", "Ảnh phòng")),
+            AuditDetailsFormatter.format("HANDOVER", "{\"kind\":\"ROOM\"}"));
+        assertEquals(List.of(new Line("Loại", "Ảnh đồng hồ điện")),
+            AuditDetailsFormatter.format("HANDOVER", "{\"kind\":\"METER_ELECTRIC\"}"));
+    }
+
+    @Test
     @DisplayName("cặp cũ/mới gộp một dòng; trạng thái dịch theo loại đối tượng")
     void statusPairsTranslatedByTarget() {
         assertEquals(List.of(new Line("Trạng thái", "Bảo trì → Trống")),
