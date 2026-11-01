@@ -36,6 +36,7 @@ public class InMemoryAuditAdapter implements AuditPort, AuditQueryPort {
         }
         return getRecordedEvents().stream()
             .filter(e -> filter.propertyIds() == null || filter.propertyIds().contains(propertyOf(e)))
+            .filter(e -> inScope(filter.scope(), e))
             .filter(e -> filter.actorId() == null || filter.actorId().equals(e.actorId()))
             .filter(e -> blank(filter.targetType()) || filter.targetType().equals(e.targetType()))
             .filter(e -> blank(filter.action()) || filter.action().equals(e.action()))
@@ -47,6 +48,16 @@ public class InMemoryAuditAdapter implements AuditPort, AuditQueryPort {
             .map(e -> new Entry(e.id(), e.action(), e.actorId(), null, e.targetType(), e.targetId(), propertyOf(e),
                 e.details() == null ? null : e.details().toString(), e.timestamp()))
             .toList();
+    }
+
+    /** Bản trong bộ nhớ không có dữ liệu quan hệ: chỉ hiểu phạm vi nhà trọ và sự kiện của chính người xem. */
+    private static boolean inScope(Scope scope, AuditEvent e) {
+        if (scope == null) {
+            return true;
+        }
+        UUID self = scope.selfUserId() != null ? scope.selfUserId() : scope.tenantUserId();
+        return (scope.propertyIds() != null && scope.propertyIds().contains(propertyOf(e)))
+            || (self != null && self.equals(e.actorId()));
     }
 
     private static UUID propertyOf(AuditEvent e) {

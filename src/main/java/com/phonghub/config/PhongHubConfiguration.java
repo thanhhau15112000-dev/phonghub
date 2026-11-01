@@ -593,9 +593,11 @@ public class PhongHubConfiguration {
     public com.phonghub.application.port.in.AuditLogUseCase auditLogUseCase(
         com.phonghub.application.port.out.AuditQueryPort auditQueryPort,
         PropertyRepositoryPort propertyRepo,
-        CurrentUserPort currentUserPort
+        CurrentUserPort currentUserPort,
+        com.phonghub.application.port.out.StaffPropertyAssignmentPort staffAssignments
     ) {
-        return new com.phonghub.application.service.AuditLogService(auditQueryPort, propertyRepo, currentUserPort);
+        return new com.phonghub.application.service.AuditLogService(
+            auditQueryPort, propertyRepo, currentUserPort, staffAssignments);
     }
 
     @Bean

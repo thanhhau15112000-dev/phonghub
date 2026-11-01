@@ -19,8 +19,27 @@ public interface AuditQueryPort {
         Instant from,
         Instant to,
         int limit,
-        int offset
-    ) {}
+        int offset,
+        Scope scope
+    ) {
+        /** Không giới hạn theo vai trò (dùng cho admin và cho kiểm thử). */
+        public Filter(
+            Collection<UUID> propertyIds, UUID actorId, String targetType, String action,
+            Instant from, Instant to, int limit, int offset
+        ) {
+            this(propertyIds, actorId, targetType, action, from, to, limit, offset, null);
+        }
+    }
+
+    /**
+     * Phạm vi sự kiện một vai trò được xem (#250); các điều kiện được hợp bằng OR, null/rỗng = không áp dụng.
+     *
+     * @param propertyIds  mọi sự kiện của các nhà trọ này (chủ trọ, nhân viên)
+     * @param selfUserId   sự kiện do người này thực hiện hoặc nói về tài khoản của họ
+     * @param technicianId sự kiện của các phiếu bảo trì đang được giao cho kỹ thuật viên này, kể cả bước trước khi được giao
+     * @param tenantUserId ba nhóm của người thuê: giao dịch của mình, tài khoản của mình, phòng của hợp đồng đang hiệu lực
+     */
+    record Scope(Collection<UUID> propertyIds, UUID selfUserId, UUID technicianId, UUID tenantUserId) {}
 
     record Entry(
         UUID id,
