@@ -385,30 +385,79 @@
                 </div>
             </div>
             <div class="custom-modal-body">
-                Bạn có chắc chắn muốn xoá vĩnh viễn tài khoản người dùng <strong id="deleteModalUserName" style="color: #dc2626;"></strong> không?
-                <p style="margin: 8px 0 0; color: var(--text-secondary); font-size: 13px;">
-                    Hệ thống sẽ xoá tài khoản và toàn bộ liên kết phân công liên quan. Thao tác này không thể hoàn tác!
+                <p style="margin: 0 0 8px; font-size: 14px;">
+                    Bạn có chắc chắn muốn xoá vĩnh viễn tài khoản người dùng <strong id="deleteModalUserName" style="color: #dc2626;"></strong> không?
                 </p>
+                <div style="padding: 8px 12px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; font-size: 12.5px; color: #92400e; margin-bottom: 12px;">
+                    <strong>Hậu quả:</strong> Hệ thống sẽ xoá tài khoản và toàn bộ liên kết phân công liên quan. Thao tác này không thể hoàn tác!
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" for="deleteModalPhraseInput">
+                        Nhập cụm từ <strong style="color: #dc2626;">XÓA TÀI KHOẢN</strong> để xác nhận:
+                    </label>
+                    <input type="text" id="deleteModalPhraseInput" class="form-control" autocomplete="off" placeholder="Gõ XÓA TÀI KHOẢN...">
+                </div>
             </div>
             <div class="custom-modal-footer">
-                <button type="button" class="btn" onclick="closeDeleteModal()">Huỷ</button>
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">Huỷ</button>
                 <form id="deleteModalForm" method="post" style="margin: 0; display: inline;">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <button type="submit" class="btn btn-danger" style="font-weight: 600;">Xoá tài khoản</button>
+                    <button type="submit" id="deleteModalSubmitBtn" class="btn btn-danger" style="font-weight: 600;" disabled>Xoá tài khoản</button>
                 </form>
             </div>
         </div>
     </div>
 
     <script>
+        function normalizeText(s) {
+            return (s || '').trim().normalize('NFC').toUpperCase();
+        }
+
+        var phraseInput = document.getElementById('deleteModalPhraseInput');
+        var submitBtn = document.getElementById('deleteModalSubmitBtn');
+        var deleteForm = document.getElementById('deleteModalForm');
+
+        function updateDeleteSubmitState() {
+            if (!phraseInput || !submitBtn) return;
+            var isMatch = normalizeText(phraseInput.value) === 'XÓA TÀI KHOẢN';
+            submitBtn.disabled = !isMatch;
+        }
+
+        if (phraseInput) {
+            phraseInput.addEventListener('input', updateDeleteSubmitState);
+            phraseInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (submitBtn && !submitBtn.disabled && deleteForm) {
+                        deleteForm.submit();
+                    }
+                }
+            });
+        }
+
+        if (deleteForm) {
+            deleteForm.addEventListener('submit', function(e) {
+                if (submitBtn && submitBtn.disabled) {
+                    e.preventDefault();
+                    return false;
+                }
+            });
+        }
+
         function openDeleteModal(actionUrl, userName) {
             var modal = document.getElementById('deleteConfirmModal');
-            var form = document.getElementById('deleteModalForm');
             var nameSpan = document.getElementById('deleteModalUserName');
-            if (modal && form && nameSpan) {
-                form.action = actionUrl;
+            if (modal && deleteForm && nameSpan) {
+                deleteForm.action = actionUrl;
                 nameSpan.textContent = userName || 'này';
+                if (phraseInput) {
+                    phraseInput.value = '';
+                }
+                updateDeleteSubmitState();
                 modal.style.display = 'flex';
+                if (phraseInput) {
+                    setTimeout(function() { phraseInput.focus(); }, 60);
+                }
             }
         }
 
@@ -416,6 +465,10 @@
             var modal = document.getElementById('deleteConfirmModal');
             if (modal) {
                 modal.style.display = 'none';
+                if (phraseInput) {
+                    phraseInput.value = '';
+                }
+                updateDeleteSubmitState();
             }
         }
 
