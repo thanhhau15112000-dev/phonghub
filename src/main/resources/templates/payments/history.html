@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Lịch sử thanh toán')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Lịch sử thanh toán</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;"
+               th:text="${viewingOwnHistory} ? 'Các khoản bạn đã chuyển, đã báo chuyển khoản, được ghi nhận tay hoặc cấn trừ từ tiền cọc, gồm cả hợp đồng đã kết thúc.' : 'Các khoản thanh toán của người thuê trong nhà trọ bạn được thu tiền.'">
+                Các khoản thanh toán.
+            </p>
+        </div>
+    </div>
+
+    <div class="card">
+        <form th:action="@{${basePath}}" method="get" id="historyFilter"
+              style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 16px;">
+            <div class="form-group" style="min-width: 220px; margin: 0;">
+                <label class="form-label" for="contractId">Hợp đồng</label>
+                <select id="contractId" name="contractId" class="form-control">
+                    <option value="">Tất cả hợp đồng</option>
+                    <option th:each="c : ${history.contracts()}" th:value="${c.id()}"
+                            th:text="${c.label() + (c.ended() ? ' (đã kết thúc)' : '')}"
+                            th:selected="${filterContractId != null and filterContractId == c.id().toString()}">Hợp đồng</option>
+                </select>
+            </div>
+            <div class="form-group" style="min-width: 180px; margin: 0;">
+                <label class="form-label" for="status">Trạng thái</label>
+                <select id="status" name="status" class="form-control">
+                    <option value="">Tất cả</option>
+                    <option th:each="s : ${statuses}" th:value="${s.name()}" th:text="${statusLabels[s.name()]}"
+                            th:selected="${s.name() == filterStatus}">Thành công</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="from">Từ ngày</label>
+                <input id="from" type="date" name="from" class="form-control" th:value="${filterFrom}">
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="to">Đến ngày</label>
+                <input id="to" type="date" name="to" class="form-control" th:value="${filterTo}">
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">Lọc</button>
+        </form>
+
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;" id="historyTotal">
+            Tổng đã ghi nhận trong bộ lọc:
+            <strong th:text="${#numbers.formatDecimal(history.totalRecorded(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</strong>
+            (<span th:text="${history.totalRows()}">0</span> dòng)
+        </p>
+
+        <p th:if="${history.rows().isEmpty()}" style="color: var(--text-secondary);">Chưa có khoản thanh toán nào.</p>
+        <div style="overflow-x: auto;">
+        <table th:if="${!history.rows().isEmpty()}" class="data-table">
+            <thead>
+                <tr>
+                    <th>Thời gian</th><th>Nhà trọ / phòng</th><th>Khoản</th><th>Số tiền</th>
+                    <th>Phương thức</th><th>Mã / nội dung</th><th>Trạng thái</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="r : ${history.rows()}">
+                    <td th:text="${#temporals.format(r.at().atZone(T(java.time.ZoneId).of('Asia/Ho_Chi_Minh')), 'dd/MM/yyyy HH:mm')}">01/01/2026 08:00</td>
+                    <td><span th:text="${r.propertyName()}">Nhà trọ</span> · <span th:text="'P.' + ${r.roomNumber()}">P.101</span></td>
+                    <td>
+                        <span th:text="${r.invoiceType() != null ? typeLabels[r.invoiceType().name()] : 'Hóa đơn'}">Tiền thuê</span>
+                        <small th:if="${r.invoiceType() != null and r.invoiceType().name() == 'RENT' and r.month() != null}"
+                               style="color: var(--text-secondary);" th:text="${#numbers.formatInteger(r.month(), 2) + '/' + r.year()}">01/2026</small>
+                    </td>
+                    <td><strong th:text="${#numbers.formatDecimal(r.amount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3.500.000 đ</strong></td>
+                    <td th:text="${methodLabels[r.method().name()]}">SePay</td>
+                    <td style="overflow-wrap: anywhere;" th:text="${r.reference()}">Mã</td>
+                    <td>
+                        <span th:text="${statusLabels[r.status().name()]}">Thành công</span>
+                        <small th:if="${r.rejectReason() != null}" style="display: block; color: var(--text-secondary);"
+                               th:text="'Lý do: ' + ${r.rejectReason()}">Lý do</small>
+                    </td>
+                    <td><a th:if="${r.hasReceipt()}" th:href="@{'/invoices/' + ${r.invoiceId()} + '/receipt'}" class="btn btn-sm btn-secondary">Biên lai</a></td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div th:if="${history.totalPages() > 1}" style="display: flex; gap: 8px; align-items: center; margin-top: 12px;">
+            <a th:if="${history.page() > 1}" class="btn btn-sm btn-secondary"
+               th:href="@{${basePath}(contractId=${filterContractId}, status=${filterStatus}, from=${filterFrom}, to=${filterTo}, page=${history.page() - 1})}">&larr; Trước</a>
+            <span style="font-size: 13px;" th:text="'Trang ' + ${history.page()} + '/' + ${history.totalPages()}">Trang 1/1</span>
+            <a th:if="${history.page() < history.totalPages()}" class="btn btn-sm btn-secondary"
+               th:href="@{${basePath}(contractId=${filterContractId}, status=${filterStatus}, from=${filterFrom}, to=${filterTo}, page=${history.page() + 1})}">Sau &rarr;</a>
+        </div>
+    </div>
+</main>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

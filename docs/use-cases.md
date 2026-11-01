@@ -1398,6 +1398,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 - BR1. Chỉ cấn trừ hóa đơn payable của chính hợp đồng; thanh toán đồng thời được tuần tự hóa bằng khóa hóa đơn. Hóa đơn được bù từ cọc chuyển sang `PAID` hoặc `PARTIALLY_PAID` theo số tiền còn thiếu.
 - BR2. Hóa đơn chốt điện/nước chỉ được lập sau khi người thuê xác nhận check-out; bỏ qua chỉ số lùi (thay đồng hồ).
 - BR3. Nếu biên bản bị từ chối, mở lại và sửa chỉ số, lần người thuê xác nhận tiếp theo cập nhật điện/nước trên chính hóa đơn check-out/phí hủy đã có. Giữ mã hóa đơn, hạn thanh toán, tiền đã thu và các khoản phí khác; điều chỉnh khoản hoàn/đối trừ theo chênh lệch, không cộng khoản hoàn hai lần. Chỉ số bằng mốc ban đầu thì bỏ khoản điện/nước đó.
+- BR2a (#248). Trang "Lịch sử thanh toán" (`/account/payments`, API `GET /api/me/payments`) gom giao dịch SePay đã gắn hóa đơn, yêu cầu báo chuyển khoản (chờ/từ chối kèm lý do), khoản chủ trọ ghi nhận tay và cấn trừ cọc, gồm cả hợp đồng đã kết thúc. Người thuê chính chỉ xem của mình; chủ trọ và nhân viên có quyền thu tiền xem của người thuê trong nhà trọ họ (`/tenants/{id}/payments`); quản trị viên và kỹ thuật viên bị 403 (#163).
 - BR3. Giao dịch cấn trừ xuất hiện trong lịch sử thanh toán và biên lai; quyết toán tính tiền cọc − khấu trừ tài sản − cấn trừ − công nợ chưa thu − hóa đơn chốt chưa thanh toán.
 
 #### UC-43. So sánh check-in/check-out và xuất PDF

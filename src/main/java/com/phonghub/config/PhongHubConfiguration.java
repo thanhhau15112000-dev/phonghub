@@ -795,6 +795,24 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.PaymentHistoryUseCase paymentHistoryUseCase(
+        PaymentRepositoryPort paymentRepository,
+        com.phonghub.application.port.out.InvoicePaymentRecordRepositoryPort paymentRecordRepository,
+        com.phonghub.application.port.out.PaymentClaimRepositoryPort claimRepository,
+        InvoiceRepositoryPort invoiceRepository,
+        ContractRepositoryPort contractRepository,
+        PropertyRepositoryPort propertyRepository,
+        RoomRepositoryPort roomRepository,
+        TenantRepositoryPort tenantRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService
+    ) {
+        return new com.phonghub.application.service.PaymentHistoryService(paymentRepository, paymentRecordRepository,
+            claimRepository, invoiceRepository, contractRepository, propertyRepository, roomRepository,
+            tenantRepository, currentUserPort, authorizationService);
+    }
+
+    @Bean
     public com.phonghub.application.port.in.LateFeePolicyUseCase lateFeePolicyUseCase(
         com.phonghub.application.port.out.LateFeePolicyRepositoryPort policyRepository,
         CurrentUserPort currentUserPort,
