@@ -5,8 +5,8 @@
     <style>
         /* Tương tác mượt mà cho các phần tử chat PhongHub (Theme: Trắng viền xám) */
         #phonghubMessengerToggleBtn:hover {
-            background-color: #f8fafc !important;
-            border-color: #94a3b8 !important;
+            background-color: #1d4ed8 !important;
+            border-color: #1d4ed8 !important;
             transform: scale(1.06);
             box-shadow: 0 6px 20px rgba(15, 23, 42, 0.18) !important;
         }
@@ -169,18 +169,19 @@
     <!-- Cột bên phải (right: 20px) dành cho các nút tròn: Dưới cùng là nút Soạn tin nhắn, phía trên là các Avatar chat thu nhỏ -->
     
     <!-- 1. Danh sách các nút tròn Avatar thu nhỏ (Chat Heads) xếp ở phía TRÊN nút soạn tin nhắn -->
-    <div id="phonghubChatHeadsContainer" style="position: fixed; bottom: 76px; right: 20px; display: flex; flex-direction: column-reverse; gap: 8px; z-index: 99999;">
+    <div id="phonghubChatHeadsContainer" style="position: fixed; bottom: 84px; right: 20px; display: flex; flex-direction: column-reverse; gap: 8px; z-index: 99999;">
         <!-- Các avatar tròn thu nhỏ sẽ được thêm động vào đây bằng JavaScript -->
     </div>
 
     <!-- 2. Nút bấm tròn Soạn tin nhắn ở góc dưới cùng bên phải: Theme màu trắng viền xám đồng nhất -->
-    <button type="button" id="phonghubMessengerToggleBtn" aria-label="Soạn tin nhắn" title="Soạn tin nhắn mới"
-            style="position: fixed; bottom: 20px; right: 20px; width: 48px; height: 48px; border-radius: 50%; background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.14); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 99999; transition: background-color 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;">
-        <!-- Icon Soạn tin nhắn chuẩn Messenger -->
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="display: block;">
-            <rect x="3" y="3" width="18" height="18" rx="5" stroke="#1e293b" stroke-width="2.2"/>
-            <path d="M8.5 15.5L14.5 9.5" stroke="#1e293b" stroke-width="2.6" stroke-linecap="round"/>
-            <circle cx="15.5" cy="8.5" r="1.3" fill="#1e293b"/>
+    <button type="button" id="phonghubMessengerToggleBtn" aria-label="Tin nhắn" title="Tin nhắn"
+            style="position: fixed; bottom: 20px; right: 20px; width: 56px; height: 56px; border-radius: 50%; background-color: #2563eb; color: #ffffff; border: 1px solid #2563eb; box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 99999; transition: background-color 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;">
+        <!-- Icon bong bóng chat -->
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" style="display: block;" aria-hidden="true">
+            <path d="M12 3C6.98 3 3 6.58 3 11c0 2.4 1.18 4.55 3.05 6.02L5.5 21l4.07-2.24c.78.17 1.6.26 2.43.26 5.02 0 9-3.58 9-8s-3.98-8-9-8z" fill="#ffffff"/>
+            <circle cx="8.5" cy="11" r="1.2" fill="#2563eb"/>
+            <circle cx="12" cy="11" r="1.2" fill="#2563eb"/>
+            <circle cx="15.5" cy="11" r="1.2" fill="#2563eb"/>
         </svg>
         <!-- Huy hiệu số tin nhắn chưa đọc toàn cục -->
         <span id="phonghubGlobalUnreadBadge" style="display: none; position: absolute; top: -3px; right: -3px; background-color: #ef4444; color: #ffffff; font-size: 10px; font-weight: 700; border-radius: 10px; padding: 1px 5px; min-width: 16px; text-align: center; border: 2px solid #ffffff; line-height: 1.2;">0</span>

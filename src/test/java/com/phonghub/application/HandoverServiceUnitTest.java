@@ -46,7 +46,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Base64;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,11 +57,13 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -560,6 +564,92 @@ class HandoverServiceUnitTest {
 
         assertThrows(ConflictException.class,
             () -> service.approve(HandoverType.CHECK_OUT, contract.getId(), new BigDecimal("9000000")));
+        verify(contractUseCase, never()).terminateContract(any(), anyBoolean());
+    }
+
+    // ---- skip ----
+
+    /** Repository giả giữ biên bản theo loại, để skip đọc lại được bản vừa tạo. */
+    private Map<HandoverType, Handover> statefulHandovers() {
+        Map<HandoverType, Handover> store = new EnumMap<>(HandoverType.class);
+        when(handovers.save(any())).thenAnswer(inv -> {
+            Handover h = inv.getArgument(0);
+            store.put(h.type(), h);
+            return h;
+        });
+        when(handovers.find(eq(contract.getId()), any()))
+            .thenAnswer(inv -> Optional.ofNullable(store.get(inv.<HandoverType>getArgument(1))));
+        when(handovers.findForUpdate(eq(contract.getId()), any()))
+            .thenAnswer(inv -> Optional.ofNullable(store.get(inv.<HandoverType>getArgument(1))));
+        return store;
+    }
+
+    @Test
+    void skipCheckInWithoutHandoverCreatesSampleAndApprovesWithoutPhotosOrTenant() {
+        statefulHandovers();
+
+        Handover skipped = service.skip(HandoverType.CHECK_IN, contract.getId());
+
+        assertEquals(HandoverStatus.APPROVED, skipped.status());
+        assertFalse(skipped.confirmedByTenant());
+        assertEquals(BigDecimal.ZERO, skipped.initialElectricMeter());
+        verify(contractUseCase, never()).terminateContract(any(), anyBoolean());
+    }
+
+    @Test
+    void skipCheckOutCopiesCheckInMetersAndTerminatesContract() {
+        when(currentUser.getCurrentUser()).thenReturn(owner);
+        Map<HandoverType, Handover> store = statefulHandovers();
+        Handover checkIn = existing(HandoverType.CHECK_IN, HandoverStatus.APPROVED);
+        store.put(HandoverType.CHECK_IN, checkIn);
+        when(items.findByHandoverId(any())).thenReturn(List.of());
+
+        Handover skipped = service.skip(HandoverType.CHECK_OUT, contract.getId());
+
+        assertEquals(HandoverStatus.APPROVED, skipped.status());
+        assertEquals(checkIn.initialElectricMeter(), skipped.initialElectricMeter());
+        assertEquals(checkIn.initialWaterMeter(), skipped.initialWaterMeter());
+        assertEquals(BigDecimal.ZERO, skipped.finalDeduction());
+        verify(authorization, atLeastOnce()).assertCanManageContracts(owner, propertyId);
+        verify(contractUseCase).terminateContract(contract.getId(), false);
+    }
+
+    @Test
+    void skipRequiresContractManager() {
+        doThrow(new UnauthorizedPropertyAccessException("no")).when(authorization)
+            .assertCanManageContracts(staff, propertyId);
+
+        assertThrows(UnauthorizedPropertyAccessException.class,
+            () -> service.skip(HandoverType.CHECK_OUT, contract.getId()));
+        verify(handovers, never()).save(any());
+    }
+
+    @Test
+    void skipFromPendingTenantDoesNotMarkTenantConfirmed() {
+        Map<HandoverType, Handover> store = statefulHandovers();
+        store.put(HandoverType.CHECK_IN, existing(HandoverType.CHECK_IN, HandoverStatus.PENDING_TENANT));
+
+        Handover skipped = service.skip(HandoverType.CHECK_IN, contract.getId());
+
+        assertEquals(HandoverStatus.APPROVED, skipped.status());
+        assertFalse(skipped.confirmedByTenant());
+    }
+
+    @Test
+    void skipRejectsAlreadyApprovedHandover() {
+        givenHandover(existing(HandoverType.CHECK_IN, HandoverStatus.APPROVED));
+
+        assertThrows(InvalidHandoverStateException.class,
+            () -> service.skip(HandoverType.CHECK_IN, contract.getId()));
+    }
+
+    @Test
+    void skipCheckOutWithoutApprovedCheckInFails() {
+        when(currentUser.getCurrentUser()).thenReturn(owner);
+        statefulHandovers();
+
+        assertThrows(InvalidHandoverStateException.class,
+            () -> service.skip(HandoverType.CHECK_OUT, contract.getId()));
         verify(contractUseCase, never()).terminateContract(any(), anyBoolean());
     }
 

@@ -78,6 +78,17 @@ class HandoverUiIntegrationTest extends SeededWebTest {
     }
 
     @Test
+    @DisplayName("Skipping is off by default: no button and the endpoint changes nothing")
+    void skipDisabledByDefault() throws Exception {
+        mockMvc.perform(get(PAGE).header("X-User-Id", OWNER_1))
+            .andExpect(content().string(not(containsString("Bỏ qua bước này"))));
+        mockMvc.perform(post(PAGE + "/skip").header("X-User-Id", OWNER_1))
+            .andExpect(flash().attributeExists("errorMessage"));
+        mockMvc.perform(get(PAGE).header("X-User-Id", OWNER_1))
+            .andExpect(content().string(containsString("Chưa có biên bản check-in")));
+    }
+
+    @Test
     @DisplayName("A draft contract activates only after tenant-confirmed check-in approval")
     void fullFlowThroughForms() throws Exception {
         Contract active = contracts.findById(DataSeeder.CONTRACT_1_ID).orElseThrow();

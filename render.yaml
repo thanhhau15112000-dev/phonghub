@@ -47,6 +47,8 @@ services:
         sync: false
       - key: SEPAY_SANDBOX_CHECKOUT_ENABLED
         sync: false
+      - key: HANDOVER_SKIP_ENABLED
+        sync: false
       - key: SEPAY_MERCHANT_ID
         sync: false
       - key: SEPAY_SECRET_KEY
