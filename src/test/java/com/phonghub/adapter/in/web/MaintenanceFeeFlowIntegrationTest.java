@@ -200,6 +200,14 @@ class MaintenanceFeeFlowIntegrationTest {
     }
 
     @Test
+    @DisplayName("#204: người thuê báo hỏng thì chủ trọ nhận thông báo phiếu mới")
+    void managersNotifiedOfNewTicket() throws Exception {
+        createTicket(TENANT, DataSeeder.ROOM_101_ID, "Hỏng cửa sổ", "NATURAL_WEAR");
+        String owner = com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter.OWNER_1_ID.toString();
+        assertTrue(titlesFor(owner).contains("Có phiếu báo hỏng mới"), titlesFor(owner).toString());
+    }
+
+    @Test
     @DisplayName("#204/#234: người thuê nhận thông báo bắt đầu sửa, cần thanh toán phí (kèm số tiền, hạn) và đã thanh toán; chủ trọ nhận báo đã thu phí")
     void feeFlowNotifications() throws Exception {
         MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Vỡ kính", "TENANT_USAGE");

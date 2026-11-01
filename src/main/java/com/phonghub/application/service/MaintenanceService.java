@@ -200,7 +200,12 @@ public class MaintenanceService implements MaintenanceUseCase {
         );
         ticket.attributeEventsTo(currentUser.id());
 
-        return maintenanceTicketRepository.save(ticket);
+        MaintenanceTicket created = maintenanceTicketRepository.save(ticket);
+        if (currentUser.role() == UserRole.TENANT) {
+            notifier.notifyManagers(created, "Có phiếu báo hỏng mới", "Người thuê phòng " + room.getRoomNumber()
+                + " vừa báo hỏng: \"" + created.getTitle() + "\".");
+        }
+        return created;
     }
 
     @Override
