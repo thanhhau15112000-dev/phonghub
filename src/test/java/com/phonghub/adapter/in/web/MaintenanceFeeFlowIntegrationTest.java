@@ -57,6 +57,7 @@ class MaintenanceFeeFlowIntegrationTest {
     @Autowired private InMemoryMaintenanceTicketRepository ticketRepository;
     @Autowired private InMemoryInvoiceRepository invoiceRepository;
     @Autowired private InMemoryPaymentRepository paymentRepository;
+    @Autowired private com.phonghub.application.port.out.NotificationRepositoryPort notificationRepository;
     @Autowired private com.phonghub.application.port.out.MaintenanceAttachmentRepositoryPort attachmentRepository;
 
     private long webhookSeq = 770000;
@@ -192,6 +193,33 @@ class MaintenanceFeeFlowIntegrationTest {
 
     private static final byte[] PNG = java.util.Base64.getDecoder().decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
+    private java.util.List<String> titlesFor(String userId) {
+        return notificationRepository.findByRecipient(UUID.fromString(userId), false, 0, 100).stream()
+            .map(com.phonghub.domain.model.Notification::title).toList();
+    }
+
+    @Test
+    @DisplayName("#204/#234: người thuê nhận thông báo bắt đầu sửa, cần thanh toán phí (kèm số tiền, hạn) và đã thanh toán; chủ trọ nhận báo đã thu phí")
+    void feeFlowNotifications() throws Exception {
+        MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Vỡ kính", "TENANT_USAGE");
+        accept(ticket.getId());
+        resolve(ticket.getId(), "250000", null);
+
+        java.util.List<String> tenantTitles = titlesFor(TENANT);
+        org.junit.jupiter.api.Assertions.assertTrue(tenantTitles.contains("Bắt đầu sửa chữa"), tenantTitles.toString());
+        org.junit.jupiter.api.Assertions.assertTrue(tenantTitles.contains("Cần thanh toán phí sửa chữa"), tenantTitles.toString());
+        var feeNotice = notificationRepository.findByRecipient(UUID.fromString(TENANT), false, 0, 100).stream()
+            .filter(n -> n.title().equals("Cần thanh toán phí sửa chữa")).findFirst().orElseThrow();
+        assertTrue(feeNotice.message().contains("250,000") || feeNotice.message().contains("250.000"), feeNotice.message());
+        assertTrue(feeNotice.message().contains("Hạn thanh toán"), feeNotice.message());
+
+        Invoice fee = invoiceRepository.findActiveByTicketId(ticket.getId()).orElseThrow();
+        payByWebhook(fee.getPaymentCode(), "250000");
+        assertTrue(titlesFor(TENANT).contains("Đã thanh toán phí sửa chữa"));
+        String owner = com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter.OWNER_1_ID.toString();
+        assertTrue(titlesFor(owner).contains("Đã thanh toán phí sửa chữa"), titlesFor(owner).toString());
+    }
 
     @Test
     @DisplayName("#232: hoàn tất phiếu kèm ảnh kết quả lưu loại RESULT, người thuê thấy ở phần Ảnh hoàn thành; không kèm ảnh vẫn hoàn tất")

@@ -215,7 +215,10 @@ public class MaintenanceService implements MaintenanceUseCase {
 
         ticket.accept(currentUser.id());
         ticket.attributeEventsTo(currentUser.id());
-        return maintenanceTicketRepository.save(ticket);
+        MaintenanceTicket accepted = maintenanceTicketRepository.save(ticket);
+        notifier.notifyTenant(accepted, "Bắt đầu sửa chữa", "Phiếu \"" + accepted.getTitle()
+            + "\" đã được kỹ thuật viên tiếp nhận và bắt đầu xử lý.");
+        return accepted;
     }
 
     @Override
@@ -256,6 +259,11 @@ public class MaintenanceService implements MaintenanceUseCase {
             currentUser, saved, details);
         if (reassignment) {
             notifyTechnicianReassignment(saved, previous, technician, reason.trim());
+        } else if (previous == null) {
+            notifier.notifyTechnician(saved, "Bạn được giao phiếu bảo trì", "Bạn được giao xử lý phiếu \""
+                + saved.getTitle() + "\".");
+            notifier.notifyTenant(saved, "Phiếu bảo trì đã được giao việc", "Phiếu \"" + saved.getTitle()
+                + "\" đã được giao cho kỹ thuật viên " + technician.fullName() + ".");
         }
         return saved;
     }
@@ -472,6 +480,8 @@ public class MaintenanceService implements MaintenanceUseCase {
             ));
         }
 
+        notifyResolved(savedTicket);
+
         // Phòng còn người ở theo hợp đồng (dữ liệu cũ) không được đánh dấu Trống
         if (command.releaseRoomToAvailable() && room != null && room.getStatus() == RoomStatus.MAINTENANCE
             && !hasResidingContract(room.getId())) {
@@ -480,6 +490,23 @@ public class MaintenanceService implements MaintenanceUseCase {
         }
 
         return savedTicket;
+    }
+
+    /** Sửa xong: người thuê được báo cần thanh toán phí (kèm số tiền và hạn) hoặc mời nghiệm thu. */
+    private void notifyResolved(MaintenanceTicket ticket) {
+        if (ticket.getStatus() == MaintenanceStatus.AWAITING_PAYMENT) {
+            String due = invoiceRepository == null ? "" : invoiceRepository.findActiveByTicketId(ticket.getId())
+                .map(fee -> String.format(" Hạn thanh toán %s%s.",
+                    fee.getDueDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                    fee.hasMaintenancePenaltyPolicy() ? "; quá hạn sẽ cộng phạt 10%" : ""))
+                .orElse("");
+            notifier.notifyTenant(ticket, "Cần thanh toán phí sửa chữa", String.format(
+                "Phiếu \"%s\" đã sửa xong. Phí sửa chữa bạn chịu: %,.0f đ.%s", ticket.getTitle(),
+                ticket.getRepairCost(), due));
+        } else {
+            notifier.notifyTenant(ticket, "Phiếu bảo trì đã sửa xong", "Phiếu \"" + ticket.getTitle()
+                + "\" đã sửa xong. Mời bạn kiểm tra và nghiệm thu kết quả.");
+        }
     }
 
     @Override
@@ -510,6 +537,8 @@ public class MaintenanceService implements MaintenanceUseCase {
         ticket.attributeEventsTo(currentUser.id());
         MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
         audit("MAINTENANCE_FEE_WAIVED", currentUser, saved, Map.of("reason", reason.trim()));
+        notifier.notifyTenant(saved, "Phí sửa chữa được miễn", "Chủ trọ đã miễn phí sửa chữa của phiếu \""
+            + saved.getTitle() + "\". Mời bạn nghiệm thu kết quả.");
         return saved;
     }
 
@@ -737,6 +766,9 @@ public class MaintenanceService implements MaintenanceUseCase {
         ticket.attributeEventsTo(currentUser.id());
         MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
         audit("MAINTENANCE_VERIFIED", currentUser, saved, Map.of());
+        String verified = "Người thuê đã nghiệm thu phiếu \"" + saved.getTitle() + "\".";
+        notifier.notifyManagers(saved, "Người thuê đã nghiệm thu", verified);
+        notifier.notifyTechnician(saved, "Người thuê đã nghiệm thu", verified);
         return saved;
     }
 
@@ -761,6 +793,9 @@ public class MaintenanceService implements MaintenanceUseCase {
         ticket.attributeEventsTo(currentUser.id());
         MaintenanceTicket saved = maintenanceTicketRepository.save(ticket);
         audit("MAINTENANCE_REOPENED_BY_TENANT", currentUser, saved, Map.of("status", saved.getStatus().name()));
+        String reopened = "Người thuê báo chưa đạt ở phiếu \"" + saved.getTitle() + "\": " + feedback.trim();
+        notifier.notifyManagers(saved, "Người thuê báo chưa đạt", reopened);
+        notifier.notifyTechnician(saved, "Người thuê báo chưa đạt", reopened);
         return saved;
     }
 

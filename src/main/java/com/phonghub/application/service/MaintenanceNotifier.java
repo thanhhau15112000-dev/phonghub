@@ -17,12 +17,16 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Gửi thông báo trong hệ thống theo từng bước của phiếu bảo trì (#204). Mọi thông báo trỏ về {@code /maintenance/{id}}.
  * Thiếu kho dữ liệu cần thiết thì không gửi gì, để việc chuyển trạng thái phiếu không bị ảnh hưởng.
  */
 public class MaintenanceNotifier {
+
+    private static final Logger log = LoggerFactory.getLogger(MaintenanceNotifier.class);
 
     private final PropertyRepositoryPort propertyRepository;
     private final StaffPropertyAssignmentPort assignmentPort;
@@ -119,7 +123,12 @@ public class MaintenanceNotifier {
         if (notificationRepository == null) {
             return;
         }
-        notificationRepository.save(Notification.createForUser(title, message, user,
-            "/maintenance/" + ticket.getId()));
+        try {
+            notificationRepository.save(Notification.createForUser(title, message, user,
+                "/maintenance/" + ticket.getId()));
+        } catch (RuntimeException ex) {
+            // Gửi thông báo lỗi không được làm hỏng việc chuyển trạng thái phiếu
+            log.warn("Không gửi được thông báo '{}' của phiếu {}", title, ticket.getId(), ex);
+        }
     }
 }

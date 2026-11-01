@@ -166,6 +166,28 @@ class MaintenanceResultAttachmentUnitTest {
     }
 
     @Test
+    @DisplayName("Sau mỗi lần người thuê báo chưa đạt, ảnh kết quả mới thuộc đợt kế tiếp và có giới hạn riêng")
+    void resultPhotosAreNumberedByRound() {
+        MaintenanceTicket ticket = ticket(MaintenanceStatus.RESOLVED);
+        when(currentUserPort.getCurrentUser()).thenReturn(technician);
+        MaintenanceAttachment round1Video = new MaintenanceAttachment(UUID.randomUUID(), ticket.getId(),
+            MaintenanceAttachment.Kind.VIDEO, "k", "video/mp4", 20, technician.id(), null,
+            MaintenanceAttachment.Phase.RESULT, 1);
+        when(attachments.findByTicketId(ticket.getId())).thenReturn(List.of(round1Video));
+
+        // chưa có phản hồi chưa đạt: vẫn đợt 1, video thứ hai bị chặn
+        assertThrows(com.phonghub.domain.exception.AttachmentLimitException.class, () -> service.uploadAll(ticket.getId(),
+            List.of(new AttachmentFile("video/mp4", MP4)), MaintenanceAttachment.Phase.RESULT));
+
+        ticket.reopenByTenant("vẫn rỉ nước");
+        when(tickets.findEvents(ticket.getId())).thenReturn(ticket.drainEvents());
+        List<MaintenanceAttachment> saved = service.uploadAll(ticket.getId(),
+            List.of(new AttachmentFile("video/mp4", MP4)), MaintenanceAttachment.Phase.RESULT);
+
+        assertEquals(2, saved.getFirst().round());
+    }
+
+    @Test
     @DisplayName("Kỹ thuật viên chỉ xóa được ảnh kết quả do chính mình tải, và chỉ khi chưa nghiệm thu")
     void technicianDeletesOnlyOwnResultPhotos() {
         MaintenanceTicket open = ticket(MaintenanceStatus.RESOLVED);

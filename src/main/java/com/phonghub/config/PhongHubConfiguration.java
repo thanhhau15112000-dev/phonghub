@@ -541,9 +541,10 @@ public class PhongHubConfiguration {
     @Bean
     public com.phonghub.application.service.MaintenanceFeeSettlement maintenanceFeeSettlement(
         InvoiceRepositoryPort invoiceRepo,
-        MaintenanceTicketRepositoryPort ticketRepo
+        MaintenanceTicketRepositoryPort ticketRepo,
+        com.phonghub.application.service.MaintenanceNotifier notifier
     ) {
-        return new com.phonghub.application.service.MaintenanceFeeSettlement(invoiceRepo, ticketRepo);
+        return new com.phonghub.application.service.MaintenanceFeeSettlement(invoiceRepo, ticketRepo, notifier);
     }
 
     @Bean
@@ -740,7 +741,8 @@ public class PhongHubConfiguration {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
         SepayProperties sepayProperties,
-        SepayGatewayOrderRepositoryPort gatewayOrderRepository
+        SepayGatewayOrderRepositoryPort gatewayOrderRepository,
+        com.phonghub.application.service.MaintenanceNotifier maintenanceNotifier
     ) {
         SepayPaymentService service = new SepayPaymentService(
             paymentRepository,
@@ -754,7 +756,7 @@ public class PhongHubConfiguration {
             authorizationService,
             sepayProperties,
             gatewayOrderRepository
-        );
+        ).withMaintenanceNotifier(maintenanceNotifier);
         return new TransactionalSepayWebhookUseCase(service);
     }
 
@@ -828,10 +830,12 @@ public class PhongHubConfiguration {
         InvoiceRepositoryPort invoiceRepository,
         ContractRepositoryPort contractRepository,
         com.phonghub.application.port.out.LateFeePolicyRepositoryPort policyRepository,
-        AuditPort auditPort
+        AuditPort auditPort,
+        MaintenanceTicketRepositoryPort ticketRepository,
+        com.phonghub.application.service.MaintenanceNotifier maintenanceNotifier
     ) {
         return new TransactionalLateFeeUseCases.Assessment(new com.phonghub.application.service.LateFeeAssessmentService(
-            invoiceRepository, contractRepository, policyRepository, auditPort));
+            invoiceRepository, contractRepository, policyRepository, auditPort, ticketRepository, maintenanceNotifier));
     }
 
     @Bean
