@@ -100,8 +100,10 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
         }
 
         // Kiểm tra loại, số lượng và dung lượng của cả lượt trước khi ghi tệp nào vào kho
+        // Ảnh kết quả tính theo đợt sửa: mỗi lần người thuê báo "Chưa đạt" mở một đợt mới với giới hạn riêng
+        int round = target == MaintenanceAttachment.Phase.RESULT ? currentRound(ticketId) : 1;
         List<MaintenanceAttachment> existing = attachmentRepository.findByTicketId(ticketId).stream()
-            .filter(attachment -> attachment.phase() == target).toList();
+            .filter(attachment -> attachment.phase() == target && attachment.round() == round).toList();
         long images = existing.stream().filter(a -> a.kind() == MaintenanceAttachment.Kind.IMAGE).count();
         long videos = existing.stream().filter(a -> a.kind() == MaintenanceAttachment.Kind.VIDEO).count();
         List<FileSanitizer.SanitizedFile> sanitized = new ArrayList<>();
@@ -138,7 +140,7 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
                 }
                 storedKeys.add(key);
                 saved.add(attachmentRepository.save(new MaintenanceAttachment(UUID.randomUUID(), ticketId, kinds.get(i),
-                    key, file.contentType(), file.content().length, user.id(), null, target)));
+                    key, file.contentType(), file.content().length, user.id(), null, target, round)));
             }
         } catch (RuntimeException ex) {
             storedKeys.forEach(this::deleteQuietly);
@@ -246,6 +248,13 @@ public class MaintenanceAttachmentService implements MaintenanceAttachmentUseCas
         return tenantRepository.findById(ticket.getRequestedByTenantId())
             .map(tenant -> attachment.uploadedBy().equals(tenant.userId()))
             .orElse(false);
+    }
+
+    /** Đợt sửa hiện tại: 1 + số lần người thuê đã báo "Chưa đạt". */
+    private int currentRound(UUID ticketId) {
+        return 1 + (int) ticketRepository.findEvents(ticketId).stream()
+            .filter(event -> event.note() != null && event.note().startsWith("Người thuê phản hồi chưa đạt"))
+            .count();
     }
 
     /** Còn nhận ảnh kết quả: từ lúc giao việc tới khi người thuê nghiệm thu; sau đó (VERIFIED) hoặc phiếu đóng thì khóa. */

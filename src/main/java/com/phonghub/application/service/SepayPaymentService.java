@@ -70,6 +70,7 @@ public class SepayPaymentService implements SepayWebhookUseCase {
     private final PaymentRepositoryPort paymentRepository;
     private final InvoiceRepositoryPort invoiceRepository;
     private final MaintenanceTicketRepositoryPort ticketRepository;
+    private MaintenanceNotifier maintenanceNotifier;
     private final ContractRepositoryPort contractRepository;
     private final PropertyRepositoryPort propertyRepository;
     private final NotificationRepositoryPort notificationRepository;
@@ -480,7 +481,13 @@ public class SepayPaymentService implements SepayWebhookUseCase {
 
     /** Hóa đơn phí sửa chữa đã trả đủ: phiếu bảo trì đang chờ thanh toán chuyển sang hoàn tất. */
     private void completeMaintenanceTicketIfPaid(Invoice invoice) {
-        new MaintenanceFeeSettlement(invoiceRepository, ticketRepository).completeIfPaid(invoice);
+        new MaintenanceFeeSettlement(invoiceRepository, ticketRepository, maintenanceNotifier).completeIfPaid(invoice);
+    }
+
+    /** Bật thông báo khi phí sửa chữa được thu đủ qua SePay (#204, #234). */
+    public SepayPaymentService withMaintenanceNotifier(MaintenanceNotifier notifier) {
+        this.maintenanceNotifier = notifier;
+        return this;
     }
 
     private Invoice matchInvoice(String code, String content) {

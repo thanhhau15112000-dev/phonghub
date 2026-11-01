@@ -12,19 +12,28 @@ public record MaintenanceAttachment(
     long sizeBytes,
     UUID uploadedBy,
     Instant createdAt,
-    Phase phase
+    Phase phase,
+    int round
 ) {
     public enum Kind { IMAGE, VIDEO }
 
     /** REPORT: tệp lúc báo hỏng. RESULT: tệp kết quả sửa chữa do kỹ thuật viên hoặc người quản lý tải. */
     public enum Phase { REPORT, RESULT }
 
+    /** Tệp có loại nhưng chưa phân đợt (đợt 1). */
+    public MaintenanceAttachment(
+        UUID id, UUID ticketId, Kind kind, String storageKey, String contentType, long sizeBytes, UUID uploadedBy,
+        Instant createdAt, Phase phase
+    ) {
+        this(id, ticketId, kind, storageKey, contentType, sizeBytes, uploadedBy, createdAt, phase, 1);
+    }
+
     /** Tệp lúc báo hỏng (mặc định). */
     public MaintenanceAttachment(
         UUID id, UUID ticketId, Kind kind, String storageKey, String contentType, long sizeBytes, UUID uploadedBy,
         Instant createdAt
     ) {
-        this(id, ticketId, kind, storageKey, contentType, sizeBytes, uploadedBy, createdAt, Phase.REPORT);
+        this(id, ticketId, kind, storageKey, contentType, sizeBytes, uploadedBy, createdAt, Phase.REPORT, 1);
     }
 
     public MaintenanceAttachment {
@@ -37,6 +46,9 @@ public record MaintenanceAttachment(
         }
         if (phase == null) {
             phase = Phase.REPORT;
+        }
+        if (round < 1) {
+            round = 1;
         }
     }
 }

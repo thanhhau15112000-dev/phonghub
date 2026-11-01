@@ -5,6 +5,7 @@ import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
 import com.phonghub.application.port.out.LateFeePolicyRepositoryPort;
+import com.phonghub.application.port.out.MaintenanceTicketRepositoryPort;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.InvoiceType;
@@ -23,6 +24,8 @@ public class LateFeeAssessmentService implements LateFeeAssessmentUseCase {
     private final ContractRepositoryPort contractRepository;
     private final LateFeePolicyRepositoryPort policyRepository;
     private final AuditPort auditPort;
+    private final MaintenanceTicketRepositoryPort ticketRepository;
+    private final MaintenanceNotifier notifier;
 
     public LateFeeAssessmentService(
         InvoiceRepositoryPort invoiceRepository,
@@ -30,10 +33,23 @@ public class LateFeeAssessmentService implements LateFeeAssessmentUseCase {
         LateFeePolicyRepositoryPort policyRepository,
         AuditPort auditPort
     ) {
+        this(invoiceRepository, contractRepository, policyRepository, auditPort, null, null);
+    }
+
+    public LateFeeAssessmentService(
+        InvoiceRepositoryPort invoiceRepository,
+        ContractRepositoryPort contractRepository,
+        LateFeePolicyRepositoryPort policyRepository,
+        AuditPort auditPort,
+        MaintenanceTicketRepositoryPort ticketRepository,
+        MaintenanceNotifier notifier
+    ) {
         this.invoiceRepository = invoiceRepository;
         this.contractRepository = contractRepository;
         this.policyRepository = policyRepository;
         this.auditPort = auditPort;
+        this.ticketRepository = ticketRepository;
+        this.notifier = notifier;
     }
 
     @Override
@@ -88,6 +104,22 @@ public class LateFeeAssessmentService implements LateFeeAssessmentUseCase {
             Map.of("invoiceType", InvoiceType.MAINTENANCE.name(), "amount",
                 invoice.getTotalAmount().subtract(before).toPlainString(),
                 "daysOverdue", ChronoUnit.DAYS.between(invoice.getDueDate(), today), "feeType", "PERCENT_10")));
+        notifyMaintenancePenalty(invoice, invoice.getTotalAmount().subtract(before));
         return true;
+    }
+
+    /** Báo người thuê khoản phí sửa chữa đã bị cộng phạt trễ hạn; lỗi gửi thông báo không làm mất khoản phạt. */
+    private void notifyMaintenancePenalty(Invoice invoice, BigDecimal penalty) {
+        if (notifier == null || ticketRepository == null || invoice.getTicketId() == null) {
+            return;
+        }
+        try {
+            ticketRepository.findById(invoice.getTicketId()).ifPresent(ticket -> notifier.notifyTenant(ticket,
+                "Đã cộng phạt trễ hạn phí sửa chữa", String.format(
+                    "Phí sửa chữa của phiếu \"%s\" đã quá hạn, hệ thống cộng phạt 10%% (%,.0f đ). Tổng cần trả: %,.0f đ.",
+                    ticket.getTitle(), penalty, invoice.remainingAmount())));
+        } catch (RuntimeException ignored) {
+            // thông báo là phụ
+        }
     }
 }

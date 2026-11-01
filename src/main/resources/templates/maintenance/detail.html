@@ -400,7 +400,7 @@
                     Trình duyệt không hỗ trợ phát video này.
                 </video>
                 <small style="display: block; margin-top: 4px; color: var(--text-secondary); overflow-wrap: anywhere;"
-                       th:text="${(a.uploadedBy() != null ? actorNames.get(a.uploadedBy()) : 'Hệ thống') + ' · ' + #temporals.format(a.createdAt().atZone(T(java.time.ZoneId).of('Asia/Ho_Chi_Minh')), 'dd/MM/yyyy HH:mm')}">Người tải · 01/01/2026 08:00</small>
+                       th:text="${(a.phase().name() == 'RESULT' ? 'Đợt ' + a.round() + ' · ' : '') + (a.uploadedBy() != null ? actorNames.get(a.uploadedBy()) : 'Hệ thống') + ' · ' + #temporals.format(a.createdAt().atZone(T(java.time.ZoneId).of('Asia/Ho_Chi_Minh')), 'dd/MM/yyyy HH:mm')}">Người tải · 01/01/2026 08:00</small>
                 <div style="display: flex; justify-content: space-between; gap: 6px; align-items: center; margin-top: 6px;">
                     <small style="color: var(--text-secondary);"
                            th:text="${a.kind().name() == 'VIDEO' ? 'Video' : 'Ảnh'} + ' · ' + ${#numbers.formatDecimal(a.sizeBytes() / 1024.0, 0, 0)} + ' KB'">Ảnh</small>

@@ -84,10 +84,10 @@ public class MaintenanceAttachmentApiController {
     }
 
     /** Không trả khóa tệp trong kho; tải qua đường dẫn có chữ ký của chính endpoint này. */
-    public record AttachmentResponse(UUID id, String kind, String phase, String contentType, long sizeBytes, UUID uploadedBy,
+    public record AttachmentResponse(UUID id, String kind, String phase, int round, String contentType, long sizeBytes, UUID uploadedBy,
                                      Instant createdAt) {
         static AttachmentResponse from(MaintenanceAttachment attachment) {
-            return new AttachmentResponse(attachment.id(), attachment.kind().name(), attachment.phase().name(), attachment.contentType(),
+            return new AttachmentResponse(attachment.id(), attachment.kind().name(), attachment.phase().name(), attachment.round(), attachment.contentType(),
                 attachment.sizeBytes(), attachment.uploadedBy(), attachment.createdAt());
         }
     }
