@@ -24,7 +24,7 @@
                 <li th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF')}"><a th:href="@{/payments}">Giao dịch</a></li>
                 <li th:if="${currentUser != null and currentUser.role().name() == 'TENANT'}"><a th:href="@{/account/payments}">Lịch sử thanh toán</a></li>
                 <li th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}"><a th:href="@{/admin/users}">Tài khoản</a></li>
-                <li th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'OWNER')}"><a th:href="@{/audit}">Nhật ký</a></li>
+                <li th:if="${currentUser != null}"><a th:href="@{/audit}" th:text="${currentUser.role().name() == 'TENANT'} ? 'Hoạt động của tôi' : 'Nhật ký'">Nhật ký</a></li>
             </ul>
         </nav>
     </div>
