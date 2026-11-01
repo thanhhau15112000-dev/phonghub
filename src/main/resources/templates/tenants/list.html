@@ -56,6 +56,7 @@
                         <div style="display: flex; gap: 6px; flex-wrap: wrap;">
                             <a th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${v.tenant().id()} + '/edit'}" class="btn btn-sm btn-secondary">Sửa</a>
                             <a th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${v.tenant().id()} + '/documents'}" class="btn btn-sm btn-secondary">Giấy tờ</a>
+                            <a th:if="${currentUser != null and currentUser.role().name() != 'ADMIN'}" th:href="@{'/tenants/' + ${v.tenant().id()} + '/payments'}" class="btn btn-sm btn-secondary">Lịch sử thanh toán</a>
                             <details th:if="${v.tenant().userId() == null}" style="display: inline-block;">
                                 <summary class="btn btn-sm btn-secondary" style="cursor: pointer;">Cấp tài khoản</summary>
                                 <form th:action="@{'/properties/' + ${property.id()} + '/tenants/' + ${v.tenant().id()} + '/issue-account'}"
