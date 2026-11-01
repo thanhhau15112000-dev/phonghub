@@ -293,10 +293,10 @@ public class SepayPaymentService implements SepayWebhookUseCase {
         Invoice invoice = null;
         UUID contractId = null;
         if (status == PaymentStatus.SUCCESS) {
-            invoice = matchInvoice(command.code(), command.content());
+            invoice = matchInvoice(command.code(), command.content(), command.description(), command.referenceCode());
             contractId = invoice != null
                 ? invoice.getContractId()
-                : extractAndMatchContractId(command.content(), command.code());
+                : extractAndMatchContractId(command.content(), command.code(), command.description(), command.referenceCode());
         }
 
         // 3b. Chia số tiền: phần cộng vào hóa đơn (tối đa số còn nợ) và phần dư cần người quản lý xem xét.
@@ -483,8 +483,8 @@ public class SepayPaymentService implements SepayWebhookUseCase {
         new MaintenanceFeeSettlement(invoiceRepository, ticketRepository).completeIfPaid(invoice);
     }
 
-    private Invoice matchInvoice(String code, String content) {
-        for (String text : new String[] { code, content }) {
+    private Invoice matchInvoice(String code, String content, String description, String referenceCode) {
+        for (String text : new String[] { code, content, description, referenceCode }) {
             for (String candidate : PaymentCode.findCandidates(text)) {
                 Optional<Invoice> invoice = invoiceRepository.findByPaymentCodeForUpdate(candidate);
                 if (invoice.isPresent()) {
@@ -495,12 +495,14 @@ public class SepayPaymentService implements SepayWebhookUseCase {
         return null;
     }
 
-    private UUID extractAndMatchContractId(String content, String code) {
-        UUID matched = tryParseContractUuid(code);
-        if (matched != null) {
-            return matched;
+    private UUID extractAndMatchContractId(String content, String code, String description, String referenceCode) {
+        for (String text : new String[] { code, content, description, referenceCode }) {
+            UUID matched = tryParseContractUuid(text);
+            if (matched != null) {
+                return matched;
+            }
         }
-        return tryParseContractUuid(content);
+        return null;
     }
 
     private UUID tryParseContractUuid(String text) {

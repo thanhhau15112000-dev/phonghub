@@ -29,7 +29,10 @@
             <a th:href="@{${returnUrl}}" class="btn btn-primary">Quay lại</a>
         </div>
         <div id="paid-live" class="alert alert-success" style="display: none; margin-bottom: 16px;">
-            Đã nhận thanh toán. Đang quay lại...
+            Đã nhận thanh toán đủ. Đang chuyển hướng...
+        </div>
+        <div id="partially-paid-live" class="alert alert-info" style="display: none; margin-bottom: 16px;">
+            Đã ghi nhận thanh toán một phần. Đang cập nhật số dư còn lại...
         </div>
         <div th:if="${invoice.getStatus().name() == 'VOIDED'}" class="empty-state">
             <p>Khoản này đã bị hủy, không cần thanh toán.</p>
@@ -200,15 +203,25 @@
         (function () {
             var statusUrl = /*[[@{'/invoices/' + ${invoice.getId()} + '/status'}]]*/ '';
             var returnUrl = /*[[@{${returnUrl}}]]*/ '/';
+            var currentPaidAmount = /*[[${invoice.getPaidAmount()}]]*/ 0;
             var timer = setInterval(function () {
                 fetch(statusUrl, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
                     .then(function (r) { return r.ok ? r.json() : null; })
                     .then(function (s) {
-                        if (!s || !(s.paid || s.consolidated)) { return; }
-                        clearInterval(timer);
-                        var box = document.getElementById('paid-live');
-                        if (box) { box.style.display = 'block'; }
-                        setTimeout(function () { window.location.href = returnUrl; }, 2000);
+                        if (!s) return;
+                        if (s.paid || s.consolidated) {
+                            clearInterval(timer);
+                            var box = document.getElementById('paid-live');
+                            if (box) { box.style.display = 'block'; }
+                            setTimeout(function () { window.location.href = returnUrl; }, 1800);
+                            return;
+                        }
+                        if (s.status === 'PARTIALLY_PAID' || (s.paidAmount !== undefined && Number(s.paidAmount) > Number(currentPaidAmount))) {
+                            clearInterval(timer);
+                            var partialBox = document.getElementById('partially-paid-live');
+                            if (partialBox) { partialBox.style.display = 'block'; }
+                            setTimeout(function () { window.location.reload(); }, 1200);
+                        }
                     })
                     .catch(function () { /* mạng chập chờn: thử lại ở lần sau */ });
             }, 3000);
