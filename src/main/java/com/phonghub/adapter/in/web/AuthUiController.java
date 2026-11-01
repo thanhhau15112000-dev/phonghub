@@ -34,7 +34,7 @@ import com.phonghub.application.port.in.TenantDocumentUseCase;
 import com.phonghub.application.port.in.UserUseCase;
 import com.phonghub.domain.model.DocumentType;
 import com.phonghub.application.port.out.CurrentUserPort;
-import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
+import com.phonghub.application.port.out.DemoFixturePort;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 @Controller
@@ -347,7 +347,7 @@ public class AuthUiController {
             }
             demoActorPort.ifPresent(p -> {
                 p.clear();
-                p.switchActor(LocalDemoAuthenticationAdapter.ADMIN_ID);
+                p.switchActor(DemoFixturePort.ADMIN_ID);
             });
         }
         return "redirect:/login?loggedOut=true";
