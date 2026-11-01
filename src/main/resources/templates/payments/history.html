@@ -66,7 +66,7 @@
             <tbody>
                 <tr th:each="r : ${history.rows()}">
                     <td th:text="${#temporals.format(r.at().atZone(T(java.time.ZoneId).of('Asia/Ho_Chi_Minh')), 'dd/MM/yyyy HH:mm')}">01/01/2026 08:00</td>
-                    <td><span th:text="${r.propertyName()}">Nhà trọ</span> · <span th:text="'P.' + ${r.roomNumber()}">P.101</span></td>
+                    <td><span th:text="${r.propertyName()}">Nhà trọ</span> · <span th:text="${r.roomNumber()}">P101</span></td>
                     <td>
                         <span th:text="${r.invoiceType() != null ? typeLabels[r.invoiceType().name()] : 'Hóa đơn'}">Tiền thuê</span>
                         <small th:if="${r.invoiceType() != null and r.invoiceType().name() == 'RENT' and r.month() != null}"
