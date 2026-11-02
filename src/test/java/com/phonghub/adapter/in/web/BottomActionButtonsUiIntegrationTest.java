@@ -48,6 +48,12 @@ class BottomActionButtonsUiIntegrationTest extends SeededWebTest {
     @Autowired private InMemoryHandoverRepository handovers;
     @Autowired private InMemoryMaintenanceTicketRepository tickets;
 
+    /** Biên bản còn sót từ lớp test khác dùng chung ngữ cảnh làm test này lỗi tùy thứ tự chạy. */
+    @org.junit.jupiter.api.BeforeEach
+    void clearHandovers() {
+        handovers.clear();
+    }
+
     @Test
     @DisplayName("Biên bản check-in: các nút hành động nằm trong thẻ #handover-actions ở cuối trang sau ảnh và tài sản")
     void handoverButtonsAtBottom() throws Exception {

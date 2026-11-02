@@ -80,7 +80,9 @@ public class AuditLogService implements AuditLogUseCase {
             scope
         ));
         return switch (user.role()) {
-            case OWNER, TENANT -> entries;
+            case OWNER -> entries;
+            // Người thuê chỉ cần biết việc gì xảy ra; tên và mã người khác thực hiện (kể cả quản trị viên) được ẩn.
+            case TENANT -> entries.stream().map(e -> maskActorForTenant(user, e)).toList();
             case STAFF -> maskForStaff(user, entries);
             case TECHNICIAN -> entries.stream()
                 .map(e -> "MAINTENANCE_TICKET".equals(e.targetType()) ? e : withDetails(e, AuditSanitizer.maskMoney(e.details())))
@@ -88,6 +90,14 @@ public class AuditLogService implements AuditLogUseCase {
             // Admin vẫn theo dõi được ai làm gì, nhưng không xem số liệu tiền của nhà trọ (#163).
             default -> entries.stream().map(e -> withDetails(e, AuditSanitizer.maskMoney(e.details()))).toList();
         };
+    }
+
+    private static AuditQueryPort.Entry maskActorForTenant(CurrentUser user, AuditQueryPort.Entry e) {
+        if (e.actorId() == null || e.actorId().equals(user.id())) {
+            return e;
+        }
+        return new AuditQueryPort.Entry(e.id(), e.action(), e.actorId(), "Ban quản lý", e.targetType(),
+            e.targetId(), e.propertyId(), e.details(), e.createdAt());
     }
 
     /** Nhân viên thấy mọi sự kiện của nhà trọ được giao, nhưng chi tiết che theo ô quyền của từng nhà trọ. */

@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Đang chuyển đến SePay')}"></head>
+<head th:replace="~{fragments/layout :: head('Đang chuyển đến trang thanh toán')}"></head>
 <body>
 <main class="container" style="max-width: 640px; padding-top: 48px;">
     <div class="card" style="text-align: center;">
-        <h1 style="font-size: 20px;">Đang chuyển đến SePay</h1>
+        <h1 style="font-size: 20px;">Đang chuyển đến trang thanh toán</h1>
         <form id="sepay-checkout" method="post" th:attr="action=${checkoutAction}">
             <input th:each="field : ${checkoutFields}" type="hidden"
                    th:name="${field.key}" th:value="${field.value}">

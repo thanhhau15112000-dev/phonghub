@@ -342,7 +342,7 @@ public final class UiText {
             "SERVICE_RATE_CREATED", "Thêm đơn giá dịch vụ",
             "SERVICE_RATE_UPDATED", "Sửa đơn giá dịch vụ",
             "METER_READING_RECORDED", "Ghi chỉ số đồng hồ",
-            "METER_OCR_REQUESTED", "Đọc chỉ số bằng OCR",
+            "METER_OCR_REQUESTED", "Đọc chỉ số từ ảnh công tơ",
             "METER_PHOTO_ATTACHED", "Đính ảnh đồng hồ",
             "METER_SUBMISSION_CREATED", "Người thuê gửi chỉ số",
             "METER_SUBMISSION_ACCEPTED", "Duyệt chỉ số người thuê gửi",

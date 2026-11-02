@@ -208,6 +208,22 @@ class AuditLogServiceUnitTest {
     }
 
     @Test
+    @DisplayName("người thuê: tên người khác (kể cả quản trị viên) bị ẩn, việc của chính mình giữ tên")
+    void tenantDoesNotSeeOtherActorNames() {
+        UUID tenantUser = UUID.randomUUID();
+        loginAs(UserRole.TENANT, tenantUser);
+        UUID admin = UUID.randomUUID();
+        when(queryPort.search(any())).thenReturn(List.of(
+            new AuditQueryPort.Entry(UUID.randomUUID(), "USER_PASSWORD_RESET", admin, "Quản trị viên A", "USER",
+                tenantUser.toString(), null, null, Instant.now()),
+            new AuditQueryPort.Entry(UUID.randomUUID(), "USER_PASSWORD_CHANGED", tenantUser, "Tôi", "USER",
+                tenantUser.toString(), null, null, Instant.now())));
+        List<AuditQueryPort.Entry> result = service.search(all());
+        assertEquals("Ban quản lý", result.get(0).actorName());
+        assertEquals("Tôi", result.get(1).actorName());
+    }
+
+    @Test
     @DisplayName("người thuê: phạm vi theo tài khoản của mình, không chọn được nhà trọ hay người khác")
     void tenantScope() {
         UUID tenantUser = UUID.randomUUID();
