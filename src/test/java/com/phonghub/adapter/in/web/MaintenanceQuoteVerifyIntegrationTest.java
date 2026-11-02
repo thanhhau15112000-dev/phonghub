@@ -48,6 +48,7 @@ class MaintenanceQuoteVerifyIntegrationTest extends SeededWebTest {
     @Autowired private MockMvc mockMvc;
     @Autowired private InMemoryMaintenanceTicketRepository tickets;
     @Autowired private InMemoryInvoiceRepository invoices;
+    @Autowired private com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository notifications;
 
     @BeforeEach
     @AfterEach
@@ -213,6 +214,30 @@ class MaintenanceQuoteVerifyIntegrationTest extends SeededWebTest {
             .filter(i -> ticket.getId().equals(i.getTicketId())).count(), "không phát hành phí lần hai");
         mockMvc.perform(post(base + "/verify").header("X-User-Id", TENANT_1))
             .andExpect(jsonPath("$.status").value("VERIFIED"));
+    }
+
+    @Test
+    @DisplayName("#299: kỹ thuật viên hoàn tất phiếu thì chủ trọ và nhân viên của nhà trọ được báo kết quả, không kèm tiền")
+    void managersNotifiedWhenResolved() throws Exception {
+        MaintenanceTicket ticket = tenantRoomTicket(MaintenanceStatus.IN_PROGRESS, LiableParty.OWNER);
+        notifications.clear();
+        mockMvc.perform(post("/api/maintenance/" + ticket.getId() + "/resolve").header("X-User-Id", TECH_1)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"resolutionNotes\": \"Thay ổ khóa mới\", \"repairCost\": 777000, \"releaseRoomToAvailable\": false}"))
+            .andExpect(status().isOk());
+
+        for (UUID manager : new UUID[] {LocalDemoAuthenticationAdapter.OWNER_1_ID, LocalDemoAuthenticationAdapter.STAFF_1_ID}) {
+            var received = notifications.findByRecipient(manager, false, 0, 50).stream()
+                .filter(n -> "Kỹ thuật viên đã hoàn tất phiếu bảo trì".equals(n.title())).toList();
+            assertEquals(1, received.size(), "mỗi người quản lý nhận đúng một thông báo");
+            assertTrue(received.get(0).message().contains("Thay ổ khóa mới"));
+            assertFalse(received.get(0).message().contains("777"), "thông báo không kèm số tiền");
+        }
+        assertTrue(notifications.findByRecipient(LocalDemoAuthenticationAdapter.TECH_1_ID, false, 0, 50).stream()
+            .noneMatch(n -> "Kỹ thuật viên đã hoàn tất phiếu bảo trì".equals(n.title())), "kỹ thuật viên không tự nhận");
+        assertTrue(notifications.findByRecipient(LocalDemoAuthenticationAdapter.STAFF_2_ID, false, 0, 50).stream()
+            .noneMatch(n -> "Kỹ thuật viên đã hoàn tất phiếu bảo trì".equals(n.title())),
+            "nhân viên của nhà trọ khác không nhận");
     }
 
     @Test
