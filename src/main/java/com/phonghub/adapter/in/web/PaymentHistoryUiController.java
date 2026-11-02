@@ -28,7 +28,7 @@ public class PaymentHistoryUiController {
         Status.REJECTED.name(), "Bị từ chối",
         Status.MISMATCH.name(), "Không khớp số tiền");
     static final Map<String, String> METHOD_LABELS = Map.of(
-        Method.SEPAY.name(), "Chuyển khoản (SePay)",
+        Method.SEPAY.name(), "Chuyển khoản ngân hàng",
         Method.TENANT_CLAIM.name(), "Báo chuyển khoản",
         Method.MANAGER_RECORD.name(), "Chủ trọ ghi nhận",
         Method.DEPOSIT_OFFSET.name(), "Cấn trừ cọc");

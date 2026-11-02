@@ -73,7 +73,7 @@
                                style="color: var(--text-secondary);" th:text="${#numbers.formatInteger(r.month(), 2) + '/' + r.year()}">01/2026</small>
                     </td>
                     <td><strong th:text="${#numbers.formatDecimal(r.amount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3.500.000 đ</strong></td>
-                    <td th:text="${methodLabels[r.method().name()]}">SePay</td>
+                    <td th:text="${methodLabels[r.method().name()]}">Chuyển khoản</td>
                     <td style="overflow-wrap: anywhere;" th:text="${r.reference()}">Mã</td>
                     <td>
                         <span th:text="${statusLabels[r.status().name()]}">Thành công</span>

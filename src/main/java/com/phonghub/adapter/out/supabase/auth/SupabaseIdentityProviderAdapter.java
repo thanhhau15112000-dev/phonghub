@@ -205,7 +205,7 @@ public class SupabaseIdentityProviderAdapter implements IdentityProviderPort {
                     String errorCode = extractErrorCode(body);
                     if ("weak_password".equals(errorCode)) {
                         throw new IllegalArgumentException(
-                            "Mật khẩu không đủ độ mạnh theo yêu cầu của Supabase (weak_password). "
+                            "Mật khẩu không đủ độ mạnh theo yêu cầu bảo mật. "
                             + "Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt.");
                     }
                     throw new IllegalArgumentException(
@@ -254,7 +254,7 @@ public class SupabaseIdentityProviderAdapter implements IdentityProviderPort {
                     }
                     if ("weak_password".equals(errorCode)) {
                         throw new IllegalArgumentException(
-                            "Mật khẩu tạm thời không đủ độ mạnh theo yêu cầu của Supabase (weak_password). "
+                            "Mật khẩu tạm thời không đủ độ mạnh theo yêu cầu bảo mật. "
                             + "Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt.");
                     }
                     throw new IdentityProviderUnavailableException(

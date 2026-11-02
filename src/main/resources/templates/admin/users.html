@@ -57,7 +57,7 @@
     <div class="card" style="margin-bottom: 20px;">
         <h2>Tạo tài khoản</h2>
         <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 16px;">
-            Hệ thống sẽ tạo identity trong Supabase Auth và lưu hồ sơ tương ứng vào cơ sở dữ liệu ứng dụng.
+            Điền thông tin bên dưới để tạo tài khoản mới. Người dùng đăng nhập bằng tên đăng nhập và mật khẩu bạn đặt.
         </p>
         <form th:action="@{/admin/users}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
