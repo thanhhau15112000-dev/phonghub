@@ -512,6 +512,12 @@ public class MaintenanceService implements MaintenanceUseCase {
             notifier.notifyTenant(ticket, "Phiếu bảo trì đã sửa xong", "Phiếu \"" + ticket.getTitle()
                 + "\" đã sửa xong. Mời bạn kiểm tra và nghiệm thu kết quả.");
         }
+        // Chủ trọ và nhân viên của nhà trọ cũng được báo kết quả (#299). Không kèm số tiền để người không có quyền
+        // xem tài chính không thấy tiền qua thông báo; số tiền xem ở trang phiếu theo quyền.
+        String notes = ticket.getResolutionNotes();
+        notifier.notifyManagers(ticket, "Kỹ thuật viên đã hoàn tất phiếu bảo trì", "Phiếu \"" + ticket.getTitle()
+            + "\" đã được kỹ thuật viên xử lý xong."
+            + (notes == null || notes.isBlank() ? "" : " Kết quả: " + notes.trim()));
     }
 
     @Override
