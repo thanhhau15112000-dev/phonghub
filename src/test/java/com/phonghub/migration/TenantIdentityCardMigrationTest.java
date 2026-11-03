@@ -63,7 +63,7 @@ class TenantIdentityCardMigrationTest {
             assertNotEquals("079200001234", row.getString("identity_card_ciphertext"));
             assertFalse(row.getString("identity_card_ciphertext").contains("079200001234"));
             assertEquals(64, row.getString("identity_card_hmac").trim().length());
-            assertEquals("test-v1", row.getString("identity_card_key_id"));
+            assertEquals(TestTenantDataProtection.keyId(), row.getString("identity_card_key_id"));
 
             ResultSet leftovers = st.executeQuery("SELECT count(*) FROM tenants "
                 + "WHERE identity_card_ciphertext IS NULL OR identity_card_hmac IS NULL");
@@ -78,7 +78,7 @@ class TenantIdentityCardMigrationTest {
             String insert = "INSERT INTO tenants (id, full_name, phone, identity_card_ciphertext, "
                 + "identity_card_nonce, identity_card_hmac, identity_card_key_id) VALUES ('"
                 + UUID.randomUUID() + "', 'Trung CCCD', '0900000098', 'x', 'y', '"
-                + source.getString("identity_card_hmac") + "', 'test-v1')";
+                + source.getString("identity_card_hmac") + "', '" + TestTenantDataProtection.keyId() + "')";
             assertThrows(java.sql.SQLException.class, () -> st.execute(insert),
                 "duplicate HMAC must violate the unique constraint");
         }

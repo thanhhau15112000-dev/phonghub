@@ -23,6 +23,26 @@
         </div>
     </div>
 
+    <section class="card" style="margin-bottom: 20px;">
+        <h2 style="margin: 0 0 4px; font-size: 16px;">Hỏi về hợp đồng</h2>
+        <p style="margin: 0 0 12px; color: var(--text-secondary); font-size: 13px;">
+            Trợ lý dùng các trường hợp đồng đang lưu. Văn bản điều khoản hoặc bản scan không có trong nguồn hỏi đáp.
+        </p>
+        <form data-ai-form th:attr="data-ai-endpoint=@{'/api/v1/ai/contracts/' + ${contract.getId()} + '/ask'}">
+            <label class="form-label" th:for="'contract-ai-question-' + ${contract.getId()}">Câu hỏi</label>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start;">
+                <textarea class="form-control" name="question" maxlength="1200" required rows="2"
+                          th:id="'contract-ai-question-' + ${contract.getId()}"
+                          placeholder="Ví dụ: Ngày thanh toán và tiền cọc là bao nhiêu?"></textarea>
+                <button type="submit" class="btn btn-primary">Gửi câu hỏi</button>
+            </div>
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        </form>
+        <div id="contract-ai-answer" class="ai-answer" aria-live="polite" style="display: none; margin-top: 12px;"></div>
+    </section>
+
+    <script th:src="@{/js/ai-assistant.js}" defer></script>
+
     <!-- Trạng thái và thao tác hợp đồng -->
     <div class="card" style="margin-bottom: 20px;">
         <div class="flex-between">

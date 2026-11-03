@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresStatisticsQueryAdapter;
-import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.application.port.out.StatisticsQueryPort;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomSearchCriteria;
@@ -45,8 +44,8 @@ class RoomArchivePostgresTest {
             .load().migrate();
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
         PostgresRoomRepository rooms = new PostgresRoomRepository(jdbc);
-        PostgresStatisticsQueryAdapter stats = new PostgresStatisticsQueryAdapter(jdbc, new AesGcmTenantDataProtector(
-            "test-v1", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="));
+        PostgresStatisticsQueryAdapter stats = new PostgresStatisticsQueryAdapter(jdbc,
+            TestTenantDataProtection.createProtector());
         UUID propertyId = UUID.fromString(jdbc.getJdbcTemplate().queryForObject(
             "SELECT id::text FROM properties LIMIT 1", String.class));
 

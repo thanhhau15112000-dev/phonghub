@@ -27,6 +27,19 @@ services:
       timeout: 5s
       retries: 12
 
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: phonghub-litellm
+    profiles: ["ai"]
+    command: ["--config", "/app/config.yaml", "--host", "0.0.0.0", "--port", "4000"]
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-phonghub-local}
+    ports:
+      - "127.0.0.1:14000:4000"
+    volumes:
+      - ./ops/litellm/config.yaml:/app/config.yaml:ro
+
   app:
     build:
       context: .
@@ -55,6 +68,14 @@ services:
       SEPAY_MERCHANT_ID: ${SEPAY_MERCHANT_ID:-}
       SEPAY_SECRET_KEY: ${SEPAY_SECRET_KEY:-}
       SEPAY_PUBLIC_BASE_URL: ${SEPAY_PUBLIC_BASE_URL:-}
+      PHONGHUB_AI_ENABLED: ${PHONGHUB_AI_ENABLED:-false}
+      PHONGHUB_AI_BASE_URL: http://litellm:4000
+      PHONGHUB_AI_API_KEY: ${LITELLM_MASTER_KEY:-sk-phonghub-local}
+      PHONGHUB_AI_MODEL: ${PHONGHUB_AI_MODEL:-gemini-3.8-flash}
+      PHONGHUB_AI_EMBEDDING_MODEL: ${PHONGHUB_AI_EMBEDDING_MODEL:-gemini-faq-embedding}
+      PHONGHUB_AI_EMBEDDING_DIMENSIONS: ${PHONGHUB_AI_EMBEDDING_DIMENSIONS:-768}
+      PHONGHUB_AI_FAQ_MAX_RESULTS: ${PHONGHUB_AI_FAQ_MAX_RESULTS:-3}
+      PHONGHUB_AI_FAQ_MINIMUM_SIMILARITY: ${PHONGHUB_AI_FAQ_MINIMUM_SIMILARITY:-0.65}
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:

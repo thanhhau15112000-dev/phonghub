@@ -66,7 +66,6 @@ class MaintenanceSlaIntegrationTest extends SeededWebTest {
     @Test
     @DisplayName("The due date comes from the priority; the defaults are configurable per priority")
     void dueDateFollowsPriority() throws Exception {
-        assertEquals(4, hoursUntilDue(report("URGENT")));
         assertEquals(24, hoursUntilDue(report("HIGH")));
         assertEquals(72, hoursUntilDue(report("MEDIUM")));
         assertEquals(168, hoursUntilDue(report("LOW")));

@@ -61,6 +61,10 @@ import com.phonghub.application.port.out.PaymentRepositoryPort;
 import com.phonghub.application.port.out.SepayGatewayOrderRepositoryPort;
 import com.phonghub.application.service.SepayPaymentService;
 import com.phonghub.application.port.in.InvoiceUseCase;
+import com.phonghub.application.port.in.AiAssistantUseCase;
+import com.phonghub.application.port.out.AiCompletionPort;
+import com.phonghub.application.port.out.AiEmbeddingPort;
+import com.phonghub.application.port.out.FaqSearchPort;
 import com.phonghub.application.port.in.FileStorageUseCase;
 import com.phonghub.application.port.out.FileStoragePort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
@@ -80,8 +84,48 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties({SepayProperties.class, TenantDataProtectionProperties.class, RateLimitProperties.class})
+@EnableConfigurationProperties({SepayProperties.class, TenantDataProtectionProperties.class, RateLimitProperties.class,
+    AiAssistantProperties.class})
 public class PhongHubConfiguration {
+
+    @Bean
+    public AiCompletionPort aiCompletionPort(AiAssistantProperties properties) {
+        return new com.phonghub.adapter.out.ai.LiteLlmChatCompletionAdapter(properties);
+    }
+
+    @Bean
+    public AiEmbeddingPort aiEmbeddingPort(AiAssistantProperties properties) {
+        return new com.phonghub.adapter.out.ai.LiteLlmEmbeddingAdapter(properties);
+    }
+
+    @Bean
+    public FaqSearchPort faqSearchPort(AiEmbeddingPort embeddingPort, AiAssistantProperties properties,
+                                      tools.jackson.databind.ObjectMapper objectMapper) {
+        return new com.phonghub.adapter.out.ai.FaqSearchAdapter(
+            new org.springframework.core.io.ClassPathResource("faq/faq-index.json"), embeddingPort, objectMapper,
+            properties.getEmbeddingDimensions(), properties.getFaqMinimumSimilarity(), 256);
+    }
+
+    @Bean
+    public AiAssistantUseCase aiAssistantUseCase(
+        InvoiceUseCase invoiceUseCase,
+        ContractUseCase contractUseCase,
+        InvoiceRepositoryPort invoiceRepository,
+        ContractRepositoryPort contractRepository,
+        RoomRepositoryPort roomRepository,
+        MaintenanceTicketRepositoryPort ticketRepository,
+        PropertyRepositoryPort propertyRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AiCompletionPort completionPort,
+        FaqSearchPort faqSearchPort,
+        AiAssistantProperties properties,
+        tools.jackson.databind.ObjectMapper objectMapper
+    ) {
+        return new com.phonghub.application.service.AiAssistantService(
+            invoiceUseCase, contractUseCase, invoiceRepository, contractRepository, roomRepository, ticketRepository,
+            propertyRepository, currentUserPort, authorizationService, completionPort, faqSearchPort, properties, objectMapper);
+    }
 
     @Bean
     public FilterRegistrationBean<com.phonghub.adapter.in.web.MdcLoggingFilter> mdcLoggingFilter() {
@@ -453,12 +497,11 @@ public class PhongHubConfiguration {
 
     @Bean
     public com.phonghub.application.service.MaintenanceSlaPolicy maintenanceSlaPolicy(
-        @org.springframework.beans.factory.annotation.Value("${phonghub.maintenance.sla-hours.urgent:4}") long urgent,
         @org.springframework.beans.factory.annotation.Value("${phonghub.maintenance.sla-hours.high:24}") long high,
         @org.springframework.beans.factory.annotation.Value("${phonghub.maintenance.sla-hours.medium:72}") long medium,
         @org.springframework.beans.factory.annotation.Value("${phonghub.maintenance.sla-hours.low:168}") long low
     ) {
-        return new com.phonghub.application.service.MaintenanceSlaPolicy(urgent, high, medium, low);
+        return new com.phonghub.application.service.MaintenanceSlaPolicy(high, medium, low);
     }
 
     @Bean

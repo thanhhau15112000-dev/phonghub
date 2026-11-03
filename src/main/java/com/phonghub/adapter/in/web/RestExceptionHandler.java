@@ -1,6 +1,7 @@
 package com.phonghub.adapter.in.web;
 
 import com.phonghub.domain.exception.ContractNotFoundException;
+import com.phonghub.application.exception.AiUnavailableException;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.exception.DuplicateActiveContractException;
 import com.phonghub.domain.exception.ExportLimitExceededException;
@@ -275,6 +276,15 @@ public class RestExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problem.setTitle("Domain Invariant Violation");
         problem.setType(URI.create("https://phonghub.local/errors/domain-error"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(AiUnavailableException.class)
+    public ProblemDetail handleAiUnavailable(AiUnavailableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        problem.setTitle("AI Service Unavailable");
+        problem.setType(URI.create("https://phonghub.local/errors/ai-unavailable"));
         problem.setProperty("timestamp", Instant.now());
         return problem;
     }

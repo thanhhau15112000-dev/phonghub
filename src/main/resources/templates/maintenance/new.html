@@ -69,7 +69,7 @@
                         <option th:each="p : ${priorities}"
                                 th:value="${p}"
                                 th:text="${uiText.maintenancePriority(p)}"
-                                th:selected="${p.name() == 'MEDIUM'}">
+                                th:selected="${p.name() == 'UNCLASSIFIED'}">
                         </option>
                     </select>
                 </div>

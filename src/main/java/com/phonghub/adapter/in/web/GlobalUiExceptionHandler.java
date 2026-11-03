@@ -17,6 +17,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 @ControllerAdvice(assignableTypes = {
     AdminNotificationUiController.class,
     AdminUserUiController.class,
+    AiOperationsUiController.class,
     AuthUiController.class,
     ContractUiController.class,
     DashboardUiController.class,

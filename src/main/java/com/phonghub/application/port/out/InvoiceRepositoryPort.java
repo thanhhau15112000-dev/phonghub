@@ -2,6 +2,7 @@ package com.phonghub.application.port.out;
 
 import com.phonghub.domain.model.Invoice;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -10,6 +11,8 @@ public interface InvoiceRepositoryPort {
     Invoice save(Invoice invoice);
     Optional<Invoice> findById(UUID id);
     List<Invoice> findByContractId(UUID contractId);
+    /** Latest prior rent invoices for the same room, one invoice per billing period, excluding drafts and voids. */
+    List<Invoice> findPriorRentByRoomId(UUID roomId, YearMonth beforePeriod, int periodLimit);
     /** Kỳ tiền thuê chưa bị hủy (status khác VOIDED) của hợp đồng trong tháng/năm. */
     Optional<Invoice> findActiveRentByContractIdAndPeriod(UUID contractId, int year, int month);
     /** Hóa đơn còn phải trả (chưa trả đủ, chưa hủy, chưa gộp) có hạn thanh toán trong [from, to] (#86). */

@@ -206,13 +206,13 @@ public final class UiText {
 
     public String maintenancePriority(MaintenancePriority priority) {
         if (priority == null) {
-            return "Chưa xác định";
+            return "Chưa phân loại";
         }
         return switch (priority) {
+            case UNCLASSIFIED -> "Chưa phân loại";
             case LOW -> "Thấp";
             case MEDIUM -> "Trung bình";
             case HIGH -> "Cao";
-            case URGENT -> "Khẩn cấp";
         };
     }
 

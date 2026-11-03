@@ -11,6 +11,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -209,6 +210,23 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
     public List<Invoice> findByContractId(UUID contractId) {
         String sql = "SELECT " + COLUMNS + " FROM invoices WHERE contract_id = :contractId ORDER BY year DESC, month DESC";
         return hydrate(jdbcTemplate.query(sql, Map.of("contractId", contractId), this::mapRow));
+    }
+
+    @Override
+    public List<Invoice> findPriorRentByRoomId(UUID roomId, YearMonth beforePeriod, int periodLimit) {
+        if (roomId == null || beforePeriod == null || periodLimit <= 0) {
+            return List.of();
+        }
+        String sql = "SELECT DISTINCT ON (year, month) " + COLUMNS + " FROM invoices "
+            + "WHERE room_id = :roomId AND invoice_type = 'RENT' AND status NOT IN ('VOIDED', 'DRAFT') "
+            + "AND (year < :year OR (year = :year AND month < :month)) "
+            + "ORDER BY year DESC, month DESC, created_at DESC LIMIT :limit";
+        return hydrate(jdbcTemplate.query(sql, Map.of(
+            "roomId", roomId,
+            "year", beforePeriod.getYear(),
+            "month", beforePeriod.getMonthValue(),
+            "limit", periodLimit
+        ), this::mapRow));
     }
 
     @Override

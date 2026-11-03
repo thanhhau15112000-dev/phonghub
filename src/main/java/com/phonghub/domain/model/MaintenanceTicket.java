@@ -181,7 +181,7 @@ public class MaintenanceTicket {
         this.assignedTechnicianId = assignedTechnicianId;
         this.title = title.trim();
         this.description = description.trim();
-        this.priority = priority != null ? priority : MaintenancePriority.MEDIUM;
+        this.priority = priority != null ? priority : MaintenancePriority.UNCLASSIFIED;
         this.status = status != null ? status : MaintenanceStatus.REPORTED;
         this.repairCost = repairCost != null ? repairCost : BigDecimal.ZERO;
         this.resolutionNotes = resolutionNotes;
