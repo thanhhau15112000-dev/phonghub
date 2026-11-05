@@ -72,10 +72,10 @@ public class AiAssistantService implements AiAssistantUseCase {
           hoặc đối chiếu chỉ số công tơ với chủ trọ.
         - Nếu trend là STABLE hoặc DECREASE: ghi nhận ngắn gọn và khuyến khích giữ thói quen đang có.
         - Nếu trend là NO_HISTORY hoặc thiếu dữ liệu: nói rõ chưa đủ lịch sử để nhận xét xu hướng, chỉ đưa một đến hai gợi ý tiết kiệm chung.
-        - Nếu tổng tiền định kỳ (recurringTotal) có trend SPIKE: nói rõ chi phí tăng đột biến và nhắc cần quản lý chi tiêu cẩn thận hơn;
-          nêu khoản nào (điện hoặc nước) góp phần tăng, chỉ dựa trên usageSignals.
-        - Nếu viewerRole là OWNER hoặc STAFF: nhận xét trung lập về hóa đơn của người thuê và gợi ý nhắc người thuê, không nói như đang
-          khuyên chính người thuê.
+        - Nếu tổng tiền định kỳ (recurringTotal) có trend SPIKE: bắt buộc nói rõ chi phí tăng đột biến và có một câu nhắc
+          cần quản lý chi tiêu cẩn thận hơn; nêu khoản nào (điện hoặc nước) góp phần tăng, chỉ dựa trên usageSignals.
+        - Nếu viewerRole là OWNER hoặc STAFF: người đọc là chủ trọ hoặc nhân viên, không phải người thuê. Không xưng "bạn" như đang khuyên
+          người thuê; viết nhận xét về mức dùng của người thuê và gợi ý chủ trọ hoặc nhân viên có thể nhắc người thuê tiết kiệm điện, nước.
         - Lời khuyên chỉ về thói quen sử dụng. Không tư vấn tài chính, pháp lý hoặc đầu tư, không hứa hẹn số tiền tiết kiệm được và không
           nêu phần trăm hay số tiền không có trong dữ liệu. Giữ ngắn: một đoạn nhận xét và tối đa ba gạch đầu dòng lời khuyên.
 
@@ -179,7 +179,8 @@ public class AiAssistantService implements AiAssistantUseCase {
         facts.put("task", "Giải thích hóa đơn, nêu thay đổi so với tối đa ba kỳ tiền thuê trước của cùng phòng và đưa lời khuyên tiết kiệm dựa trên usageSignals.");
         addFaqContext(facts, faq);
         String answer = complete("Hãy giải thích tổng tiền và các khoản riêng. Chỉ nêu lý do tăng giảm khi số liệu so sánh hỗ trợ. "
-            + "Sau đó nhận xét xu hướng điện, nước và đưa lời khuyên tiết kiệm theo usageSignals.", facts);
+            + "Sau đó nhận xét xu hướng điện, nước và đưa lời khuyên tiết kiệm theo usageSignals. "
+            + "Nếu tổng tiền định kỳ tăng đột biến (SPIKE), kết thúc bằng lời nhắc cần quản lý chi tiêu cẩn thận hơn.", facts);
         return new AiResponse(answer, withFaqSources(invoiceSources(current, previous), faq));
     }
 

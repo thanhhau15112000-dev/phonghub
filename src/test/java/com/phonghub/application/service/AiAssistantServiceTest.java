@@ -488,10 +488,12 @@ class AiAssistantServiceTest {
         ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
         verify(completionPort).complete(system.capture(), prompt.capture());
         assertTrue(prompt.getValue().contains("lời khuyên tiết kiệm"));
+        assertTrue(prompt.getValue().contains("quản lý chi tiêu cẩn thận hơn"));
         assertTrue(prompt.getValue().contains("\"usageSignals\""));
         String rules = system.getValue();
         assertTrue(rules.contains("SPIKE"));
-        assertTrue(rules.contains("quản lý chi tiêu cẩn thận hơn"));
+        assertTrue(rules.contains("cần quản lý chi tiêu cẩn thận hơn"));
+        assertTrue(rules.contains("OWNER hoặc STAFF"));
         assertTrue(rules.contains("tiết kiệm"));
         assertTrue(rules.contains("không tự tính hoặc suy diễn thêm"));
         assertTrue(rules.contains("Không tư vấn tài chính, pháp lý hoặc đầu tư"));
