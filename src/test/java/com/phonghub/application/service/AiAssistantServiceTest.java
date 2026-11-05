@@ -498,6 +498,7 @@ class AiAssistantServiceTest {
         assertTrue(rules.contains("cần quản lý chi tiêu cẩn thận hơn"));
         assertTrue(rules.contains("OWNER hoặc STAFF"));
         assertTrue(rules.contains("mustMention"));
+        assertTrue(rules.contains("Không nhắc quản lý chi tiêu khi usageSignals không có mustMention"));
         assertTrue(rules.contains("tiết kiệm"));
         assertTrue(rules.contains("không tự tính hoặc suy diễn thêm"));
         assertTrue(rules.contains("Không tư vấn tài chính, pháp lý hoặc đầu tư"));

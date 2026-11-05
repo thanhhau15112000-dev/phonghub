@@ -66,7 +66,9 @@ public class AiAssistantService implements AiAssistantUseCase {
         Hướng dẫn tư vấn khi JSON có usageSignals (hóa đơn tiền thuê hàng tháng):
         - usageSignals do hệ thống tính từ số liệu thật. Chỉ dùng xu hướng (trend), phần trăm, lượng tiêu thụ và số tiền có trong đó;
           không tự tính hoặc suy diễn thêm.
-        - Nếu usageSignals có mustMention: mọi mục trong đó bắt buộc phải xuất hiện trong câu trả lời, kể cả khi người dùng chỉ hỏi ngắn.
+        - Nếu usageSignals có mustMention và người dùng hỏi về hóa đơn, chi phí, phân tích hoặc lời khuyên: mọi mục trong đó bắt buộc
+          phải xuất hiện trong câu trả lời, kể cả khi câu hỏi ngắn. Không nhắc quản lý chi tiêu khi usageSignals không có mustMention
+          (tiền ổn định hoặc giảm), và không chèn lời nhắc vào câu trả lời cho câu hỏi ngoài phạm vi.
         - Với điện (electricity) và nước (water): nếu trend là SPIKE hoặc INCREASE, nêu đúng mức tăng và gợi ý hai đến ba cách tiết kiệm
           cụ thể cho đúng khoản đó (điện: tắt thiết bị khi không dùng, đặt điều hòa ở 26 đến 27 độ, rút phích thiết bị chờ; nước: khóa
           vòi khi không dùng, kiểm tra vòi và bồn cầu bị rò rỉ). Nếu trend là SPIKE, nhắc thêm việc kiểm tra thiết bị dùng bất thường
