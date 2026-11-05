@@ -342,6 +342,8 @@ class AiAssistantServiceTest {
         assertEquals(39, total.path("changePercent").asInt());
         assertEquals("SPIKE", total.path("trend").asString());
         assertEquals(3, signals.path("previousPeriodsCompared").asInt());
+        assertEquals(1, signals.path("mustMention").size());
+        assertTrue(signals.path("mustMention").get(0).asString().contains("cần quản lý chi tiêu cẩn thận hơn"));
     }
 
     @Test
@@ -362,6 +364,7 @@ class AiAssistantServiceTest {
         assertEquals("DECREASE", signals.path("water").path("trend").asString());
         assertEquals(-33, signals.path("water").path("changePercent").asInt());
         assertEquals("STABLE", signals.path("recurringTotal").path("trend").asString());
+        assertTrue(signals.path("mustMention").isMissingNode());
     }
 
     @Test
@@ -494,6 +497,7 @@ class AiAssistantServiceTest {
         assertTrue(rules.contains("SPIKE"));
         assertTrue(rules.contains("cần quản lý chi tiêu cẩn thận hơn"));
         assertTrue(rules.contains("OWNER hoặc STAFF"));
+        assertTrue(rules.contains("mustMention"));
         assertTrue(rules.contains("tiết kiệm"));
         assertTrue(rules.contains("không tự tính hoặc suy diễn thêm"));
         assertTrue(rules.contains("Không tư vấn tài chính, pháp lý hoặc đầu tư"));

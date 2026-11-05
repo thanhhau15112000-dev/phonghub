@@ -66,6 +66,7 @@ public class AiAssistantService implements AiAssistantUseCase {
         Hướng dẫn tư vấn khi JSON có usageSignals (hóa đơn tiền thuê hàng tháng):
         - usageSignals do hệ thống tính từ số liệu thật. Chỉ dùng xu hướng (trend), phần trăm, lượng tiêu thụ và số tiền có trong đó;
           không tự tính hoặc suy diễn thêm.
+        - Nếu usageSignals có mustMention: mọi mục trong đó bắt buộc phải xuất hiện trong câu trả lời, kể cả khi người dùng chỉ hỏi ngắn.
         - Với điện (electricity) và nước (water): nếu trend là SPIKE hoặc INCREASE, nêu đúng mức tăng và gợi ý hai đến ba cách tiết kiệm
           cụ thể cho đúng khoản đó (điện: tắt thiết bị khi không dùng, đặt điều hòa ở 26 đến 27 độ, rút phích thiết bị chờ; nước: khóa
           vòi khi không dùng, kiểm tra vòi và bồn cầu bị rò rỉ). Nếu trend là SPIKE, nhắc thêm việc kiểm tra thiết bị dùng bất thường
@@ -423,7 +424,11 @@ public class AiAssistantService implements AiAssistantUseCase {
         if (water != null) {
             signals.put("water", water);
         }
-        signals.put("recurringTotal", recurringSignal(current, previous));
+        Map<String, Object> recurring = recurringSignal(current, previous);
+        signals.put("recurringTotal", recurring);
+        if ("SPIKE".equals(recurring.get("trend"))) {
+            signals.put("mustMention", List.of("Tổng tiền định kỳ tăng đột biến: phải nhắc cần quản lý chi tiêu cẩn thận hơn."));
+        }
         return signals;
     }
 

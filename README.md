@@ -121,6 +121,13 @@ FAQ liên quan cùng số liệu đã được backend tính; danh sách chi ti�
 được thêm khi câu hỏi yêu cầu và giới hạn ở 20 dòng mỗi nhóm. Khi đổi model hoặc
 chiều vector, tạo lại index để hai phía dùng cùng không gian embedding.
 
+Lời khuyên (#302): với hóa đơn tiền thuê, backend tính sẵn `usageSignals` (lượng điện, nước
+và tổng tiền định kỳ so với trung bình các kỳ trước, xu hướng `SPIKE` từ +30%, `INCREASE` từ
++10%, `STABLE`, `DECREASE` từ -10%, `NO_HISTORY`); phí sửa chữa và phí trễ hạn không tính vào
+xu hướng. Với hợp đồng, backend tính `timeline` (số tháng, ngày còn lại; `EXPIRING_SOON` khi còn
+không quá 30 ngày). Mô hình chỉ diễn giải các tín hiệu này và đưa lời khuyên theo hướng dẫn trong
+system prompt (`AiAssistantService`), không tự tính số.
+
 ## Chạy local với Docker
 
 ### Chạy toàn bộ stack bằng Docker Compose
