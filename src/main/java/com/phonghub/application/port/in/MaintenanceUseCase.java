@@ -115,7 +115,7 @@ public interface MaintenanceUseCase {
                 throw new IllegalArgumentException("Mô tả không được để trống.");
             }
             if (priority == null) {
-                priority = MaintenancePriority.MEDIUM;
+                priority = MaintenancePriority.UNCLASSIFIED;
             }
         }
     }

@@ -36,6 +36,7 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
         String techIdStr = rs.getString("assigned_technician_id");
         UUID techId = techIdStr != null ? UUID.fromString(techIdStr) : null;
         String causeStr = rs.getString("cause_category");
+        String priorityStr = rs.getString("priority");
 
         MaintenanceTicket ticket = new MaintenanceTicket(
             UUID.fromString(rs.getString("id")),
@@ -45,7 +46,7 @@ public class PostgresMaintenanceTicketRepository implements MaintenanceTicketRep
             techId,
             rs.getString("title"),
             rs.getString("description"),
-            MaintenancePriority.valueOf(rs.getString("priority")),
+            priorityStr != null ? MaintenancePriority.valueOf(priorityStr) : MaintenancePriority.UNCLASSIFIED,
             MaintenanceStatus.valueOf(rs.getString("status")),
             rs.getBigDecimal("repair_cost"),
             rs.getString("resolution_notes"),

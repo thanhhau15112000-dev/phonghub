@@ -70,6 +70,8 @@ public class SepayPaymentService implements SepayWebhookUseCase {
     private final PaymentRepositoryPort paymentRepository;
     private final InvoiceRepositoryPort invoiceRepository;
     private final MaintenanceTicketRepositoryPort ticketRepository;
+    private MaintenanceNotifier maintenanceNotifier;
+    private com.phonghub.application.port.out.AuditPort auditPort = event -> {};
     private final ContractRepositoryPort contractRepository;
     private final PropertyRepositoryPort propertyRepository;
     private final NotificationRepositoryPort notificationRepository;
@@ -293,10 +295,10 @@ public class SepayPaymentService implements SepayWebhookUseCase {
         Invoice invoice = null;
         UUID contractId = null;
         if (status == PaymentStatus.SUCCESS) {
-            invoice = matchInvoice(command.code(), command.content());
+            invoice = matchInvoice(command.code(), command.content(), command.description(), command.referenceCode());
             contractId = invoice != null
                 ? invoice.getContractId()
-                : extractAndMatchContractId(command.content(), command.code());
+                : extractAndMatchContractId(command.content(), command.code(), command.description(), command.referenceCode());
         }
 
         // 3b. Chia số tiền: phần cộng vào hóa đơn (tối đa số còn nợ) và phần dư cần người quản lý xem xét.
@@ -370,6 +372,7 @@ public class SepayPaymentService implements SepayWebhookUseCase {
         // 6. Gửi thông báo đến người quản lý nếu là tiền vào thành công
         if (status == PaymentStatus.SUCCESS) {
             sendPaymentNotification(tx, invoice);
+            auditPaymentReceived(tx, invoice, applied, excess);
         }
 
         return new WebhookProcessResult(true, "Xử lý giao dịch SePay thành công", tx);
@@ -480,11 +483,38 @@ public class SepayPaymentService implements SepayWebhookUseCase {
 
     /** Hóa đơn phí sửa chữa đã trả đủ: phiếu bảo trì đang chờ thanh toán chuyển sang hoàn tất. */
     private void completeMaintenanceTicketIfPaid(Invoice invoice) {
-        new MaintenanceFeeSettlement(invoiceRepository, ticketRepository).completeIfPaid(invoice);
+        new MaintenanceFeeSettlement(invoiceRepository, ticketRepository, maintenanceNotifier).completeIfPaid(invoice);
     }
 
-    private Invoice matchInvoice(String code, String content) {
-        for (String text : new String[] { code, content }) {
+    /** Bật thông báo khi phí sửa chữa được thu đủ qua SePay (#204, #234). */
+    public SepayPaymentService withAuditPort(com.phonghub.application.port.out.AuditPort port) {
+        this.auditPort = port != null ? port : event -> {};
+        return this;
+    }
+
+    private void auditPaymentReceived(PaymentTransaction tx, Invoice invoice, BigDecimal applied, BigDecimal excess) {
+        java.util.Map<String, Object> details = new java.util.HashMap<>();
+        details.put("amount", applied.toPlainString());
+        details.put("source", "SEPAY");
+        if (excess.signum() > 0) {
+            details.put("excess", excess.toPlainString());
+        }
+        if (tx.contractId() != null) {
+            details.put("contractId", tx.contractId().toString());
+        }
+        String target = invoice != null ? "INVOICE" : "PAYMENT";
+        String targetId = invoice != null ? invoice.getId().toString() : tx.id().toString();
+        auditPort.recordEvent(com.phonghub.application.port.out.AuditPort.AuditEvent.of(
+            "PAYMENT_RECEIVED", null, target, targetId, details));
+    }
+
+    public SepayPaymentService withMaintenanceNotifier(MaintenanceNotifier notifier) {
+        this.maintenanceNotifier = notifier;
+        return this;
+    }
+
+    private Invoice matchInvoice(String code, String content, String description, String referenceCode) {
+        for (String text : new String[] { code, content, description, referenceCode }) {
             for (String candidate : PaymentCode.findCandidates(text)) {
                 Optional<Invoice> invoice = invoiceRepository.findByPaymentCodeForUpdate(candidate);
                 if (invoice.isPresent()) {
@@ -495,12 +525,14 @@ public class SepayPaymentService implements SepayWebhookUseCase {
         return null;
     }
 
-    private UUID extractAndMatchContractId(String content, String code) {
-        UUID matched = tryParseContractUuid(code);
-        if (matched != null) {
-            return matched;
+    private UUID extractAndMatchContractId(String content, String code, String description, String referenceCode) {
+        for (String text : new String[] { code, content, description, referenceCode }) {
+            UUID matched = tryParseContractUuid(text);
+            if (matched != null) {
+                return matched;
+            }
         }
-        return tryParseContractUuid(content);
+        return null;
     }
 
     private UUID tryParseContractUuid(String text) {

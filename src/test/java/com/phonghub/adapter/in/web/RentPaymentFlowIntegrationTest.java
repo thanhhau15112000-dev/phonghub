@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -206,5 +207,132 @@ class RentPaymentFlowIntegrationTest {
             .andExpect(content().string(containsString("Nhà trọ trong phạm vi")))
             .andExpect(content().string(not(containsString("Nơi ở của tôi"))))
             .andExpect(content().string(containsString("Sửa vòi nước và kiểm tra máy lạnh")));
+    }
+
+    @Test
+    @DisplayName("Issue #199: Partial then full payment via SePay webhook updates live status and prevents duplicate credit")
+    void partialThenFullPaymentUpdatesStatusAndPreventsDuplicate() throws Exception {
+        String period = YearMonth.now().toString();
+        mockMvc.perform(post(CONTRACT_URL + "/invoices").header("X-User-Id", OWNER).param("period", period))
+            .andExpect(redirectedUrl(CONTRACT_URL));
+
+        Invoice invoice = invoiceRepository.findByContractId(DataSeeder.CONTRACT_1_ID).get(0);
+        String payUrl = "/invoices/" + invoice.getId() + "/pay";
+        String statusUrl = "/invoices/" + invoice.getId() + "/status";
+
+        // Tenant accesses pay page: both live alerts and polling logic are rendered
+        mockMvc.perform(get(payUrl).header("X-User-Id", TENANT))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("id=\"paid-live\"")))
+            .andExpect(content().string(containsString("id=\"partially-paid-live\"")))
+            .andExpect(content().string(containsString("fetch(statusUrl")));
+
+        // Initial status: unpaid
+        mockMvc.perform(get(statusUrl).header("X-User-Id", TENANT))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("ISSUED"))
+            .andExpect(jsonPath("$.paid").value(false))
+            .andExpect(jsonPath("$.partiallyPaid").value(false))
+            .andExpect(jsonPath("$.paidAmount").value(0))
+            .andExpect(jsonPath("$.remaining").value(3500000));
+
+        // 1. Partial payment (1.000.000)
+        String partialPayload = """
+            {
+              "id": 880010,
+              "gateway": "MBBank",
+              "transactionDate": "2026-10-02 08:00:00",
+              "accountNumber": "0389999999",
+              "code": null,
+              "content": "Chuyen tien %s dot 1",
+              "transferType": "in",
+              "transferAmount": 1000000,
+              "accumulated": 5000000,
+              "referenceCode": "MB.880010"
+            }
+            """.formatted(invoice.getPaymentCode());
+
+        mockMvc.perform(post("/api/v1/payments/sepay/webhook")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(partialPayload))
+            .andExpect(status().isOk());
+
+        // Status must be PARTIALLY_PAID with correct remaining amount
+        mockMvc.perform(get(statusUrl).header("X-User-Id", TENANT))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("PARTIALLY_PAID"))
+            .andExpect(jsonPath("$.paid").value(false))
+            .andExpect(jsonPath("$.partiallyPaid").value(true))
+            .andExpect(jsonPath("$.paidAmount").value(1000000))
+            .andExpect(jsonPath("$.remaining").value(2500000));
+
+        // 2. Duplicate webhook with same ID does not double credit
+        mockMvc.perform(post("/api/v1/payments/sepay/webhook")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(partialPayload))
+            .andExpect(status().isOk());
+
+        Invoice afterDuplicate = invoiceRepository.findById(invoice.getId()).orElseThrow();
+        assertEquals(0, new java.math.BigDecimal("1000000").compareTo(afterDuplicate.getPaidAmount()));
+
+        // 3. Remaining payment (2.500.000) where code is in description field
+        String fullPayload = """
+            {
+              "id": 880011,
+              "gateway": "MBBank",
+              "transactionDate": "2026-10-02 08:30:00",
+              "accountNumber": "0389999999",
+              "code": null,
+              "content": "Thanh toan tien phong",
+              "description": "Hop dong phong P101 %s",
+              "transferType": "in",
+              "transferAmount": 2500000,
+              "accumulated": 7500000,
+              "referenceCode": "MB.880011"
+            }
+            """.formatted(invoice.getPaymentCode());
+
+        mockMvc.perform(post("/api/v1/payments/sepay/webhook")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(fullPayload))
+            .andExpect(status().isOk());
+
+        // Status is now PAID and remaining amount is 0
+        mockMvc.perform(get(statusUrl).header("X-User-Id", TENANT))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("PAID"))
+            .andExpect(jsonPath("$.paid").value(true))
+            .andExpect(jsonPath("$.partiallyPaid").value(false))
+            .andExpect(jsonPath("$.paidAmount").value(3500000))
+            .andExpect(jsonPath("$.remaining").value(0));
+    }
+
+    @Test
+    @DisplayName("Issue #199: Unmatched webhook payment is saved with review reason UNMATCHED and does not credit invoice")
+    void unmatchedWebhookIsSavedForReview() throws Exception {
+        String unmatchedPayload = """
+            {
+              "id": 880099,
+              "gateway": "MBBank",
+              "transactionDate": "2026-10-02 09:00:00",
+              "accountNumber": "0389999999",
+              "code": null,
+              "content": "Chuyen tien khong kem ma hop dong",
+              "transferType": "in",
+              "transferAmount": 500000,
+              "accumulated": 8000000,
+              "referenceCode": "MB.880099"
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/payments/sepay/webhook")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(unmatchedPayload))
+            .andExpect(status().isOk());
+
+        var tx = paymentRepository.findBySepayId(880099L).orElseThrow();
+        assertEquals(com.phonghub.domain.model.PaymentReviewReason.UNMATCHED, tx.reviewReason());
+        assertEquals(0, tx.appliedAmount().signum());
+        assertEquals(0, new java.math.BigDecimal("500000").compareTo(tx.excessAmount()));
     }
 }

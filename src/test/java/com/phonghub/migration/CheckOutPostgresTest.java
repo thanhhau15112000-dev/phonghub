@@ -13,7 +13,6 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetRepository
 import com.phonghub.adapter.out.persistence.postgres.PostgresServiceRateRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantDocumentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantRepository;
-import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.adapter.out.storage.InMemoryFileStorageAdapter;
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.in.HandoverUseCase;
@@ -115,10 +114,8 @@ class CheckOutPostgresTest {
         }
 
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
-
         JpaTestContext jpa = JpaTestContext.over(ds);
-        var protector = new AesGcmTenantDataProtector("test-v1",
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
+        var protector = TestTenantDataProtection.createProtector();
         PostgresHandoverRepository handovers = new PostgresHandoverRepository(jdbc);
         PostgresHandoverItemRepository items = new PostgresHandoverItemRepository(jdbc);
         ContractRepositoryPort contractRepo = jpa.contracts();

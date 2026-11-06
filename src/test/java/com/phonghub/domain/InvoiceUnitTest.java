@@ -192,7 +192,7 @@ class InvoiceUnitTest {
     }
 
     @Test
-    @DisplayName("Maintenance fee invoice: ACTIVE contract only, due in 7 days, voidable only while unpaid")
+    @DisplayName("Maintenance fee invoice: ACTIVE contract only, due in 3 days, voidable only while unpaid")
     void maintenanceFeeInvoice() {
         UUID ticketId = UUID.randomUUID();
         LocalDate today = LocalDate.of(2026, 3, 10);
@@ -206,7 +206,7 @@ class InvoiceUnitTest {
             contract(ContractStatus.ACTIVE, 5), ticketId, new BigDecimal("200000"), "PHAAAA2222", today);
         assertEquals(com.phonghub.domain.model.InvoiceType.MAINTENANCE, fee.getType());
         assertEquals(ticketId, fee.getTicketId());
-        assertEquals(LocalDate.of(2026, 3, 17), fee.getDueDate());
+        assertEquals(LocalDate.of(2026, 3, 13), fee.getDueDate());
         assertEquals(0, fee.getRentAmount().signum());
 
         fee.applyPayment(new BigDecimal("50000"), Instant.now());

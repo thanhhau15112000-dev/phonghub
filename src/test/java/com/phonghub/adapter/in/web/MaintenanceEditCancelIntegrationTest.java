@@ -122,7 +122,7 @@ class MaintenanceEditCancelIntegrationTest extends SeededWebTest {
         assertFalse(techView.contains("Sửa hoặc hủy yêu cầu"), "phiếu đang xử lý không còn sửa/hủy");
 
         mockMvc.perform(post("/maintenance/" + ticketId + "/edit").header("X-User-Id", TENANT_1)
-                .param("title", "Vòi nước rỉ (sửa)").param("description", "Rỉ nhiều hơn").param("priority", "URGENT"))
+                .param("title", "Vòi nước rỉ (sửa)").param("description", "Rỉ nhiều hơn").param("priority", "HIGH"))
             .andExpect(redirectedUrl("/maintenance/" + ticketId))
             .andExpect(flash().attribute("successMessage", containsString("Đã cập nhật")));
 

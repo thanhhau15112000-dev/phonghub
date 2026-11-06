@@ -154,7 +154,12 @@ public class InvoiceService implements InvoiceUseCase {
                 "Kỳ thanh toán %02d/%d đã tồn tại cho hợp đồng này.", period.getMonthValue(), period.getYear()
             ));
         }
-        return issuer.issue(contract, period, today);
+        Invoice issued = issuer.issue(contract, period, today);
+        auditPort.recordEvent(AuditPort.AuditEvent.of("INVOICE_ISSUED", currentUserPort.getCurrentUser().id(), "INVOICE",
+            issued.getId().toString(), contract.getPropertyId(), Map.of(
+                "period", String.format("%02d/%d", issued.getMonth(), issued.getYear()),
+                "totalAmount", issued.getTotalAmount().toPlainString())));
+        return issued;
     }
 
     @Override

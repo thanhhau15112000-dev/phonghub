@@ -101,7 +101,9 @@ public class InvoicePayUiController {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("status", invoice.getStatus().name());
         body.put("paid", invoice.getStatus() == com.phonghub.domain.model.InvoiceStatus.PAID);
+        body.put("partiallyPaid", invoice.getStatus() == com.phonghub.domain.model.InvoiceStatus.PARTIALLY_PAID);
         body.put("consolidated", invoice.isConsolidated());
+        body.put("totalAmount", invoice.getTotalAmount());
         body.put("paidAmount", invoice.getPaidAmount());
         body.put("remaining", invoice.remainingAmount());
         return body;

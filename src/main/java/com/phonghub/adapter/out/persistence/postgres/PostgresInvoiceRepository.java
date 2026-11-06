@@ -11,6 +11,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -212,6 +213,23 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
     }
 
     @Override
+    public List<Invoice> findPriorRentByRoomId(UUID roomId, YearMonth beforePeriod, int periodLimit) {
+        if (roomId == null || beforePeriod == null || periodLimit <= 0) {
+            return List.of();
+        }
+        String sql = "SELECT DISTINCT ON (year, month) " + COLUMNS + " FROM invoices "
+            + "WHERE room_id = :roomId AND invoice_type = 'RENT' AND status NOT IN ('VOIDED', 'DRAFT') "
+            + "AND (year < :year OR (year = :year AND month < :month)) "
+            + "ORDER BY year DESC, month DESC, created_at DESC LIMIT :limit";
+        return hydrate(jdbcTemplate.query(sql, Map.of(
+            "roomId", roomId,
+            "year", beforePeriod.getYear(),
+            "month", beforePeriod.getMonthValue(),
+            "limit", periodLimit
+        ), this::mapRow));
+    }
+
+    @Override
     public List<Invoice> findPayableDueBetween(LocalDate from, LocalDate to) {
         String sql = "SELECT " + COLUMNS + " FROM invoices WHERE due_date BETWEEN :from AND :to"
             + " AND status IN ('ISSUED', 'PARTIALLY_PAID', 'OVERDUE') AND consolidated_into_invoice_id IS NULL";
@@ -263,6 +281,16 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
         return jdbcTemplate.query("""
             SELECT id FROM invoices
             WHERE invoice_type = 'RENT' AND status IN ('ISSUED', 'PARTIALLY_PAID', 'OVERDUE')
+              AND consolidated_into_invoice_id IS NULL AND due_date < :today
+            ORDER BY due_date
+            """, Map.of("today", java.sql.Date.valueOf(today)), (rs, rowNum) -> UUID.fromString(rs.getString(1)));
+    }
+
+    @Override
+    public List<UUID> findOverdueMaintenanceInvoiceIds(java.time.LocalDate today) {
+        return jdbcTemplate.query("""
+            SELECT id FROM invoices
+            WHERE invoice_type = 'MAINTENANCE' AND status IN ('ISSUED', 'PARTIALLY_PAID', 'OVERDUE')
               AND consolidated_into_invoice_id IS NULL AND due_date < :today
             ORDER BY due_date
             """, Map.of("today", java.sql.Date.valueOf(today)), (rs, rowNum) -> UUID.fromString(rs.getString(1)));

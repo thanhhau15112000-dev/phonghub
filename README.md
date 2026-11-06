@@ -97,6 +97,30 @@ khai báo trong `compose.yaml` và `application-docker.yml`:
 Compose mặc định chỉ publish app, PostgreSQL và Redis trên loopback
 (`127.0.0.1`). Không đưa secret thật vào Git.
 
+### Bật trợ lý AI local (#294)
+
+Điền `GEMINI_API_KEY` trong `.env`, đặt `PHONGHUB_AI_ENABLED=true`, rồi chạy:
+
+```bash
+docker compose --profile ai up --build
+```
+
+Compose chạy LiteLLM ở `127.0.0.1:14000`; app gọi gateway nội bộ và dùng
+`LITELLM_MASTER_KEY` làm khóa gateway. `PHONGHUB_AI_API_KEY` phải trùng khóa đó
+khi chạy app trực tiếp trên máy host. Mặc định AI tắt. LiteLLM tắt ghi log nội
+dung prompt. Hỏi đáp hợp đồng chỉ dùng các trường có cấu trúc hiện lưu; hệ thống
+không có văn bản điều khoản để tra cứu. Trợ lý vận hành chỉ nhận dữ liệu tổng hợp
+của một nhà trọ mà người dùng được quyền xem tài chính.
+
+FAQ RAG dùng bản nháp nghiệp vụ tại `ops/faq/assistant-faq.vi.json`. Tìm kiếm lấy
+vector Gemini Embedding 2 đã tạo sẵn trong `src/main/resources/faq/faq-index.json`;
+các câu hỏi chỉ gọi embedding khi chưa có trong cache tiến trình. Khi sửa FAQ, tạo
+lại index bằng PowerShell script scripts\reindex-faq.ps1; script đọc `GEMINI_API_KEY` từ môi
+trường hoặc `.env` và không in khóa ra output. Mỗi lần trả lời chỉ gửi tối đa ba
+FAQ liên quan cùng số liệu đã được backend tính; danh sách chi tiết vận hành chỉ
+được thêm khi câu hỏi yêu cầu và giới hạn ở 20 dòng mỗi nhóm. Khi đổi model hoặc
+chiều vector, tạo lại index để hai phía dùng cùng không gian embedding.
+
 ## Chạy local với Docker
 
 ### Chạy toàn bộ stack bằng Docker Compose

@@ -23,13 +23,42 @@
         </div>
     </div>
 
+    <section class="card" style="margin-bottom: 20px;">
+        <div class="flex-between" style="gap: 12px; flex-wrap: wrap;">
+            <div>
+                <h2 style="margin: 0 0 4px; font-size: 16px;">Hỏi về hóa đơn</h2>
+                <p th:if="${invoice.getType().name() == 'RENT'}" style="margin: 0; color: var(--text-secondary); font-size: 13px;">
+                    So sánh tối đa 3 kỳ tiền thuê trước của cùng phòng. Phí sửa chữa được tách riêng.
+                </p>
+            </div>
+            <button th:if="${invoice.getType().name() == 'RENT'}" type="button" class="btn btn-secondary" data-ai-analysis
+                    th:attr="data-ai-endpoint=@{'/api/v1/ai/invoices/' + ${invoice.getId()} + '/analysis'}"
+                    data-ai-target="invoice-ai-answer">Phân tích hóa đơn</button>
+        </div>
+        <form data-ai-form style="margin-top: 12px;"
+              th:attr="data-ai-endpoint=@{'/api/v1/ai/invoices/' + ${invoice.getId()} + '/ask'}">
+            <label class="form-label" th:for="'invoice-ai-question-' + ${invoice.getId()}">Câu hỏi</label>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start;">
+                <textarea class="form-control" name="question" maxlength="1200" required rows="2"
+                          th:id="'invoice-ai-question-' + ${invoice.getId()}"
+                          placeholder="Ví dụ: Vì sao tiền điện kỳ này thay đổi?"></textarea>
+                <button type="submit" class="btn btn-primary">Gửi câu hỏi</button>
+            </div>
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        </form>
+        <div id="invoice-ai-answer" class="ai-answer" aria-live="polite" style="display: none; margin-top: 12px;"></div>
+    </section>
+
     <div class="card" id="invoice-pay">
         <div th:if="${invoice.getStatus().name() == 'PAID'}" class="empty-state" id="paid-notice">
             <p style="font-weight: 600;">Khoản này đã được thanh toán đủ.</p>
             <a th:href="@{${returnUrl}}" class="btn btn-primary">Quay lại</a>
         </div>
         <div id="paid-live" class="alert alert-success" style="display: none; margin-bottom: 16px;">
-            Đã nhận thanh toán. Đang quay lại...
+            Đã nhận thanh toán đủ. Đang chuyển hướng...
+        </div>
+        <div id="partially-paid-live" class="alert alert-info" style="display: none; margin-bottom: 16px;">
+            Đã ghi nhận thanh toán một phần. Đang cập nhật số dư còn lại...
         </div>
         <div th:if="${invoice.getStatus().name() == 'VOIDED'}" class="empty-state">
             <p>Khoản này đã bị hủy, không cần thanh toán.</p>
@@ -196,19 +225,31 @@
         </table>
     </div>
 
+    <script th:src="@{/js/ai-assistant.js}" defer></script>
+
     <script th:if="${invoice.isPayable()}" th:inline="javascript">
         (function () {
             var statusUrl = /*[[@{'/invoices/' + ${invoice.getId()} + '/status'}]]*/ '';
             var returnUrl = /*[[@{${returnUrl}}]]*/ '/';
+            var currentPaidAmount = /*[[${invoice.getPaidAmount()}]]*/ 0;
             var timer = setInterval(function () {
                 fetch(statusUrl, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
                     .then(function (r) { return r.ok ? r.json() : null; })
                     .then(function (s) {
-                        if (!s || !(s.paid || s.consolidated)) { return; }
-                        clearInterval(timer);
-                        var box = document.getElementById('paid-live');
-                        if (box) { box.style.display = 'block'; }
-                        setTimeout(function () { window.location.href = returnUrl; }, 2000);
+                        if (!s) return;
+                        if (s.paid || s.consolidated) {
+                            clearInterval(timer);
+                            var box = document.getElementById('paid-live');
+                            if (box) { box.style.display = 'block'; }
+                            setTimeout(function () { window.location.href = returnUrl; }, 1800);
+                            return;
+                        }
+                        if (s.status === 'PARTIALLY_PAID' || (s.paidAmount !== undefined && Number(s.paidAmount) > Number(currentPaidAmount))) {
+                            clearInterval(timer);
+                            var partialBox = document.getElementById('partially-paid-live');
+                            if (partialBox) { partialBox.style.display = 'block'; }
+                            setTimeout(function () { window.location.reload(); }, 1200);
+                        }
                     })
                     .catch(function () { /* mạng chập chờn: thử lại ở lần sau */ });
             }, 3000);

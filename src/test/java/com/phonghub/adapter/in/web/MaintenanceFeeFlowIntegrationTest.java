@@ -57,6 +57,8 @@ class MaintenanceFeeFlowIntegrationTest {
     @Autowired private InMemoryMaintenanceTicketRepository ticketRepository;
     @Autowired private InMemoryInvoiceRepository invoiceRepository;
     @Autowired private InMemoryPaymentRepository paymentRepository;
+    @Autowired private com.phonghub.application.port.out.NotificationRepositoryPort notificationRepository;
+    @Autowired private com.phonghub.application.port.out.MaintenanceAttachmentRepositoryPort attachmentRepository;
 
     private long webhookSeq = 770000;
 
@@ -150,6 +152,119 @@ class MaintenanceFeeFlowIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(payload))
             .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("#234: người thuê báo chưa đạt khi chưa trả: khoản phí bị hủy, sửa lại xong thì phát hành một khoản phí mới hạn 3 ngày")
+    void tenantReopensWhileAwaitingPayment() throws Exception {
+        MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Hỏng khóa cửa", "TENANT_USAGE");
+        accept(ticket.getId());
+        resolve(ticket.getId(), "300000", null);
+        Invoice first = invoiceRepository.findActiveByTicketId(ticket.getId()).orElseThrow();
+        assertEquals(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).plusDays(3), first.getDueDate());
+
+        mockMvc.perform(asUser(post("/maintenance/" + ticket.getId() + "/reopen").param("feedback", "khóa vẫn kẹt"), TENANT))
+            .andExpect(flash().attributeExists("successMessage"));
+        assertEquals(InvoiceStatus.VOIDED, invoiceRepository.findById(first.getId()).orElseThrow().getStatus());
+        assertTrue(invoiceRepository.findActiveByTicketId(ticket.getId()).isEmpty());
+        assertTrue(reload(ticket.getId()).getStatus() != MaintenanceStatus.AWAITING_PAYMENT);
+
+        mockMvc.perform(asUser(post("/maintenance/" + ticket.getId() + "/accept"), ADMIN));
+        resolve(ticket.getId(), "300000", null);
+        Invoice second = invoiceRepository.findActiveByTicketId(ticket.getId()).orElseThrow();
+        assertTrue(!second.getId().equals(first.getId()));
+        assertEquals(MaintenanceStatus.AWAITING_PAYMENT, reload(ticket.getId()).getStatus());
+    }
+
+    @Test
+    @DisplayName("#234: đã trả một phần thì không báo chưa đạt được, khoản phí giữ nguyên")
+    void tenantCannotReopenAfterPartialPayment() throws Exception {
+        MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Hỏng khóa cửa", "TENANT_USAGE");
+        accept(ticket.getId());
+        resolve(ticket.getId(), "300000", null);
+        Invoice fee = invoiceRepository.findActiveByTicketId(ticket.getId()).orElseThrow();
+        payByWebhook(fee.getPaymentCode(), "100000");
+
+        mockMvc.perform(asUser(post("/maintenance/" + ticket.getId() + "/reopen").param("feedback", "chưa đạt"), TENANT))
+            .andExpect(flash().attributeExists("errorMessage"));
+        assertEquals(MaintenanceStatus.AWAITING_PAYMENT, reload(ticket.getId()).getStatus());
+        assertEquals(InvoiceStatus.PARTIALLY_PAID, invoiceRepository.findById(fee.getId()).orElseThrow().getStatus());
+    }
+
+    private static final byte[] PNG = java.util.Base64.getDecoder().decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
+    private java.util.List<String> titlesFor(String userId) {
+        return notificationRepository.findByRecipient(UUID.fromString(userId), false, 0, 100).stream()
+            .map(com.phonghub.domain.model.Notification::title).toList();
+    }
+
+    @Test
+    @DisplayName("#204: người thuê báo hỏng thì chủ trọ nhận thông báo phiếu mới")
+    void managersNotifiedOfNewTicket() throws Exception {
+        createTicket(TENANT, DataSeeder.ROOM_101_ID, "Hỏng cửa sổ", "NATURAL_WEAR");
+        String owner = com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter.OWNER_1_ID.toString();
+        assertTrue(titlesFor(owner).contains("Có phiếu báo hỏng mới"), titlesFor(owner).toString());
+    }
+
+    @Test
+    @DisplayName("#204/#234: người thuê nhận thông báo bắt đầu sửa, cần thanh toán phí (kèm số tiền, hạn) và đã thanh toán; chủ trọ nhận báo đã thu phí")
+    void feeFlowNotifications() throws Exception {
+        MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Vỡ kính", "TENANT_USAGE");
+        accept(ticket.getId());
+        resolve(ticket.getId(), "250000", null);
+
+        java.util.List<String> tenantTitles = titlesFor(TENANT);
+        org.junit.jupiter.api.Assertions.assertTrue(tenantTitles.contains("Bắt đầu sửa chữa"), tenantTitles.toString());
+        org.junit.jupiter.api.Assertions.assertTrue(tenantTitles.contains("Cần thanh toán phí sửa chữa"), tenantTitles.toString());
+        var feeNotice = notificationRepository.findByRecipient(UUID.fromString(TENANT), false, 0, 100).stream()
+            .filter(n -> n.title().equals("Cần thanh toán phí sửa chữa")).findFirst().orElseThrow();
+        assertTrue(feeNotice.message().contains("250,000") || feeNotice.message().contains("250.000"), feeNotice.message());
+        assertTrue(feeNotice.message().contains("Hạn thanh toán"), feeNotice.message());
+
+        Invoice fee = invoiceRepository.findActiveByTicketId(ticket.getId()).orElseThrow();
+        payByWebhook(fee.getPaymentCode(), "250000");
+        assertTrue(titlesFor(TENANT).contains("Đã thanh toán phí sửa chữa"));
+        String owner = com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter.OWNER_1_ID.toString();
+        assertTrue(titlesFor(owner).contains("Đã thanh toán phí sửa chữa"), titlesFor(owner).toString());
+    }
+
+    @Test
+    @DisplayName("#232: hoàn tất phiếu kèm ảnh kết quả lưu loại RESULT, người thuê thấy ở phần Ảnh hoàn thành; không kèm ảnh vẫn hoàn tất")
+    void resolveWithResultPhotos() throws Exception {
+        MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Hỏng vòi nước", "NATURAL_WEAR");
+        accept(ticket.getId());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .multipart("/maintenance/" + ticket.getId() + "/resolve")
+                .file(new org.springframework.mock.web.MockMultipartFile("files", "ket-qua.png", "image/png", PNG))
+                .param("resolutionNotes", "Đã thay vòi")
+                .param("repairCost", "0")
+                .param("releaseRoomToAvailable", "false").header("X-User-Id", ADMIN))
+            .andExpect(flash().attributeExists("successMessage"));
+
+        assertEquals(MaintenanceStatus.RESOLVED, reload(ticket.getId()).getStatus());
+        var saved = attachmentRepository.findByTicketId(ticket.getId());
+        assertEquals(1, saved.stream().filter(a -> a.phase() == com.phonghub.domain.model.MaintenanceAttachment.Phase.RESULT).count());
+
+        mockMvc.perform(asUser(get("/maintenance/" + ticket.getId()), TENANT))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Ảnh hoàn thành")));
+
+        // Tenant không tải được ảnh kết quả
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .multipart("/maintenance/" + ticket.getId() + "/attachments")
+                .file(new org.springframework.mock.web.MockMultipartFile("files", "x.png", "image/png", PNG))
+                .param("phase", "RESULT").header("X-User-Id", TENANT))
+            .andExpect(flash().attributeExists("errorMessage"));
+    }
+
+    @Test
+    @DisplayName("#232: hoàn tất phiếu không kèm ảnh vẫn được")
+    void resolveWithoutPhotos() throws Exception {
+        MaintenanceTicket ticket = createTicket(TENANT, DataSeeder.ROOM_101_ID, "Hỏng vòi nước", "NATURAL_WEAR");
+        accept(ticket.getId());
+        resolve(ticket.getId(), "0", null);
+        assertEquals(MaintenanceStatus.RESOLVED, reload(ticket.getId()).getStatus());
     }
 
     @Test

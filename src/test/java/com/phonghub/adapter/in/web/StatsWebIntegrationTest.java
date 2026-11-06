@@ -222,9 +222,16 @@ class StatsWebIntegrationTest extends SeededWebTest {
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertTrue(owner.contains("id=\"operations\""));
         assertTrue(owner.contains("Doanh thu theo tháng"));
-        assertTrue(owner.contains("4.000.000 đ"), "đã thu");
-        assertTrue(owner.contains("1 hóa đơn quá hạn"));
+        // Mặc định chỉ hiện tháng hiện tại; số của tháng trước chưa lẫn vào.
+        assertTrue(owner.contains("3.500.000 đ"), "đã thu tháng này");
+        assertFalse(owner.contains("4.000.000 đ"), "chưa gộp tháng trước");
         assertFalse(owner.contains("id=\"adminOverview\""));
+
+        String twoMonths = mockMvc.perform(get("/").header("X-User-Id", OWNER_1)
+                .param("statsFrom", YearMonth.now(StatisticsQueryPort.ZONE).minusMonths(1).toString()))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertTrue(twoMonths.contains("4.000.000 đ"), "đã thu 2 tháng");
+        assertTrue(twoMonths.contains("1 hóa đơn quá hạn"));
 
         String admin = mockMvc.perform(get("/").header("X-User-Id", ADMIN))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();

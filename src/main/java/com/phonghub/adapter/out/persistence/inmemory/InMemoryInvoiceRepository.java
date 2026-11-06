@@ -5,6 +5,9 @@ import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.InvoiceStatus;
 import com.phonghub.domain.model.InvoiceType;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,6 +33,25 @@ public class InMemoryInvoiceRepository implements InvoiceRepositoryPort {
     public List<Invoice> findByContractId(UUID contractId) {
         return store.values().stream()
             .filter(i -> i.getContractId().equals(contractId))
+            .toList();
+    }
+
+    @Override
+    public List<Invoice> findPriorRentByRoomId(UUID roomId, YearMonth beforePeriod, int periodLimit) {
+        if (roomId == null || beforePeriod == null || periodLimit <= 0) {
+            return List.of();
+        }
+        LinkedHashMap<YearMonth, Invoice> latestByPeriod = new LinkedHashMap<>();
+        store.values().stream()
+            .filter(invoice -> roomId.equals(invoice.getRoomId()))
+            .filter(invoice -> invoice.getType() == InvoiceType.RENT)
+            .filter(invoice -> invoice.getStatus() != InvoiceStatus.VOIDED && invoice.getStatus() != InvoiceStatus.DRAFT)
+            .filter(invoice -> YearMonth.of(invoice.getYear(), invoice.getMonth()).isBefore(beforePeriod))
+            .sorted(Comparator.comparing(Invoice::getCreatedAt).reversed())
+            .forEach(invoice -> latestByPeriod.putIfAbsent(YearMonth.of(invoice.getYear(), invoice.getMonth()), invoice));
+        return latestByPeriod.values().stream()
+            .sorted(Comparator.comparing((Invoice invoice) -> YearMonth.of(invoice.getYear(), invoice.getMonth())).reversed())
+            .limit(periodLimit)
             .toList();
     }
 
@@ -67,6 +89,14 @@ public class InMemoryInvoiceRepository implements InvoiceRepositoryPort {
     public List<UUID> findOverdueRentInvoiceIds(java.time.LocalDate today) {
         return store.values().stream()
             .filter(i -> i.getType() == InvoiceType.RENT && i.isOverdue(today))
+            .map(Invoice::getId)
+            .toList();
+    }
+
+    @Override
+    public List<UUID> findOverdueMaintenanceInvoiceIds(java.time.LocalDate today) {
+        return store.values().stream()
+            .filter(i -> i.getType() == InvoiceType.MAINTENANCE && !i.isConsolidated() && i.isOverdue(today))
             .map(Invoice::getId)
             .toList();
     }

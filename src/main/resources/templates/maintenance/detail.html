@@ -301,6 +301,18 @@
             <div th:if="${feeInvoice != null}" style="margin-bottom: 4px;">
                 <span style="color: var(--text-secondary);">Hạn thanh toán:</span>
                 <span th:text="${uiText.date(feeInvoice.getDueDate())}">2026-10-09</span>
+                <span th:if="${feeInvoice.isPayable() and !feeInvoice.isOverdue(today)}" style="color: var(--text-secondary);"
+                      th:text="'(còn ' + ${T(java.time.temporal.ChronoUnit).DAYS.between(today, feeInvoice.getDueDate()) + 1} + ' ngày)'">(còn 3 ngày)</span>
+            </div>
+            <div th:if="${feeInvoice != null and feeInvoice.hasMaintenancePenaltyPolicy() and feeInvoice.isPayable() and feeInvoice.lateFeeItem().isEmpty()}"
+                 class="alert alert-warning" style="margin: 8px 0;">
+                Quá hạn sẽ cộng 10% tổng tiền sửa chữa
+                (<strong th:text="${#numbers.formatDecimal(feeInvoice.maintenanceLateFeePreview(), 0, 'POINT', 0, 'COMMA') + ' đ'}">50,000 đ</strong>).
+            </div>
+            <div th:if="${feeInvoice != null and feeInvoice.lateFeeItem().isPresent() and feeInvoice.hasMaintenancePenaltyPolicy()}"
+                 class="alert alert-error" style="margin: 8px 0;">
+                Đã quá hạn: cộng phạt <strong th:text="${#numbers.formatDecimal(feeInvoice.lateFeeItem().get().totalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">50,000 đ</strong>.
+                Tổng cần trả: <strong th:text="${#numbers.formatDecimal(feeInvoice.getTotalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">550,000 đ</strong>.
             </div>
             <div th:if="${feeInvoice != null}">
                 <span style="color: var(--text-secondary);">Nội dung chuyển khoản:</span>
@@ -363,12 +375,18 @@
         </ol>
     </div>
 
-    <!-- Ảnh / video đính kèm -->
-    <div class="card" style="margin-bottom: 20px;">
-        <h2>Ảnh và video đính kèm</h2>
-        <p th:if="${attachments.isEmpty()}" style="color: var(--text-secondary); font-size: 13px;">Chưa có tệp đính kèm.</p>
-        <div th:if="${!attachments.isEmpty()}" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 14px;">
-            <div th:each="a : ${attachments}" style="border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; min-width: 0;">
+    <!-- Ảnh / video: báo hỏng (REPORT) và kết quả sửa chữa (RESULT) -->
+    <th:block th:each="ph : ${ {'REPORT', 'RESULT'} }">
+    <th:block th:with="items=${ph == 'RESULT' ? attachments.?[phase().name() == 'RESULT'] : attachments.?[phase().name() == 'REPORT']},
+                       canUploadResult=${(currentUser.role().name() == 'TECHNICIAN' or currentUser.role().name() == 'OWNER' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'ADMIN')
+                           and (ticket.getStatus().name() == 'ASSIGNED' or ticket.getStatus().name() == 'IN_PROGRESS' or ticket.getStatus().name() == 'AWAITING_PAYMENT' or ticket.getStatus().name() == 'RESOLVED')}">
+    <div class="card" style="margin-bottom: 20px;" th:if="${ph == 'REPORT' or !items.isEmpty() or canUploadResult}"
+         th:id="${ph == 'RESULT' ? 'result-attachments' : 'report-attachments'}">
+        <h2 th:text="${ph == 'RESULT' ? 'Ảnh hoàn thành' : 'Ảnh và video đính kèm'}">Ảnh và video đính kèm</h2>
+        <p th:if="${items.isEmpty()}" style="color: var(--text-secondary); font-size: 13px;"
+           th:text="${ph == 'RESULT' ? 'Chưa có ảnh hoàn thành.' : 'Chưa có tệp đính kèm.'}">Chưa có tệp đính kèm.</p>
+        <div th:if="${!items.isEmpty()}" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 14px;">
+            <div th:each="a : ${items}" style="border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; min-width: 0;">
                 <a th:if="${a.kind().name() == 'IMAGE'}"
                    th:href="@{'/maintenance/' + ${ticket.getId()} + '/attachments/' + ${a.id()}}"
                    class="maintenance-image-preview" style="display: block; cursor: zoom-in;">
@@ -381,6 +399,8 @@
                     <source th:src="@{'/maintenance/' + ${ticket.getId()} + '/attachments/' + ${a.id()}}" th:type="${a.contentType()}">
                     Trình duyệt không hỗ trợ phát video này.
                 </video>
+                <small style="display: block; margin-top: 4px; color: var(--text-secondary); overflow-wrap: anywhere;"
+                       th:text="${(a.phase().name() == 'RESULT' ? 'Đợt ' + a.round() + ' · ' : '') + (a.uploadedBy() != null ? actorNames.get(a.uploadedBy()) : 'Hệ thống') + ' · ' + #temporals.format(a.createdAt().atZone(T(java.time.ZoneId).of('Asia/Ho_Chi_Minh')), 'dd/MM/yyyy HH:mm')}">Người tải · 01/01/2026 08:00</small>
                 <div style="display: flex; justify-content: space-between; gap: 6px; align-items: center; margin-top: 6px;">
                     <small style="color: var(--text-secondary);"
                            th:text="${a.kind().name() == 'VIDEO' ? 'Video' : 'Ảnh'} + ' · ' + ${#numbers.formatDecimal(a.sizeBytes() / 1024.0, 0, 0)} + ' KB'">Ảnh</small>
@@ -398,15 +418,26 @@
                 </div>
             </div>
         </div>
-        <form th:if="${currentUser.role().name() != 'TECHNICIAN' and !ticket.isWorkFinished()}"
+        <form th:if="${ph == 'REPORT' and currentUser.role().name() != 'TECHNICIAN' and !ticket.isWorkFinished()}"
               th:action="@{'/maintenance/' + ${ticket.getId()} + '/attachments'}" method="post" enctype="multipart/form-data">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div th:replace="~{fragments/attachment-picker :: attachmentPicker(
-                    ${#lists.size(attachments.?[kind().name() == 'IMAGE'])},
-                    ${#lists.size(attachments.?[kind().name() == 'VIDEO'])}, true)}"></div>
+                    ${#lists.size(items.?[kind().name() == 'IMAGE'])},
+                    ${#lists.size(items.?[kind().name() == 'VIDEO'])}, true)}"></div>
             <button type="submit" class="btn btn-secondary" style="margin-top: 10px;">Đính kèm</button>
         </form>
+        <form th:if="${ph == 'RESULT' and canUploadResult}"
+              th:action="@{'/maintenance/' + ${ticket.getId()} + '/attachments'}" method="post" enctype="multipart/form-data">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <input type="hidden" name="phase" value="RESULT">
+            <div th:replace="~{fragments/attachment-picker :: attachmentPicker(
+                    ${#lists.size(items.?[kind().name() == 'IMAGE'])},
+                    ${#lists.size(items.?[kind().name() == 'VIDEO'])}, true)}"></div>
+            <button type="submit" class="btn btn-secondary" style="margin-top: 10px;">Đính kèm ảnh kết quả</button>
+        </form>
     </div>
+    </th:block>
+    </th:block>
     <dialog id="maintenanceImageZoom" style="max-width: 92vw; max-height: 92vh; padding: 12px; border: 0; border-radius: 8px;">
         <button type="button" class="btn btn-sm btn-secondary" style="float: right;" onclick="document.getElementById('maintenanceImageZoom').close()">Đóng</button>
         <img id="maintenanceImageZoomTarget" alt="Ảnh đính kèm phóng to" style="display: block; max-width: 88vw; max-height: 82vh; object-fit: contain; margin-top: 8px;">
@@ -475,10 +506,10 @@
     </div>
 
     <!-- Người thuê xác nhận kết quả sửa chữa (#83, #253) -->
-    <div th:if="${currentUser.role().name() == 'TENANT' and ticket.getStatus().name() == 'RESOLVED'}" class="card" style="margin-bottom: 20px;" id="tenant-confirm">
+    <div th:if="${currentUser.role().name() == 'TENANT' and (ticket.getStatus().name() == 'RESOLVED' or ticket.getStatus().name() == 'AWAITING_PAYMENT')}" class="card" style="margin-bottom: 20px;" id="tenant-confirm">
         <h2>Xác nhận kết quả sửa chữa</h2>
         <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">Hãy kiểm tra lại và xác nhận đã sửa xong, hoặc cho biết chỗ chưa đạt để kỹ thuật viên sửa tiếp.</p>
-        <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/verify'}" method="post" style="margin-bottom: 12px;">
+        <form th:if="${ticket.getStatus().name() == 'RESOLVED'}" th:action="@{'/maintenance/' + ${ticket.getId()} + '/verify'}" method="post" style="margin-bottom: 12px;">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <button type="submit" class="btn btn-primary">Xác nhận đã sửa xong</button>
         </form>
@@ -560,7 +591,7 @@
                     <label class="form-label" for="editTicketPriority">Mức độ</label>
                     <select id="editTicketPriority" name="priority" class="form-control">
                         <option th:each="p : ${priorities}" th:value="${p}" th:text="${uiText.maintenancePriority(p)}"
-                                th:selected="${p == ticket.getPriority()}">Trung bình</option>
+                                th:selected="${p == ticket.getPriority()}">Chưa phân loại</option>
                     </select>
                 </div>
             </div>
@@ -599,7 +630,7 @@
             Gửi báo cáo này sẽ hoàn tất yêu cầu và tùy chọn đưa phòng từ trạng thái BẢO TRÌ về trạng thái TRỐNG.
         </p>
 
-        <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/resolve'}" method="post">
+        <form th:action="@{'/maintenance/' + ${ticket.getId()} + '/resolve'}" method="post" enctype="multipart/form-data">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="form-group">
                 <label class="form-label">Ghi chú xử lý *</label>
@@ -635,6 +666,13 @@
                         Đưa phòng về trạng thái TRỐNG (nếu không còn yêu cầu đang mở)
                     </label>
                 </div>
+            </div>
+
+            <div class="form-group" id="resolve-result-files">
+                <label class="form-label">Ảnh/video kết quả sửa chữa (không bắt buộc)</label>
+                <div th:replace="~{fragments/attachment-picker :: attachmentPicker(
+                        ${#lists.size(attachments.?[phase().name() == 'RESULT' and kind().name() == 'IMAGE'])},
+                        ${#lists.size(attachments.?[phase().name() == 'RESULT' and kind().name() == 'VIDEO'])}, false)}"></div>
             </div>
 
             <div style="margin-top: 12px;">

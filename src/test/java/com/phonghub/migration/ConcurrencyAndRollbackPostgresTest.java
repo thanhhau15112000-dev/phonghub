@@ -15,7 +15,6 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresMaintenanceTicketRe
 import com.phonghub.adapter.out.persistence.postgres.PostgresPaymentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresUserRepository;
-import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.application.port.in.SepayWebhookUseCase.SepayWebhookCommand;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
@@ -101,8 +100,7 @@ class ConcurrencyAndRollbackPostgresTest {
         Flyway.configure().dataSource(ds).locations(MAIN, FIXTURE).load().migrate();
         jdbc = new NamedParameterJdbcTemplate(ds);
         jpa = JpaTestContext.over(ds);
-        protector = new AesGcmTenantDataProtector("test-v1",
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
+        protector = TestTenantDataProtection.createProtector();
         tx = new TransactionTemplate(jpa.transactionManager());
         try (Connection c = ds.getConnection(); Statement st = c.createStatement()) {
             ResultSet rs = st.executeQuery("SELECT id FROM contracts WHERE status = 'ACTIVE' LIMIT 1");

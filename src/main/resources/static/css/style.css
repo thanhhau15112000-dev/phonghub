@@ -404,6 +404,15 @@ h2 {
   letter-spacing: 0.01em;
 }
 
+.badge-priority-unclassified { background: #e5e7eb; color: #374151; }
+.badge-priority-low { background: #fef3c7; color: #92400e; }
+.badge-priority-medium { background: #ffedd5; color: #9a3412; }
+.badge-priority-high { background: #fee2e2; color: #991b1b; }
+.ai-answer { border-top: 1px solid var(--border-color); padding-top: 12px; white-space: normal; }
+.ai-answer-text { margin: 0; white-space: pre-wrap; }
+.ai-sources-heading { margin: 12px 0 4px; font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+.ai-answer ul { margin: 0; padding-left: 18px; color: var(--text-secondary); font-size: 12px; }
+
 .badge::before {
   content: "";
   display: inline-block;

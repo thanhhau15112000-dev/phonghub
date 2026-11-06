@@ -14,6 +14,12 @@ public interface MaintenanceAttachmentUseCase {
     /** Tải nhiều tệp trong một lượt: kiểm tra hết trước khi lưu, lỗi một tệp thì không lưu tệp nào. */
     List<MaintenanceAttachment> uploadAll(UUID ticketId, List<AttachmentFile> files);
 
+    /**
+     * Như {@link #uploadAll(UUID, List)} nhưng chọn loại tệp. {@code RESULT} (ảnh/video kết quả sửa chữa) dành cho
+     * kỹ thuật viên được giao và người quản lý nhà trọ; người thuê không tải được.
+     */
+    List<MaintenanceAttachment> uploadAll(UUID ticketId, List<AttachmentFile> files, MaintenanceAttachment.Phase phase);
+
     List<MaintenanceAttachment> list(UUID ticketId);
 
     URI signedUrl(UUID ticketId, UUID attachmentId);

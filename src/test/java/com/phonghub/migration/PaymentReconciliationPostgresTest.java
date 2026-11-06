@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.phonghub.adapter.out.persistence.postgres.PostgresPaymentRepository;
-import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.domain.model.PaymentReviewReason;
 import com.phonghub.domain.model.PaymentStatus;
 import com.phonghub.domain.model.PaymentTransaction;
@@ -53,8 +52,7 @@ class PaymentReconciliationPostgresTest {
         }
 
         PostgresPaymentRepository payments = new PostgresPaymentRepository(new NamedParameterJdbcTemplate(ds),
-            new AesGcmTenantDataProtector("test-v1", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-                "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="));
+            TestTenantDataProtection.createProtector());
         payments.saveIfNew(tx(920001, contractId, invoiceId, "2026-09-01T00:00:00Z", "1000000", null));
         payments.saveIfNew(tx(920002, contractId, invoiceId, "2026-09-03T00:00:00Z", "2000000", null));
         payments.saveIfNew(tx(920003, contractId, null, "2026-09-02T00:00:00Z", "0", PaymentReviewReason.UNMATCHED));

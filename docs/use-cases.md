@@ -1398,6 +1398,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 - BR1. Chỉ cấn trừ hóa đơn payable của chính hợp đồng; thanh toán đồng thời được tuần tự hóa bằng khóa hóa đơn. Hóa đơn được bù từ cọc chuyển sang `PAID` hoặc `PARTIALLY_PAID` theo số tiền còn thiếu.
 - BR2. Hóa đơn chốt điện/nước chỉ được lập sau khi người thuê xác nhận check-out; bỏ qua chỉ số lùi (thay đồng hồ).
 - BR3. Nếu biên bản bị từ chối, mở lại và sửa chỉ số, lần người thuê xác nhận tiếp theo cập nhật điện/nước trên chính hóa đơn check-out/phí hủy đã có. Giữ mã hóa đơn, hạn thanh toán, tiền đã thu và các khoản phí khác; điều chỉnh khoản hoàn/đối trừ theo chênh lệch, không cộng khoản hoàn hai lần. Chỉ số bằng mốc ban đầu thì bỏ khoản điện/nước đó.
+- BR2a (#248). Trang "Lịch sử thanh toán" (`/account/payments`, API `GET /api/me/payments`) gom giao dịch SePay đã gắn hóa đơn, yêu cầu báo chuyển khoản (chờ/từ chối kèm lý do), khoản chủ trọ ghi nhận tay và cấn trừ cọc, gồm cả hợp đồng đã kết thúc. Người thuê chính chỉ xem của mình; chủ trọ và nhân viên có quyền thu tiền xem của người thuê trong nhà trọ họ (`/tenants/{id}/payments`); quản trị viên và kỹ thuật viên bị 403 (#163).
 - BR3. Giao dịch cấn trừ xuất hiện trong lịch sử thanh toán và biên lai; quyết toán tính tiền cọc − khấu trừ tài sản − cấn trừ − công nợ chưa thu − hóa đơn chốt chưa thanh toán.
 
 #### UC-43. So sánh check-in/check-out và xuất PDF
@@ -2044,7 +2045,8 @@ Các use case dưới đây **chưa có** trên `staging` (25/10/2026), hoặc m
 | Thông báo tiến độ xử lý phiếu (được giao, đang sửa, đã xong) | Chưa có; phiếu chỉ gửi thông báo khi bị từ chối hoặc quá hạn | #204 |
 | Nhân viên hoặc chủ trọ xác nhận thanh toán tiền mặt / chuyển khoản sai nội dung | Chưa có; tiền chỉ vào qua SePay (UC-51) | #205 |
 | Giao diện đặt đơn giá điện nước (UC-16) và ghi chỉ số của người quản lý (UC-46) | Chỉ có API | — |
-| Kỹ thuật viên gửi ảnh hoàn thành; nhân viên kiểm tra kết quả trước khi người thuê nghiệm thu | Chưa có | — |
+| Kỹ thuật viên gửi ảnh hoàn thành | Đã có (#232): kỹ thuật viên được giao và người quản lý tải ảnh/video kết quả (loại RESULT) khi sửa hoặc trong form hoàn tất, khóa sau khi người thuê nghiệm thu. Chưa có: đánh số đợt sửa | #232 |
+| Nhân viên kiểm tra kết quả trước khi người thuê nghiệm thu | Chưa có | — |
 | Báo người thuê khi có hóa đơn mới; hạn và phạt khi người thuê không gửi chỉ số | Chưa có (chỉ nhắc sắp đến hạn, UC-53) | — |
 | Kênh chat chung chỉ đọc với người thuê | Chưa có trên `staging` (PR đang mở) | #129 |
 | AI: trợ lý trong chat, phân tích hóa đơn, đánh giá tài sản; MCP cho quản trị viên | Chưa có | #154–#157, #197 |

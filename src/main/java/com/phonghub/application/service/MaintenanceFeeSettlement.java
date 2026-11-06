@@ -18,10 +18,20 @@ public class MaintenanceFeeSettlement {
 
     private final InvoiceRepositoryPort invoiceRepository;
     private final MaintenanceTicketRepositoryPort ticketRepository;
+    private final MaintenanceNotifier notifier;
 
     public MaintenanceFeeSettlement(InvoiceRepositoryPort invoiceRepository, MaintenanceTicketRepositoryPort ticketRepository) {
+        this(invoiceRepository, ticketRepository, null);
+    }
+
+    public MaintenanceFeeSettlement(
+        InvoiceRepositoryPort invoiceRepository,
+        MaintenanceTicketRepositoryPort ticketRepository,
+        MaintenanceNotifier notifier
+    ) {
         this.invoiceRepository = invoiceRepository;
         this.ticketRepository = ticketRepository;
+        this.notifier = notifier;
     }
 
     public void completeIfPaid(Invoice invoice) {
@@ -45,7 +55,21 @@ public class MaintenanceFeeSettlement {
                 .ifPresent(ticket -> {
                     ticket.markFeePaid();
                     ticketRepository.save(ticket);
+                    notifyPaid(ticket);
                 });
         }
+    }
+
+    /** Báo đã thu phí: người thuê mời nghiệm thu, chủ trọ/nhân viên và kỹ thuật viên được giao biết khoản đã thu. */
+    private void notifyPaid(com.phonghub.domain.model.MaintenanceTicket ticket) {
+        if (notifier == null) {
+            return;
+        }
+        String title = "Đã thanh toán phí sửa chữa";
+        notifier.notifyTenant(ticket, title, "Phí sửa chữa của phiếu \"" + ticket.getTitle()
+            + "\" đã được ghi nhận thanh toán đủ. Mời bạn kiểm tra và nghiệm thu kết quả.");
+        String message = "Đã thu phí sửa chữa của phiếu \"" + ticket.getTitle() + "\".";
+        notifier.notifyManagers(ticket, title, message);
+        notifier.notifyTechnician(ticket, title, message);
     }
 }

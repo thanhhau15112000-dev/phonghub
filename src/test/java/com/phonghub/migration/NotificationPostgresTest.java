@@ -11,7 +11,6 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceReminderRepo
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresNotificationRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresUserRepository;
-import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.Notification;
@@ -54,10 +53,8 @@ class NotificationPostgresTest {
             .load().migrate();
 
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
-
         JpaTestContext jpa = JpaTestContext.over(ds);
-        var protector = new AesGcmTenantDataProtector("test-v1",
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
+        var protector = TestTenantDataProtection.createProtector();
         PostgresNotificationRepository notifications = new PostgresNotificationRepository(jdbc, protector);
         User tenant = new PostgresUserRepository(jdbc, protector).findById(TENANT_USER).orElseThrow();
 

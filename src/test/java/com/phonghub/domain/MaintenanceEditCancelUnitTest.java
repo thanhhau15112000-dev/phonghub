@@ -40,9 +40,9 @@ class MaintenanceEditCancelUnitTest {
         assertEquals("Rỉ cả đêm", ticket.getDescription());
         assertEquals(due, ticket.getDueAt(), "cùng mức độ thì không đổi hạn");
 
-        ticket.updateRequest("Vòi nước rỉ mạnh", "Rỉ cả đêm", MaintenancePriority.URGENT, Duration.ofHours(4));
-        assertEquals(MaintenancePriority.URGENT, ticket.getPriority());
-        assertEquals(ticket.getCreatedAt().plus(Duration.ofHours(4)), ticket.getDueAt());
+        ticket.updateRequest("Vòi nước rỉ mạnh", "Rỉ cả đêm", MaintenancePriority.HIGH, Duration.ofHours(24));
+        assertEquals(MaintenancePriority.HIGH, ticket.getPriority());
+        assertEquals(ticket.getCreatedAt().plus(Duration.ofHours(24)), ticket.getDueAt());
         assertNull(ticket.getSlaNotifiedAt(), "hạn mới thì được cảnh báo quá hạn lại");
         assertEquals(MaintenanceStatus.REPORTED, ticket.getStatus());
         assertTrue(ticket.drainEvents().isEmpty(), "sửa nội dung không phải mốc trạng thái");

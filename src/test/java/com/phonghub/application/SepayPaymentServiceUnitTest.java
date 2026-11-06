@@ -286,6 +286,42 @@ class SepayPaymentServiceUnitTest {
     }
 
     @Test
+    @DisplayName("#292: tiền SePay vào hóa đơn được ghi nhật ký PAYMENT_RECEIVED; gửi lại cùng giao dịch không ghi thêm")
+    void testPaymentReceivedIsAudited() {
+        java.util.List<com.phonghub.application.port.out.AuditPort.AuditEvent> events = new java.util.ArrayList<>();
+        service.withAuditPort(events::add);
+        Contract contract = saveActiveContract(UUID.randomUUID(), new BigDecimal("3000000"));
+        Invoice invoice = saveInvoice(contract, "PHAUDIT234");
+
+        var command = createCommand(7001L, "PHAUDIT234", "tien phong", "in", new BigDecimal("3500000"));
+        service.processWebhook(null, command);
+        service.processWebhook(null, command);
+
+        assertEquals(1, events.size());
+        var event = events.getFirst();
+        assertEquals("PAYMENT_RECEIVED", event.action());
+        assertEquals("INVOICE", event.targetType());
+        assertEquals(invoice.getId().toString(), event.targetId());
+        assertEquals("3000000", event.details().get("amount"));
+        assertEquals("500000", event.details().get("excess"));
+        assertEquals(contract.getId().toString(), event.details().get("contractId"));
+    }
+
+    @Test
+    @DisplayName("#292: tiền không khớp hóa đơn nào vẫn được ghi nhật ký, đối tượng là giao dịch")
+    void testUnmatchedPaymentIsAudited() {
+        java.util.List<com.phonghub.application.port.out.AuditPort.AuditEvent> events = new java.util.ArrayList<>();
+        service.withAuditPort(events::add);
+
+        service.processWebhook(null, createCommand(7002L, null, "khong ro noi dung", "in", new BigDecimal("100000")));
+
+        assertEquals(1, events.size());
+        assertEquals("PAYMENT", events.getFirst().targetType());
+        assertEquals("0", events.getFirst().details().get("amount"));
+        assertEquals("100000", events.getFirst().details().get("excess"));
+    }
+
+    @Test
     @DisplayName("SePay code field takes precedence; partial transfers accumulate until fully paid")
     void testPartialPaymentsAccumulate() {
         Contract contract = saveActiveContract(UUID.randomUUID(), new BigDecimal("3000000"));
@@ -426,5 +462,30 @@ class SepayPaymentServiceUnitTest {
         assertEquals(1, paymentRepo.findAll().size());
         assertEquals(0, vnd("1000000").compareTo(again.transaction().excessAmount()));
         assertEquals(0, vnd("3000000").compareTo(invoiceRepo.findById(invoice.getId()).orElseThrow().getPaidAmount()));
+    }
+
+    @Test
+    @DisplayName("Payment code in description or referenceCode is matched and credits invoice")
+    void testPaymentCodeInDescriptionOrReferenceCode() {
+        Contract contract = saveActiveContract(UUID.randomUUID(), vnd("3000000"));
+        Invoice invoice = saveInvoice(contract, "PHDESCR123");
+
+        var cmdDesc = new SepayWebhookUseCase.SepayWebhookCommand(
+            9701L, "MBBank", "2026-10-02 08:00:00", "0389999999", null, null,
+            "chuyen tien phong", "in", vnd("1500000"), null, null, "Thanh toan PHDESCR123 thang 10"
+        );
+        service.processWebhook(null, cmdDesc);
+        Invoice afterDesc = invoiceRepo.findById(invoice.getId()).orElseThrow();
+        assertEquals(InvoiceStatus.PARTIALLY_PAID, afterDesc.getStatus());
+        assertEquals(0, vnd("1500000").compareTo(afterDesc.getPaidAmount()));
+
+        var cmdRef = new SepayWebhookUseCase.SepayWebhookCommand(
+            9702L, "MBBank", "2026-10-02 08:05:00", "0389999999", null, null,
+            "thanh toan", "in", vnd("1500000"), null, "REF-PHDESCR123", null
+        );
+        service.processWebhook(null, cmdRef);
+        Invoice afterRef = invoiceRepo.findById(invoice.getId()).orElseThrow();
+        assertEquals(InvoiceStatus.PAID, afterRef.getStatus());
+        assertEquals(0, vnd("3000000").compareTo(afterRef.getPaidAmount()));
     }
 }

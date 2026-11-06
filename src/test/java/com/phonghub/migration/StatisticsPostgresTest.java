@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresStatisticsQueryAdapter;
 import com.phonghub.adapter.out.persistence.postgres.PostgresUserRepository;
-import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.application.port.out.StatisticsQueryPort.ActivityCount;
 import com.phonghub.application.port.out.StatisticsQueryPort.InvoiceAggregate;
 import com.phonghub.application.port.out.StatisticsQueryPort.MaintenanceAggregate;
@@ -84,10 +83,8 @@ class StatisticsPostgresTest {
         }
 
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
-
         JpaTestContext jpa = JpaTestContext.over(ds);
-        TenantDataProtectionPort protector = new AesGcmTenantDataProtector("test-v1",
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
+        TenantDataProtectionPort protector = TestTenantDataProtection.createProtector();
         PostgresStatisticsQueryAdapter stats = new PostgresStatisticsQueryAdapter(jdbc, protector);
 
         UUID ownerId = UUID.randomUUID();
