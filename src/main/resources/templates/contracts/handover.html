@@ -24,6 +24,14 @@
             </p>
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <form th:if="${canSkip}" th:action="@{${base} + '/skip'}" method="post" style="margin: 0;">
+                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="button" class="btn btn-secondary" title="Tạo dữ liệu mẫu nếu thiếu và duyệt biên bản ngay"
+                        th:data-confirm="${checkOut} ? 'Bỏ qua các bước còn lại của biên bản check-out?' : 'Bỏ qua các bước còn lại và duyệt biên bản check-in?'"
+                        data-confirm-title="Bỏ qua bàn giao"
+                        th:data-confirm-consequence="${checkOut} ? 'Hợp đồng sẽ kết thúc, phòng được trả và công nợ được cấn trừ vào tiền cọc.' : 'Biên bản được duyệt ngay mà không cần ảnh, giấy tờ hay xác nhận của người thuê.'"
+                        data-confirm-btn="Bỏ qua">Bỏ qua bước này</button>
+            </form>
             <a th:if="${details != null}" th:href="@{'/contracts/' + ${contract.getId()} + '/handover-report'}" class="btn btn-secondary">Đối chiếu &amp; PDF</a>
             <a th:href="@{'/contracts/' + ${contract.getId()}}" class="btn">&larr; Quay lại hợp đồng</a>
         </div>

@@ -524,25 +524,9 @@ public class HandoverService implements HandoverUseCase {
             throw new IllegalArgumentException("Phòng chưa có hiện trạng trước đó. Hãy nhập chỉ số điện, nước và tình trạng thực tế trước khi gửi.");
         }
 
-        int itemCount;
-        if (type == HandoverType.CHECK_IN) {
-            List<HandoverItem> items = itemRepository.findByHandoverId(handover.id());
-            if (items.isEmpty()) {
-                items = checkInSnapshotItems(handover.id(), contract.getRoomId());
-                itemRepository.replaceAll(handover.id(), items, user.id());
-            }
-            itemCount = items.size();
-        } else {
-            itemCount = itemRepository.findByHandoverId(handover.id()).size();
-        }
-        PropertyHouseRules rules = rulesRepository.findByPropertyId(contract.getPropertyId()).orElse(null);
-
-        Handover saved = handoverRepository.save(handover.send(
-            termsHash(contract),
-            rules == null ? null : rules.content(),
-            rules == null ? null : sha256(rules.content()),
-            user.id()));
-        audit(type, "SENT", user, saved, Map.of("items", itemCount, "photos", photos.size()));
+        Handover saved = sendDraft(type, contract, handover, user);
+        audit(type, "SENT", user, saved, Map.of("items", itemRepository.findByHandoverId(saved.id()).size(),
+            "photos", photos.size()));
         if (notifications != null) {
             // Chỉ người thuê chính xác nhận được biên bản (requirePrimaryTenant).
             notifications.notifyTenants(contract, false, "Biên bản " + label(type) + " cần bạn xác nhận",
@@ -550,6 +534,20 @@ public class HandoverService implements HandoverUseCase {
                 link(type, contractId));
         }
         return saved;
+    }
+
+    /** DRAFT -> PENDING_TENANT: check-in chụp hiện trạng phòng (nếu chưa có), kèm hash điều khoản và nội quy. */
+    private Handover sendDraft(HandoverType type, Contract contract, Handover handover, CurrentUser user) {
+        if (type == HandoverType.CHECK_IN && itemRepository.findByHandoverId(handover.id()).isEmpty()) {
+            itemRepository.replaceAll(handover.id(), checkInSnapshotItems(handover.id(), contract.getRoomId()),
+                user.id());
+        }
+        PropertyHouseRules rules = rulesRepository.findByPropertyId(contract.getPropertyId()).orElse(null);
+        return handoverRepository.save(handover.send(
+            termsHash(contract),
+            rules == null ? null : rules.content(),
+            rules == null ? null : sha256(rules.content()),
+            user.id()));
     }
 
     private List<HandoverItem> checkInSnapshotItems(UUID handoverId, UUID roomId) {
@@ -580,13 +578,7 @@ public class HandoverService implements HandoverUseCase {
             throw new IllegalArgumentException("Vui lòng tải ảnh CCCD ở Hồ sơ cá nhân trước khi xác nhận biên bản");
         }
         Handover saved = handoverRepository.save(handover.tenantConfirm(user.id()));
-        if (type == HandoverType.CHECK_OUT) {
-            Handover checkIn = handoverRepository.find(contractId, HandoverType.CHECK_IN)
-                .filter(found -> found.status() == HandoverStatus.APPROVED)
-                .orElseThrow(() -> new InvalidHandoverStateException(
-                    "Cần có biên bản check-in đã được duyệt trước khi xác nhận check-out."));
-            issueCheckOutInvoices(contract, checkIn, saved, user);
-        }
+        afterTenantConfirmation(type, contract, saved, user);
         audit(type, "TENANT_CONFIRMED", user, saved, Map.of());
         if (notifications != null) {
             // Cả chủ trọ và staff quản lý hợp đồng đều có thể duyệt check-out.
@@ -596,6 +588,18 @@ public class HandoverService implements HandoverUseCase {
                 link(type, contractId));
         }
         return saved;
+    }
+
+    /** Check-out đã qua bước xác nhận (hoặc được bỏ qua): lập các khoản phải trả trước khi duyệt. */
+    private void afterTenantConfirmation(HandoverType type, Contract contract, Handover confirmed, CurrentUser user) {
+        if (type != HandoverType.CHECK_OUT) {
+            return;
+        }
+        Handover checkIn = handoverRepository.find(contract.getId(), HandoverType.CHECK_IN)
+            .filter(found -> found.status() == HandoverStatus.APPROVED)
+            .orElseThrow(() -> new InvalidHandoverStateException(
+                "Cần có biên bản check-in đã được duyệt trước khi xác nhận check-out."));
+        issueCheckOutInvoices(contract, checkIn, confirmed, user);
     }
 
     /**
@@ -701,7 +705,63 @@ public class HandoverService implements HandoverUseCase {
         authorizationService.assertCanManageContracts(user, contract.getPropertyId());
         Handover handover = handoverRepository.findForUpdate(contractId, type)
             .orElseThrow(() -> new HandoverNotFoundException("Chưa có biên bản cho hợp đồng " + contractId));
+        return approvePending(type, contract, handover, user, finalDeduction, depositOffsetInvoiceIds, false);
+    }
 
+    @Override
+    public Handover skip(HandoverType type, UUID contractId) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        Contract contract = findContract(contractId);
+        authorizationService.assertCanManageContracts(user, contract.getPropertyId());
+        if (handoverRepository.find(contractId, type).isEmpty()) {
+            create(type, sampleCommand(type, contract));
+        }
+        Handover handover = handoverRepository.findForUpdate(contractId, type)
+            .orElseThrow(() -> new HandoverNotFoundException("Chưa có biên bản cho hợp đồng " + contractId));
+        HandoverStatus from = handover.status();
+        if (handover.status() == HandoverStatus.APPROVED) {
+            throw new InvalidHandoverStateException("Biên bản " + label(type) + " đã được duyệt.");
+        }
+        if (handover.status() == HandoverStatus.REJECTED) {
+            handover = handoverRepository.save(handover.reopen(user.id()));
+        }
+        if (handover.status() == HandoverStatus.DRAFT) {
+            handover = sendDraft(type, contract, handover, user);
+        }
+        if (handover.status() == HandoverStatus.PENDING_TENANT) {
+            handover = handoverRepository.save(handover.skipTenantConfirmation(user.id()));
+            afterTenantConfirmation(type, contract, handover, user);
+        }
+        // Như chủ trọ chọn cấn trừ mọi khoản còn nợ vào tiền cọc; cọc không đủ thì vẫn bị chặn như duyệt thường.
+        List<UUID> outstanding = type == HandoverType.CHECK_OUT && invoiceRepository != null
+            ? invoiceRepository.findPayableByContractIdForUpdate(contractId).stream()
+                .filter(invoice -> invoice.remainingAmount().signum() > 0).map(Invoice::getId).toList()
+            : List.of();
+        Handover saved = approvePending(type, contract, handover, user, null, outstanding, true);
+        audit(type, "SKIPPED", user, saved, Map.of("fromStatus", from.name()));
+        return saved;
+    }
+
+    /** Biên bản mẫu cho nút bỏ qua: check-out lấy chỉ số mới nhất (hoặc của check-in) để không phát sinh tiêu thụ giả. */
+    private HandoverCommand sampleCommand(HandoverType type, Contract contract) {
+        Handover checkIn = type == HandoverType.CHECK_OUT
+            ? handoverRepository.find(contract.getId(), HandoverType.CHECK_IN).orElse(null) : null;
+        BigDecimal electric = checkIn == null ? BigDecimal.ZERO
+            : latestMeter(contract, MeterType.ELECTRIC, checkIn.initialElectricMeter());
+        BigDecimal water = checkIn == null ? BigDecimal.ZERO
+            : latestMeter(contract, MeterType.WATER, checkIn.initialWaterMeter());
+        return new HandoverCommand(contract.getId(), electric, water, "Bỏ qua bàn giao (dữ liệu mẫu).", null);
+    }
+
+    /**
+     * PENDING_APPROVAL -> APPROVED. Check-in kích hoạt hợp đồng nháp; check-out cấn trừ cọc, kết thúc hợp đồng và trả
+     * phòng trong cùng transaction. {@code tenantConfirmationSkipped} chỉ do nút bỏ qua đặt.
+     */
+    private Handover approvePending(
+        HandoverType type, Contract contract, Handover handover, CurrentUser user, BigDecimal finalDeduction,
+        List<UUID> depositOffsetInvoiceIds, boolean tenantConfirmationSkipped
+    ) {
+        UUID contractId = contract.getId();
         if (type == HandoverType.CHECK_IN) {
             Handover saved = handoverRepository.save(handover.approve(user.id()));
             if (contract.getStatus() == com.phonghub.domain.model.ContractStatus.DRAFT) {
@@ -712,7 +772,7 @@ public class HandoverService implements HandoverUseCase {
             return saved;
         }
 
-        if (!handover.confirmedByTenant()) {
+        if (!handover.confirmedByTenant() && !tenantConfirmationSkipped) {
             throw new ConflictException("Người thuê cần xác nhận biên bản check-out trước khi duyệt.");
         }
         List<HandoverItem> items = itemRepository.findByHandoverId(handover.id());
