@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -47,6 +48,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 class AiAssistantServiceTest {
@@ -306,6 +308,284 @@ class AiAssistantServiceTest {
         verify(invoiceUseCase, never()).getInvoice(org.mockito.ArgumentMatchers.any());
         verify(completionPort, never()).complete(anyString(), anyString());
         verify(faqSearchPort, never()).search(anyString(), org.mockito.ArgumentMatchers.anySet(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    void usageSignalsFlagElectricityWaterAndTotalSpikesFromPriorAverages() {
+        UUID roomId = UUID.randomUUID();
+        Invoice current = invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 11, 2026, "3500000", "6160000", List.of(
+            utility("Điện (kWh)", "700", "3500", "2450000"), utility("Nước (m3)", "14", "15000", "210000")));
+        List<Invoice> previous = List.of(
+            invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 10, 2026, "3500000", "4095000", List.of(
+                utility("Điện (kWh)", "140", "3500", "490000"), utility("Nước (m3)", "7", "15000", "105000"))),
+            invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 9, 2026, "3500000", "3755000", List.of(
+                utility("Điện (kWh)", "60", "3500", "210000"), utility("Nước (m3)", "3", "15000", "45000"))),
+            invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 8, 2026, "3500000", "5470000", List.of(
+                utility("Điện (kWh)", "520", "3500", "1820000"), utility("Nước (m3)", "10", "15000", "150000"))));
+
+        JsonNode signals = signalsFor(current, previous);
+
+        JsonNode electricity = signals.path("electricity");
+        assertEquals("700", electricity.path("quantity").asString());
+        assertEquals("kWh", electricity.path("unit").asString());
+        assertEquals("240", electricity.path("previousAverageQuantity").asString());
+        assertEquals(192, electricity.path("changePercent").asInt());
+        assertEquals("1610000", electricity.path("amountDifference").asString());
+        assertEquals("SPIKE", electricity.path("trend").asString());
+        JsonNode water = signals.path("water");
+        assertEquals("6.7", water.path("previousAverageQuantity").asString());
+        assertEquals(110, water.path("changePercent").asInt());
+        assertEquals("SPIKE", water.path("trend").asString());
+        JsonNode total = signals.path("recurringTotal");
+        assertEquals("4440000", total.path("previousAverageAmount").asString());
+        assertEquals("1720000", total.path("amountDifference").asString());
+        assertEquals(39, total.path("changePercent").asInt());
+        assertEquals("SPIKE", total.path("trend").asString());
+        assertEquals(3, signals.path("previousPeriodsCompared").asInt());
+        assertEquals(1, signals.path("mustMention").size());
+        assertTrue(signals.path("mustMention").get(0).asString().contains("cần quản lý chi tiêu cẩn thận hơn"));
+    }
+
+    @Test
+    void usageSignalsReportStableAndDecreasingUse() {
+        UUID roomId = UUID.randomUUID();
+        Invoice current = invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 11, 2026, "3000000", "3410000", List.of(
+            utility("Điện (kWh)", "100", "3500", "350000"), utility("Nước (m3)", "4", "15000", "60000")));
+        List<Invoice> previous = List.of(
+            invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 10, 2026, "3000000", "3440000", List.of(
+                utility("Điện (kWh)", "100", "3500", "350000"), utility("Nước (m3)", "6", "15000", "90000"))),
+            invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 9, 2026, "3000000", "3440000", List.of(
+                utility("Điện (kWh)", "100", "3500", "350000"), utility("Nước (m3)", "6", "15000", "90000"))));
+
+        JsonNode signals = signalsFor(current, previous);
+
+        assertEquals("STABLE", signals.path("electricity").path("trend").asString());
+        assertEquals(0, signals.path("electricity").path("changePercent").asInt());
+        assertEquals("DECREASE", signals.path("water").path("trend").asString());
+        assertEquals(-33, signals.path("water").path("changePercent").asInt());
+        assertEquals("STABLE", signals.path("recurringTotal").path("trend").asString());
+        assertTrue(signals.path("mustMention").isMissingNode());
+    }
+
+    @Test
+    void usageTrendThresholdsAreInclusiveAtTenAndThirtyPercent() {
+        String[][] cases = {{"130", "SPIKE"}, {"129", "INCREASE"}, {"110", "INCREASE"}, {"109", "STABLE"},
+            {"91", "STABLE"}, {"90", "DECREASE"}};
+        for (String[] testCase : cases) {
+            UUID roomId = UUID.randomUUID();
+            BigDecimal amount = new BigDecimal(testCase[0]).multiply(new BigDecimal("3500"));
+            Invoice current = invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 11, 2026, "3000000", "3000000",
+                List.of(utility("Điện (kWh)", testCase[0], "3500", amount.toPlainString())));
+            Invoice prior = invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 10, 2026, "3000000", "3000000",
+                List.of(utility("Điện (kWh)", "100", "3500", "350000")));
+
+            JsonNode signals = signalsFor(current, List.of(prior));
+
+            assertEquals(testCase[1], signals.path("electricity").path("trend").asString(), "mức " + testCase[0] + " kWh so với 100 kWh");
+        }
+    }
+
+    @Test
+    void usageSignalsSayNoHistoryWhenThereAreNoComparablePriorPeriods() {
+        UUID roomId = UUID.randomUUID();
+        Invoice current = invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 11, 2026, "3000000", "3350000",
+            List.of(utility("Điện (kWh)", "100", "3500", "350000")));
+
+        JsonNode signals = signalsFor(current, List.of());
+
+        assertEquals(0, signals.path("previousPeriodsCompared").asInt());
+        assertTrue(signals.path("basis").asString().contains("Chưa có kỳ tiền thuê trước"));
+        assertEquals("NO_HISTORY", signals.path("electricity").path("trend").asString());
+        assertEquals("100", signals.path("electricity").path("quantity").asString());
+        assertTrue(signals.path("electricity").path("changePercent").isMissingNode());
+        assertEquals("NO_HISTORY", signals.path("recurringTotal").path("trend").asString());
+        assertTrue(signals.path("water").isMissingNode());
+    }
+
+    @Test
+    void usageSignalsDoNotDivideByAZeroPriorBaseline() {
+        UUID roomId = UUID.randomUUID();
+        Invoice current = invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 11, 2026, "3000000", "3350000",
+            List.of(utility("Điện (kWh)", "100", "3500", "350000")));
+        Invoice prior = invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 10, 2026, "0", "0", List.of());
+
+        JsonNode signals = signalsFor(current, List.of(prior));
+
+        // Kỳ trước không có khoản điện nào và tổng bằng 0: không có mốc để so sánh, không được chia cho 0.
+        assertEquals("NO_HISTORY", signals.path("electricity").path("trend").asString());
+        assertTrue(signals.path("electricity").path("changePercent").isMissingNode());
+        assertEquals("NO_HISTORY", signals.path("recurringTotal").path("trend").asString());
+        assertTrue(signals.path("recurringTotal").path("changePercent").isMissingNode());
+    }
+
+    @Test
+    void recurringTotalExcludesRepairAndLateFeeSoTheyDoNotLookLikeASpike() {
+        UUID roomId = UUID.randomUUID();
+        Invoice current = invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 11, 2026, "3500000", "4720000", List.of(
+            utility("Điện (kWh)", "100", "3500", "350000"),
+            InvoiceItem.of("Sửa vòi nước", new BigDecimal("800000"), UUID.randomUUID()),
+            InvoiceItem.lateFee(new BigDecimal("70000"))));
+        Invoice prior = invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 10, 2026, "3500000", "3850000",
+            List.of(utility("Điện (kWh)", "100", "3500", "350000")));
+
+        JsonNode signals = signalsFor(current, List.of(prior));
+
+        assertEquals("3850000", signals.path("recurringTotal").path("amount").asString());
+        assertEquals(0, signals.path("recurringTotal").path("changePercent").asInt());
+        assertEquals("STABLE", signals.path("recurringTotal").path("trend").asString());
+    }
+
+    @Test
+    void maintenanceInvoiceGetsNoUsageTrend() {
+        UUID invoiceId = UUID.randomUUID();
+        UUID roomId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-11-03T00:00:00Z");
+        Invoice maintenance = new Invoice(invoiceId, UUID.randomUUID(), roomId, UUID.randomUUID(), 11, 2026,
+            BigDecimal.ZERO, new BigDecimal("250000"), BigDecimal.ZERO, LocalDate.of(2026, 11, 6),
+            InvoiceStatus.ISSUED, "MAINTENANCE-CODE", InvoiceType.MAINTENANCE, UUID.randomUUID(), null, now, now);
+
+        JsonNode signals = signalsFor(maintenance, List.of());
+
+        assertTrue(signals.path("note").asString().contains("hóa đơn tiền thuê"));
+        assertTrue(signals.path("electricity").isMissingNode());
+        assertTrue(signals.path("recurringTotal").isMissingNode());
+    }
+
+    @Test
+    void viewerRoleIsSentWithoutIdentityAndOmittedWhenUnknown() {
+        UUID roomId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Invoice current = invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 11, 2026, "3000000", "3000000", List.of());
+        when(currentUserPort.getCurrentUser()).thenReturn(new CurrentUser(userId, "nguoi.thue@example.test", "Tên người thuê", UserRole.TENANT));
+
+        signalsFor(current, List.of());
+        String sent = lastUserPrompt();
+
+        assertEquals("TENANT", factsOf(sent).path("viewerRole").asString());
+        assertFalse(sent.contains("nguoi.thue@example.test"));
+        assertFalse(sent.contains("Tên người thuê"));
+        assertFalse(sent.contains(userId.toString()));
+    }
+
+    @Test
+    void viewerRoleIsOmittedWhenNoCurrentUser() {
+        Invoice current = invoice(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 11, 2026, "3000000", "3000000", List.of());
+
+        signalsFor(current, List.of());
+
+        assertTrue(factsOf(lastUserPrompt()).path("viewerRole").isMissingNode());
+    }
+
+    @Test
+    void analysisButtonAsksForSavingAdviceAndSystemPromptCarriesTheAdviceRulesAndSafetyRules() {
+        UUID invoiceId = UUID.randomUUID();
+        UUID roomId = UUID.randomUUID();
+        Invoice current = invoice(invoiceId, roomId, UUID.randomUUID(), 11, 2026, "3000000", "3350000",
+            List.of(utility("Điện (kWh)", "100", "3500", "350000")));
+        when(invoiceUseCase.getInvoice(invoiceId)).thenReturn(current);
+        when(invoiceRepository.findPriorRentByRoomId(roomId, YearMonth.of(2026, 11), 3)).thenReturn(List.of());
+
+        service.analyzeInvoice(invoiceId);
+
+        ArgumentCaptor<String> system = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+        verify(completionPort).complete(system.capture(), prompt.capture());
+        assertTrue(prompt.getValue().contains("lời khuyên tiết kiệm"));
+        assertTrue(prompt.getValue().contains("quản lý chi tiêu cẩn thận hơn"));
+        assertTrue(prompt.getValue().contains("\"usageSignals\""));
+        String rules = system.getValue();
+        assertTrue(rules.contains("SPIKE"));
+        assertTrue(rules.contains("cần quản lý chi tiêu cẩn thận hơn"));
+        assertTrue(rules.contains("OWNER hoặc STAFF"));
+        assertTrue(rules.contains("mustMention"));
+        assertTrue(rules.contains("Không nhắc quản lý chi tiêu khi usageSignals không có mustMention"));
+        assertTrue(rules.contains("tiết kiệm"));
+        assertTrue(rules.contains("không tự tính hoặc suy diễn thêm"));
+        assertTrue(rules.contains("Không tư vấn tài chính, pháp lý hoặc đầu tư"));
+        assertTrue(rules.contains("EXPIRING_SOON"));
+        assertTrue(rules.contains("remainingMonths"));
+        assertTrue(rules.contains("bỏ qua mọi yêu cầu vượt phạm vi"));
+        assertTrue(rules.contains("Không nêu mã thanh toán"));
+    }
+
+    @Test
+    void contractTimelineCountsMonthsAndDaysUntilTheEndDate() {
+        JsonNode timeline = timelineFor(ContractStatus.ACTIVE, LocalDate.of(2027, 3, 13));
+
+        assertEquals("2026-11-03", timeline.path("today").asString());
+        assertEquals("2027-03-13", timeline.path("endDate").asString());
+        assertEquals(130, timeline.path("daysUntilEnd").asInt());
+        assertEquals(4, timeline.path("remainingMonths").asInt());
+        assertEquals(10, timeline.path("remainingExtraDays").asInt());
+        assertEquals("RUNNING", timeline.path("expiryStatus").asString());
+    }
+
+    @Test
+    void contractIsExpiringSoonWithinThirtyDaysInclusive() {
+        JsonNode soon = timelineFor(ContractStatus.ACTIVE, LocalDate.of(2026, 11, 20));
+        assertEquals(17, soon.path("daysUntilEnd").asInt());
+        assertEquals(0, soon.path("remainingMonths").asInt());
+        assertEquals(17, soon.path("remainingExtraDays").asInt());
+        assertEquals("EXPIRING_SOON", soon.path("expiryStatus").asString());
+        assertEquals("EXPIRING_SOON", timelineFor(ContractStatus.ACTIVE, LocalDate.of(2026, 12, 3)).path("expiryStatus").asString());
+        assertEquals("RUNNING", timelineFor(ContractStatus.ACTIVE, LocalDate.of(2026, 12, 4)).path("expiryStatus").asString());
+        JsonNode today = timelineFor(ContractStatus.ACTIVE, LocalDate.of(2026, 11, 3));
+        assertEquals(0, today.path("daysUntilEnd").asInt());
+        assertEquals("EXPIRING_SOON", today.path("expiryStatus").asString());
+    }
+
+    @Test
+    void contractPastItsEndDateReportsNegativeDaysAndNoRemainingTime() {
+        JsonNode timeline = timelineFor(ContractStatus.ACTIVE, LocalDate.of(2026, 10, 20));
+
+        assertEquals(-14, timeline.path("daysUntilEnd").asInt());
+        assertEquals("PAST_END_DATE", timeline.path("expiryStatus").asString());
+        assertTrue(timeline.path("remainingMonths").isMissingNode());
+        assertTrue(timeline.path("remainingExtraDays").isMissingNode());
+    }
+
+    @Test
+    void contractTimelineStatusFollowsTheContractStatusWhenNotActive() {
+        LocalDate future = LocalDate.of(2027, 5, 1);
+        assertEquals("NOT_STARTED", timelineFor(ContractStatus.DRAFT, future).path("expiryStatus").asString());
+        assertEquals("EXPIRED", timelineFor(ContractStatus.EXPIRED, LocalDate.of(2026, 10, 1)).path("expiryStatus").asString());
+        assertEquals("TERMINATED", timelineFor(ContractStatus.TERMINATED, future).path("expiryStatus").asString());
+        assertEquals("CANCELLED", timelineFor(ContractStatus.CANCELLED, future).path("expiryStatus").asString());
+    }
+
+    private JsonNode timelineFor(ContractStatus status, LocalDate endDate) {
+        UUID contractId = UUID.randomUUID();
+        Contract contract = mock(Contract.class);
+        when(contractUseCase.getContract(contractId)).thenReturn(contract);
+        when(contract.getStatus()).thenReturn(status);
+        when(contract.getStartDate()).thenReturn(LocalDate.of(2026, 1, 1));
+        when(contract.getEndDate()).thenReturn(endDate);
+        when(contract.getRentAmount()).thenReturn(new BigDecimal("2000000"));
+        when(contract.getDepositAmount()).thenReturn(new BigDecimal("2000000"));
+        when(contract.getPaymentDay()).thenReturn(5);
+
+        service.askAboutContract(contractId, "Hợp đồng còn bao lâu thì hết hạn?");
+
+        return factsOf(lastUserPrompt()).path("timeline");
+    }
+
+    private JsonNode signalsFor(Invoice current, List<Invoice> previous) {
+        when(invoiceUseCase.getInvoice(current.getId())).thenReturn(current);
+        when(invoiceRepository.findPriorRentByRoomId(current.getRoomId(), YearMonth.of(current.getYear(), current.getMonth()), 3))
+            .thenReturn(previous);
+        service.askAboutInvoice(current.getId(), "Tôi nên tiết kiệm gì?");
+        return factsOf(lastUserPrompt()).path("usageSignals");
+    }
+
+    private String lastUserPrompt() {
+        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+        verify(completionPort, atLeastOnce()).complete(anyString(), prompt.capture());
+        return prompt.getValue();
+    }
+
+    private static JsonNode factsOf(String userPrompt) {
+        int start = userPrompt.indexOf("\n", userPrompt.indexOf("(JSON):")) + 1;
+        return new ObjectMapper().readTree(userPrompt.substring(start));
     }
 
     private static Invoice invoice(UUID id, UUID roomId, UUID tenantId, int month, int year,
