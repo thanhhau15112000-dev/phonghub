@@ -1,6 +1,6 @@
 package com.phonghub.adapter.in.scheduling;
 
-import com.phonghub.adapter.out.event.SseChatEventPublisher;
+import com.phonghub.application.port.out.ChatSubscriptionPort;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -21,14 +21,14 @@ public class ChatSseHeartbeatScheduler implements DisposableBean {
     private static final Logger log = LoggerFactory.getLogger(ChatSseHeartbeatScheduler.class);
     private static final long INTERVAL_SECONDS = 25;
 
-    private final SseChatEventPublisher publisher;
+    private final ChatSubscriptionPort publisher;
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
         Thread thread = new Thread(runnable, "chat-sse-heartbeat");
         thread.setDaemon(true);
         return thread;
     });
 
-    public ChatSseHeartbeatScheduler(SseChatEventPublisher publisher) {
+    public ChatSseHeartbeatScheduler(ChatSubscriptionPort publisher) {
         this.publisher = publisher;
         executor.scheduleWithFixedDelay(this::heartbeat, INTERVAL_SECONDS, INTERVAL_SECONDS, TimeUnit.SECONDS);
     }

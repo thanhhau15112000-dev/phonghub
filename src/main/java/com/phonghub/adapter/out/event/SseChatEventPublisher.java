@@ -1,6 +1,7 @@
 package com.phonghub.adapter.out.event;
 
 import com.phonghub.application.port.out.ChatEventPublisherPort;
+import com.phonghub.application.port.out.ChatSubscriptionPort;
 import com.phonghub.domain.model.ChatMessage;
 import com.phonghub.domain.model.ChatRoom;
 import java.io.IOException;
@@ -14,7 +15,7 @@ import java.util.function.Supplier;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-public class SseChatEventPublisher implements ChatEventPublisherPort {
+public class SseChatEventPublisher implements ChatEventPublisherPort, ChatSubscriptionPort {
 
     /** Trình duyệt chờ chừng này trước khi tự kết nối lại khi luồng SSE bị ngắt. */
     private static final long RECONNECT_DELAY_MS = 3_000;
@@ -35,7 +36,9 @@ public class SseChatEventPublisher implements ChatEventPublisherPort {
         return userEmitters.values().stream().mapToInt(List::size).sum();
     }
 
-    public SseEmitter subscribe(UUID userId) {
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> T subscribe(UUID userId) {
         // Timeout 30 phút, client sẽ tự reconnect
         SseEmitter emitter = new SseEmitter(30L * 60 * 1000);
         userEmitters.computeIfAbsent(userId, k -> new CopyOnWriteArrayList<>()).add(emitter);
@@ -50,7 +53,7 @@ public class SseChatEventPublisher implements ChatEventPublisherPort {
             removeEmitter(userId, emitter);
         }
 
-        return emitter;
+        return (T) emitter;
     }
 
     private void removeEmitter(UUID userId, SseEmitter emitter) {
@@ -84,6 +87,7 @@ public class SseChatEventPublisher implements ChatEventPublisherPort {
      * Gửi dòng chú thích cho mọi kết nối đang mở. Proxy (Cloudflare, Render) cắt kết nối im lặng quá lâu,
      * và trình duyệt không tự kết nối lại khi proxy trả trang lỗi thay cho luồng SSE.
      */
+    @Override
     public void sendHeartbeat() {
         userEmitters.forEach((userId, emitters) -> {
             for (SseEmitter emitter : emitters) {
