@@ -154,15 +154,15 @@ class MaintenanceListFiltersIntegrationTest {
     @Test
     @DisplayName("Filters by property, priority and report date range")
     void commonFilters() throws Exception {
-        createTicket("Phiếu mức cao", "URGENT");
+        createTicket("Phiếu mức cao", "HIGH");
         LocalDate today = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
 
         // mức độ
-        mockMvc.perform(as(get("/maintenance?priority=URGENT"), ADMIN))
-            .andExpect(content().string(containsString("Phiếu mức cao")))
-            .andExpect(content().string(not(containsString(SEEDED))));
         mockMvc.perform(as(get("/maintenance?priority=HIGH"), ADMIN))
-            .andExpect(content().string(containsString(SEEDED)))
+            .andExpect(content().string(containsString("Phiếu mức cao")))
+            .andExpect(content().string(containsString(SEEDED)));
+        mockMvc.perform(as(get("/maintenance?priority=LOW"), ADMIN))
+            .andExpect(content().string(not(containsString(SEEDED))))
             .andExpect(content().string(not(containsString("Phiếu mức cao"))));
 
         // cơ sở: phiếu đều thuộc PROP_1, PROP_2 không có phiếu nào
@@ -215,11 +215,11 @@ class MaintenanceListFiltersIntegrationTest {
     @Test
     @DisplayName("Filter parsing is lenient and the done group excludes AWAITING_PAYMENT")
     void filterParsing() {
-        MaintenanceListFilter filter = MaintenanceListFilter.parse("done", "AWAITING_PAYMENT", "bad", "urgent", "2026-10-01", "oops");
+        MaintenanceListFilter filter = MaintenanceListFilter.parse("done", "AWAITING_PAYMENT", "bad", "high", "2026-10-01", "oops");
         assertEquals(MaintenanceListFilter.Tab.DONE, filter.tab());
         assertNull(filter.status(), "status filter is ignored on the done tab");
         assertNull(filter.propertyId());
-        assertEquals(MaintenancePriority.URGENT, filter.priority());
+        assertEquals(MaintenancePriority.HIGH, filter.priority());
         assertEquals(LocalDate.of(2026, 10, 1), filter.from());
         assertNull(filter.to());
 

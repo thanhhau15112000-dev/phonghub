@@ -8,7 +8,6 @@ import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyHouseRulesR
 import com.phonghub.adapter.out.persistence.postgres.PostgresRoomAssetRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantDocumentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantRepository;
-import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.adapter.out.storage.InMemoryFileStorageAdapter;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.CurrentUser;
@@ -104,8 +103,7 @@ class HandoverPostgresTest {
         }
 
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
-        var protector = new AesGcmTenantDataProtector("test-v1",
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
+        var protector = TestTenantDataProtection.createProtector();
         PostgresHandoverRepository handovers = new PostgresHandoverRepository(jdbc);
         PostgresHandoverPhotoRepository photos = new PostgresHandoverPhotoRepository(jdbc);
         CurrentUserPort currentUser = mock(CurrentUserPort.class);

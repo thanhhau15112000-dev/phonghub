@@ -1,7 +1,6 @@
 package com.phonghub.migration;
 
 import com.phonghub.adapter.out.audit.PostgresAuditAdapter;
-import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.AuditQueryPort;
 import com.phonghub.application.port.out.TenantDataProtectionPort;
@@ -54,8 +53,7 @@ class AuditScopePostgresTest {
         ds.setUser(POSTGRES.getUsername());
         ds.setPassword(POSTGRES.getPassword());
         Flyway.configure().dataSource(ds).locations(MAIN, FIXTURE).load().migrate();
-        TenantDataProtectionPort protector = new AesGcmTenantDataProtector("test-v1",
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
+        TenantDataProtectionPort protector = TestTenantDataProtection.createProtector();
         jdbc = new NamedParameterJdbcTemplate(ds);
         audit = new PostgresAuditAdapter(jdbc, new ObjectMapper(), protector);
 

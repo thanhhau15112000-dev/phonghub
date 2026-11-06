@@ -46,6 +46,15 @@
             </a>
         </div>
 
+        <!-- Priority tabs show only the tickets in the viewer's existing scope. -->
+        <div th:if="${currentUser.role().name() != 'TENANT'}" class="filter-tabs" style="margin-bottom: 12px;">
+            <a th:each="pr : ${priorities}" th:href="${filter.priorityTabHref(pr)}"
+               class="filter-tab" th:classappend="${filter.priority() == pr} ? 'active'">
+                <span th:text="${uiText.maintenancePriority(pr)}">Chưa phân loại</span>
+                <span class="badge-count" th:text="${priorityCounts.get(pr)}">0</span>
+            </a>
+        </div>
+
         <!-- Lọc theo cơ sở, mức độ, thời gian báo cáo (không dành cho người thuê) -->
         <form th:if="${currentUser.role().name() != 'TENANT'}" th:action="@{/maintenance}" method="get"
               style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px;">
@@ -109,7 +118,8 @@
                         <strong th:text="${roomNumbers.get(t.getRoomId()) != null ? roomNumbers.get(t.getRoomId()) : '—'}">P101</strong>
                         <div th:if="${currentUser.role().name() != 'TENANT'}" style="font-size: 12px; color: var(--text-secondary);" th:text="${propertyNames.get(t.getPropertyId())}">Cơ sở</div>
                     </td>
-                    <td><span class="badge" th:text="${uiText.maintenancePriority(t.getPriority())}">Trung bình</span>
+                    <td><span class="badge" th:class="'badge badge-priority-' + ${t.getPriority().name().toLowerCase()}"
+                              th:text="${uiText.maintenancePriority(t.getPriority())}">Chưa phân loại</span>
                         <span th:if="${t.isOverdue(now)}" class="badge" style="background: #ef4444; color: #fff;">Quá hạn</span></td>
                     <td><span th:class="'badge badge-' + ${t.getStatus()}" th:text="${uiText.maintenanceStatus(t.getStatus())}">Đã báo</span></td>
                     <td th:text="${t.getRepairCost() != null and t.getRepairCost().compareTo(T(java.math.BigDecimal).ZERO) > 0 ? #numbers.formatDecimal(t.getRepairCost(), 0, 'POINT', 0, 'COMMA') + ' đ' : '—'}">—</td>

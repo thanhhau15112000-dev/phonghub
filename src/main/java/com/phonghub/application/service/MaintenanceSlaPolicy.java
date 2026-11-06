@@ -4,24 +4,24 @@ import com.phonghub.domain.model.MaintenancePriority;
 import java.time.Duration;
 
 /** Hạn xử lý mặc định theo mức ưu tiên (giờ), cấu hình qua {@code phonghub.maintenance.sla-hours.*}. */
-public record MaintenanceSlaPolicy(long urgentHours, long highHours, long mediumHours, long lowHours) {
+public record MaintenanceSlaPolicy(long highHours, long mediumHours, long lowHours) {
 
     public static MaintenanceSlaPolicy defaults() {
-        return new MaintenanceSlaPolicy(4, 24, 72, 168);
+        return new MaintenanceSlaPolicy(24, 72, 168);
     }
 
     public MaintenanceSlaPolicy {
-        if (urgentHours <= 0 || highHours <= 0 || mediumHours <= 0 || lowHours <= 0) {
+        if (highHours <= 0 || mediumHours <= 0 || lowHours <= 0) {
             throw new IllegalArgumentException("SLA hours must be positive");
         }
     }
 
     public Duration forPriority(MaintenancePriority priority) {
-        MaintenancePriority effective = priority == null ? MaintenancePriority.MEDIUM : priority;
+        MaintenancePriority effective = priority == null ? MaintenancePriority.UNCLASSIFIED : priority;
         return Duration.ofHours(switch (effective) {
-            case URGENT -> urgentHours;
+            // Keep the existing default ticket SLA for unclassified requests.
+            case UNCLASSIFIED, MEDIUM -> mediumHours;
             case HIGH -> highHours;
-            case MEDIUM -> mediumHours;
             case LOW -> lowHours;
         });
     }

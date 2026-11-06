@@ -105,11 +105,21 @@ public class MaintenanceUiController {
         }
 
         MaintenanceListFilter filter = MaintenanceListFilter.parse(tab, status, propertyId, priority, from, to);
+        List<MaintenanceTicket> scope = tickets.stream().filter(filter::matchesScope).toList();
         List<MaintenanceTicket> common = tickets.stream().filter(filter::matchesCommon).toList();
         List<MaintenanceTicket> visible = common.stream()
             .filter(filter::matchesTab)
             .sorted(java.util.Comparator.comparing(MaintenanceTicket::getCreatedAt).reversed())
             .toList();
+
+        java.util.Map<MaintenancePriority, Long> priorityCounts = new java.util.EnumMap<>(MaintenancePriority.class);
+        for (MaintenancePriority candidate : MaintenancePriority.values()) {
+            priorityCounts.put(candidate, scope.stream()
+                .filter(filter::matchesTab)
+                .filter(ticket -> (ticket.getPriority() == null
+                    ? MaintenancePriority.UNCLASSIFIED : ticket.getPriority()) == candidate)
+                .count());
+        }
 
         // Số phiếu theo tab / trạng thái, tính theo cơ sở, mức độ, thời gian đang lọc
         List<MaintenanceTicket> openTickets = common.stream().filter(t -> !MaintenanceListFilter.isDone(t)).toList();
@@ -133,6 +143,7 @@ public class MaintenanceUiController {
         model.addAttribute("feeInvoices", feeInvoices);
         model.addAttribute("filter", filter);
         model.addAttribute("commonQuery", filter.commonQuery());
+        model.addAttribute("priorityCounts", priorityCounts);
         model.addAttribute("properties", accessibleProperties);
         model.addAttribute("propertyNames", propertyNames);
         model.addAttribute("priorities", MaintenancePriority.values());
@@ -195,7 +206,7 @@ public class MaintenanceUiController {
         @RequestParam UUID roomId,
         @RequestParam String title,
         @RequestParam String description,
-        @RequestParam(defaultValue = "MEDIUM") MaintenancePriority priority,
+        @RequestParam(defaultValue = "UNCLASSIFIED") MaintenancePriority priority,
         @RequestParam(name = "setRoomMaintenance", defaultValue = "false") boolean setRoomMaintenance,
         @RequestParam(required = false) MaintenanceCause cause,
         @RequestParam(required = false) String causeDetail,

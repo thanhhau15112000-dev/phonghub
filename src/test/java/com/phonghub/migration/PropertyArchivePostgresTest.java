@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.phonghub.adapter.out.persistence.postgres.PostgresPropertyRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresStatisticsQueryAdapter;
-import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.application.port.out.StatisticsQueryPort;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyApprovalStatus;
@@ -41,8 +40,8 @@ class PropertyArchivePostgresTest {
             .load().migrate();
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
         PostgresPropertyRepository properties = new PostgresPropertyRepository(jdbc);
-        PostgresStatisticsQueryAdapter stats = new PostgresStatisticsQueryAdapter(jdbc, new AesGcmTenantDataProtector(
-            "test-v1", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="));
+        PostgresStatisticsQueryAdapter stats = new PostgresStatisticsQueryAdapter(jdbc,
+            TestTenantDataProtection.createProtector());
 
         Property pending = properties.save(new Property(UUID.randomUUID(), "Nhà chờ duyệt", "9 Hai Bà Trưng", null, 3,
             null, PropertyApprovalStatus.PENDING, null, Instant.now()));
