@@ -92,6 +92,8 @@ public class RoomUiController {
             model.addAttribute("room", room);
             model.addAttribute("property", property);
             model.addAttribute("activeContract", activeContract.orElse(null));
+            model.addAttribute("canViewContractMoney", activeContract
+                .map(contract -> authorizationService.canViewContractMoney(currentUser, contract)).orElse(false));
             model.addAttribute("tickets", tickets);
             model.addAttribute("manualStatuses", room.manualTargets(activeContract.isPresent()));
             model.addAttribute("canManageRoomsAndAssets",

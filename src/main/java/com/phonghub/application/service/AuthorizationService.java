@@ -36,6 +36,8 @@ public class AuthorizationService {
         "Bạn không quản lý nhà trọ nào mà người thuê này đang hoặc đã từng cư trú.";
     public static final String ADMIN_FINANCE_DENIED = "Quản trị viên không xem số liệu tài chính của nhà trọ.";
     public static final String TECHNICIAN_FINANCE_DENIED = "Kỹ thuật viên không xem số liệu tài chính của nhà trọ.";
+    public static final String ADMIN_CONTRACT_DENIED =
+        "Quản trị viên không lập hay quản lý hợp đồng; việc này do chủ trọ hoặc nhân viên được cấp quyền thực hiện.";
     public static final String STAFF_FINANCE_DENIED =
         "Bạn chưa được cấp quyền thu tiền hoặc quản lý hợp đồng tại nhà trọ này nên không xem được hóa đơn.";
 
@@ -360,22 +362,37 @@ public class AuthorizationService {
         assertCanViewPropertyFinance(user, contract.getPropertyId());
     }
 
-    /** Hợp đồng, bàn giao, phát hành hóa đơn: staff cần được owner cấp quyền can_manage_contracts. */
+    /**
+     * Xem tiền thuê, tiền cọc của một hợp đồng (REQ-CON-04, #304): người thuê (phạm vi hợp đồng của mình do
+     * {@code getContract} kiểm), chủ trọ, nhân viên có quyền thu tiền hoặc quản lý hợp đồng. Quản trị viên, kỹ thuật
+     * viên và nhân viên không có hai quyền đó vẫn xem được hợp đồng nhưng không thấy số tiền.
+     */
+    public boolean canViewContractMoney(CurrentUser user, Contract contract) {
+        if (user == null || contract == null) {
+            return false;
+        }
+        try {
+            assertCanViewPropertyFinance(user, contract.getPropertyId());
+            return true;
+        } catch (UnauthorizedPropertyAccessException ex) {
+            return false;
+        }
+    }
+
+    /**
+     * Hợp đồng, bàn giao, phát hành hóa đơn: staff cần được owner cấp quyền can_manage_contracts. Quản trị viên không
+     * quản lý hợp đồng vì lập, sửa, gia hạn hay quyết toán đều phải thấy tiền thuê, tiền cọc (#304).
+     */
     public void assertCanManageContracts(CurrentUser user, UUID propertyId) {
+        if (user != null && user.role() == UserRole.ADMIN) {
+            throw new UnauthorizedPropertyAccessException(ADMIN_CONTRACT_DENIED);
+        }
         assertCanManageProperty(user, propertyId);
         if (user.role() == UserRole.STAFF && !assignmentPort.find(user.id(), propertyId)
             .map(assignment -> assignment.canManageContracts()).orElse(false)) {
             throw new UnauthorizedPropertyAccessException(
                 "Bạn chưa được cấp quyền quản lý hợp đồng tại nhà trọ này.");
         }
-    }
-
-    /**
-     * Người được chọn người thuê của mọi nhà trọ khi lập hợp đồng. Chủ nhà trọ và nhân viên chỉ chọn trong phạm vi
-     * nhà trọ của mình để không lộ người thuê của chủ khác; quản trị viên không bị giới hạn đó.
-     */
-    public boolean canSelectTenantsAcrossProperties(CurrentUser user) {
-        return user != null && user.role() == UserRole.ADMIN;
     }
 
     public boolean canManageContracts(CurrentUser user, UUID propertyId) {
