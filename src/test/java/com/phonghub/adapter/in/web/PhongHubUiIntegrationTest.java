@@ -187,8 +187,9 @@ class PhongHubUiIntegrationTest {
             .andExpect(content().string(containsString("Nguyễn Văn A")))
             .andExpect(content().string(containsString("Đang hiệu lực")));
 
+        // Form tạo hợp đồng dành cho chủ trọ, nhân viên được cấp quyền; quản trị viên không lập hợp đồng (#304)
         mockMvc.perform(get("/contracts/new")
-                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Chọn nhà trọ")))
             .andExpect(content().string(containsString("Chọn phòng")))

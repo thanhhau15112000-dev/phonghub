@@ -107,7 +107,7 @@
     <div class="card">
         <div class="flex-between" style="margin-bottom: 12px;">
             <h2>Hợp đồng thuê</h2>
-            <a th:if="${activeContract == null and !room.isArchived() and (room.getStatus().name() == 'AVAILABLE' or room.getStatus().name() == 'RESERVED') and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            <a th:if="${activeContract == null and !room.isArchived() and (room.getStatus().name() == 'AVAILABLE' or room.getStatus().name() == 'RESERVED') and (currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                th:href="@{'/contracts/new?propertyId=' + ${property.id()} + '&roomId=' + ${room.getId()}}"
                class="btn btn-primary btn-sm">+ Tạo hợp đồng</a>
         </div>
@@ -133,7 +133,7 @@
                         <td th:text="${activeContract.getId()}">Mã định danh</td>
                         <td th:text="${uiText.date(activeContract.getStartDate())}">2026-01-01</td>
                         <td th:text="${uiText.date(activeContract.getEndDate())}">2027-01-01</td>
-                        <td th:text="${#numbers.formatDecimal(activeContract.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
+                        <td th:text="${canViewContractMoney ? #numbers.formatDecimal(activeContract.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ' : '—'}">3,500,000 đ</td>
                         <td><span th:class="${'badge badge-' + activeContract.getStatus().name()}" th:text="${uiText.contractStatus(activeContract.getStatus())}">Đang hiệu lực</span></td>
                         <td>
                             <a th:href="@{'/contracts/' + ${activeContract.getId()}}" class="btn btn-sm">Xem hợp đồng</a>

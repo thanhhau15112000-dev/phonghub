@@ -68,7 +68,11 @@ public record ContractResponse(
         }
     }
 
-    public static ContractResponse from(Contract contract) {
+    /**
+     * @param showMoney người xem có quyền thấy tiền thuê, tiền cọc không (REQ-CON-04, #304); không có quyền thì hai
+     *                  trường này là {@code null}.
+     */
+    public static ContractResponse from(Contract contract, boolean showMoney) {
         List<ContractOccupantResponse> occupantResponses = contract.getOccupants() != null
             ? contract.getOccupants().stream().map(ContractOccupantResponse::from).toList()
             : List.of();
@@ -78,8 +82,8 @@ public record ContractResponse(
             contract.getPropertyId(),
             contract.getRoomId(),
             contract.getPrimaryTenantId(),
-            contract.getRentAmount(),
-            contract.getDepositAmount(),
+            showMoney ? contract.getRentAmount() : null,
+            showMoney ? contract.getDepositAmount() : null,
             contract.getStartDate(),
             contract.getEndDate(),
             contract.getPaymentDay(),

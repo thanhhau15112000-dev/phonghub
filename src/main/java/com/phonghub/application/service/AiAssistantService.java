@@ -205,16 +205,27 @@ public class AiAssistantService implements AiAssistantUseCase {
         List<FaqMatch> faq = searchFaq(cleanQuestion, CONTRACT_FAQ_CATEGORIES);
         Map<String, Object> facts = new LinkedHashMap<>();
         facts.put("record", "Hợp đồng đã chọn");
-        facts.put("contract", Map.of(
-            "status", contract.getStatus().name(),
-            "startDate", contract.getStartDate().toString(),
-            "endDate", contract.getEndDate().toString(),
-            "rentAmount", money(contract.getRentAmount()),
-            "depositAmount", money(contract.getDepositAmount()),
-            "paymentDay", contract.getPaymentDay(),
-            "structuredDataAvailable", List.of("trạng thái", "ngày bắt đầu", "ngày kết thúc", "tiền thuê", "tiền cọc", "ngày thanh toán",
+        // Người không xem được tiền của hợp đồng (quản trị viên, kỹ thuật viên, nhân viên chưa có quyền) thì không gửi
+        // tiền thuê, tiền cọc cho mô hình (#304).
+        boolean showMoney = authorizationService.canViewContractMoney(currentUserPort.getCurrentUser(), contract);
+        Map<String, Object> contractFacts = new LinkedHashMap<>();
+        contractFacts.put("status", contract.getStatus().name());
+        contractFacts.put("startDate", contract.getStartDate().toString());
+        contractFacts.put("endDate", contract.getEndDate().toString());
+        if (showMoney) {
+            contractFacts.put("rentAmount", money(contract.getRentAmount()));
+            contractFacts.put("depositAmount", money(contract.getDepositAmount()));
+        }
+        contractFacts.put("paymentDay", contract.getPaymentDay());
+        contractFacts.put("structuredDataAvailable", showMoney
+            ? List.of("trạng thái", "ngày bắt đầu", "ngày kết thúc", "tiền thuê", "tiền cọc", "ngày thanh toán",
                 "thời gian còn lại đến ngày kết thúc")
-        ));
+            : List.of("trạng thái", "ngày bắt đầu", "ngày kết thúc", "ngày thanh toán",
+                "thời gian còn lại đến ngày kết thúc"));
+        if (!showMoney) {
+            contractFacts.put("moneyHidden", "Người hỏi không có quyền xem tiền thuê, tiền cọc của hợp đồng này.");
+        }
+        facts.put("contract", contractFacts);
         facts.put("timeline", contractTimeline(contract, LocalDate.now(clock)));
         facts.put("notAvailable", "Hệ thống không lưu văn bản điều khoản hoặc bản scan hợp đồng để truy vấn.");
         addFaqContext(facts, faq);
