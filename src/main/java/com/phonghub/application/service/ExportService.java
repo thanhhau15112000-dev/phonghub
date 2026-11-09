@@ -254,12 +254,15 @@ public class ExportService implements ExportUseCase {
 
     /**
      * Phạm vi nhà trọ được xuất: hóa đơn/công nợ cần quyền thu tiền, hợp đồng cần quyền quản lý hợp đồng (owner luôn có
-     * ở nhà của mình). Admin chỉ xuất hợp đồng vì không xem số liệu tiền (#163). Kỹ thuật viên và người thuê không được
-     * xuất.
+     * ở nhà của mình). Quản trị viên không xuất gì: hóa đơn, công nợ là số liệu tiền (#163), còn file hợp đồng có tiền
+     * thuê, tiền cọc (#304). Kỹ thuật viên và người thuê không được xuất.
      */
     private List<Property> scope(CurrentUser user, ExportRequest request) {
         if (user == null) {
             throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
+        }
+        if (user.role() == com.phonghub.domain.model.UserRole.ADMIN) {
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.ADMIN_FINANCE_DENIED);
         }
         boolean contracts = request.dataset() == Dataset.CONTRACTS;
         if (!contracts) {
@@ -275,7 +278,6 @@ public class ExportService implements ExportUseCase {
                 .orElseThrow(() -> new PropertyNotFoundException("Không tìm thấy nhà trọ: " + request.propertyId())));
         }
         return switch (user.role()) {
-            case ADMIN -> propertyRepository.findAll();
             case OWNER -> propertyRepository.findByOwnerId(user.id());
             case STAFF -> {
                 Predicate<StaffPropertyAssignment> allowed = contracts
@@ -285,7 +287,7 @@ public class ExportService implements ExportUseCase {
                     .filter(allowed).map(StaffPropertyAssignment::propertyId).toList());
             }
             default -> throw new UnauthorizedPropertyAccessException(
-                "Chỉ quản trị viên, chủ nhà trọ hoặc nhân viên được phân quyền mới xuất được dữ liệu.");
+                "Chỉ chủ nhà trọ hoặc nhân viên được phân quyền mới xuất được dữ liệu.");
         };
     }
 

@@ -206,6 +206,51 @@ class AiAssistantServiceTest {
     }
 
     @Test
+    void contractPromptIncludesMoneyForTenantOfContract() {
+        when(currentUserPort.getCurrentUser()).thenReturn(new CurrentUser(UUID.randomUUID(), "tenant@example.test",
+            "Người thuê", UserRole.TENANT));
+        String sent = askContractWithMoney();
+
+        assertTrue(sent.contains("\"rentAmount\":\"2100000\""));
+        assertTrue(sent.contains("\"depositAmount\":\"4200000\""));
+        assertFalse(sent.contains("moneyHidden"));
+    }
+
+    @Test
+    void contractPromptOmitsMoneyForAdminAndTechnician() {
+        for (UserRole role : new UserRole[] {UserRole.ADMIN, UserRole.TECHNICIAN}) {
+            org.mockito.Mockito.clearInvocations(completionPort);
+            when(currentUserPort.getCurrentUser()).thenReturn(new CurrentUser(UUID.randomUUID(), "user@example.test",
+                "Người dùng", role));
+            String sent = askContractWithMoney();
+
+            assertFalse(sent.contains("2100000"), role + " không được nhận tiền thuê");
+            assertFalse(sent.contains("4200000"), role + " không được nhận tiền cọc");
+            assertTrue(sent.contains("moneyHidden"));
+            assertTrue(sent.contains("\"paymentDay\":5"));
+        }
+    }
+
+    private String askContractWithMoney() {
+        UUID contractId = UUID.randomUUID();
+        Contract contract = mock(Contract.class);
+        when(contractUseCase.getContract(contractId)).thenReturn(contract);
+        when(contract.getPropertyId()).thenReturn(UUID.randomUUID());
+        when(contract.getStatus()).thenReturn(ContractStatus.ACTIVE);
+        when(contract.getStartDate()).thenReturn(LocalDate.of(2026, 1, 1));
+        when(contract.getEndDate()).thenReturn(LocalDate.of(2026, 12, 31));
+        when(contract.getRentAmount()).thenReturn(new BigDecimal("2100000"));
+        when(contract.getDepositAmount()).thenReturn(new BigDecimal("4200000"));
+        when(contract.getPaymentDay()).thenReturn(5);
+
+        service.askAboutContract(contractId, "Tiền thuê và tiền cọc bao nhiêu?");
+
+        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+        verify(completionPort).complete(anyString(), prompt.capture());
+        return prompt.getValue();
+    }
+
+    @Test
     void operationsAssistantRejectsTenantBeforeReadingPropertyData() {
         when(currentUserPort.getCurrentUser()).thenReturn(new CurrentUser(UUID.randomUUID(), "tenant@example.test",
             "Tên người thuê", UserRole.TENANT));

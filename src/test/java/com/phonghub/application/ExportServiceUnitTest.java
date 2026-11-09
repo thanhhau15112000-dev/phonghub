@@ -30,7 +30,6 @@ import com.phonghub.application.port.in.ExportUseCase.InvoiceState;
 import com.phonghub.application.port.in.ExportUseCase.Preview;
 import com.phonghub.domain.exception.ExportLimitExceededException;
 import com.phonghub.domain.exception.NoExportDataException;
-import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
 import com.phonghub.domain.model.ContractStatus;
@@ -154,6 +153,13 @@ class ExportServiceUnitTest {
         when(currentUserPort.getCurrentUser()).thenReturn(new CurrentUser(id, role + "@x", role.name(), role));
     }
 
+    /** Nhân viên quản lý hợp đồng ở cả hai nhà: người xuất được hợp đồng nhiều nhà (admin không xuất, #304). */
+    private void loginStaffManagingBothProperties() {
+        assignments.save(new StaffPropertyAssignment(UUID.randomUUID(), staffId, p1, false, true, NOW));
+        assignments.save(new StaffPropertyAssignment(UUID.randomUUID(), staffId, p2, false, true, NOW));
+        login(staffId, UserRole.STAFF);
+    }
+
     @Test
     @DisplayName("hóa đơn: trong khoảng kỳ, bỏ phí đã gộp, chỉ nhà của owner; trạng thái quá hạn; tên tệp theo kỳ")
     void invoices() {
@@ -196,12 +202,12 @@ class ExportServiceUnitTest {
     @Test
     @DisplayName("hợp đồng: CCCD luôn bị che, không bao giờ xuất số đầy đủ")
     void contractsMaskIdentity() {
-        login(UUID.randomUUID(), UserRole.ADMIN);
+        loginStaffManagingBothProperties();
 
         service.export(new ExportRequest(Dataset.CONTRACTS, Format.XLSX, null, null, null));
 
         Table table = xlsx.last;
-        assertEquals(2, table.rows().size(), "admin xuất mọi nhà");
+        assertEquals(2, table.rows().size(), "nhân viên quản lý hợp đồng hai nhà xuất cả hai");
         assertEquals("CCCD (đã che)", table.headers().get(3));
         for (List<Object> row : table.rows()) {
             String masked = (String) row.get(3);
@@ -212,10 +218,10 @@ class ExportServiceUnitTest {
     }
 
     @Test
-    @DisplayName("#163: admin không xuất hóa đơn, công nợ (toàn bộ hay một nhà) vì không xem số liệu tiền")
+    @DisplayName("#163, #304: admin không xuất hóa đơn, công nợ, hợp đồng (toàn bộ hay một nhà) vì không xem số liệu tiền")
     void adminCannotExportFinance() {
         login(UUID.randomUUID(), UserRole.ADMIN);
-        for (Dataset dataset : List.of(Dataset.INVOICES, Dataset.DEBTS)) {
+        for (Dataset dataset : List.of(Dataset.INVOICES, Dataset.DEBTS, Dataset.CONTRACTS)) {
             UnauthorizedPropertyAccessException ex = assertThrows(UnauthorizedPropertyAccessException.class,
                 () -> service.export(new ExportRequest(dataset, Format.XLSX, null, null, null)));
             assertEquals(AuthorizationService.ADMIN_FINANCE_DENIED, ex.getMessage());
@@ -360,7 +366,7 @@ class ExportServiceUnitTest {
     @Test
     @DisplayName("#227: chọn nhiều nhà trọ trong phạm vi chỉ lấy các nhà đó")
     void multiplePropertiesNarrowScope() {
-        login(UUID.randomUUID(), UserRole.ADMIN);
+        loginStaffManagingBothProperties();
         ExportRequest request = new ExportRequest(Dataset.CONTRACTS, Format.XLSX, null, null, null);
         service.export(request, ExportFilter.none(), null);
         assertEquals(2, xlsx.last.rows().size());
@@ -424,7 +430,7 @@ class ExportServiceUnitTest {
     }
 
     @Test
-    @DisplayName("kỹ thuật viên, người thuê, chưa đăng nhập, owner lọc nhà người khác bị 403; nhà không tồn tại 404")
+    @DisplayName("kỹ thuật viên, người thuê, chưa đăng nhập, owner lọc nhà người khác hay nhà không tồn tại bị 403")
     void forbidden() {
         for (UserRole role : List.of(UserRole.TECHNICIAN, UserRole.TENANT)) {
             login(UUID.randomUUID(), role);
@@ -436,8 +442,7 @@ class ExportServiceUnitTest {
         login(ownerId, UserRole.OWNER);
         assertThrows(UnauthorizedPropertyAccessException.class,
             () -> service.export(new ExportRequest(Dataset.CONTRACTS, Format.XLSX, p2, null, null)));
-        login(UUID.randomUUID(), UserRole.ADMIN);
-        assertThrows(PropertyNotFoundException.class,
+        assertThrows(UnauthorizedPropertyAccessException.class,
             () -> service.export(new ExportRequest(Dataset.CONTRACTS, Format.XLSX, UUID.randomUUID(), null, null)));
         when(currentUserPort.getCurrentUser()).thenReturn(null);
         assertThrows(UnauthorizedPropertyAccessException.class,
@@ -476,7 +481,7 @@ class ExportServiceUnitTest {
         assertEquals(1, audit.getRecordedEvents().get(0).details().get("rows"));
 
         audit.clear();
-        login(UUID.randomUUID(), UserRole.ADMIN);
+        loginStaffManagingBothProperties();
         service.export(new ExportRequest(Dataset.CONTRACTS, Format.PDF, null, null, null));
 
         var events = audit.getRecordedEvents();

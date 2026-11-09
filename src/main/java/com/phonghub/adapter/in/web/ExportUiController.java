@@ -39,8 +39,15 @@ public class ExportUiController {
     }
 
     @GetMapping("/exports")
-    public String page(Model model) {
-        model.addAttribute("currentUser", currentUserPort.getCurrentUser());
+    public String page(Model model, RedirectAttributes redirectAttributes) {
+        com.phonghub.application.port.out.CurrentUser currentUser = currentUserPort.getCurrentUser();
+        if (currentUser != null && currentUser.role() == com.phonghub.domain.model.UserRole.ADMIN) {
+            // Quản trị viên không có dữ liệu nào để xuất (#163, #304)
+            redirectAttributes.addFlashAttribute("errorMessage",
+                com.phonghub.application.service.AuthorizationService.ADMIN_FINANCE_DENIED);
+            return "redirect:/dashboard";
+        }
+        model.addAttribute("currentUser", currentUser);
         model.addAttribute("properties", propertyUseCase.listAccessibleProperties());
         model.addAttribute("currentMonth", YearMonth.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
         model.addAttribute("maxRows", ExportUseCase.MAX_ROWS);
