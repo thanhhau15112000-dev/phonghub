@@ -73,6 +73,10 @@ public class ProductionSecurityConfig {
                     .jwtAuthenticationConverter(jwtAuthenticationConverter())
                 )
             )
+            // Phiên đăng nhập của giao diện cũng dùng được cho API, nên phải kiểm lại tài khoản như chuỗi giao diện (#305).
+            // Đăng ký trước PasswordChangeGate (cùng vị trí sau BearerTokenAuthenticationFilter) để tài khoản bị khóa nhận
+            // 401 trước khi bị yêu cầu đổi mật khẩu.
+            .addFilterAfter(new UserActiveValidationFilter(userRepository, true), BearerTokenAuthenticationFilter.class)
             .addFilterAfter(new PasswordChangeGate(), BearerTokenAuthenticationFilter.class)
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
