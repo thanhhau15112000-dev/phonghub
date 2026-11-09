@@ -1453,4 +1453,83 @@ class ProductionAuthSecurityTest {
             .andReturn();
         return (MockHttpSession) result.getRequest().getSession(false);
     }
+
+    // ---- #305: phiên đăng nhập của tài khoản bị khóa hoặc đổi vai trò không còn gọi được API ----
+
+    private User sessionUser(UUID id, UserRole role, User.UserStatus status) {
+        return new User(id, "sessionuser", "sessionuser@example.com", "Session User", "0901234567", role, status,
+            false, Instant.now());
+    }
+
+    private MockHttpSession loginBrowserSession(UUID id, UserRole role) throws Exception {
+        when(userRepository.findById(id)).thenReturn(Optional.of(sessionUser(id, role, User.UserStatus.ACTIVE)));
+        when(authUseCase.login("sessionuser", "secret123")).thenReturn(new AuthTokenResponse("session-access",
+            "session-refresh", "Bearer", 3600L,
+            new AuthTokenResponse.UserInfo(id, "sessionuser", "sessionuser@example.com", "Session User", role, false)));
+        when(chatRoomUseCase.getRoomsForUser(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+        return (MockHttpSession) mockMvc.perform(post("/login").with(csrf())
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .param("username", "sessionuser").param("password", "secret123"))
+            .andExpect(status().is3xxRedirection())
+            .andReturn().getRequest().getSession(false);
+    }
+
+    @Test
+    @DisplayName("#305: phiên của tài khoản còn hoạt động vẫn gọi được API")
+    void activeBrowserSessionReachesApi() throws Exception {
+        UUID id = UUID.randomUUID();
+        MockHttpSession session = loginBrowserSession(id, UserRole.OWNER);
+
+        mockMvc.perform(get("/api/chat/rooms").session(session))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("#305: tài khoản bị khóa thì phiên cũ gọi API nhận 401 và phiên bị hủy")
+    void suspendedBrowserSessionIsRevokedForApi() throws Exception {
+        UUID id = UUID.randomUUID();
+        MockHttpSession session = loginBrowserSession(id, UserRole.OWNER);
+        when(userRepository.findById(id)).thenReturn(Optional.of(
+            sessionUser(id, UserRole.OWNER, User.UserStatus.SUSPENDED)));
+
+        mockMvc.perform(get("/api/chat/rooms").session(session))
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.status").value(401));
+        assertTrue(session.isInvalid(), "Phiên của tài khoản bị khóa phải bị hủy");
+    }
+
+    @Test
+    @DisplayName("#305: tài khoản ngừng hoạt động hoặc bị xóa cũng không gọi được API bằng phiên cũ")
+    void inactiveOrDeletedAccountSessionIsRevokedForApi() throws Exception {
+        UUID inactiveId = UUID.randomUUID();
+        MockHttpSession inactive = loginBrowserSession(inactiveId, UserRole.STAFF);
+        when(userRepository.findById(inactiveId)).thenReturn(Optional.of(
+            sessionUser(inactiveId, UserRole.STAFF, User.UserStatus.INACTIVE)));
+        mockMvc.perform(post("/api/chat/rooms/direct").session(inactive)
+                .contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isUnauthorized());
+
+        UUID deletedId = UUID.randomUUID();
+        MockHttpSession deleted = loginBrowserSession(deletedId, UserRole.TENANT);
+        when(userRepository.findById(deletedId)).thenReturn(Optional.empty());
+        mockMvc.perform(get("/api/chat/rooms").session(deleted))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("#305: đổi vai trò thì phiên cũ bị hủy ở cả API và giao diện")
+    void roleChangeRevokesBrowserSession() throws Exception {
+        UUID id = UUID.randomUUID();
+        MockHttpSession apiSession = loginBrowserSession(id, UserRole.OWNER);
+        when(userRepository.findById(id)).thenReturn(Optional.of(sessionUser(id, UserRole.STAFF, User.UserStatus.ACTIVE)));
+        mockMvc.perform(get("/api/chat/rooms").session(apiSession))
+            .andExpect(status().isUnauthorized());
+
+        MockHttpSession uiSession = loginBrowserSession(id, UserRole.OWNER);
+        when(userRepository.findById(id)).thenReturn(Optional.of(sessionUser(id, UserRole.STAFF, User.UserStatus.ACTIVE)));
+        mockMvc.perform(get("/").session(uiSession))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+    }
 }
