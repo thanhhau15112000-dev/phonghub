@@ -13,9 +13,9 @@
             <p style="color: var(--text-secondary); font-size: 13px;">Quản lý hợp đồng thuê, kích hoạt, người ở và chấm dứt hợp đồng.</p>
         </div>
         <div style="display: flex; gap: 8px;">
-            <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'OWNER')}"
+            <a th:if="${currentUser != null and (currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'OWNER')}"
                th:href="@{/exports}" class="btn" id="export-link">Xuất dữ liệu</a>
-            <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'OWNER')}"
+            <a th:if="${currentUser != null and (currentUser.role().name() == 'STAFF' or currentUser.role().name() == 'OWNER')}"
                th:href="@{/contracts/new}" class="btn btn-primary">+ Tạo hợp đồng</a>
         </div>
     </div>
@@ -48,8 +48,8 @@
                         <div th:text="${tenantNames[c.getPrimaryTenantId()]}">Người thuê</div>
                     </td>
                     <td th:text="${uiText.date(c.getStartDate()) + ' đến ' + uiText.date(c.getEndDate())}">2026-01-01 đến 2027-01-01</td>
-                    <td th:text="${#numbers.formatDecimal(c.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
-                    <td th:text="${#numbers.formatDecimal(c.getDepositAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
+                    <td th:text="${moneyContractIds.contains(c.getId()) ? #numbers.formatDecimal(c.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ' : '—'}">3,500,000 đ</td>
+                    <td th:text="${moneyContractIds.contains(c.getId()) ? #numbers.formatDecimal(c.getDepositAmount(), 0, 'POINT', 0, 'COMMA') + ' đ' : '—'}">3,500,000 đ</td>
                     <td th:text="${uiText.date(c.billingAnchorDate())}">25/10/2026</td>
                     <td>
                         <span th:class="'badge badge-' + ${c.getStatus()}" th:text="${uiText.contractStatus(c.getStatus())}">Bản nháp</span>

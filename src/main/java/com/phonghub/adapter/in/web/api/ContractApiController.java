@@ -4,6 +4,7 @@ import com.phonghub.adapter.in.web.api.dto.ContractResponse;
 import com.phonghub.application.port.in.ContractUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.service.AuthorizationService;
 import com.phonghub.domain.model.Contract;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
@@ -31,16 +32,25 @@ public class ContractApiController {
 
     private final ContractUseCase contractUseCase;
     private final CurrentUserPort currentUserPort;
+    private final AuthorizationService authorizationService;
 
-    public ContractApiController(ContractUseCase contractUseCase, CurrentUserPort currentUserPort) {
+    public ContractApiController(ContractUseCase contractUseCase, CurrentUserPort currentUserPort,
+                                 AuthorizationService authorizationService) {
         this.contractUseCase = contractUseCase;
         this.currentUserPort = currentUserPort;
+        this.authorizationService = authorizationService;
+    }
+
+    /** Mọi response hợp đồng đi qua đây để ẩn tiền thuê, tiền cọc với người không có quyền (#304). */
+    private ContractResponse toResponse(Contract contract) {
+        return ContractResponse.from(contract,
+            authorizationService.canViewContractMoney(currentUserPort.getCurrentUser(), contract));
     }
 
     @GetMapping("/properties/{propertyId}/contracts")
     public ResponseEntity<List<ContractResponse>> listContracts(@PathVariable UUID propertyId) {
         List<ContractResponse> list = contractUseCase.listContractsForProperty(propertyId).stream()
-            .map(ContractResponse::from)
+            .map(this::toResponse)
             .toList();
         return ResponseEntity.ok(list);
     }
@@ -57,14 +67,14 @@ public class ContractApiController {
             request.endDate(),
             request.paymentDay()
         ));
-        ContractResponse response = ContractResponse.from(contract);
+        ContractResponse response = toResponse(contract);
         return ResponseEntity.created(URI.create("/api/contracts/" + response.id())).body(response);
     }
 
     @PostMapping("/contracts/{id}/activate")
     public ResponseEntity<ContractResponse> activateContract(@PathVariable UUID id) {
         Contract contract = contractUseCase.activateContract(id);
-        return ResponseEntity.ok(ContractResponse.from(contract));
+        return ResponseEntity.ok(toResponse(contract));
     }
 
     /** Sửa điều khoản hợp đồng nháp (#89); gửi kèm {@code version} để phát hiện sửa chồng (409). */
@@ -76,13 +86,13 @@ public class ContractApiController {
         Contract contract = contractUseCase.updateDraftContract(new ContractUseCase.UpdateDraftContractCommand(
             id, request.depositAmount(), request.rentAmount(), request.startDate(), request.endDate(),
             request.paymentDay(), request.version()));
-        return ResponseEntity.ok(ContractResponse.from(contract));
+        return ResponseEntity.ok(toResponse(contract));
     }
 
     /** Hủy hợp đồng nháp (#89): chuyển CANCELLED, không xóa cứng. */
     @PostMapping("/contracts/{id}/cancel")
     public ResponseEntity<ContractResponse> cancelDraftContract(@PathVariable UUID id) {
-        return ResponseEntity.ok(ContractResponse.from(contractUseCase.cancelDraftContract(id)));
+        return ResponseEntity.ok(toResponse(contractUseCase.cancelDraftContract(id)));
     }
 
     public record UpdateDraftContractRequest(
@@ -115,7 +125,7 @@ public class ContractApiController {
         @RequestParam(name = "reason", required = false) String reason
     ) {
         Contract contract = contractUseCase.terminateEarly(id, requiresMaintenance, reason);
-        return ResponseEntity.ok(ContractResponse.from(contract));
+        return ResponseEntity.ok(toResponse(contract));
     }
 
     @PostMapping("/contracts/{id}/renew")
@@ -125,7 +135,7 @@ public class ContractApiController {
     ) {
         Contract contract = contractUseCase.renewContract(new ContractUseCase.RenewContractCommand(
             id, request.endDate(), request.rentAmount(), request.version()));
-        return ResponseEntity.ok(ContractResponse.from(contract));
+        return ResponseEntity.ok(toResponse(contract));
     }
 
     public record RenewContractRequest(
@@ -139,14 +149,14 @@ public class ContractApiController {
     @GetMapping("/contracts/{id}")
     public ResponseEntity<ContractResponse> getContract(@PathVariable UUID id) {
         Contract contract = contractUseCase.getContract(id);
-        return ResponseEntity.ok(ContractResponse.from(contract));
+        return ResponseEntity.ok(toResponse(contract));
     }
 
     @GetMapping("/contracts/my-active")
     public ResponseEntity<ContractResponse> getMyActiveContract() {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         return contractUseCase.getActiveContractForTenant(currentUser.id())
-            .map(ContractResponse::from)
+            .map(this::toResponse)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }
