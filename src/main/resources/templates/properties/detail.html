@@ -347,7 +347,7 @@
                                 <span>Chi tiết</span>
                             </a>
                             <a th:if="${(r.getStatus().name() == 'AVAILABLE' or r.getStatus().name() == 'RESERVED') and property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED'
-                                        and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                                        and (currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                                th:href="@{'/contracts/new?propertyId=' + ${property.id()} + '&roomId=' + ${r.getId()}}"
                                class="btn btn-sm btn-primary" title="Tạo hợp đồng thuê mới">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -385,7 +385,7 @@
                                th:text="${' · ' + t.maskedIdentityCardNumber() + (t.userId() != null ? ' · có tài khoản app' : ' · chưa có tài khoản app')}"> · ****1111</small>
                     </span>
                     <a th:if="${property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED'
-                                and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                                and (currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                        th:href="@{/contracts/new(propertyId=${property.id()}, tenantProfileId=${t.id()})}"
                        class="btn btn-sm btn-primary">Tạo hợp đồng</a>
                 </li>

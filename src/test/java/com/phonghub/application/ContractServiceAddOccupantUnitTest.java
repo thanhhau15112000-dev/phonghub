@@ -369,8 +369,8 @@ class ContractServiceAddOccupantUnitTest {
     }
 
     @Test
-    @DisplayName("Admin adds occupant to active contract successfully")
-    void testAdminAddsOccupantSuccessfully() {
+    @DisplayName("Admin không thêm được người ở cùng: quản trị viên không quản lý hợp đồng (#304)")
+    void testAdminCannotAddOccupant() {
         authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_ADMIN);
 
         ContractUseCase.AddOccupantCommand cmd = new ContractUseCase.AddOccupantCommand(
@@ -382,9 +382,8 @@ class ContractServiceAddOccupantUnitTest {
             null,
             LocalDate.now());
 
-        ContractOccupant occupant = contractService.addOccupant(cmd).occupant();
-        assertNotNull(occupant);
-        assertEquals(2, contractRepo.findById(activeContract.getId()).orElseThrow().getOccupants().size());
+        assertThrows(UnauthorizedPropertyAccessException.class, () -> contractService.addOccupant(cmd));
+        assertEquals(1, contractRepo.findById(activeContract.getId()).orElseThrow().getOccupants().size());
     }
 
     @Test

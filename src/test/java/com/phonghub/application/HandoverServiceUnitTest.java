@@ -52,7 +52,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -252,6 +251,70 @@ class HandoverServiceUnitTest {
         verify(items).replaceAll(eq(created.id()), captor.capture(), eq(staff.id()));
         assertEquals(1, captor.getValue().size());
         assertEquals(BigDecimal.ZERO, captor.getValue().get(0).deductionAmount());
+    }
+
+    private RoomAsset roomAsset(UUID id, String name) {
+        return new RoomAsset(id, roomId, "A-" + name, name, null, 1, AssetStatus.GOOD, null, null,
+            new BigDecimal("1000000"), null, Instant.now(), staff.id(), Instant.now(), staff.id());
+    }
+
+    private Handover checkOutDraftWithPhotos() {
+        Handover checkOut = existing(HandoverType.CHECK_OUT, HandoverStatus.DRAFT);
+        givenHandover(checkOut);
+        when(photos.findByHandoverId(checkOut.id())).thenReturn(java.util.Arrays.stream(HandoverPhotoKind.values())
+            .map(kind -> new HandoverPhoto(UUID.randomUUID(), checkOut.id(), kind, "photo-" + kind, "image/png",
+                Instant.now(), staff.id())).toList());
+        return checkOut;
+    }
+
+    @Test
+    void createCheckOutAddsAssetsAddedToRoomAfterCheckIn() {
+        Handover checkIn = existing(HandoverType.CHECK_IN, HandoverStatus.APPROVED);
+        givenHandover(checkIn);
+        HandoverItem fridge = item(checkIn.id(), AssetStatus.GOOD, "0");
+        when(items.findByHandoverId(checkIn.id())).thenReturn(List.of(fridge));
+        when(assets.findActiveByRoomId(roomId)).thenReturn(List.of(
+            roomAsset(fridge.assetId(), "Tủ lạnh"), roomAsset(UUID.randomUUID(), "Máy lạnh mới")));
+
+        Handover created = service.create(HandoverType.CHECK_OUT, command());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<HandoverItem>> captor = ArgumentCaptor.forClass(List.class);
+        verify(items).replaceAll(eq(created.id()), captor.capture(), eq(staff.id()));
+        assertEquals(List.of("Tủ lạnh", "Máy lạnh mới"),
+            captor.getValue().stream().map(HandoverItem::assetName).toList());
+        assertEquals(created.id(), captor.getValue().get(1).handoverId());
+    }
+
+    @Test
+    void sendCheckOutAddsNewAssetWithoutOverwritingEvaluatedItems() {
+        Handover checkOut = checkOutDraftWithPhotos();
+        HandoverItem evaluated = new HandoverItem(UUID.randomUUID(), checkOut.id(), UUID.randomUUID(), "Tủ lạnh", 1,
+            AssetStatus.DAMAGED, "Móp cửa", new BigDecimal("500000"));
+        when(items.findByHandoverId(checkOut.id())).thenReturn(List.of(evaluated));
+        when(assets.findActiveByRoomId(roomId)).thenReturn(List.of(
+            roomAsset(evaluated.assetId(), "Tủ lạnh"), roomAsset(UUID.randomUUID(), "Máy giặt")));
+
+        service.send(HandoverType.CHECK_OUT, contract.getId());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<HandoverItem>> captor = ArgumentCaptor.forClass(List.class);
+        verify(items).replaceAll(eq(checkOut.id()), captor.capture(), eq(staff.id()));
+        assertEquals(2, captor.getValue().size());
+        assertEquals(evaluated, captor.getValue().get(0));
+        assertEquals("Máy giặt", captor.getValue().get(1).assetName());
+    }
+
+    @Test
+    void sendCheckOutWithoutNewAssetsDoesNotRewriteItems() {
+        Handover checkOut = checkOutDraftWithPhotos();
+        HandoverItem evaluated = item(checkOut.id(), AssetStatus.DAMAGED, "300000");
+        when(items.findByHandoverId(checkOut.id())).thenReturn(List.of(evaluated));
+        when(assets.findActiveByRoomId(roomId)).thenReturn(List.of(roomAsset(evaluated.assetId(), "Tủ lạnh")));
+
+        service.send(HandoverType.CHECK_OUT, contract.getId());
+
+        verify(items, never()).replaceAll(eq(checkOut.id()), any(), any());
     }
 
     @Test
@@ -653,7 +716,6 @@ class HandoverServiceUnitTest {
         verify(contractUseCase, never()).terminateContract(any(), anyBoolean());
     }
 
-    @Disabled("L3: send check-out không làm mới danh sách tài sản, bỏ sót tài sản thêm sau check-in")
     @Test
     void sendCheckOutIncludesAssetsAddedAfterCheckIn() {
         Handover checkOut = existing(HandoverType.CHECK_OUT, HandoverStatus.DRAFT);

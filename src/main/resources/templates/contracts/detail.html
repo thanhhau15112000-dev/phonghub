@@ -52,7 +52,7 @@
             </div>
 
             <!-- Các nút thao tác -->
-            <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" class="inline-actions">
+            <div th:if="${canManageContracts}" class="inline-actions">
             <!-- Bắt đầu quy trình check-in; hợp đồng chỉ có hiệu lực sau khi duyệt biên bản. -->
                 <form th:if="${contract.getStatus().name() == 'DRAFT'}" th:action="@{'/contracts/' + ${contract.getId()} + '/activate'}" method="post">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -124,11 +124,11 @@
                         <td style="color: var(--text-secondary);">Ngày kết thúc:</td>
                         <td th:text="${uiText.date(contract.getEndDate())}">2027-01-01</td>
                     </tr>
-                    <tr>
+                    <tr th:if="${canViewMoney}">
                         <td style="color: var(--text-secondary);">Tiền thuê hàng tháng:</td>
                         <td th:text="${#numbers.formatDecimal(contract.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     </tr>
-                    <tr>
+                    <tr th:if="${canViewMoney}">
                         <td style="color: var(--text-secondary);">Tiền đặt cọc:</td>
                         <td th:text="${#numbers.formatDecimal(contract.getDepositAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     </tr>
@@ -705,7 +705,7 @@
     </dialog>
 
     <!-- Dialog ghi nhận rời phòng cho người ở cùng (Chủ nhà hoặc Quản trị viên) -->
-    <dialog th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+    <dialog th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()}"
             id="checkOutModal"
             class="modal-dialog"
             style="max-width: 450px;">
@@ -776,7 +776,7 @@
     </script>
 
     <!-- Dialog sửa điều khoản hợp đồng nháp (#89) -->
-    <dialog th:if="${contract.getStatus().name() == 'DRAFT' and currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+    <dialog th:if="${contract.getStatus().name() == 'DRAFT' and canManageContracts}"
             id="editDraftModal" class="modal-dialog" style="max-width: 520px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
             <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Sửa điều khoản hợp đồng nháp</h3>
@@ -817,7 +817,7 @@
     </dialog>
 
     <!-- Dialog gia hạn hợp đồng người thuê còn ở (đang hiệu lực hoặc đã hết hạn chưa trả phòng) -->
-    <dialog th:if="${contract.isResiding() and currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+    <dialog th:if="${contract.isResiding() and canManageContracts}"
             id="renewModal" class="modal-dialog" style="max-width: 480px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
             <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Gia hạn hợp đồng</h3>

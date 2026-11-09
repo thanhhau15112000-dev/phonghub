@@ -237,6 +237,7 @@ class PhongHubApiIntegrationTest {
     @Test
     @DisplayName("Create and activate contract on available room changes room to OCCUPIED")
     void testContractCreationAndActivation() throws Exception {
+        // Hợp đồng do chủ trọ lập; quản trị viên không lập hợp đồng (#304)
         UUID tenantId = createAvailableTenant();
         ContractApiController.CreateContractRequest req = new ContractApiController.CreateContractRequest(
             DataSeeder.PROP_1_ID,
@@ -250,7 +251,7 @@ class PhongHubApiIntegrationTest {
         );
 
         String response = mockMvc.perform(post("/api/contracts")
-                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isCreated())
@@ -261,17 +262,17 @@ class PhongHubApiIntegrationTest {
 
         // API cannot activate without an approved check-in.
         mockMvc.perform(post("/api/contracts/" + contractId + "/activate")
-                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isConflict());
 
-        java.util.UUID actorId = LocalDemoAuthenticationAdapter.ADMIN_ID;
+        java.util.UUID actorId = LocalDemoAuthenticationAdapter.OWNER_1_ID;
         Handover checkIn = Handover.draft(java.util.UUID.fromString(contractId), HandoverType.CHECK_IN,
             BigDecimal.ZERO, BigDecimal.ZERO, "Phòng đã kiểm tra", null, actorId)
             .send("terms-hash", null, null, actorId).tenantConfirm(actorId).approve(actorId);
         handoverRepository.save(checkIn);
 
         mockMvc.perform(post("/api/contracts/" + contractId + "/activate")
-                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status", is("ACTIVE")));
 
@@ -298,7 +299,7 @@ class PhongHubApiIntegrationTest {
         );
 
         mockMvc.perform(post("/api/contracts")
-                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isConflict())

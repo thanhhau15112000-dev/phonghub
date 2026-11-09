@@ -121,6 +121,16 @@ public class ContractUiController {
         model.addAttribute("roomNames", roomNames);
         model.addAttribute("tenantNames", tenantNames);
         model.addAttribute("contracts", contracts);
+        // Tiền thuê, tiền cọc chỉ hiện với người có quyền xem tiền của nhà trọ đó (#304)
+        java.util.Map<UUID, Boolean> moneyByProperty = new java.util.HashMap<>();
+        java.util.Set<UUID> moneyContractIds = new java.util.HashSet<>();
+        for (Contract contract : contracts) {
+            if (moneyByProperty.computeIfAbsent(contract.getPropertyId(),
+                ignored -> authorizationService.canViewContractMoney(currentUser, contract))) {
+                moneyContractIds.add(contract.getId());
+            }
+        }
+        model.addAttribute("moneyContractIds", moneyContractIds);
         return "contracts/list";
     }
 
@@ -133,8 +143,8 @@ public class ContractUiController {
         RedirectAttributes redirectAttributes
     ) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
-        if (currentUser.role() != UserRole.ADMIN && currentUser.role() != UserRole.STAFF && currentUser.role() != UserRole.OWNER) {
-            redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên, chủ nhà trọ hoặc nhân viên mới có thể tạo hợp đồng.");
+        if (currentUser.role() != UserRole.STAFF && currentUser.role() != UserRole.OWNER) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Chỉ chủ nhà trọ hoặc nhân viên được cấp quyền mới có thể tạo hợp đồng.");
             return "redirect:/contracts";
         }
 
@@ -265,6 +275,7 @@ public class ContractUiController {
             model.addAttribute("billingCycles", contract.billingCycles());
             model.addAttribute("checkOut", checkOut);
             model.addAttribute("canManageContracts", authorizationService.canManageContracts(currentUser, contract.getPropertyId()));
+            model.addAttribute("canViewMoney", authorizationService.canViewContractMoney(currentUser, contract));
             model.addAttribute("property", property);
             model.addAttribute("room", room);
             model.addAttribute("currentOccupantCount", currentOccupantCount);

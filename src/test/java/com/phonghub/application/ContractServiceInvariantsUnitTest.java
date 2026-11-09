@@ -75,7 +75,8 @@ class ContractServiceInvariantsUnitTest {
         assignmentRepo = new InMemoryStaffPropertyAssignmentRepository();
 
         authAdapter = new LocalDemoAuthenticationAdapter();
-        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_ADMIN);
+        // Hợp đồng do chủ trọ lập; quản trị viên không lập hay quản lý hợp đồng (#304)
+        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_OWNER_1);
 
         authService = new AuthorizationService(assignmentRepo, propertyRepo, tenantRepo, contractRepo);
 
@@ -84,7 +85,8 @@ class ContractServiceInvariantsUnitTest {
         maintenanceService = new MaintenanceService(ticketRepo, roomRepo, tenantRepo, authAdapter, authService);
         roomService = new RoomService(roomRepo, propertyRepo, ticketRepo, contractRepo, tenantRepo, authAdapter, authService);
 
-        property = propertyRepo.save(new Property(UUID.randomUUID(), "Test Prop", "Test Addr", "", 5, Instant.now()));
+        property = propertyRepo.save(new Property(UUID.randomUUID(), "Test Prop", "Test Addr", "", 5,
+            LocalDemoAuthenticationAdapter.DEMO_OWNER_1.id(), PropertyApprovalStatus.VERIFIED, null, Instant.now()));
         room = roomRepo.save(Room.create(property.id(), "R101", 1, new BigDecimal("25.0"), new BigDecimal("3000000"), 2));
     }
 
@@ -302,6 +304,8 @@ class ContractServiceInvariantsUnitTest {
     @Test
     @DisplayName("Cannot release room from MAINTENANCE if unresolved tickets remain")
     void testCannotReleaseRoomWithUnresolvedTickets() {
+        // Nhận và xử lý phiếu là việc của kỹ thuật viên hoặc quản trị viên, không phải chủ trọ
+        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_ADMIN);
         room.putUnderMaintenance();
         roomRepo.save(room);
 
@@ -329,7 +333,8 @@ class ContractServiceInvariantsUnitTest {
     @DisplayName("Creating contract on unverified (PENDING or REJECTED) property throws DomainException")
     void testCreatingContractOnUnverifiedPropertyThrowsDomainException() {
         Property pendingProp = propertyRepo.save(new Property(
-            UUID.randomUUID(), "Pending Prop", "Addr", "", 5, null, PropertyApprovalStatus.PENDING, null, Instant.now()
+            UUID.randomUUID(), "Pending Prop", "Addr", "", 5, LocalDemoAuthenticationAdapter.DEMO_OWNER_1.id(),
+            PropertyApprovalStatus.PENDING, null, Instant.now()
         ));
         Room pendingRoom = roomRepo.save(Room.create(pendingProp.id(), "P101", 1, new BigDecimal("25.0"), new BigDecimal("3000000"), 2));
 

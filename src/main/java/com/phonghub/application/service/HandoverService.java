@@ -368,7 +368,8 @@ public class HandoverService implements HandoverUseCase {
                 .map(item -> new HandoverItem(UUID.randomUUID(), saved.id(), item.assetId(), item.assetName(),
                     item.quantity(), item.status(), null, BigDecimal.ZERO))
                 .toList();
-            itemRepository.replaceAll(saved.id(), start, user.id());
+            itemRepository.replaceAll(saved.id(), withAssetsAddedAfterCheckIn(saved.id(), contract.getRoomId(), start),
+                user.id());
         }
         audit(type, "CREATED", user, saved, Map.of());
         return saved;
@@ -538,9 +539,18 @@ public class HandoverService implements HandoverUseCase {
 
     /** DRAFT -> PENDING_TENANT: check-in chụp hiện trạng phòng (nếu chưa có), kèm hash điều khoản và nội quy. */
     private Handover sendDraft(HandoverType type, Contract contract, Handover handover, CurrentUser user) {
-        if (type == HandoverType.CHECK_IN && itemRepository.findByHandoverId(handover.id()).isEmpty()) {
-            itemRepository.replaceAll(handover.id(), checkInSnapshotItems(handover.id(), contract.getRoomId()),
-                user.id());
+        List<HandoverItem> items = itemRepository.findByHandoverId(handover.id());
+        if (type == HandoverType.CHECK_IN) {
+            if (items.isEmpty()) {
+                itemRepository.replaceAll(handover.id(), checkInSnapshotItems(handover.id(), contract.getRoomId()),
+                    user.id());
+            }
+        } else {
+            // Tài sản thêm vào phòng sau khi tạo bản nháp check-out cũng phải có trong biên bản (#306)
+            List<HandoverItem> merged = withAssetsAddedAfterCheckIn(handover.id(), contract.getRoomId(), items);
+            if (merged.size() != items.size()) {
+                itemRepository.replaceAll(handover.id(), merged, user.id());
+            }
         }
         PropertyHouseRules rules = rulesRepository.findByPropertyId(contract.getPropertyId()).orElse(null);
         return handoverRepository.save(handover.send(
@@ -977,6 +987,29 @@ public class HandoverService implements HandoverUseCase {
             throw new UnauthorizedPropertyAccessException("Chỉ người thuê chính được xác nhận biên bản.");
         }
         return tenant;
+    }
+
+    /**
+     * Biên bản check-out lấy danh sách tài sản từ check-in; tài sản đang dùng của phòng mà danh sách chưa có (thêm vào
+     * phòng sau check-in) được bổ sung với tình trạng hiện tại để còn đối chiếu và trừ cọc (#306). Item đã có giữ
+     * nguyên, không ghi đè đánh giá nhân viên đã nhập.
+     */
+    private List<HandoverItem> withAssetsAddedAfterCheckIn(UUID handoverId, UUID roomId, List<HandoverItem> items) {
+        if (assetRepository == null) {
+            return items;
+        }
+        java.util.Set<UUID> listed = items.stream().map(HandoverItem::assetId)
+            .filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+        List<HandoverItem> added = assetRepository.findActiveByRoomId(roomId).stream()
+            .filter(asset -> !listed.contains(asset.id()))
+            .map(asset -> snapshot(handoverId, asset))
+            .toList();
+        if (added.isEmpty()) {
+            return items;
+        }
+        List<HandoverItem> merged = new java.util.ArrayList<>(items);
+        merged.addAll(added);
+        return merged;
     }
 
     private HandoverItem snapshot(UUID handoverId, RoomAsset asset) {

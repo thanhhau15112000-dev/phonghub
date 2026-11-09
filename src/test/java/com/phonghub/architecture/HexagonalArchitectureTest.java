@@ -26,4 +26,25 @@ class HexagonalArchitectureTest {
     @ArchTest
     static final ArchRule applicationKhongPhuThuocWebSpring = noClasses().that().resideInAPackage("..application..")
         .should().dependOnClassesThat().resideInAnyPackage("org.springframework.web..", "jakarta.servlet..");
+
+    @ArchTest
+    static final ArchRule adapterInKhongPhuThuocAdapterOut = noClasses().that().resideInAPackage("..adapter.in..")
+        .should().dependOnClassesThat().resideInAnyPackage("..adapter.out..");
+
+    /**
+     * Controller không được gọi trực tiếp RepositoryPort (phải qua UseCase).
+     * Ngoại lệ rõ ràng cho các UI Controller cũ đang nợ kỹ thuật để chuyển đổi dần (#276).
+     */
+    @ArchTest
+    static final ArchRule controllerKhongGoiRepositoryPortTrucTiep = noClasses()
+        .that().resideInAPackage("..adapter.in.web..")
+        .and().haveSimpleNameEndingWith("Controller")
+        .and().doNotHaveSimpleName("AuthUiController")
+        .and().doNotHaveSimpleName("RoomUiController")
+        .and().doNotHaveSimpleName("ContractUiController")
+        .and().doNotHaveSimpleName("HandoverUiController")
+        .and().doNotHaveSimpleName("MaintenanceUiController")
+        .and().doNotHaveSimpleName("PropertyUiController")
+        .and().doNotHaveSimpleName("TenantDocumentUiController")
+        .should().dependOnClassesThat().haveSimpleNameEndingWith("RepositoryPort");
 }
