@@ -28,7 +28,7 @@
             <div>
                 <h2 style="margin: 0 0 4px; font-size: 16px;">Hỏi về hóa đơn</h2>
                 <p th:if="${invoice.getType().name() == 'RENT'}" style="margin: 0; color: var(--text-secondary); font-size: 13px;">
-                    So sánh tối đa 3 kỳ tiền thuê trước của cùng phòng. Phí sửa chữa được tách riêng.
+                    So sánh tối đa 3 kỳ tiền thuê trước của hợp đồng này. Phí sửa chữa được tách riêng.
                 </p>
             </div>
             <button th:if="${invoice.getType().name() == 'RENT'}" type="button" class="btn btn-secondary" data-ai-analysis

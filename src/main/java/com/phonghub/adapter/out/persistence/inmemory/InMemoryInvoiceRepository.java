@@ -37,13 +37,13 @@ public class InMemoryInvoiceRepository implements InvoiceRepositoryPort {
     }
 
     @Override
-    public List<Invoice> findPriorRentByRoomId(UUID roomId, YearMonth beforePeriod, int periodLimit) {
-        if (roomId == null || beforePeriod == null || periodLimit <= 0) {
+    public List<Invoice> findPriorRentByContractId(UUID contractId, YearMonth beforePeriod, int periodLimit) {
+        if (contractId == null || beforePeriod == null || periodLimit <= 0) {
             return List.of();
         }
         LinkedHashMap<YearMonth, Invoice> latestByPeriod = new LinkedHashMap<>();
         store.values().stream()
-            .filter(invoice -> roomId.equals(invoice.getRoomId()))
+            .filter(invoice -> contractId.equals(invoice.getContractId()))
             .filter(invoice -> invoice.getType() == InvoiceType.RENT)
             .filter(invoice -> invoice.getStatus() != InvoiceStatus.VOIDED && invoice.getStatus() != InvoiceStatus.DRAFT)
             .filter(invoice -> YearMonth.of(invoice.getYear(), invoice.getMonth()).isBefore(beforePeriod))

@@ -1,6 +1,7 @@
 package com.phonghub.adapter.out.persistence.inmemory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.InvoiceStatus;
@@ -15,7 +16,7 @@ import org.junit.jupiter.api.Test;
 
 class InMemoryInvoicePriorPeriodsTest {
     @Test
-    void returnsLatestDistinctPriorRentPeriodsForSameRoomOnly() {
+    void returnsLatestDistinctPriorRentPeriodsOfSameContractOnly() {
         InMemoryInvoiceRepository repository = new InMemoryInvoiceRepository();
         UUID roomId = UUID.randomUUID();
         UUID otherRoomId = UUID.randomUUID();
@@ -28,7 +29,9 @@ class InMemoryInvoicePriorPeriodsTest {
         repository.save(newestSeptember);
         repository.save(invoice(roomId, contractId, tenantId, 8, 2026, InvoiceStatus.DRAFT,
             InvoiceType.RENT, "2026-09-01T00:00:00Z"));
-        repository.save(invoice(roomId, UUID.randomUUID(), tenantId, 8, 2026, InvoiceStatus.ISSUED,
+        // Hợp đồng trước của cùng phòng (người thuê cũ): không được lẫn vào lịch sử của hợp đồng hiện tại (#310)
+        UUID previousContractId = UUID.randomUUID();
+        repository.save(invoice(roomId, previousContractId, UUID.randomUUID(), 8, 2026, InvoiceStatus.ISSUED,
             InvoiceType.RENT, "2026-09-02T00:00:00Z"));
         repository.save(invoice(roomId, contractId, tenantId, 7, 2026, InvoiceStatus.ISSUED,
             InvoiceType.RENT, "2026-08-01T00:00:00Z"));
@@ -41,11 +44,13 @@ class InMemoryInvoicePriorPeriodsTest {
         repository.save(invoice(roomId, contractId, tenantId, 9, 2026, InvoiceStatus.ISSUED,
             InvoiceType.MAINTENANCE, "2026-10-03T00:00:00Z"));
 
-        List<Invoice> periods = repository.findPriorRentByRoomId(roomId, YearMonth.of(2026, 10), 3);
+        List<Invoice> periods = repository.findPriorRentByContractId(contractId, YearMonth.of(2026, 10), 3);
 
         assertEquals(3, periods.size());
-        assertEquals(List.of(9, 8, 7), periods.stream().map(Invoice::getMonth).toList());
+        assertEquals(List.of(9, 7, 6), periods.stream().map(Invoice::getMonth).toList());
         assertEquals(newestSeptember.getId(), periods.getFirst().getId());
+        assertTrue(periods.stream().allMatch(invoice -> contractId.equals(invoice.getContractId())));
+        assertEquals(List.of(), repository.findPriorRentByContractId(previousContractId, YearMonth.of(2026, 8), 3));
     }
 
     private static Invoice invoice(UUID roomId, UUID contractId, UUID tenantId, int month, int year,

@@ -106,12 +106,16 @@ class InvoicePriorPeriodsPostgresTest {
             save(invoices, anotherRoomId, anotherRoomContractId, tenantId, 9, InvoiceStatus.ISSUED, InvoiceType.RENT,
                 "2026-10-03T00:00:00Z");
 
-            List<Invoice> periods = invoices.findPriorRentByRoomId(roomId, YearMonth.of(2026, 10), 3);
+            // Chỉ lấy kỳ của cùng hợp đồng; hợp đồng khác của cùng phòng (người thuê khác) không lẫn vào (#310)
+            List<Invoice> periods = invoices.findPriorRentByContractId(testContractId, YearMonth.of(2026, 10), 3);
 
             assertEquals(3, periods.size());
             assertEquals(List.of(9, 7, 6), periods.stream().map(Invoice::getMonth).toList());
-            assertEquals(septemberNewer.getId(), periods.getFirst().getId());
-            assertTrue(!periods.getFirst().getId().equals(septemberOlder.getId()));
+            assertEquals(septemberOlder.getId(), periods.getFirst().getId());
+            assertTrue(periods.stream().allMatch(invoice -> testContractId.equals(invoice.getContractId())));
+
+            List<Invoice> secondContract = invoices.findPriorRentByContractId(secondContractId, YearMonth.of(2026, 10), 3);
+            assertEquals(List.of(septemberNewer.getId()), secondContract.stream().map(Invoice::getId).toList());
         }
     }
 

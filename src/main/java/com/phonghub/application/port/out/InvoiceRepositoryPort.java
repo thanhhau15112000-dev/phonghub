@@ -11,8 +11,11 @@ public interface InvoiceRepositoryPort {
     Invoice save(Invoice invoice);
     Optional<Invoice> findById(UUID id);
     List<Invoice> findByContractId(UUID contractId);
-    /** Latest prior rent invoices for the same room, one invoice per billing period, excluding drafts and voids. */
-    List<Invoice> findPriorRentByRoomId(UUID roomId, YearMonth beforePeriod, int periodLimit);
+    /**
+     * Latest prior rent invoices of the same contract, one invoice per billing period, excluding drafts and voids.
+     * Never crosses into another contract of the same room, so a new tenant never sees the previous tenant's bills (#310).
+     */
+    List<Invoice> findPriorRentByContractId(UUID contractId, YearMonth beforePeriod, int periodLimit);
     /** Kỳ tiền thuê chưa bị hủy (status khác VOIDED) của hợp đồng trong tháng/năm. */
     Optional<Invoice> findActiveRentByContractIdAndPeriod(UUID contractId, int year, int month);
     /** Hóa đơn còn phải trả (chưa trả đủ, chưa hủy, chưa gộp) có hạn thanh toán trong [from, to] (#86). */

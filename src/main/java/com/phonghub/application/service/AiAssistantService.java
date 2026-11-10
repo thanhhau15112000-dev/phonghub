@@ -179,7 +179,7 @@ public class AiAssistantService implements AiAssistantUseCase {
         List<Invoice> previous = priorInvoices(current);
         List<FaqMatch> faq = searchFaq("Giải thích hóa đơn, các khoản tiền và so sánh theo lịch sử cùng phòng.", INVOICE_FAQ_CATEGORIES);
         Map<String, Object> facts = invoiceContext(current, previous);
-        facts.put("task", "Giải thích hóa đơn, nêu thay đổi so với tối đa ba kỳ tiền thuê trước của cùng phòng và đưa lời khuyên tiết kiệm dựa trên usageSignals.");
+        facts.put("task", "Giải thích hóa đơn, nêu thay đổi so với tối đa ba kỳ tiền thuê trước của cùng hợp đồng và đưa lời khuyên tiết kiệm dựa trên usageSignals.");
         addFaqContext(facts, faq);
         String answer = complete("Hãy giải thích tổng tiền và các khoản riêng. Chỉ nêu lý do tăng giảm khi số liệu so sánh hỗ trợ. "
             + "Sau đó nhận xét xu hướng điện, nước và đưa lời khuyên tiết kiệm theo usageSignals. "
@@ -388,17 +388,17 @@ public class AiAssistantService implements AiAssistantUseCase {
             return List.of();
         }
         int periodLimit = Math.max(0, Math.min(properties.getComparisonPeriods(), 6));
-        return invoiceRepository.findPriorRentByRoomId(current.getRoomId(),
+        return invoiceRepository.findPriorRentByContractId(current.getContractId(),
             YearMonth.of(current.getYear(), current.getMonth()), periodLimit);
     }
 
     private Map<String, Object> invoiceContext(Invoice current, List<Invoice> previous) {
         Map<String, Object> facts = new LinkedHashMap<>();
         facts.put("invoice", invoiceFacts(current));
-        facts.put("previousSameRoomRentPeriods", previous.stream().map(this::invoiceFacts).toList());
+        facts.put("previousRentPeriodsSameContract", previous.stream().map(this::invoiceFacts).toList());
         facts.put("comparisonPeriodCount", Math.max(0, Math.min(properties.getComparisonPeriods(), 6)));
         facts.put("comparisonNote", previous.isEmpty()
-            ? "Không tìm thấy kỳ tiền thuê trước của cùng phòng."
+            ? "Không tìm thấy kỳ tiền thuê trước của cùng hợp đồng."
             : "Các số chênh lệch đã được hệ thống tính giữa hóa đơn hiện tại và từng kỳ trước.");
         if (current.getType() == InvoiceType.RENT && !previous.isEmpty()) {
             facts.put("comparisons", previous.stream().map(invoice -> comparison(current, invoice)).toList());
@@ -426,8 +426,8 @@ public class AiAssistantService implements AiAssistantUseCase {
         Map<String, Object> currentTotals = utilityTotals(current.getItems());
         List<Map<String, Object>> previousTotals = previous.stream().map(invoice -> utilityTotals(invoice.getItems())).toList();
         signals.put("basis", previous.isEmpty()
-            ? "Chưa có kỳ tiền thuê trước của cùng phòng để so sánh xu hướng."
-            : "So sánh với trung bình " + previous.size() + " kỳ tiền thuê trước của cùng phòng; changePercent là phần trăm thay đổi so với trung bình đó.");
+            ? "Chưa có kỳ tiền thuê trước của cùng hợp đồng để so sánh xu hướng."
+            : "So sánh với trung bình " + previous.size() + " kỳ tiền thuê trước của cùng hợp đồng; changePercent là phần trăm thay đổi so với trung bình đó.");
         signals.put("previousPeriodsCompared", previous.size());
         Map<String, Object> electricity = utilitySignal(currentTotals, previousTotals, "ELECTRICITY", "kWh");
         if (electricity != null) {
@@ -690,7 +690,7 @@ public class AiAssistantService implements AiAssistantUseCase {
     private List<Source> invoiceSources(Invoice current, List<Invoice> previous) {
         List<Source> sources = new ArrayList<>();
         sources.add(new Source("Hóa đơn đang xem, kỳ " + period(current)));
-        previous.forEach(invoice -> sources.add(new Source("Hóa đơn cùng phòng, kỳ " + period(invoice) + " (đã ẩn danh)")));
+        previous.forEach(invoice -> sources.add(new Source("Hóa đơn cùng hợp đồng, kỳ " + period(invoice) + " (đã ẩn danh)")));
         return List.copyOf(sources);
     }
 
