@@ -145,7 +145,10 @@ class CheckOutSettlementIntegrationTest {
             .andExpect(content().string(containsString("Người thuê cần trả thêm")));
 
         demoActorPort.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_TECH_1);
-        assertTrue(settlementUseCase.settlement(DataSeeder.CONTRACT_1_ID).isEmpty());
+        // Kỹ thuật viên không xem hợp đồng nên cũng không xem quyết toán (#312)
+        org.junit.jupiter.api.Assertions.assertThrows(
+            com.phonghub.domain.exception.UnauthorizedPropertyAccessException.class,
+            () -> settlementUseCase.settlement(DataSeeder.CONTRACT_1_ID));
         demoActorPort.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_TENANT_1);
         assertTrue(settlementUseCase.settlement(DataSeeder.CONTRACT_1_ID).isPresent());
     }

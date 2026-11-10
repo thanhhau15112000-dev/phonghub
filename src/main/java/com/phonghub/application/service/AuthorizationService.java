@@ -36,6 +36,8 @@ public class AuthorizationService {
         "Bạn không quản lý nhà trọ nào mà người thuê này đang hoặc đã từng cư trú.";
     public static final String ADMIN_FINANCE_DENIED = "Quản trị viên không xem số liệu tài chính của nhà trọ.";
     public static final String TECHNICIAN_FINANCE_DENIED = "Kỹ thuật viên không xem số liệu tài chính của nhà trọ.";
+    public static final String TECHNICIAN_CONTRACT_DENIED =
+        "Kỹ thuật viên chỉ xử lý phiếu bảo trì, không xem hợp đồng thuê.";
     public static final String ADMIN_CONTRACT_DENIED =
         "Quản trị viên không lập hay quản lý hợp đồng; việc này do chủ trọ hoặc nhân viên được cấp quyền thực hiện.";
     public static final String STAFF_FINANCE_DENIED =
@@ -392,6 +394,17 @@ public class AuthorizationService {
             .map(assignment -> assignment.canManageContracts()).orElse(false)) {
             throw new UnauthorizedPropertyAccessException(
                 "Bạn chưa được cấp quyền quản lý hợp đồng tại nhà trọ này.");
+        }
+    }
+
+    /** Hợp đồng thuê không liên quan tới việc sửa chữa nên kỹ thuật viên không được xem (#312). */
+    public boolean canViewContracts(CurrentUser user) {
+        return user != null && user.role() != UserRole.TECHNICIAN;
+    }
+
+    public void assertCanViewContracts(CurrentUser user) {
+        if (user != null && user.role() == UserRole.TECHNICIAN) {
+            throw new UnauthorizedPropertyAccessException(TECHNICIAN_CONTRACT_DENIED);
         }
     }
 
