@@ -96,8 +96,12 @@ public class ContractUiController {
     }
 
     @GetMapping
-    public String listContracts(Model model) {
+    public String listContracts(Model model, RedirectAttributes redirectAttributes) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
+        if (!authorizationService.canViewContracts(currentUser)) {
+            redirectAttributes.addFlashAttribute("errorMessage", AuthorizationService.TECHNICIAN_CONTRACT_DENIED);
+            return "redirect:/maintenance";
+        }
         List<Contract> contracts = new ArrayList<>();
 
         if (currentUser.role() == UserRole.TENANT) {
@@ -217,6 +221,10 @@ public class ContractUiController {
     @GetMapping("/{id}")
     public String viewContract(@PathVariable UUID id, Model model, RedirectAttributes redirectAttributes) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
+        if (!authorizationService.canViewContracts(currentUser)) {
+            redirectAttributes.addFlashAttribute("errorMessage", AuthorizationService.TECHNICIAN_CONTRACT_DENIED);
+            return "redirect:/maintenance";
+        }
         try {
             Contract contract = contractUseCase.getContract(id);
             // getContract has already checked that a tenant is the primary tenant or a linked occupant.

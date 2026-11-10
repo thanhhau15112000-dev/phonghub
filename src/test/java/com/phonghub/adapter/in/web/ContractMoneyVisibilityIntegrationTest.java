@@ -37,8 +37,9 @@ import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * Tiền thuê, tiền cọc của hợp đồng chỉ hiện với chủ trọ, nhân viên có quyền thu tiền hoặc quản lý hợp đồng và người
- * thuê của hợp đồng (REQ-CON-04, #304). Quản trị viên, kỹ thuật viên và nhân viên không có quyền vẫn xem được hợp đồng
- * nhưng không thấy số tiền, ở API, trang hợp đồng và trang phòng. Quản trị viên không còn lập hay quản lý hợp đồng.
+ * thuê của hợp đồng (REQ-CON-04, #304). Quản trị viên và nhân viên không có quyền vẫn xem được hợp đồng nhưng không
+ * thấy số tiền, ở API, trang hợp đồng và trang phòng. Quản trị viên không còn lập hay quản lý hợp đồng. Kỹ thuật viên
+ * không xem hợp đồng (#312, xem {@link TechnicianContractAccessIntegrationTest}).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -110,9 +111,9 @@ class ContractMoneyVisibilityIntegrationTest {
     }
 
     @Test
-    @DisplayName("API: quản trị viên, kỹ thuật viên, nhân viên không có quyền xem được hợp đồng nhưng không có tiền")
+    @DisplayName("API: quản trị viên, nhân viên không có quyền xem được hợp đồng nhưng không có tiền")
     void apiHidesMoneyFromRestrictedRoles() throws Exception {
-        for (String user : new String[] {ADMIN, TECH_1, STAFF_2}) {
+        for (String user : new String[] {ADMIN, STAFF_2}) {
             mockMvc.perform(get(API_CONTRACT).header("X-User-Id", user))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString(DataSeeder.CONTRACT_1_ID.toString())))
@@ -144,9 +145,9 @@ class ContractMoneyVisibilityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Giao diện: quản trị viên, kỹ thuật viên, nhân viên không có quyền không thấy tiền hợp đồng")
+    @DisplayName("Giao diện: quản trị viên, nhân viên không có quyền không thấy tiền hợp đồng")
     void pagesHideMoneyFromRestrictedRoles() throws Exception {
-        for (String user : new String[] {ADMIN, TECH_1, STAFF_2}) {
+        for (String user : new String[] {ADMIN, STAFF_2}) {
             mockMvc.perform(get(CONTRACT_PAGE).header("X-User-Id", user))
                 .andExpect(status().isOk())
                 .andExpect(content().string(not(containsString(RENT_SHOWN))))

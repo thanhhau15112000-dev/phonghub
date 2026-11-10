@@ -459,6 +459,7 @@ public class ContractService implements ContractUseCase {
     @Override
     public Contract getContract(UUID contractId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
+        authorizationService.assertCanViewContracts(currentUser);
         Contract contract = contractRepository.findById(contractId)
             .orElseThrow(() -> new ContractNotFoundException("Không tìm thấy hợp đồng: " + contractId));
 
@@ -482,6 +483,7 @@ public class ContractService implements ContractUseCase {
     @Override
     public List<Contract> listContractsForProperty(UUID propertyId) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
+        authorizationService.assertCanViewContracts(currentUser);
         authorizationService.assertCanAccessProperty(currentUser, propertyId);
 
         if (currentUser.role() == UserRole.TENANT) {

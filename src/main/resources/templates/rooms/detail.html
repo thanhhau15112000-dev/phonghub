@@ -103,8 +103,8 @@
         </form>
     </div>
 
-    <!-- Hợp đồng đang hiệu lực -->
-    <div class="card">
+    <!-- Hợp đồng đang hiệu lực; kỹ thuật viên không xem hợp đồng (#312) -->
+    <div class="card" th:if="${canViewContracts}" id="room-contract">
         <div class="flex-between" style="margin-bottom: 12px;">
             <h2>Hợp đồng thuê</h2>
             <a th:if="${activeContract == null and !room.isArchived() and (room.getStatus().name() == 'AVAILABLE' or room.getStatus().name() == 'RESERVED') and (currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
