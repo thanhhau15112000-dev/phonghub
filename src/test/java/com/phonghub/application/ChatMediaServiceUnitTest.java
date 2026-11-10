@@ -246,11 +246,15 @@ class ChatMediaServiceUnitTest {
     }
 
     @Test
-    @DisplayName("Everyone can post media in the public channel and every member can open it")
+    @DisplayName("Management posts media in the public channel and every member can open it; tenants cannot post (#320)")
     void globalChannel() {
         ChatRoom global = rooms.save(ChatRoom.createGlobal());
-        ChatMessage sent = chat.sendMediaMessage(bob, global.id(), "Thông báo", List.of(new MediaUpload("video/mp4", mp4(1_000))));
+        ChatMessage sent = chat.sendMediaMessage(alice, global.id(), "Thông báo", List.of(new MediaUpload("video/mp4", mp4(1_000))));
         assertEquals("video/mp4", chat.attachmentFile(carol, global.id(), sent.id(), sent.attachments().get(0).id()).contentType());
+        int stored = storage.stored.size();
+        assertThrows(UnauthorizedChatAccessException.class, () ->
+            chat.sendMediaMessage(bob, global.id(), "Người thuê", List.of(new MediaUpload("image/png", png()))));
+        assertEquals(stored, storage.stored.size(), "không lưu tệp của tin bị chặn");
     }
 
     @Test

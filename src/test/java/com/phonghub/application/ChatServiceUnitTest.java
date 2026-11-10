@@ -3,6 +3,7 @@ package com.phonghub.application;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryChatMessageRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryChatRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
+import com.phonghub.application.port.in.ChatMessageUseCase;
 import com.phonghub.application.port.out.ChatEventPublisherPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.service.ChatService;
@@ -126,6 +127,32 @@ class ChatServiceUnitTest {
         List<ChatMessage> list = chatService.getMessages(userB, ChatRoom.GLOBAL_ROOM_ID, null, 10);
         assertEquals(1, list.size());
         assertEquals("Xin chào mọi người", list.get(0).content());
+    }
+
+    @Test
+    @DisplayName("#320: người thuê chỉ đọc Kênh chung, gửi tin chữ hoặc ảnh đều bị từ chối và không lưu gì")
+    void tenantCannotPostToGlobalRoom() {
+        chatService.sendMessage(userA, ChatRoom.GLOBAL_ROOM_ID, "Thông báo cúp nước");
+        int published = recorder.messages.size();
+
+        UnauthorizedChatAccessException text = assertThrows(UnauthorizedChatAccessException.class,
+            () -> chatService.sendMessage(userB, ChatRoom.GLOBAL_ROOM_ID, "Người thuê nhắn kênh chung"));
+        assertTrue(text.getMessage().startsWith("Kênh chung chỉ dành cho ban quản lý"));
+        assertThrows(UnauthorizedChatAccessException.class, () -> chatService.sendMediaMessage(userB,
+            ChatRoom.GLOBAL_ROOM_ID, "ảnh", List.of(new ChatMessageUseCase.MediaUpload("image/png", new byte[] {1, 2, 3}))));
+
+        List<ChatMessage> list = chatService.getMessages(userB, ChatRoom.GLOBAL_ROOM_ID, null, 10);
+        assertEquals(1, list.size(), "người thuê vẫn đọc được, nhưng không có tin nào của người thuê");
+        assertEquals(published, recorder.messages.size(), "không phát sự kiện realtime cho tin bị chặn");
+    }
+
+    @Test
+    @DisplayName("#320: nhân viên vẫn gửi Kênh chung; người thuê vẫn nhắn riêng 1-1 được")
+    void staffPostsGlobalAndTenantStillSendsDirect() {
+        assertNotNull(chatService.sendMessage(userC, ChatRoom.GLOBAL_ROOM_ID, "Nhân viên thông báo"));
+        ChatRoom direct = chatService.getOrCreateDirectRoom(userB, userA.id());
+        ChatMessage msg = chatService.sendMessage(userB, direct.id(), "Chào chủ trọ");
+        assertEquals(userB.id(), msg.senderId());
     }
 
     @Test

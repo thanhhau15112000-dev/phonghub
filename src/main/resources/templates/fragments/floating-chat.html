@@ -1,5 +1,6 @@
 <div th:fragment="floatingChatWidget" th:if="${currentUser != null}" id="phonghubFloatingChatContainer"
      th:data-user-id="${currentUser.id()}" th:data-user-name="${currentUser.fullName()}"
+     th:data-user-role="${currentUser.role().name()}"
      th:data-chat-max-image-bytes="${chatMediaLimits != null ? chatMediaLimits['imageBytes'] : 10485760}"
      th:data-chat-max-video-bytes="${chatMediaLimits != null ? chatMediaLimits['videoBytes'] : 10485760}">
     <style>
@@ -254,6 +255,10 @@
             <!-- Ảnh/video chờ gửi (#251): xem trước, bỏ bớt được trước khi gửi -->
             <div id="phonghubAttachPreview" style="display: none; gap: 6px; flex-wrap: wrap; padding: 2px 0 4px;"></div>
             <div id="phonghubAttachStatus" role="status" aria-live="polite" style="display: none; font-size: 11.5px; line-height: 1.35;"></div>
+            <!-- Kênh chung chỉ đọc với người thuê (#320): thay ô nhập bằng dòng báo -->
+            <div id="phonghubDockedReadOnlyNote" role="note" style="display: none; font-size: 12px; color: #64748b; text-align: center; padding: 4px 0;">
+                Kênh chung chỉ đọc. Bạn hãy nhắn riêng cho chủ trọ nếu cần hỗ trợ.
+            </div>
             <form id="phonghubDockedSendForm" style="width: 100%; display: flex; align-items: center; margin: 0; gap: 6px;">
                 <input type="file" id="phonghubAttachInput" multiple hidden
                        accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime">
@@ -286,6 +291,7 @@
     <script>
     (function() {
         let currentUserId = '';
+        let currentUserRole = '';
         let activeFloatingRoomId = null;
         // Ảnh/video đang chờ gửi trong khung chat đang mở (#251)
         let pendingAttachments = [];
@@ -341,6 +347,7 @@
             const container = document.getElementById('phonghubFloatingChatContainer');
             if (!container) return;
             currentUserId = container.dataset.userId || '';
+            currentUserRole = container.dataset.userRole || '';
             if (!currentUserId) return;
 
             const toggleBtn = document.getElementById('phonghubMessengerToggleBtn');
@@ -1163,6 +1170,14 @@
                 }
             }
 
+            // Người thuê chỉ đọc Kênh chung (#320): ẩn ô nhập, máy chủ cũng chặn nếu vẫn gửi
+            const readOnly = roomType === 'GLOBAL' && currentUserRole === 'TENANT';
+            const sendForm = document.getElementById('phonghubDockedSendForm');
+            const readOnlyNote = document.getElementById('phonghubDockedReadOnlyNote');
+            if (sendForm) sendForm.style.display = readOnly ? 'none' : 'flex';
+            if (readOnlyNote) readOnlyNote.style.display = readOnly ? 'block' : 'none';
+            if (readOnly) clearPendingAttachments();
+
             const avatarElem = document.getElementById('phonghubDockedAvatar');
             if (roomType === 'GLOBAL') {
                 avatarElem.style.background = 'linear-gradient(135deg, #0084ff, #4f46e5)';
@@ -1184,7 +1199,9 @@
                     const messages = await res.json();
                     messagesPane.innerHTML = '';
                     if (messages.length === 0) {
-                        messagesPane.innerHTML = '<div class="phonghub-chat-empty" style="margin: auto; color: #64748b; font-size: 12.5px; text-align: center;">Chưa có tin nhắn nào.<br>Hãy gửi lời chào đầu tiên! 👋</div>';
+                        messagesPane.innerHTML = readOnly
+                            ? '<div class="phonghub-chat-empty" style="margin: auto; color: #64748b; font-size: 12.5px; text-align: center;">Chưa có thông báo nào.</div>'
+                            : '<div class="phonghub-chat-empty" style="margin: auto; color: #64748b; font-size: 12.5px; text-align: center;">Chưa có tin nhắn nào.<br>Hãy gửi lời chào đầu tiên! 👋</div>';
                     } else {
                         messages.forEach(m => appendDockedMessageUI(m));
                     }

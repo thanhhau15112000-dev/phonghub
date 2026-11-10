@@ -22,6 +22,7 @@ import com.phonghub.domain.model.ChatRoom;
 import com.phonghub.domain.model.ChatRoomMember;
 import com.phonghub.domain.model.ChatRoomType;
 import com.phonghub.domain.model.User;
+import com.phonghub.domain.model.UserRole;
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
@@ -89,6 +90,14 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
     private void assertAuthenticated(CurrentUser user) {
         if (user == null) {
             throw new UnauthorizedChatAccessException("Yêu cầu xác thực tài khoản để truy cập chat");
+        }
+    }
+
+    /** Kênh chung là kênh thông báo của ban quản lý: người thuê chỉ đọc, không gửi tin hay ảnh/video (#320, QA-10.7). */
+    private void assertCanPost(CurrentUser user, ChatRoom room) {
+        if (room.isGlobal() && user.role() == UserRole.TENANT) {
+            throw new UnauthorizedChatAccessException(
+                "Kênh chung chỉ dành cho ban quản lý gửi thông báo. Người thuê chỉ xem được, hãy nhắn riêng cho chủ trọ.");
         }
     }
 
@@ -228,6 +237,7 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
 
         // Kiểm tra quyền truy cập phòng trước khi gửi tin
         ChatRoom room = getRoomById(currentUser, roomId);
+        assertCanPost(currentUser, room);
 
         ChatMessage message = ChatMessage.create(room.id(), currentUser.id(), currentUser.fullName(), content.trim(),
             clock.instant());
@@ -247,6 +257,7 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         assertAuthenticated(currentUser);
         // Cùng quyền với gửi tin chữ: phòng 1-1 chỉ thành viên, kênh chung theo quy tắc gửi tin của kênh
         ChatRoom room = getRoomById(currentUser, roomId);
+        assertCanPost(currentUser, room);
         if (storagePort == null) {
             throw new IllegalStateException("Chưa cấu hình kho lưu trữ cho ảnh/video trong chat.");
         }

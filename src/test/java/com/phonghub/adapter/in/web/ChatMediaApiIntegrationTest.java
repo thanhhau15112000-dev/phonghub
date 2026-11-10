@@ -223,14 +223,27 @@ class ChatMediaApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("Public channel: a member posts an image and another member opens it")
+    @DisplayName("Public channel: staff posts an image and a tenant opens it")
     void globalChannel() throws Exception {
-        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_TENANT_1);
+        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_STAFF_1);
         mockMvc.perform(get("/api/chat/rooms")).andExpect(status().isOk());
         String url = send(ChatRoom.GLOBAL_ROOM_ID.toString(), "Thông báo", file("a.png", "image/png", image("png")))
             .get("attachments").get(0).get("url").asText();
-        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_STAFF_1);
+        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_TENANT_1);
         mockMvc.perform(get(url)).andExpect(status().isOk()).andExpect(header().string(HttpHeaders.CONTENT_TYPE, "image/png"));
+    }
+
+    @Test
+    @DisplayName("#320: tenant cannot post an image to the public channel; nothing is stored")
+    void tenantCannotPostImageToGlobalChannel() throws Exception {
+        authAdapter.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_TENANT_1);
+        mockMvc.perform(get("/api/chat/rooms")).andExpect(status().isOk());
+        mockMvc.perform(multipart("/api/chat/rooms/" + ChatRoom.GLOBAL_ROOM_ID + "/attachments")
+                .file(file("a.png", "image/png", image("png"))).param("content", "Người thuê gửi ảnh"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.startsWith("Kênh chung chỉ dành cho ban quản lý")));
+        mockMvc.perform(get("/api/chat/rooms/" + ChatRoom.GLOBAL_ROOM_ID + "/messages"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test
