@@ -93,7 +93,7 @@ class AiAssistantServiceTest {
         Invoice prior = invoice(UUID.randomUUID(), roomId, UUID.randomUUID(), 10, 2026, "900000", "900400",
             List.of(utility("Điện tháng 10 (8 kWh)", "8", "50", "400")));
         when(invoiceUseCase.getInvoice(currentId)).thenReturn(current);
-        when(invoiceRepository.findPriorRentByRoomId(roomId, YearMonth.of(2026, 11), 3)).thenReturn(List.of(prior));
+        when(invoiceRepository.findPriorRentByContractId(current.getContractId(), YearMonth.of(2026, 11), 3)).thenReturn(List.of(prior));
 
         AiAssistantUseCase.AiResponse response = service.askAboutInvoice(currentId, "Vì sao hóa đơn thay đổi?");
 
@@ -111,7 +111,7 @@ class AiAssistantServiceTest {
         assertFalse(sent.contains("Private repair description"));
         assertFalse(sent.contains("PAYMENT-SECRET"));
         assertFalse(sent.contains(tenantId.toString()));
-        verify(invoiceRepository).findPriorRentByRoomId(roomId, YearMonth.of(2026, 11), 3);
+        verify(invoiceRepository).findPriorRentByContractId(current.getContractId(), YearMonth.of(2026, 11), 3);
     }
 
     @Test
@@ -122,7 +122,7 @@ class AiAssistantServiceTest {
         assertThrows(UnauthorizedPropertyAccessException.class,
             () -> service.askAboutInvoice(invoiceId, "Tổng tiền là bao nhiêu?"));
 
-        verify(invoiceRepository, never()).findPriorRentByRoomId(
+        verify(invoiceRepository, never()).findPriorRentByContractId(
             org.mockito.ArgumentMatchers.any(UUID.class), org.mockito.ArgumentMatchers.any(YearMonth.class), org.mockito.ArgumentMatchers.anyInt());
         verify(completionPort, never()).complete(anyString(), anyString());
         verify(faqSearchPort, never()).search(anyString(), org.mockito.ArgumentMatchers.anySet(), org.mockito.ArgumentMatchers.anyInt());
@@ -134,7 +134,7 @@ class AiAssistantServiceTest {
         UUID roomId = UUID.randomUUID();
         Invoice current = invoice(invoiceId, roomId, UUID.randomUUID(), 11, 2026, "1000000", "1000000", List.of());
         when(invoiceUseCase.getInvoice(invoiceId)).thenReturn(current);
-        when(invoiceRepository.findPriorRentByRoomId(roomId, YearMonth.of(2026, 11), 3)).thenReturn(List.of());
+        when(invoiceRepository.findPriorRentByContractId(current.getContractId(), YearMonth.of(2026, 11), 3)).thenReturn(List.of());
         when(faqSearchPort.search("Hóa đơn so sánh những kỳ nào?", java.util.Set.of("invoice", "general"), 3))
             .thenReturn(List.of(new FaqMatch("invoice-same-room-history", "invoice", "So sánh cùng phòng",
                 "So sánh với kỳ nào?", "Mặc định lấy ba kỳ trước của cùng phòng.", "FAQ nháp", 0.82)));
@@ -154,7 +154,7 @@ class AiAssistantServiceTest {
         UUID roomId = UUID.randomUUID();
         Invoice current = invoice(invoiceId, roomId, UUID.randomUUID(), 11, 2026, "1000000", "1000000", List.of());
         when(invoiceUseCase.getInvoice(invoiceId)).thenReturn(current);
-        when(invoiceRepository.findPriorRentByRoomId(roomId, YearMonth.of(2026, 11), 3)).thenReturn(List.of());
+        when(invoiceRepository.findPriorRentByContractId(current.getContractId(), YearMonth.of(2026, 11), 3)).thenReturn(List.of());
         when(faqSearchPort.search(anyString(), org.mockito.ArgumentMatchers.anySet(), org.mockito.ArgumentMatchers.anyInt()))
             .thenThrow(new AiUnavailableException());
 
@@ -174,7 +174,7 @@ class AiAssistantServiceTest {
             BigDecimal.ZERO, new BigDecimal("250000"), BigDecimal.ZERO, LocalDate.of(2026, 11, 6),
             InvoiceStatus.ISSUED, "MAINTENANCE-CODE", InvoiceType.MAINTENANCE, UUID.randomUUID(), null, now, now);
         when(invoiceUseCase.getInvoice(invoiceId)).thenReturn(maintenance);
-        when(invoiceRepository.findPriorRentByRoomId(roomId, YearMonth.of(2026, 11), 3)).thenReturn(List.of());
+        when(invoiceRepository.findPriorRentByContractId(maintenance.getContractId(), YearMonth.of(2026, 11), 3)).thenReturn(List.of());
 
         service.askAboutInvoice(invoiceId, "Giải thích phí sửa chữa");
 
@@ -528,7 +528,7 @@ class AiAssistantServiceTest {
         Invoice current = invoice(invoiceId, roomId, UUID.randomUUID(), 11, 2026, "3000000", "3350000",
             List.of(utility("Điện (kWh)", "100", "3500", "350000")));
         when(invoiceUseCase.getInvoice(invoiceId)).thenReturn(current);
-        when(invoiceRepository.findPriorRentByRoomId(roomId, YearMonth.of(2026, 11), 3)).thenReturn(List.of());
+        when(invoiceRepository.findPriorRentByContractId(current.getContractId(), YearMonth.of(2026, 11), 3)).thenReturn(List.of());
 
         service.analyzeInvoice(invoiceId);
 
@@ -616,7 +616,7 @@ class AiAssistantServiceTest {
 
     private JsonNode signalsFor(Invoice current, List<Invoice> previous) {
         when(invoiceUseCase.getInvoice(current.getId())).thenReturn(current);
-        when(invoiceRepository.findPriorRentByRoomId(current.getRoomId(), YearMonth.of(current.getYear(), current.getMonth()), 3))
+        when(invoiceRepository.findPriorRentByContractId(current.getContractId(), YearMonth.of(current.getYear(), current.getMonth()), 3))
             .thenReturn(previous);
         service.askAboutInvoice(current.getId(), "Tôi nên tiết kiệm gì?");
         return factsOf(lastUserPrompt()).path("usageSignals");

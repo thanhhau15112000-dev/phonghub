@@ -213,16 +213,16 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
     }
 
     @Override
-    public List<Invoice> findPriorRentByRoomId(UUID roomId, YearMonth beforePeriod, int periodLimit) {
-        if (roomId == null || beforePeriod == null || periodLimit <= 0) {
+    public List<Invoice> findPriorRentByContractId(UUID contractId, YearMonth beforePeriod, int periodLimit) {
+        if (contractId == null || beforePeriod == null || periodLimit <= 0) {
             return List.of();
         }
         String sql = "SELECT DISTINCT ON (year, month) " + COLUMNS + " FROM invoices "
-            + "WHERE room_id = :roomId AND invoice_type = 'RENT' AND status NOT IN ('VOIDED', 'DRAFT') "
+            + "WHERE contract_id = :contractId AND invoice_type = 'RENT' AND status NOT IN ('VOIDED', 'DRAFT') "
             + "AND (year < :year OR (year = :year AND month < :month)) "
             + "ORDER BY year DESC, month DESC, created_at DESC LIMIT :limit";
         return hydrate(jdbcTemplate.query(sql, Map.of(
-            "roomId", roomId,
+            "contractId", contractId,
             "year", beforePeriod.getYear(),
             "month", beforePeriod.getMonthValue(),
             "limit", periodLimit
