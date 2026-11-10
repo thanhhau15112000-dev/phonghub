@@ -17,7 +17,9 @@ public record RoomResponse(
     RoomStatus status,
     Instant createdAt,
     Instant updatedAt,
-    Instant archivedAt
+    Instant archivedAt,
+    /** Gửi lại khi sửa phòng để phát hiện hai người sửa cùng lúc (#314). */
+    long version
 ) {
     public static RoomResponse from(Room room) {
         return new RoomResponse(
@@ -31,7 +33,8 @@ public record RoomResponse(
             room.getStatus(),
             room.getCreatedAt(),
             room.getUpdatedAt(),
-            room.getArchivedAt()
+            room.getArchivedAt(),
+            room.getVersion()
         );
     }
 }

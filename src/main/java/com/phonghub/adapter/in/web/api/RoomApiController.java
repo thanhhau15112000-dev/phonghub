@@ -223,12 +223,10 @@ public class RoomApiController {
         @Min(value = 1, message = "Max occupants must be at least 1")
         int maxOccupants,
 
-        /** Phiên bản phòng khi client đọc; bỏ trống thì không kiểm tra xung đột ở tầng ứng dụng. */
+        /** Phiên bản phòng client đã đọc (trường version của phòng); bắt buộc để phát hiện sửa đồng thời (#314). */
+        @NotNull(message = "Thiếu version của phòng: hãy tải lại thông tin phòng rồi gửi kèm version.")
         Long version
     ) {
-        public UpdateRoomRequest(String roomNumber, int floor, BigDecimal areaSqm, BigDecimal basePrice, int maxOccupants) {
-            this(roomNumber, floor, areaSqm, basePrice, maxOccupants, null);
-        }
     }
 
     public record UpdateRoomStatusRequest(
