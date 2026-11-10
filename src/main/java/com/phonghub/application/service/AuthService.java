@@ -180,10 +180,10 @@ public class AuthService implements AuthUseCase {
     public void changePassword(String newPassword) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         if (currentUser == null) {
-            throw new InvalidCredentialsException("Authentication required to change password");
+            throw new InvalidCredentialsException("Bạn cần đăng nhập để đổi mật khẩu.");
         }
         if (newPassword == null || newPassword.length() < 8) {
-            throw new IllegalArgumentException("Password must be at least 8 characters long");
+            throw new IllegalArgumentException(PASSWORD_TOO_SHORT);
         }
 
         identityProviderPort.changePassword(currentUser.id(), newPassword);

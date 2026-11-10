@@ -49,8 +49,8 @@ public class AuthApiController {
     ) {}
 
     public record ChangePasswordRequest(
-        @NotBlank(message = "New password cannot be blank")
-        @Size(min = 8, message = "Password must be at least 8 characters")
+        @NotBlank(message = "Vui lòng nhập mật khẩu mới.")
+        @Size(min = 8, message = AuthUseCase.PASSWORD_TOO_SHORT)
         String newPassword
     ) {
         @Override

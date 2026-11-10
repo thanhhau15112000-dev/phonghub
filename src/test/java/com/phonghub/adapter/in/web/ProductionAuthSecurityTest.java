@@ -1,5 +1,6 @@
 package com.phonghub.adapter.in.web;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
@@ -289,6 +290,49 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(get("/properties").session(session))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/account/password"));
+    }
+
+    @Test
+    void loginFormHasExactlyOneCsrfField() throws Exception {
+        String page = mockMvc.perform(get("/login"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+
+        int formStart = page.indexOf("action=\"/login\"");
+        String loginForm = page.substring(formStart, page.indexOf("</form>", formStart));
+        assertEquals(1, loginForm.split("name=\"_csrf\"", -1).length - 1, "Form đăng nhập chỉ có một ô _csrf (#313)");
+    }
+
+    @Test
+    void shortPasswordErrorIsShownOnceInVietnamese() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(authUseCase.login("temporary", "secret123")).thenReturn(new AuthTokenResponse(
+            "temporary-access-token",
+            "temporary-refresh-token",
+            "Bearer",
+            3600L,
+            new AuthTokenResponse.UserInfo(userId, "temporary", "temporary@example.com", "Temporary User", UserRole.TENANT, true)
+        ));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(new User(
+            userId, "temporary", "temporary@phonghub.local", "Temporary User", "0900000001",
+            UserRole.TENANT, User.UserStatus.ACTIVE, true, Instant.now()
+        )));
+        doThrow(new IllegalArgumentException(AuthUseCase.PASSWORD_TOO_SHORT)).when(authUseCase).changePassword("1234567");
+        MockHttpSession session = (MockHttpSession) mockMvc.perform(post("/login").with(csrf())
+                .param("username", "temporary").param("password", "secret123"))
+            .andExpect(redirectedUrl("/account/password"))
+            .andReturn().getRequest().getSession(false);
+
+        String page = mockMvc.perform(post("/account/password").session(session).with(csrf())
+                .param("newPassword", "1234567"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+
+        assertEquals(1, page.split(AuthUseCase.PASSWORD_TOO_SHORT, -1).length - 1, "Câu báo chỉ hiện một lần (#313)");
+        assertTrue(!page.contains("at least 8 characters"));
+        int formStart = page.indexOf("action=\"/account/password\"");
+        String passwordForm = page.substring(formStart, page.indexOf("</form>", formStart));
+        assertEquals(1, passwordForm.split("name=\"_csrf\"", -1).length - 1, "Form đổi mật khẩu chỉ có một ô _csrf (#313)");
     }
 
     @Test

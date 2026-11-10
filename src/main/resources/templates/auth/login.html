@@ -26,7 +26,6 @@
         </div>
 
         <form th:action="@{/login}" method="post">
-            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="form-group">
                 <label class="form-label" for="username">Tên đăng nhập</label>
                 <input id="username" type="text" name="username" th:value="${username}" class="form-control" autocomplete="username" required th:autofocus="${errorMessage == null}">
