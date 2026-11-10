@@ -152,6 +152,15 @@ class ChatApiControllerIntegrationTest {
             .andExpect(jsonPath("$.length()", greaterThanOrEqualTo(1)))
             .andExpect(jsonPath("$[0].content", is("Thông báo lịch bảo trì điện tuần tới")));
 
+        // #320: Tenant chỉ đọc Kênh Chung, gửi tin bị 403 và không có tin mới
+        mockMvc.perform(post("/api/chat/rooms/" + ChatRoom.GLOBAL_ROOM_ID + "/messages")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"content\":\"Người thuê nhắn kênh chung\"}"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.detail", org.hamcrest.Matchers.startsWith("Kênh chung chỉ dành cho ban quản lý")));
+        mockMvc.perform(get("/api/chat/rooms/" + ChatRoom.GLOBAL_ROOM_ID + "/messages"))
+            .andExpect(jsonPath("$[*].content", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("Người thuê nhắn kênh chung"))));
+
         // Kiểm tra danh sách liên hệ
         mockMvc.perform(get("/api/chat/contacts"))
             .andExpect(status().isOk())
