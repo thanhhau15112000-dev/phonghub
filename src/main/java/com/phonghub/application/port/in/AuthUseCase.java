@@ -9,6 +9,9 @@ import java.util.Map;
 import java.util.UUID;
 
 public interface AuthUseCase {
+
+    /** Câu báo khi mật khẩu mới quá ngắn; dùng chung cho giao diện và API (#313). */
+    String PASSWORD_TOO_SHORT = "Mật khẩu mới phải có ít nhất 8 ký tự.";
     AuthTokenResponse login(String username, String password);
     AuthTokenResponse refreshToken(String refreshToken);
     void logout(String accessToken);
