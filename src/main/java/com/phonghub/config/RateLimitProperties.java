@@ -52,6 +52,8 @@ public class RateLimitProperties {
     private Rule forgotPasswordTarget = new Rule(3, 900);
     /** Webhook SePay được nới rộng để các lần retry hợp lệ không bị chặn nhầm. */
     private Rule webhook = new Rule(300, 60);
+    /** Trợ lý AI: đếm theo tài khoản đã đăng nhập vì mỗi lần gọi đều tốn chi phí mô hình (#311). */
+    private Rule ai = new Rule(20, 60);
 
     public boolean isEnabled() {
         return enabled;
@@ -115,5 +117,13 @@ public class RateLimitProperties {
 
     public void setWebhook(Rule webhook) {
         this.webhook = webhook;
+    }
+
+    public Rule getAi() {
+        return ai;
+    }
+
+    public void setAi(Rule ai) {
+        this.ai = ai;
     }
 }
