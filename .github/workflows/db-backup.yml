@@ -1,0 +1,47 @@
+name: Sao lưu CSDL
+
+# Sao lưu hằng ngày lúc 02:00 giờ Việt Nam (#331). Lịch chỉ chạy trên nhánh mặc định (main);
+# chạy tay được ở tab Actions. Bản sao lưu được mã hóa trước khi lưu artifact và giữ 7 ngày.
+on:
+  schedule:
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}
+    steps:
+      - name: Kiểm tra secret
+        run: |
+          if [ -z "$BACKUP_DATABASE_URL" ] || [ -z "$BACKUP_ENCRYPTION_PASSPHRASE" ]; then
+            echo "::error::Thiếu secret BACKUP_DATABASE_URL hoặc BACKUP_ENCRYPTION_PASSPHRASE (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Sao lưu và mã hóa
+        run: |
+          name="phonghub-$(date -u +%Y%m%dT%H%MZ)"
+          echo "BACKUP_NAME=$name" >> "$GITHUB_ENV"
+          sh scripts/db-backup.sh "backup/$name.dump.gpg"
+
+      - name: Lưu bản sao lưu
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BACKUP_NAME }}
+          path: backup/${{ env.BACKUP_NAME }}.dump.gpg
+          retention-days: 7
+          if-no-files-found: error
