@@ -53,6 +53,8 @@ management:
 phonghub:
   management:
     metrics-token: ${PHONGHUB_METRICS_TOKEN:phonghub-metrics-secret-token}
+  # Địa chỉ công khai của app (https://..., không có / cuối), để tạo liên kết đặt lại mật khẩu trong email (#330)
+  public-base-url: ${PHONGHUB_PUBLIC_BASE_URL:}
   demo:
     enabled: false
   storage:

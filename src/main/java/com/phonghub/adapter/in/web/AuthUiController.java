@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import com.phonghub.application.port.in.DemoActorPort;
 import com.phonghub.application.port.in.NotificationUseCase;
+import com.phonghub.application.port.in.PasswordRecoveryUseCase;
 import com.phonghub.application.port.in.TenantDocumentUseCase;
 import com.phonghub.application.port.in.UserUseCase;
 import com.phonghub.domain.model.DocumentType;
@@ -47,6 +48,7 @@ public class AuthUiController {
     private final Optional<DemoActorPort> demoActorPort;
     private final Optional<NotificationUseCase> notificationUseCase;
     private final TenantDocumentUseCase tenantDocumentUseCase;
+    private final PasswordRecoveryUseCase passwordRecoveryUseCase;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
     public AuthUiController(
@@ -56,7 +58,8 @@ public class AuthUiController {
         CurrentUserPort currentUserPort,
         Optional<DemoActorPort> demoActorPort,
         Optional<NotificationUseCase> notificationUseCase,
-        TenantDocumentUseCase tenantDocumentUseCase
+        TenantDocumentUseCase tenantDocumentUseCase,
+        PasswordRecoveryUseCase passwordRecoveryUseCase
     ) {
         this.authUseCase = authUseCase;
         this.userRepository = userRepository;
@@ -65,6 +68,7 @@ public class AuthUiController {
         this.demoActorPort = demoActorPort;
         this.notificationUseCase = notificationUseCase;
         this.tenantDocumentUseCase = tenantDocumentUseCase;
+        this.passwordRecoveryUseCase = passwordRecoveryUseCase;
     }
 
     private static final String SESSION_LOGIN_FAILED_ATTEMPTS = "LOGIN_FAILED_ATTEMPTS";
@@ -176,26 +180,46 @@ public class AuthUiController {
             model.addAttribute("errorMessage", "Vui lòng nhập tên đăng nhập hoặc email.");
             return "auth/forgot-password";
         }
-
-        // Thông báo trung lập — KHÔNG tiết lộ tài khoản có tồn tại hay không (anti-enumeration)
-        final String NEUTRAL_SUCCESS =
-            "Nếu thông tin bạn nhập khớp với một tài khoản trong hệ thống, Quản trị viên sẽ được thông báo " +
-            "và liên hệ với bạn để cấp lại mật khẩu tạm thời.";
-
-        Optional<User> userOpt = cleanIdentifier.contains("@")
-            ? userRepository.findByEmail(cleanIdentifier.toLowerCase())
-            : userRepository.findByUsername(cleanIdentifier.toLowerCase());
-
-        if (userOpt.isPresent()) {
-            User user = userOpt.get();
-            // ADMIN tự xử lý mật khẩu qua Supabase dashboard — không gửi notification
-            if (user.role() != UserRole.ADMIN) {
-                notificationUseCase.ifPresent(n -> n.requestPasswordReset(user));
-            }
-        }
-        // Luôn trả về cùng một thông báo dù tài khoản có tồn tại hay không
-        model.addAttribute("successMessage", NEUTRAL_SUCCESS);
+        // Thông báo trung lập, không tiết lộ tài khoản có tồn tại hay không (anti-enumeration)
+        passwordRecoveryUseCase.requestRecovery(cleanIdentifier);
+        model.addAttribute("successMessage", passwordRecoveryUseCase.isEmailRecoveryAvailable()
+            ? "Nếu thông tin bạn nhập khớp với một tài khoản trong hệ thống, bạn sẽ nhận được email hướng dẫn đặt lại "
+                + "mật khẩu trong vài phút (hãy kiểm tra cả thư rác). Tài khoản chưa có email sẽ được Quản trị viên "
+                + "liên hệ để cấp lại mật khẩu tạm thời."
+            : "Nếu thông tin bạn nhập khớp với một tài khoản trong hệ thống, Quản trị viên sẽ được thông báo "
+                + "và liên hệ với bạn để cấp lại mật khẩu tạm thời.");
         return "auth/forgot-password";
+    }
+
+    /** Trang mở từ liên kết trong email; token nằm sau dấu # nên do JavaScript của trang đọc (#330). */
+    @GetMapping("/reset-password")
+    public String resetPasswordPage(Model model) {
+        model.addAttribute("emailRecoveryAvailable", passwordRecoveryUseCase.isEmailRecoveryAvailable());
+        return "auth/reset-password";
+    }
+
+    @PostMapping("/reset-password")
+    public String handleResetPassword(
+        @RequestParam(defaultValue = "") String recoveryToken,
+        @RequestParam(defaultValue = "") String newPassword,
+        @RequestParam(defaultValue = "") String confirmPassword,
+        Model model,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            passwordRecoveryUseCase.resetPassword(recoveryToken, newPassword, confirmPassword);
+        } catch (DomainException | IllegalArgumentException ex) {
+            model.addAttribute("emailRecoveryAvailable", passwordRecoveryUseCase.isEmailRecoveryAvailable());
+            model.addAttribute("errorMessage", ex.getMessage());
+            // Lỗi do mật khẩu nhập sai thì giữ token để nhập lại; liên kết hỏng thì không
+            if (ex instanceof IllegalArgumentException) {
+                model.addAttribute("recoveryToken", recoveryToken);
+            }
+            return "auth/reset-password";
+        }
+        redirectAttributes.addFlashAttribute("successMessage",
+            "Đã đặt lại mật khẩu. Hãy đăng nhập bằng mật khẩu mới.");
+        return "redirect:/login";
     }
 
     @GetMapping("/account/password")
