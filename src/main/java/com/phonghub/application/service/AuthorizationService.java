@@ -369,6 +369,22 @@ public class AuthorizationService {
      * {@code getContract} kiểm), chủ trọ, nhân viên có quyền thu tiền hoặc quản lý hợp đồng. Quản trị viên, kỹ thuật
      * viên và nhân viên không có hai quyền đó vẫn xem được hợp đồng nhưng không thấy số tiền.
      */
+    /**
+     * Xem giá thuê cơ bản của phòng (#326): giá niêm yết thường bằng đúng tiền thuê nên dùng cùng quy tắc xem tiền
+     * của nhà trọ. Quản trị viên, kỹ thuật viên và nhân viên không có quyền thu tiền hay quản lý hợp đồng không thấy.
+     */
+    public boolean canViewPropertyFinance(CurrentUser user, UUID propertyId) {
+        if (user == null || propertyId == null) {
+            return false;
+        }
+        try {
+            assertCanViewPropertyFinance(user, propertyId);
+            return true;
+        } catch (UnauthorizedPropertyAccessException ex) {
+            return false;
+        }
+    }
+
     public boolean canViewContractMoney(CurrentUser user, Contract contract) {
         if (user == null || contract == null) {
             return false;
