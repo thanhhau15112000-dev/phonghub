@@ -90,6 +90,7 @@ phonghub:
     embedding-dimensions: ${PHONGHUB_AI_EMBEDDING_DIMENSIONS:768}
     timeout-seconds: ${PHONGHUB_AI_TIMEOUT_SECONDS:20}
     max-output-tokens: ${PHONGHUB_AI_MAX_OUTPUT_TOKENS:600}
+    reasoning-effort: ${PHONGHUB_AI_REASONING_EFFORT:low}
     comparison-periods: ${PHONGHUB_AI_COMPARISON_PERIODS:3}
     faq-max-results: ${PHONGHUB_AI_FAQ_MAX_RESULTS:3}
     faq-minimum-similarity: ${PHONGHUB_AI_FAQ_MINIMUM_SIMILARITY:0.65}

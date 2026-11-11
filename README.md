@@ -111,6 +111,10 @@ khi chạy app trực tiếp trên máy host. Mặc định AI tắt. LiteLLM t�
 dung prompt. Hỏi đáp hợp đồng chỉ dùng các trường có cấu trúc hiện lưu; hệ thống
 không có văn bản điều khoản để tra cứu. Trợ lý vận hành chỉ nhận dữ liệu tổng hợp
 của một nhà trọ mà người dùng được quyền xem tài chính.
+Lỗi gọi mô hình (mã HTTP, hết thời gian chờ) được ghi log WARN, không kèm nội dung
+câu hỏi hay câu trả lời. Nếu trỏ `PHONGHUB_AI_BASE_URL` thẳng tới mô hình không nhận
+tham số `reasoning_effort` (vd. OpenAI `gpt-4o-mini`), đặt `PHONGHUB_AI_REASONING_EFFORT=`
+(để trống) để không gửi tham số này.
 
 FAQ RAG dùng bản nháp nghiệp vụ tại `ops/faq/assistant-faq.vi.json`. Tìm kiếm lấy
 vector Gemini Embedding 2 đã tạo sẵn trong `src/main/resources/faq/faq-index.json`;

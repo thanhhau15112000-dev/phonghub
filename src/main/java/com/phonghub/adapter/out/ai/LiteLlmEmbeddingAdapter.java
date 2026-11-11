@@ -5,6 +5,8 @@ import com.phonghub.application.port.out.AiEmbeddingPort;
 import com.phonghub.config.AiAssistantProperties;
 import java.time.Duration;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
@@ -13,6 +15,7 @@ import tools.jackson.databind.JsonNode;
 
 /** LiteLLM/OpenAI-compatible embedding adapter; questions and vectors are never logged. */
 public class LiteLlmEmbeddingAdapter implements AiEmbeddingPort {
+    private static final Logger LOGGER = LoggerFactory.getLogger(LiteLlmEmbeddingAdapter.class);
     private final AiAssistantProperties properties;
     private final RestClient restClient;
 
@@ -51,6 +54,9 @@ public class LiteLlmEmbeddingAdapter implements AiEmbeddingPort {
                 .body(JsonNode.class);
             JsonNode vector = response == null ? null : response.path("data").path(0).path("embedding");
             if (vector == null || !vector.isArray() || vector.size() != properties.getEmbeddingDimensions()) {
+                LOGGER.warn("Mô hình embedding trả vector sai kích thước: model={}, expected={}, actual={}",
+                    properties.getEmbeddingModel(), properties.getEmbeddingDimensions(),
+                    vector == null || !vector.isArray() ? -1 : vector.size());
                 throw new AiUnavailableException();
             }
             double[] values = new double[vector.size()];
@@ -66,6 +72,8 @@ public class LiteLlmEmbeddingAdapter implements AiEmbeddingPort {
             }
             return values;
         } catch (RestClientException ex) {
+            LOGGER.warn("Gọi mô hình embedding thất bại: model={}, {}", properties.getEmbeddingModel(),
+                AiCallFailure.describe(ex));
             throw new AiUnavailableException();
         }
     }

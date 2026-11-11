@@ -12,6 +12,8 @@ public class AiAssistantProperties {
     private int embeddingDimensions = 768;
     private int timeoutSeconds = 20;
     private int maxOutputTokens = 600;
+    /** Gửi kèm reasoning_effort cho mô hình; để trống thì không gửi (OpenAI gpt-4o-mini không nhận tham số này, #322). */
+    private String reasoningEffort = "low";
     private int comparisonPeriods = 3;
     private int faqMaxResults = 3;
     private double faqMinimumSimilarity = 0.65;
@@ -32,6 +34,8 @@ public class AiAssistantProperties {
     public void setTimeoutSeconds(int timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; }
     public int getMaxOutputTokens() { return maxOutputTokens; }
     public void setMaxOutputTokens(int maxOutputTokens) { this.maxOutputTokens = maxOutputTokens; }
+    public String getReasoningEffort() { return reasoningEffort; }
+    public void setReasoningEffort(String reasoningEffort) { this.reasoningEffort = reasoningEffort; }
     public int getComparisonPeriods() { return comparisonPeriods; }
     public void setComparisonPeriods(int comparisonPeriods) { this.comparisonPeriods = comparisonPeriods; }
     public int getFaqMaxResults() { return faqMaxResults; }
