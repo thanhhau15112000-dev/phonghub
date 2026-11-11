@@ -645,6 +645,33 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void resetPasswordPageIsPublicAndRejectsForgedToken() throws Exception {
+        // #330: trang mở từ liên kết email, chưa đăng nhập vẫn vào được; token giả bị từ chối
+        when(jwtDecoder.decode("khong-phai-jwt"))
+            .thenThrow(new org.springframework.security.oauth2.jwt.BadJwtException("malformed"));
+        mockMvc.perform(get("/reset-password"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("emailRecoveryAvailable", true));
+        mockMvc.perform(post("/reset-password")
+                .with(csrf())
+                .param("recoveryToken", "khong-phai-jwt")
+                .param("newPassword", "MatKhauMoi#2026")
+                .param("confirmPassword", "MatKhauMoi#2026"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("errorMessage",
+                com.phonghub.domain.exception.InvalidPasswordRecoveryLinkException.MESSAGE));
+    }
+
+    @Test
+    void resetPasswordRequiresCsrf() throws Exception {
+        mockMvc.perform(post("/reset-password")
+                .param("recoveryToken", "x")
+                .param("newPassword", "MatKhauMoi#2026")
+                .param("confirmPassword", "MatKhauMoi#2026"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
     void unauthenticatedUserAccessingProfileRedirectsToLogin() throws Exception {
         mockMvc.perform(get("/account/profile"))
             .andExpect(status().is3xxRedirection())

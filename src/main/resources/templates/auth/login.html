@@ -54,6 +54,10 @@
     </div>
 </main>
 <script>
+    // Liên kết đặt lại mật khẩu trong email có thể về trang chủ (Site URL) rồi chuyển sang đây: đưa sang trang đặt lại (#330)
+    if (/[#&]type=recovery(&|$)/.test(window.location.hash) || /[#&]error_code=/.test(window.location.hash)) {
+        window.location.replace('/reset-password' + window.location.hash);
+    }
     document.addEventListener('DOMContentLoaded', function () {
         const toggleBtn = document.getElementById('togglePasswordBtn');
         const passwordInput = document.getElementById('password');

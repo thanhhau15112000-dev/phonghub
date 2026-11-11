@@ -49,7 +49,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
         String path = request.getRequestURI();
         return !(path.equals("/login") || path.equals("/api/auth/login")
-            || path.equals("/forgot-password") || path.equals(WEBHOOK_PATH));
+            || path.equals("/forgot-password") || path.equals("/reset-password") || path.equals(WEBHOOK_PATH));
     }
 
     @Override
@@ -87,6 +87,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
                         props.getForgotPasswordTarget());
                 }
             }
+            // Đặt lại mật khẩu dùng chung hạn mức theo IP với quên mật khẩu (#330)
+            case "/reset-password" -> decision = check("forgot-password", ip, props.getForgotPassword());
             default -> decision = check("webhook", ip, props.getWebhook());
         }
         if (decision.allowed()) {

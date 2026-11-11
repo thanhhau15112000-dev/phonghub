@@ -31,6 +31,9 @@ services:
         sync: false
       - key: SUPABASE_JWT_AUDIENCE
         value: authenticated
+      # Địa chỉ công khai của app, để tạo liên kết đặt lại mật khẩu trong email (#330)
+      - key: PHONGHUB_PUBLIC_BASE_URL
+        sync: false
       - key: TENANT_DATA_KEY_ID
         sync: false
       - key: TENANT_DATA_ENCRYPTION_KEY
