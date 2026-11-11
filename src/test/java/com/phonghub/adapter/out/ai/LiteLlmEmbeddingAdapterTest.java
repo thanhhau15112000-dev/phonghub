@@ -74,6 +74,36 @@ class LiteLlmEmbeddingAdapterTest {
         }
     }
 
+    @Test
+    void providerErrorIsLoggedWithStatusOnly() throws IOException {
+        ch.qos.logback.classic.Logger logger =
+            (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(LiteLlmEmbeddingAdapter.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> logs =
+            new ch.qos.logback.core.read.ListAppender<>();
+        logs.start();
+        logger.addAppender(logs);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/v1/embeddings", exchange -> {
+            byte[] bytes = "{\"error\":\"bad model\"}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(404, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        try {
+            AiAssistantProperties properties = enabledProperties(server.getAddress().getPort());
+            assertThrows(AiUnavailableException.class,
+                () -> new LiteLlmEmbeddingAdapter(properties).embed("cau-hoi-rieng-tu"));
+            assertEquals(1, logs.list.size());
+            String message = logs.list.get(0).getFormattedMessage();
+            assertTrue(message.contains("status=404"), message);
+            assertTrue(!message.contains("cau-hoi-rieng-tu") && !message.contains("bad model"), message);
+        } finally {
+            logger.detachAppender(logs);
+            server.stop(0);
+        }
+    }
+
     private static AiAssistantProperties enabledProperties(int port) {
         AiAssistantProperties properties = new AiAssistantProperties();
         properties.setEnabled(true);
