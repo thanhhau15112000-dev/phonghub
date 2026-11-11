@@ -672,6 +672,19 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.PasswordRecoveryUseCase passwordRecoveryUseCase(
+        UserRepositoryPort userRepo,
+        IdentityProviderPort identityProviderPort,
+        org.springframework.beans.factory.ObjectProvider<com.phonghub.application.port.out.PasswordRecoveryPort> recoveryPort,
+        org.springframework.beans.factory.ObjectProvider<NotificationUseCase> notificationUseCase,
+        AuditPort auditPort,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.public-base-url:}") String publicBaseUrl
+    ) {
+        return new com.phonghub.application.service.PasswordRecoveryService(userRepo, identityProviderPort,
+            recoveryPort.getIfAvailable(), notificationUseCase.getIfAvailable(), auditPort, publicBaseUrl, Clock.systemUTC());
+    }
+
+    @Bean
     public AuthUseCase authUseCase(
         UserRepositoryPort userRepo,
         IdentityProviderPort identityProviderPort,

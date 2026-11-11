@@ -436,6 +436,28 @@ SEPAY_BANK_ACCOUNT_NAME
 `SEPAY_SECRET_KEY` dùng cho checkout/IPN Sandbox; `SEPAY_WEBHOOK_API_KEY` dùng
 cho webhook chuyển khoản thật.
 
+### Quên mật khẩu qua email (#330)
+
+Người dùng tự đặt lại mật khẩu tại `/forgot-password`: app gọi Supabase
+`POST /auth/v1/recover`, Supabase gửi email chứa liên kết về `/reset-password`.
+Trang này đọc token của phiên khôi phục, máy chủ kiểm token bằng bộ giải mã JWT
+của API (chỉ nhận phiên được cấp qua email, không nhận phiên đăng nhập bằng
+mật khẩu), đặt mật khẩu mới qua Supabase Admin và thu hồi phiên. Mỗi liên kết
+chỉ dùng được một lần; tài khoản bị khóa không đặt lại được.
+
+Cấu hình cần làm một lần:
+
+1. Đặt `PHONGHUB_PUBLIC_BASE_URL` là địa chỉ công khai của app, ví dụ
+   `https://phonghub.onrender.com` (không có `/` cuối).
+2. Supabase Dashboard → Authentication → URL Configuration: đặt **Site URL**
+   là địa chỉ đó và thêm `<địa chỉ>/reset-password` vào **Redirect URLs**.
+3. SMTP mặc định của Supabase chỉ gửi vài email mỗi giờ; dùng thật nên cấu hình
+   SMTP riêng ở Authentication → Emails.
+
+Tài khoản không có email, hoặc khi không gửi được email, vẫn tạo thông báo để
+Quản trị viên cấp lại mật khẩu tạm như trước. Profile `test` và `local-demo`
+không có Supabase nên chỉ dùng cách báo Quản trị viên.
+
 Không đặt giá trị thật trong `application-*.yml`, `.env` đã commit hoặc bundle
 frontend. Dùng secret/environment management của môi trường deploy.
 
