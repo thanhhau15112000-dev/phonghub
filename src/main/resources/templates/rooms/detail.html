@@ -10,7 +10,8 @@
     <div class="page-title-row">
         <div>
             <h1>Phòng <span th:text="${room.getRoomNumber()}">P101</span> — <span th:text="${property.name()}">Nhà trọ</span></h1>
-            <p style="color: var(--text-secondary); font-size: 13px;">Quản lý trạng thái phòng, hợp đồng đang hiệu lực và yêu cầu bảo trì.</p>
+            <p th:if="${currentUser != null and currentUser.role().name() == 'TECHNICIAN'}" style="color: var(--text-secondary); font-size: 13px;">Thông tin phòng, tài sản và yêu cầu bảo trì.</p>
+            <p th:unless="${currentUser != null and currentUser.role().name() == 'TECHNICIAN'}" style="color: var(--text-secondary); font-size: 13px;">Quản lý trạng thái phòng, hợp đồng đang hiệu lực và yêu cầu bảo trì.</p>
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <a th:if="${currentUser != null and currentUser.role().name() != 'TECHNICIAN'}"
@@ -53,7 +54,7 @@
                 <span style="color: var(--text-secondary);">Diện tích:</span>
                 <strong th:text="${room.getAreaSqm() != null ? room.getAreaSqm() + ' m²' : '—'}">25 m²</strong>
             </div>
-            <div>
+            <div th:if="${canViewRoomPrice}">
                 <span style="color: var(--text-secondary);">Giá thuê cơ bản:</span>
                 <strong th:text="${#numbers.formatDecimal(room.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</strong>
             </div>
@@ -144,7 +145,7 @@
         </div>
     </div>
 
-    <div class="card" id="initial-condition">
+    <div class="card" id="initial-condition" th:unless="${currentUser != null and currentUser.role().name() == 'TECHNICIAN'}">
         <h2>Biên bản hiện trạng</h2>
         <div th:if="${initialCondition.snapshot() == null}" class="empty-state">
             <p>Phòng được tạo trước khi lưu biên bản hiện trạng. Bổ sung hiện trạng để lưu mốc điện, nước và tài sản.</p>
@@ -548,8 +549,9 @@
             </div>
 
             <div class="form-group" style="margin-bottom: 16px;">
-                <label class="form-label" for="editBasePrice">Giá thuê cơ bản (VNĐ / tháng) <span style="color: var(--danger-color, #dc2626);">*</span></label>
-                <input type="number" step="1000" min="0" id="editBasePrice" name="basePrice" th:value="${room.getBasePrice()}" class="form-control" required placeholder="VD: 3500000">
+                <label class="form-label" for="editBasePrice">Giá thuê cơ bản (VNĐ / tháng) <span th:if="${canViewRoomPrice}" style="color: var(--danger-color, #dc2626);">*</span></label>
+                <input th:if="${canViewRoomPrice}" type="number" step="1000" min="0" id="editBasePrice" name="basePrice" th:value="${room.getBasePrice()}" class="form-control" required placeholder="VD: 3500000">
+                <input th:unless="${canViewRoomPrice}" type="number" step="1000" min="0" id="editBasePrice" name="basePrice" class="form-control" placeholder="Để trống để giữ giá hiện tại">
                 <p style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; margin-bottom: 0;">
                     Lưu ý: Thay đổi giá cơ bản không ảnh hưởng đến tiền thuê của hợp đồng đang hiệu lực.
                 </p>

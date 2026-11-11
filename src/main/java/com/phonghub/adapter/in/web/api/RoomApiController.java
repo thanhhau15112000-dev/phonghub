@@ -3,6 +3,9 @@ package com.phonghub.adapter.in.web.api;
 import com.phonghub.adapter.in.web.api.dto.RoomResponse;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.in.RoomSetupUseCase;
+import com.phonghub.application.port.out.CurrentUserPort;
+import com.phonghub.application.service.AuthorizationService;
+import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.AssetStatus;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomPage;
@@ -36,15 +39,31 @@ public class RoomApiController {
 
     private final RoomUseCase roomUseCase;
     private final RoomSetupUseCase roomSetupUseCase;
+    private final CurrentUserPort currentUserPort;
+    private final AuthorizationService authorizationService;
 
     @Autowired
-    public RoomApiController(RoomUseCase roomUseCase, RoomSetupUseCase roomSetupUseCase) {
+    public RoomApiController(RoomUseCase roomUseCase, RoomSetupUseCase roomSetupUseCase,
+                             CurrentUserPort currentUserPort, AuthorizationService authorizationService) {
         this.roomUseCase = roomUseCase;
         this.roomSetupUseCase = roomSetupUseCase;
+        this.currentUserPort = currentUserPort;
+        this.authorizationService = authorizationService;
     }
 
-    /** Constructor giữ tương thích cho các kiểm thử chỉ đọc danh sách/phòng. */
-    public RoomApiController(RoomUseCase roomUseCase) { this(roomUseCase, null); }
+    /** Constructor giữ tương thích cho các kiểm thử chỉ đọc danh sách/phòng (không kiểm quyền xem giá). */
+    public RoomApiController(RoomUseCase roomUseCase) { this(roomUseCase, null, null, null); }
+
+    /** Có được xem giá thuê cơ bản của nhà trọ này không (#326). */
+    private boolean canViewPrice(UUID propertyId) {
+        return authorizationService == null
+            || authorizationService.canViewPropertyFinance(currentUserPort.getCurrentUser(), propertyId);
+    }
+
+    private RoomResponse present(Room room) {
+        RoomResponse response = RoomResponse.from(room);
+        return canViewPrice(room.getPropertyId()) ? response : response.withoutPrice();
+    }
 
     /**
      * Danh sách phòng của nhà trọ. Không có tham số lọc/phân trang thì trả toàn bộ như trước; có thì lọc kết hợp
@@ -62,18 +81,25 @@ public class RoomApiController {
         @RequestParam(required = false) Integer size,
         @RequestParam(defaultValue = "false") boolean archived
     ) {
+        boolean canViewPrice = canViewPrice(propertyId);
+        if (!canViewPrice && (minPrice != null || maxPrice != null)) {
+            // Lọc theo khoảng giá sẽ đoán ra được giá thuê (#326)
+            throw new UnauthorizedPropertyAccessException("Bạn không có quyền lọc phòng theo giá thuê tại nhà trọ này.");
+        }
         RoomSearchCriteria criteria = new RoomSearchCriteria(
             propertyId, status, minPrice, maxPrice, floor, null, page, size, archived);
         if (criteria.isUnfiltered()) {
             return ResponseEntity.ok(roomUseCase.listRoomsForProperty(propertyId).stream()
-                .map(RoomResponse::from)
+                .map(room -> canViewPrice ? RoomResponse.from(room) : RoomResponse.from(room).withoutPrice())
                 .toList());
         }
         RoomPage result = roomUseCase.searchRooms(criteria);
         return ResponseEntity.ok()
             .header("X-Total-Count", Long.toString(result.totalElements()))
             .header("X-Page", Integer.toString(result.page()))
-            .body(result.items().stream().map(RoomResponse::from).toList());
+            .body(result.items().stream()
+                .map(room -> canViewPrice ? RoomResponse.from(room) : RoomResponse.from(room).withoutPrice())
+                .toList());
     }
 
     @PostMapping("/properties/{propertyId}/rooms")
@@ -89,7 +115,7 @@ public class RoomApiController {
             request.roomNumber(), request.floor(), request.areaSqm(), request.basePrice(), request.maxOccupants(),
             request.electricMeter(), request.waterMeter(), request.conditionNote(), Boolean.TRUE.equals(request.noAssets()),
             request.assetTemplate(), assets, request.electricMeterPhotoKey(), request.waterMeterPhotoKey())).room();
-        RoomResponse response = RoomResponse.from(room);
+        RoomResponse response = present(room);
         return ResponseEntity.created(URI.create("/api/rooms/" + response.id())).body(response);
     }
 
@@ -102,24 +128,24 @@ public class RoomApiController {
         List<Room> rooms = roomSetupUseCase.createRooms(new RoomSetupUseCase.BulkCreateCommand(propertyId,
             request.floor(), request.areaSqm(), request.basePrice(), request.maxOccupants(), request.conditionNote(),
             request.assetTemplate(), readings)).stream().map(RoomSetupUseCase.RoomSetupResult::room).toList();
-        return ResponseEntity.status(201).body(rooms.stream().map(RoomResponse::from).toList());
+        return ResponseEntity.status(201).body(rooms.stream().map(this::present).toList());
     }
 
     /** Ngừng sử dụng phòng (#89): chủ nhà trọ hoặc admin; còn hợp đồng/hóa đơn/phiếu bảo trì dở dang thì 409. */
     @PostMapping("/rooms/{id}/archive")
     public ResponseEntity<RoomResponse> archiveRoom(@PathVariable UUID id) {
-        return ResponseEntity.ok(RoomResponse.from(roomUseCase.archiveRoom(id)));
+        return ResponseEntity.ok(present(roomUseCase.archiveRoom(id)));
     }
 
     @PostMapping("/rooms/{id}/restore")
     public ResponseEntity<RoomResponse> restoreRoom(@PathVariable UUID id) {
-        return ResponseEntity.ok(RoomResponse.from(roomUseCase.restoreRoom(id)));
+        return ResponseEntity.ok(present(roomUseCase.restoreRoom(id)));
     }
 
     @GetMapping("/rooms/{id}")
     public ResponseEntity<RoomResponse> getRoom(@PathVariable UUID id) {
         Room room = roomUseCase.getRoom(id);
-        return ResponseEntity.ok(RoomResponse.from(room));
+        return ResponseEntity.ok(present(room));
     }
 
     @PutMapping("/rooms/{id}")
@@ -136,7 +162,7 @@ public class RoomApiController {
             request.maxOccupants(),
             request.version()
         ));
-        return ResponseEntity.ok(RoomResponse.from(room));
+        return ResponseEntity.ok(present(room));
     }
 
     @PutMapping("/rooms/{id}/status")
@@ -145,7 +171,7 @@ public class RoomApiController {
         @Valid @RequestBody UpdateRoomStatusRequest request
     ) {
         Room room = roomUseCase.changeRoomStatus(id, request.status());
-        return ResponseEntity.ok(RoomResponse.from(room));
+        return ResponseEntity.ok(present(room));
     }
 
     public record CreateRoomRequest(
@@ -216,7 +242,7 @@ public class RoomApiController {
         @DecimalMin(value = "0.0", message = "Area cannot be negative")
         BigDecimal areaSqm,
 
-        @NotNull(message = "Base price is required")
+        /** Để trống thì giữ giá hiện tại; người không có quyền tài chính không đọc được giá (#326). */
         @DecimalMin(value = "0.0", message = "Base price cannot be negative")
         BigDecimal basePrice,
 

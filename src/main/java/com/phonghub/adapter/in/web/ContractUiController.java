@@ -592,6 +592,13 @@ public class ContractUiController {
         @RequestParam(required = false) String permanentAddress,
         RedirectAttributes redirectAttributes
     ) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        if (currentUser != null && currentUser.role() == UserRole.ADMIN) {
+            // Quản trị viên không quản lý hợp đồng (#304) nên không sửa hồ sơ người thuê từ trang hợp đồng (#327)
+            redirectAttributes.addFlashAttribute("errorMessage",
+                "Quản trị viên không sửa hồ sơ người thuê trên trang hợp đồng. Chủ trọ của nhà trọ sẽ cập nhật thông tin này.");
+            return "redirect:/contracts/" + contractId;
+        }
         try {
             tenantUseCase.updateTenant(new TenantUseCase.UpdateTenantCommand(
                 tenantId,

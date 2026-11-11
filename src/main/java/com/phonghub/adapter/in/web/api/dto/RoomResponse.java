@@ -21,6 +21,12 @@ public record RoomResponse(
     /** Gửi lại khi sửa phòng để phát hiện hai người sửa cùng lúc (#314). */
     long version
 ) {
+    /** Bản trả về cho người không có quyền xem tiền của nhà trọ: bỏ giá thuê cơ bản (#326). */
+    public RoomResponse withoutPrice() {
+        return new RoomResponse(id, propertyId, roomNumber, floor, areaSqm, null, maxOccupants, status, createdAt,
+            updatedAt, archivedAt, version);
+    }
+
     public static RoomResponse from(Room room) {
         return new RoomResponse(
             room.getId(),
