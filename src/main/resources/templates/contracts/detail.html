@@ -146,7 +146,7 @@
                        th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${primaryTenant.id()} + '/documents'}"
                        class="btn btn-sm btn-secondary">Giấy tờ</a>
                 </div>
-                <button th:if="${primaryTenant != null and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                <button th:if="${primaryTenant != null and currentUser != null and currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()}"
                         type="button"
                         id="editPrimaryTenantBtn"
                         class="btn btn-sm btn-secondary"
@@ -648,8 +648,8 @@
         })();
     </script>
 
-    <!-- Dialog sửa hồ sơ người thuê (Chủ nhà hoặc Quản trị viên) -->
-    <dialog th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+    <!-- Dialog sửa hồ sơ người thuê: chỉ chủ trọ của nhà trọ (#327) -->
+    <dialog th:if="${currentUser != null and currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()}"
             id="editTenantModal"
             class="modal-dialog"
             style="max-width: 500px;">

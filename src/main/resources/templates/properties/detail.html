@@ -281,11 +281,11 @@
                             th:selected="${s.name() == filterStatus}">Trống</option>
                 </select>
             </div>
-            <div class="form-group" style="min-width: 140px; margin: 0;">
+            <div th:if="${canViewRoomPrice}" class="form-group" style="min-width: 140px; margin: 0;">
                 <label class="form-label" for="filterMinPrice">Giá từ (đ)</label>
                 <input id="filterMinPrice" type="number" name="minPrice" min="0" step="1000" class="form-control" th:value="${filterMinPrice}">
             </div>
-            <div class="form-group" style="min-width: 140px; margin: 0;">
+            <div th:if="${canViewRoomPrice}" class="form-group" style="min-width: 140px; margin: 0;">
                 <label class="form-label" for="filterMaxPrice">Giá đến (đ)</label>
                 <input id="filterMaxPrice" type="number" name="maxPrice" min="0" step="1000" class="form-control" th:value="${filterMaxPrice}">
             </div>
@@ -312,7 +312,7 @@
                     <th style="min-width: 100px;">Số phòng</th>
                     <th class="col-number">Tầng</th>
                     <th>Diện tích</th>
-                    <th>Giá cơ bản</th>
+                    <th th:if="${canViewRoomPrice}">Giá cơ bản</th>
                     <th>Sức chứa</th>
                     <th>Người ở / chỗ trống</th>
                     <th>Trạng thái</th>
@@ -326,7 +326,7 @@
                     </td>
                     <td class="col-number" th:text="${r.getFloor()}">1</td>
                     <td th:text="${r.getAreaSqm() != null ? r.getAreaSqm() + ' m²' : '—'}">25 m²</td>
-                    <td style="font-weight: 500;" th:text="${#numbers.formatDecimal(r.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
+                    <td th:if="${canViewRoomPrice}" style="font-weight: 500;" th:text="${#numbers.formatDecimal(r.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     <td th:text="${r.getMaxOccupants()} + ' người'">2 người</td>
                     <td>
                         <strong th:text="${roomOccupantCounts.get(r.getId()) + '/' + r.getMaxOccupants()}">0/2</strong>
