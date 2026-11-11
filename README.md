@@ -400,6 +400,8 @@ Hệ thống trò chuyện được thiết kế theo chuẩn Hexagonal Architec
 
 Runbook Render/Supabase/Cloudflare và quy trình tạo Admin đầu tiên: [docs/production-deployment.md](docs/production-deployment.md).
 
+Sao lưu CSDL hằng ngày và khôi phục: [docs/backup-restore.md](docs/backup-restore.md).
+
 Kích hoạt profile:
 
 ```bash
