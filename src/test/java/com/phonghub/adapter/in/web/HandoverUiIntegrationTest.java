@@ -70,7 +70,7 @@ class HandoverUiIntegrationTest extends SeededWebTest {
     void emptyPage() throws Exception {
         mockMvc.perform(get(PAGE).header("X-User-Id", OWNER_1))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Chưa có biên bản check-in")))
+            .andExpect(content().string(containsString("Chưa có biên bản nhận phòng")))
             .andExpect(content().string(containsString("Tạo biên bản")));
         mockMvc.perform(get(PAGE).header("X-User-Id", TENANT_1))
             .andExpect(status().isOk())
@@ -91,7 +91,7 @@ class HandoverUiIntegrationTest extends SeededWebTest {
 
         mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID).header("X-User-Id", OWNER_1))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Lập biên bản check-in")));
+            .andExpect(content().string(containsString("Lập biên bản nhận phòng")));
         mockMvc.perform(post("/contracts/" + DataSeeder.CONTRACT_1_ID + "/activate").header("X-User-Id", OWNER_1))
             .andExpect(status().is3xxRedirection())
             .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
@@ -102,7 +102,7 @@ class HandoverUiIntegrationTest extends SeededWebTest {
             rooms.findById(active.getRoomId()).orElseThrow().getStatus());
         mockMvc.perform(get("/contracts/" + DataSeeder.CONTRACT_1_ID).header("X-User-Id", TENANT_1))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Bước hiện tại: hoàn thiện biên bản check-in")));
+            .andExpect(content().string(containsString("Bước hiện tại: hoàn thiện biên bản nhận phòng")));
 
         mockMvc.perform(post(PAGE + "/update").header("X-User-Id", OWNER_1).param("initialElectricMeter", "100.5")
                 .param("initialWaterMeter", "20").param("roomCondition", "Phòng sạch").param("keysProvided", "2 chìa"))
