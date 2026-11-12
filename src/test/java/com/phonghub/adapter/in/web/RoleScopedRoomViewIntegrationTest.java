@@ -159,13 +159,13 @@ class RoleScopedRoomViewIntegrationTest extends SeededWebTest {
         String room = "/rooms/" + DataSeeder.ROOM_101_ID;
         String tech = html(room, TECH_1);
         assertTrue(tech.contains("Thông tin phòng, tài sản và yêu cầu bảo trì."));
-        assertFalse(tech.contains("hợp đồng đang hiệu lực"));
+        assertFalse(tech.contains("hợp đồng đang thuê"));
         assertFalse(tech.contains("id=\"initial-condition\""));
         assertTrue(tech.contains("Các yêu cầu bảo trì của phòng này"));
 
         String owner = html(room, OWNER_1);
         assertTrue(owner.contains("id=\"initial-condition\""));
-        assertTrue(owner.contains("hợp đồng đang hiệu lực"));
+        assertTrue(owner.contains("hợp đồng đang thuê"));
     }
 
     @Test

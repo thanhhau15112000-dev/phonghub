@@ -152,7 +152,7 @@ class RentPaymentFlowIntegrationTest {
     void tenantDashboardShowsInvoice() throws Exception {
         mockMvc.perform(get("/dashboard").header("X-User-Id", TENANT))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Nơi ở của tôi")))
+            .andExpect(content().string(containsString("Thông tin phòng trọ đang ở")))
             .andExpect(content().string(containsString("Hiện không có khoản nào cần thanh toán")))
             .andExpect(content().string(not(containsString("Nhà trọ trong phạm vi"))))
             .andExpect(content().string(not(containsString("Sửa vòi nước và kiểm tra máy lạnh"))));
@@ -205,7 +205,7 @@ class RentPaymentFlowIntegrationTest {
         mockMvc.perform(get("/dashboard").header("X-User-Id", ADMIN))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Nhà trọ trong phạm vi")))
-            .andExpect(content().string(not(containsString("Nơi ở của tôi"))))
+            .andExpect(content().string(not(containsString("Thông tin phòng trọ đang ở"))))
             .andExpect(content().string(containsString("Sửa vòi nước và kiểm tra máy lạnh")));
     }
 

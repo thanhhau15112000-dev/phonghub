@@ -9,7 +9,7 @@
 
     <div class="page-title-row">
         <div>
-            <h1 th:text="${checkOut} ? 'Biên bản check-out (trả phòng)' : 'Biên bản check-in'">Biên bản check-in</h1>
+            <h1 th:text="${checkOut} ? 'Biên bản trả phòng' : 'Biên bản nhận phòng'">Biên bản nhận phòng</h1>
             <p th:if="${checkOut and details != null and details.handover().earlyTermination()}"
                style="margin: 4px 0 0; color: var(--text-secondary);">
                 Kết thúc sớm — lý do: <strong th:text="${details.handover().terminationReason()}">Lý do</strong>
@@ -18,7 +18,7 @@
                 Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Hợp đồng chỉ có hiệu lực và phòng chuyển sang đang thuê sau khi người thuê chính xác nhận, người quản lý duyệt biên bản.
             </p>
             <p th:if="${checkOut}" style="color: var(--text-secondary); font-size: 13px;">
-                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Check-out cần biên bản check-in đã duyệt.
+                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Trả phòng cần biên bản nhận phòng đã duyệt.
                 Chủ trọ chốt khoản khấu trừ khi duyệt; duyệt sẽ kết thúc hợp đồng và trả phòng
                 (phòng chuyển sang bảo trì nếu có tài sản hỏng hoặc mất).
             </p>
@@ -31,10 +31,10 @@
 
     <!-- Chưa có biên bản -->
     <div class="card" th:if="${details == null}">
-        <h2 th:text="${checkOut} ? 'Chưa có biên bản check-out' : 'Chưa có biên bản check-in'">Chưa có biên bản</h2>
+        <h2 th:text="${checkOut} ? 'Chưa có biên bản trả phòng' : 'Chưa có biên bản nhận phòng'">Chưa có biên bản</h2>
         <div th:if="${!canManage}" class="empty-state"><p>Chủ trọ hoặc nhân viên sẽ tạo biên bản khi bàn giao phòng.</p></div>
         <p th:if="${canManage and contract.getStatus().name() != 'ACTIVE' and contract.getStatus().name() != 'DRAFT' and !(checkOut and contract.getStatus().name() == 'EXPIRED')}" style="color: var(--danger-color, #dc2626);">
-            Chỉ lập biên bản check-in cho hợp đồng nháp hoặc đang hiệu lực; riêng check-out được lập cả khi hợp đồng đã hết hạn.
+            Chỉ lập biên bản nhận phòng cho hợp đồng nháp hoặc đang thuê; riêng trả phòng được lập cả khi hợp đồng đã hết hạn.
         </p>
         <form th:if="${canManage and (contract.getStatus().name() == 'ACTIVE' or (!checkOut and contract.getStatus().name() == 'DRAFT') or (checkOut and contract.getStatus().name() == 'EXPIRED'))}" th:action="@{${base}}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -56,7 +56,7 @@
                           th:text="${conditionPrefill != null and conditionPrefill.snapshot() != null ? conditionPrefill.snapshot().conditionNote() : null}"></textarea>
             </div>
             <p th:if="${conditionPrefill != null and conditionPrefill.snapshot() != null}" style="font-size: 12px; color: var(--text-secondary);">
-                Chỉ số, ghi chú và tài sản được lấy từ biên bản hiện trạng gần nhất; khi gửi, danh sách tài sản này sẽ được chụp vào biên bản check-in.
+                Chỉ số, ghi chú và tài sản được lấy từ biên bản hiện trạng gần nhất; khi gửi, danh sách tài sản này sẽ được chụp vào biên bản nhận phòng.
             </p>
             <div th:if="${conditionPrefill != null and conditionPrefill.snapshot() != null}" style="margin: 12px 0;">
                 <h3>Tài sản hiện trạng được điền sẵn</h3>
@@ -199,7 +199,7 @@
         <div class="card">
             <h2 th:text="${checkOut} ? 'Tình trạng tài sản khi trả phòng' : 'Tài sản bàn giao'">Tài sản bàn giao</h2>
             <p th:if="${#lists.isEmpty(details.items())}" style="font-size: 13px; color: var(--text-secondary);"
-               th:text="${checkOut} ? 'Biên bản check-in không có tài sản nào.' : 'Phòng không có tài sản bàn giao.'">
+               th:text="${checkOut} ? 'Biên bản nhận phòng không có tài sản nào.' : 'Phòng không có tài sản bàn giao.'">
                 Danh sách tài sản
             </p>
             <table th:if="${!#lists.isEmpty(details.items())}" class="data-table">
@@ -262,7 +262,7 @@
                 <button type="submit" class="btn btn-sm btn-secondary">Thêm vào phòng và biên bản</button>
             </form>
             <p th:if="${!checkOut and contract.getStatus().name() == 'DRAFT'}" style="font-size: 11px; color: var(--text-secondary);">
-                Tài sản mới được ghi vào danh sách tài sản của phòng và chụp vào biên bản check-in.
+                Tài sản mới được ghi vào danh sách tài sản của phòng và chụp vào biên bản nhận phòng.
             </p>
             <div th:if="${checkOut}" style="margin-top: 8px; font-size: 13px;">
                 Tổng khấu trừ đề xuất: <strong th:text="${#numbers.formatDecimal(details.proposedDeduction(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</strong>

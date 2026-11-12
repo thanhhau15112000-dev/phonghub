@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Yêu cầu bảo trì')}"></head>
+<head th:replace="~{fragments/layout :: head('Phiếu báo hỏng & sửa chữa')}"></head>
 <body>
 <header th:replace="~{fragments/layout :: header}"></header>
 
@@ -9,7 +9,7 @@
 
     <div class="page-title-row">
         <div>
-            <h1>Yêu cầu bảo trì</h1>
+            <h1>Phiếu báo hỏng & sửa chữa</h1>
             <p style="color: var(--text-secondary); font-size: 13px;">Quản lý sự cố kỹ thuật, phân công, tiến độ xử lý và kết quả.</p>
         </div>
         <div>
@@ -70,9 +70,9 @@
                 </select>
             </div>
             <div class="form-group" style="margin: 0;">
-                <label class="form-label" for="filterPriority">Mức độ</label>
+                <label class="form-label" for="filterPriority">Mức ưu tiên</label>
                 <select id="filterPriority" name="priority" class="form-control">
-                    <option value="">Tất cả mức độ</option>
+                    <option value="">Tất cả mức ưu tiên</option>
                     <option th:each="pr : ${priorities}" th:value="${pr.name()}" th:text="${uiText.maintenancePriority(pr)}"
                             th:selected="${filter.priority() == pr}"></option>
                 </select>
@@ -101,7 +101,7 @@
                 <tr>
                     <th>Tiêu đề và mô tả</th>
                     <th>Phòng</th>
-                    <th>Mức độ</th>
+                    <th>Mức ưu tiên</th>
                     <th>Trạng thái</th>
                     <th>Chi phí sửa chữa</th>
                     <th>Ngày báo cáo</th>
@@ -136,9 +136,9 @@
                                class="btn btn-sm btn-primary" title="Khoản này nằm trong hóa đơn tháng">
                                 <span>Thanh toán (hóa đơn tháng)</span>
                             </a>
-                            <a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm btn-secondary" title="Xem và cập nhật sự cố">
+                            <a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm btn-secondary" title="Xem chi tiết sự cố">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                <span>Quản lý</span>
+                                <span>Xem chi tiết</span>
                             </a>
                         </div>
                     </td>

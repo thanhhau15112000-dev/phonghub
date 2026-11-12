@@ -68,7 +68,7 @@
                     <small class="field-error" th:if="${createFieldErrors != null and createFieldErrors['username'] != null}" th:text="${createFieldErrors['username']}">Lỗi</small>
                 </div>
                 <div class="form-group" style="flex: 1;">
-                    <label class="form-label" for="email">Email Auth *</label>
+                    <label class="form-label" for="email">Email *</label>
                     <input id="email" type="email" name="email" class="form-control" required th:classappend="${createFieldErrors != null and createFieldErrors['email'] != null ? 'is-invalid' : ''}" th:value="${createForm != null ? createForm['email'] : ''}">
                     <small class="field-error" th:if="${createFieldErrors != null and createFieldErrors['email'] != null}" th:text="${createFieldErrors['email']}">Lỗi</small>
                 </div>
