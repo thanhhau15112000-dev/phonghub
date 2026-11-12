@@ -18,19 +18,19 @@
     <!-- Chỉ số tổng quan (người thuê chỉ có một phòng nên không cần) -->
     <div class="grid-cols-4" th:if="${currentUser.role().name() != 'TENANT'}">
         <div class="metric-card">
-            <div class="metric-label">Nhà trọ được truy cập</div>
+            <div class="metric-label">Nhà trọ bạn quản lý</div>
             <div class="metric-value" th:text="${propertiesCount}">0</div>
         </div>
         <div class="metric-card">
-            <div class="metric-label">Phòng đang theo dõi</div>
+            <div class="metric-label">Tổng số phòng</div>
             <div class="metric-value" th:text="${roomsCount}">0</div>
         </div>
         <div class="metric-card">
-            <div class="metric-label">Hợp đồng đang hiệu lực</div>
+            <div class="metric-label">Hợp đồng đang thuê</div>
             <div class="metric-value" th:text="${activeContractsCount}">0</div>
         </div>
         <div class="metric-card">
-            <div class="metric-label">Yêu cầu đang mở</div>
+            <div class="metric-label">Phiếu sự cố chờ xử lý</div>
             <div class="metric-value" th:text="${openTicketsCount}">0</div>
         </div>
     </div>
@@ -70,7 +70,7 @@
 
             <div class="grid-cols-4">
                 <div class="metric-card">
-                    <div class="metric-label">Tỷ lệ lấp đầy</div>
+                    <div class="metric-label">Tỷ lệ phòng đang được thuê</div>
                     <div class="metric-value" th:text="${opsSummary.occupancy().occupancyRate() != null ? opsSummary.occupancy().occupancyRate() + '%' : '—'}">0%</div>
                     <div style="font-size: 12px; color: var(--text-secondary);"
                          th:text="${opsSummary.occupancy().occupied()} + '/' + ${opsSummary.occupancy().totalRooms()} + ' phòng đang ở'">0/0 phòng</div>
@@ -97,7 +97,7 @@
                     <div class="metric-label">Phòng đang bảo trì</div>
                     <div class="metric-value" th:text="${opsSummary.maintenance().roomsUnderMaintenance()}">0</div>
                     <div style="font-size: 12px; color: var(--text-secondary);"
-                         th:text="${opsSummary.maintenance().openTickets()} + ' phiếu mở · ' + ${opsSummary.maintenance().overdueTickets()} + ' quá hạn SLA'">0 phiếu mở</div>
+                         th:text="${opsSummary.maintenance().openTickets()} + ' phiếu chưa xong · ' + ${opsSummary.maintenance().overdueTickets()} + ' trễ hạn xử lý'">0 phiếu chưa xong</div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Thời gian xử lý trung bình</div>
@@ -151,7 +151,7 @@
                 <thead>
                     <tr>
                         <th>Nhà trọ</th>
-                        <th class="col-number">Lấp đầy</th>
+                        <th class="col-number">Đang được thuê</th>
                         <th class="col-number">Phát sinh</th>
                         <th class="col-number">Đã thu</th>
                         <th class="col-number">Công nợ</th>
@@ -188,7 +188,7 @@
                 <div class="metric-label">Phòng</div>
                 <div class="metric-value" th:text="${adminOverview.occupancy().totalRooms()}">0</div>
                 <div style="font-size: 12px; color: var(--text-secondary);"
-                     th:text="'Lấp đầy ' + ${adminOverview.occupancy().occupancyRate() != null ? adminOverview.occupancy().occupancyRate() + '%' : '—'}">Lấp đầy 0%</div>
+                     th:text="'Đang được thuê ' + ${adminOverview.occupancy().occupancyRate() != null ? adminOverview.occupancy().occupancyRate() + '%' : '—'}">Đang được thuê 0%</div>
             </div>
             <div class="metric-card">
                 <div class="metric-label">Chủ nhà / người thuê</div>
@@ -243,7 +243,7 @@
             </div>
 
             <div th:if="${tenantContract == null}" class="empty-state">
-                <p>Bạn chưa có hợp đồng đang hiệu lực.</p>
+                <p>Bạn chưa có hợp đồng đang thuê.</p>
             </div>
 
             <div th:if="${tenantContract != null and nextInvoice == null}" class="empty-state">
@@ -280,7 +280,7 @@
         </div>
 
         <div class="card">
-            <h2 style="margin-bottom: 12px;">Nơi ở của tôi</h2>
+            <h2 style="margin-bottom: 12px;">Thông tin phòng trọ đang ở</h2>
             <div th:if="${tenantProperty == null}" class="empty-state">
                 <p>Tài khoản hiện tại chưa gắn với phòng nào.</p>
             </div>
@@ -356,7 +356,7 @@
     <!-- Yêu cầu bảo trì gần đây -->
     <div class="card">
         <div class="flex-between" style="margin-bottom: 12px;">
-            <h2>Yêu cầu bảo trì</h2>
+            <h2>Phiếu báo hỏng & sửa chữa</h2>
             <a th:if="${currentUser.role().canReportMaintenance()}" th:href="@{/maintenance/new}" class="btn btn-primary btn-sm">+ Báo hỏng</a>
         </div>
 
@@ -384,7 +384,7 @@
                 <tr>
                     <th>Tiêu đề yêu cầu</th>
                     <th>Phòng</th>
-                    <th>Mức độ</th>
+                    <th>Mức ưu tiên</th>
                     <th>Trạng thái</th>
                     <th class="col-actions">Thao tác</th>
                 </tr>

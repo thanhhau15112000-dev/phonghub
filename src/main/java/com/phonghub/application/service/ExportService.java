@@ -494,7 +494,7 @@ public class ExportService implements ExportUseCase {
     private static String contractStatus(ContractStatus status) {
         return switch (status) {
             case DRAFT -> "Nháp";
-            case ACTIVE -> "Đang hiệu lực";
+            case ACTIVE -> "Đang thuê";
             case EXPIRED -> "Hết hạn";
             case TERMINATED -> "Đã kết thúc";
             case CANCELLED -> "Đã hủy";

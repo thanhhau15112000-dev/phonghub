@@ -17,9 +17,9 @@
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <!-- Chỉ người mở được biên bản mới thấy nút: người quản lý hợp đồng hoặc người thuê của hợp đồng (#312) -->
             <a th:if="${contract.isResiding() and (canManageContracts or currentUser.role().name() == 'TENANT')}"
-               th:href="@{'/contracts/' + ${contract.getId()} + '/handover'}" class="btn btn-secondary">Biên bản check-in</a>
+               th:href="@{'/contracts/' + ${contract.getId()} + '/handover'}" class="btn btn-secondary">Biên bản nhận phòng</a>
             <a th:if="${contract.isResiding() and (canManageContracts or currentUser.role().name() == 'TENANT')}"
-               th:href="@{'/contracts/' + ${contract.getId()} + '/check-out'}" class="btn btn-secondary">Check-out</a>
+               th:href="@{'/contracts/' + ${contract.getId()} + '/check-out'}" class="btn btn-secondary">Biên bản trả phòng</a>
             <a th:href="@{/contracts}" class="btn">&larr; Quay lại danh sách hợp đồng</a>
         </div>
     </div>
@@ -57,7 +57,7 @@
             <!-- Bắt đầu quy trình check-in; hợp đồng chỉ có hiệu lực sau khi duyệt biên bản. -->
                 <form th:if="${contract.getStatus().name() == 'DRAFT'}" th:action="@{'/contracts/' + ${contract.getId()} + '/activate'}" method="post">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <button type="submit" class="btn btn-primary" th:text="${checkIn == null} ? 'Lập biên bản check-in' : 'Mở biên bản check-in'">Lập biên bản check-in</button>
+                    <button type="submit" class="btn btn-primary" th:text="${checkIn == null} ? 'Lập biên bản nhận phòng' : 'Mở biên bản nhận phòng'">Lập biên bản nhận phòng</button>
                 </form>
 
                 <!-- Hợp đồng nháp sửa / hủy được (#89); hủy giữ lại bản ghi với trạng thái "Đã hủy" -->
@@ -84,25 +84,25 @@
         </div>
         <section th:if="${contract.getStatus().name() == 'DRAFT'}" style="margin-top: 14px;">
             <h2 style="font-size: 16px; margin-bottom: 8px;">Tiến độ nhận phòng</h2>
-            <p th:if="${checkIn == null}" style="margin: 0;">Chưa lập biên bản check-in.</p>
-            <p th:if="${checkIn != null and checkIn.handover().status().name() == 'DRAFT' or checkIn != null and checkIn.handover().status().name() == 'REJECTED'}" style="margin: 0;">Bước hiện tại: hoàn thiện biên bản check-in và gửi người thuê.</p>
+            <p th:if="${checkIn == null}" style="margin: 0;">Chưa lập biên bản nhận phòng.</p>
+            <p th:if="${checkIn != null and checkIn.handover().status().name() == 'DRAFT' or checkIn != null and checkIn.handover().status().name() == 'REJECTED'}" style="margin: 0;">Bước hiện tại: hoàn thiện biên bản nhận phòng và gửi người thuê.</p>
             <p th:if="${checkIn != null and checkIn.handover().status().name() == 'PENDING_TENANT'}" style="margin: 0;">Bước hiện tại: chờ người thuê chính xác nhận.</p>
             <p th:if="${checkIn != null and checkIn.handover().status().name() == 'PENDING_APPROVAL'}" style="margin: 0;">Bước hiện tại: chờ người quản lý duyệt.</p>
             <a th:if="${checkIn != null and (canManageContracts or currentUser.role().name() == 'TENANT')}" th:href="@{'/contracts/' + ${contract.getId()} + '/handover'}" class="btn btn-sm btn-secondary" style="margin-top: 8px;">Mở biên bản</a>
         </section>
         <section th:if="${contract.isResiding()}" style="margin-top: 14px;">
             <h2 style="font-size: 16px; margin-bottom: 8px;">Tiến độ trả phòng</h2>
-            <p th:if="${checkOut == null}" style="margin: 0;">Chưa lập biên bản check-out.</p>
-            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'DRAFT'}" style="margin: 0;">Đang hoàn thiện biên bản check-out.</p>
-            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'PENDING_TENANT'}" style="margin: 0;">Chờ người thuê kiểm tra và xác nhận check-out.</p>
+            <p th:if="${checkOut == null}" style="margin: 0;">Chưa lập biên bản trả phòng.</p>
+            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'DRAFT'}" style="margin: 0;">Đang hoàn thiện biên bản trả phòng.</p>
+            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'PENDING_TENANT'}" style="margin: 0;">Chờ người thuê kiểm tra và xác nhận trả phòng.</p>
             <p th:if="${checkOut != null and checkOut.handover().status().name() == 'PENDING_APPROVAL'}" style="margin: 0;">
                 Người thuê đã xác nhận; chờ quản lý duyệt và chốt tiền cọc.
                 <span th:if="${openInvoiceCount != null and openInvoiceCount > 0}"
                       th:text="${' Còn ' + openInvoiceCount + ' hóa đơn chưa thanh toán; cần thanh toán hoặc cấn trừ từ tiền cọc trước khi duyệt.'}">Còn hóa đơn chưa thanh toán.</span>
             </p>
-            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'REJECTED'}" style="margin: 0;">Biên bản check-out bị từ chối; cần mở lại và hoàn thiện.</p>
-            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'APPROVED'}" style="margin: 0;">Check-out đã được duyệt; hợp đồng đã kết thúc.</p>
-            <a th:if="${checkOut != null and (canManageContracts or currentUser.role().name() == 'TENANT')}" th:href="@{'/contracts/' + ${contract.getId()} + '/check-out'}" class="btn btn-sm btn-secondary" style="margin-top: 8px;">Mở biên bản check-out</a>
+            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'REJECTED'}" style="margin: 0;">Biên bản trả phòng bị từ chối; cần mở lại và hoàn thiện.</p>
+            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'APPROVED'}" style="margin: 0;">Trả phòng đã được duyệt; hợp đồng đã kết thúc.</p>
+            <a th:if="${checkOut != null and (canManageContracts or currentUser.role().name() == 'TENANT')}" th:href="@{'/contracts/' + ${contract.getId()} + '/check-out'}" class="btn btn-sm btn-secondary" style="margin-top: 8px;">Mở biên bản trả phòng</a>
         </section>
     </div>
 
@@ -866,7 +866,7 @@
             <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('terminateModal').close()">✕</button>
         </div>
         <div style="font-size: 13px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 12px;">
-            <p style="margin: 0 0 6px;">Hệ thống sẽ mở biên bản check-out và lưu lý do. Hợp đồng chỉ kết thúc sau khi người thuê xác nhận, quản lý kiểm tra tài sản, xử lý công nợ và duyệt biên bản.</p>
+            <p style="margin: 0 0 6px;">Hệ thống sẽ mở biên bản trả phòng và lưu lý do. Hợp đồng chỉ kết thúc sau khi người thuê xác nhận, quản lý kiểm tra tài sản, xử lý công nợ và duyệt biên bản.</p>
             <span style="color: #dc2626; font-size: 12px; font-weight: 600;">Hậu quả: Thao tác này sẽ bắt đầu quy trình thanh lý hợp đồng và trả phòng.</span>
         </div>
         <form th:action="@{'/contracts/' + ${contract.getId()} + '/terminate'}" method="post">
@@ -884,7 +884,7 @@
             </div>
             <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
                 <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('terminateModal').close()">Đóng</button>
-                <button type="submit" id="terminateSubmitBtn" class="btn btn-sm btn-danger" disabled>Mở biên bản check-out</button>
+                <button type="submit" id="terminateSubmitBtn" class="btn btn-sm btn-danger" disabled>Mở biên bản trả phòng</button>
             </div>
         </form>
     </dialog>

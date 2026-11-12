@@ -11,7 +11,7 @@
         <div>
             <h1>Phòng <span th:text="${room.getRoomNumber()}">P101</span> — <span th:text="${property.name()}">Nhà trọ</span></h1>
             <p th:if="${currentUser != null and currentUser.role().name() == 'TECHNICIAN'}" style="color: var(--text-secondary); font-size: 13px;">Thông tin phòng, tài sản và yêu cầu bảo trì.</p>
-            <p th:unless="${currentUser != null and currentUser.role().name() == 'TECHNICIAN'}" style="color: var(--text-secondary); font-size: 13px;">Quản lý trạng thái phòng, hợp đồng đang hiệu lực và yêu cầu bảo trì.</p>
+            <p th:unless="${currentUser != null and currentUser.role().name() == 'TECHNICIAN'}" style="color: var(--text-secondary); font-size: 13px;">Quản lý trạng thái phòng, hợp đồng đang thuê và yêu cầu bảo trì.</p>
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <a th:if="${currentUser != null and currentUser.role().name() != 'TECHNICIAN'}"
@@ -114,7 +114,7 @@
         </div>
 
         <div th:if="${activeContract == null}" class="empty-state">
-            <p>Phòng này chưa có hợp đồng đang hiệu lực.</p>
+            <p>Phòng này chưa có hợp đồng đang thuê.</p>
         </div>
 
         <div th:if="${activeContract != null}" style="font-size: 13px;">
@@ -463,7 +463,7 @@
             <thead>
                 <tr>
                     <th>Tiêu đề</th>
-                    <th>Mức độ</th>
+                    <th>Mức ưu tiên</th>
                     <th>Trạng thái</th>
                     <th>Thao tác</th>
                 </tr>
@@ -553,7 +553,7 @@
                 <input th:if="${canViewRoomPrice}" type="number" step="1000" min="0" id="editBasePrice" name="basePrice" th:value="${room.getBasePrice()}" class="form-control" required placeholder="VD: 3500000">
                 <input th:unless="${canViewRoomPrice}" type="number" step="1000" min="0" id="editBasePrice" name="basePrice" class="form-control" placeholder="Để trống để giữ giá hiện tại">
                 <p style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; margin-bottom: 0;">
-                    Lưu ý: Thay đổi giá cơ bản không ảnh hưởng đến tiền thuê của hợp đồng đang hiệu lực.
+                    Lưu ý: Thay đổi giá cơ bản không ảnh hưởng đến tiền thuê của hợp đồng đang thuê.
                 </p>
             </div>
 

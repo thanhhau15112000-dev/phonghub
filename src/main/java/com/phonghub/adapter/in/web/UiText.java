@@ -111,7 +111,7 @@ public final class UiText {
         }
         return switch (status) {
             case DRAFT -> "Bản nháp";
-            case ACTIVE -> "Đang hiệu lực";
+            case ACTIVE -> "Đang thuê";
             case EXPIRED -> "Đã hết hạn";
             case TERMINATED -> "Đã chấm dứt";
             case CANCELLED -> "Đã hủy";

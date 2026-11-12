@@ -91,7 +91,7 @@ class PhongHubUiIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Bảng điều khiển quản lý nhà trọ")))
-            .andExpect(content().string(containsString("Nhà trọ được truy cập")))
+            .andExpect(content().string(containsString("Nhà trọ bạn quản lý")))
             .andExpect(content().string(containsString("PhongHub")))
             .andExpect(content().string(containsString("Trạng thái duyệt")))
             .andExpect(content().string(not(containsString("PhongHub Ops"))))
@@ -185,7 +185,7 @@ class PhongHubUiIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Nguyễn Văn A")))
-            .andExpect(content().string(containsString("Đang hiệu lực")));
+            .andExpect(content().string(containsString("Đang thuê")));
 
         // Form tạo hợp đồng dành cho chủ trọ, nhân viên được cấp quyền; quản trị viên không lập hợp đồng (#304)
         mockMvc.perform(get("/contracts/new")
@@ -203,7 +203,7 @@ class PhongHubUiIntegrationTest {
         mockMvc.perform(get("/maintenance")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Yêu cầu bảo trì")));
+            .andExpect(content().string(containsString("Phiếu báo hỏng & sửa chữa")));
 
         mockMvc.perform(get("/maintenance/" + DataSeeder.TICKET_1_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
@@ -215,7 +215,7 @@ class PhongHubUiIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Báo hỏng phòng")))
-            .andExpect(content().string(containsString("Mức độ")));
+            .andExpect(content().string(containsString("Mức ưu tiên")));
     }
 
     @Test
