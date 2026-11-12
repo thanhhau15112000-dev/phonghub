@@ -375,7 +375,7 @@ public class AiAssistantService implements AiAssistantUseCase {
 
     private List<Source> withFaqSources(List<Source> sources, List<FaqMatch> faq) {
         List<Source> combined = new ArrayList<>(sources);
-        faq.stream().map(match -> new Source("FAQ PhongHub nháp: " + match.title())).forEach(combined::add);
+        faq.stream().map(match -> new Source("Hướng dẫn PhongHub: " + match.title())).forEach(combined::add);
         return List.copyOf(combined);
     }
 

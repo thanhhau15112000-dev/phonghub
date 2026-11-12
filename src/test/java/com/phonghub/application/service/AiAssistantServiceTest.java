@@ -136,15 +136,15 @@ class AiAssistantServiceTest {
         when(invoiceUseCase.getInvoice(invoiceId)).thenReturn(current);
         when(invoiceRepository.findPriorRentByContractId(current.getContractId(), YearMonth.of(2026, 11), 3)).thenReturn(List.of());
         when(faqSearchPort.search("Hóa đơn so sánh những kỳ nào?", java.util.Set.of("invoice", "general"), 3))
-            .thenReturn(List.of(new FaqMatch("invoice-same-room-history", "invoice", "So sánh cùng phòng",
-                "So sánh với kỳ nào?", "Mặc định lấy ba kỳ trước của cùng phòng.", "FAQ nháp", 0.82)));
+            .thenReturn(List.of(new FaqMatch("invoice-same-contract-history", "invoice", "So sánh cùng hợp đồng",
+                "So sánh với kỳ nào?", "Lấy ba kỳ trước của cùng hợp đồng.", "Hướng dẫn sử dụng PhongHub", 0.82)));
 
         AiAssistantUseCase.AiResponse response = service.askAboutInvoice(invoiceId, "Hóa đơn so sánh những kỳ nào?");
 
         ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
         verify(completionPort).complete(anyString(), prompt.capture());
-        assertTrue(prompt.getValue().contains("Mặc định lấy ba kỳ trước của cùng phòng."));
-        assertTrue(response.sources().stream().anyMatch(source -> source.label().contains("FAQ PhongHub nháp: So sánh cùng phòng")));
+        assertTrue(prompt.getValue().contains("Lấy ba kỳ trước của cùng hợp đồng."));
+        assertTrue(response.sources().stream().anyMatch(source -> source.label().contains("Hướng dẫn PhongHub: So sánh cùng hợp đồng")));
         verify(faqSearchPort).search("Hóa đơn so sánh những kỳ nào?", java.util.Set.of("invoice", "general"), 3);
     }
 
