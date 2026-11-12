@@ -1,106 +1,106 @@
 [
   {
-    "id": "invoice-same-room-history",
+    "id": "invoice-same-contract-history",
     "category": "invoice",
-    "title": "So sánh hóa đơn theo lịch sử cùng phòng",
+    "title": "So sánh hóa đơn với các kỳ trước của hợp đồng",
     "question": "Hóa đơn được so sánh với những kỳ nào?",
-    "answer": "Mặc định hệ thống so sánh hóa đơn tiền thuê hiện tại với tối đa ba kỳ tiền thuê trước của cùng phòng. Hệ thống tính sẵn chênh lệch; hóa đơn bảo trì không nằm trong tập so sánh này.",
-    "source": "FAQ nháp từ nghiệp vụ PhongHub"
+    "answer": "Hệ thống so sánh hóa đơn tiền thuê hiện tại với tối đa ba kỳ tiền thuê trước của cùng hợp đồng. Hóa đơn của người thuê trước ở cùng phòng không được dùng để so sánh. Hóa đơn sửa chữa không nằm trong phần so sánh.",
+    "source": "Hướng dẫn sử dụng PhongHub"
   },
   {
     "id": "invoice-cost-breakdown",
     "category": "invoice",
     "title": "Các khoản riêng trên hóa đơn",
     "question": "Tiền thuê, điện nước, sửa chữa và phí trễ hạn được xử lý thế nào?",
-    "answer": "Hệ thống tách tiền thuê, điện nước/dịch vụ, sửa chữa, phí trễ hạn và phần còn lại. Khi so sánh tiền thuê, phí sửa chữa và phí trễ hạn được giữ riêng, không gộp vào tiền thuê.",
-    "source": "FAQ nháp từ nghiệp vụ PhongHub"
+    "answer": "Hệ thống tách riêng tiền thuê, điện nước và dịch vụ, phí sửa chữa, phí trễ hạn và số tiền còn phải trả. Khi so sánh tiền thuê, phí sửa chữa và phí trễ hạn được để riêng, không cộng vào tiền thuê.",
+    "source": "Hướng dẫn sử dụng PhongHub"
   },
   {
     "id": "invoice-utilities-calculated",
     "category": "invoice",
     "title": "Số liệu điện nước do hệ thống tính",
     "question": "AI tự tính lại số tiền điện nước hay không?",
-    "answer": "Backend tính sẵn tiêu thụ, đơn giá bình quân và chênh lệch điện nước từ các dòng hóa đơn có dữ liệu chỉ số. AI chỉ diễn giải các kết quả được cấp và không tự tính lại số tiền.",
-    "source": "FAQ nháp từ nghiệp vụ PhongHub"
+    "answer": "Không. Hệ thống tính sẵn lượng điện nước đã dùng, đơn giá trung bình và mức chênh lệch từ chỉ số trên hóa đơn. Trợ lý chỉ giải thích các con số này, không tự tính lại số tiền.",
+    "source": "Hướng dẫn sử dụng PhongHub"
   },
   {
     "id": "invoice-history-missing",
     "category": "invoice",
     "title": "Không có kỳ hóa đơn trước",
-    "question": "Nếu phòng chưa có hóa đơn tiền thuê trước thì sao?",
-    "answer": "Nếu không có kỳ tiền thuê trước của cùng phòng, hệ thống không tạo phép so sánh cho kỳ đó. Hóa đơn hiện tại vẫn được giải thích từ những trường có sẵn.",
-    "source": "FAQ nháp từ nghiệp vụ PhongHub"
+    "question": "Nếu hợp đồng chưa có hóa đơn tiền thuê kỳ trước thì sao?",
+    "answer": "Nếu hợp đồng chưa có kỳ tiền thuê nào trước đó, hệ thống không so sánh. Trợ lý vẫn giải thích hóa đơn hiện tại dựa trên các khoản đang có.",
+    "source": "Hướng dẫn sử dụng PhongHub"
   },
   {
     "id": "contract-structured-fields",
     "category": "contract",
     "title": "Thông tin hợp đồng có thể tra cứu",
     "question": "Trợ lý đọc được những thông tin nào của hợp đồng?",
-    "answer": "Trợ lý hiện có thể dùng trạng thái hợp đồng, ngày bắt đầu, ngày kết thúc, tiền thuê, tiền cọc và ngày thanh toán; chỉ trả lời trong phạm vi các trường có cấu trúc này.",
-    "source": "FAQ nháp từ nghiệp vụ PhongHub"
+    "answer": "Trợ lý dùng trạng thái hợp đồng, ngày bắt đầu, ngày kết thúc, ngày đóng tiền và số ngày còn lại đến khi hết hạn. Tiền thuê và tiền cọc chỉ có khi người hỏi được phép xem tiền của hợp đồng đó.",
+    "source": "Hướng dẫn sử dụng PhongHub"
   },
   {
     "id": "contract-clauses-unavailable",
     "category": "contract",
-    "title": "Văn bản điều khoản chưa khả dụng",
+    "title": "Chưa tra cứu được điều khoản hợp đồng",
     "question": "Có thể hỏi về điều khoản trong bản hợp đồng hoặc bản scan không?",
-    "answer": "Không. Dữ liệu hiện có không lưu nội dung điều khoản hoặc bản scan để truy vấn. Trợ lý cần nói rõ giới hạn này thay vì suy đoán điều khoản.",
-    "source": "FAQ nháp từ nghiệp vụ PhongHub"
+    "answer": "Chưa. Hệ thống không lưu nội dung điều khoản hay bản scan hợp đồng để tra cứu. Trợ lý sẽ nói rõ là không có thông tin này thay vì đoán.",
+    "source": "Hướng dẫn sử dụng PhongHub"
   },
   {
     "id": "operations-access-scope",
     "category": "operations",
-    "title": "Phạm vi dữ liệu trợ lý vận hành",
+    "title": "Ai dùng được trợ lý vận hành",
     "question": "Ai được hỏi trợ lý vận hành và dữ liệu trong phạm vi nào?",
-    "answer": "Chỉ OWNER hoặc STAFF có quyền xem tài chính của nhà trọ được chọn mới dùng được trợ lý vận hành. Câu trả lời chỉ dựa trên nhà trọ đó và chức năng này chỉ đọc dữ liệu.",
-    "source": "FAQ nháp từ nghiệp vụ PhongHub"
+    "answer": "Chủ trọ và nhân viên được chủ trọ cho xem tài chính của nhà trọ đó. Trợ lý chỉ trả lời về nhà trọ đang chọn và chỉ đọc dữ liệu, không sửa gì.",
+    "source": "Hướng dẫn sử dụng PhongHub"
   },
   {
     "id": "operations-vacancy",
     "category": "operations",
     "title": "Tổng hợp phòng trống",
     "question": "Trợ lý xác định phòng trống như thế nào?",
-    "answer": "Backend đếm phòng có trạng thái AVAILABLE là phòng trống và OCCUPIED là phòng đang có người ở trong nhà trọ được chọn.",
-    "source": "FAQ nháp từ nghiệp vụ PhongHub"
+    "answer": "Hệ thống đếm số phòng đang trống và số phòng đang có người thuê trong nhà trọ đang chọn, theo trạng thái phòng hiện tại.",
+    "source": "Hướng dẫn sử dụng PhongHub"
   },
   {
     "id": "operations-contract-expiry",
     "category": "operations",
     "title": "Hợp đồng sắp hết hạn",
     "question": "Hợp đồng nào được tính là sắp hết hạn?",
-    "answer": "Backend đếm các hợp đồng ACTIVE có ngày kết thúc từ hôm nay đến hết 30 ngày tiếp theo. Ngày tham chiếu là ngày hệ thống tính theo múi giờ Asia/Ho_Chi_Minh.",
-    "source": "FAQ nháp từ nghiệp vụ PhongHub"
+    "answer": "Là hợp đồng đang hiệu lực có ngày kết thúc từ hôm nay đến 30 ngày tới. Ngày hôm nay tính theo giờ Việt Nam.",
+    "source": "Hướng dẫn sử dụng PhongHub"
   },
   {
     "id": "operations-open-maintenance",
     "category": "operations",
-    "title": "Phiếu bảo trì đang mở",
-    "question": "Phiếu bảo trì nào được tính là đang mở?",
-    "answer": "Tổng đang mở gồm phiếu đã báo, chờ chủ trọ duyệt, chờ người thuê duyệt, đã giao, đang thực hiện hoặc chờ thanh toán. Backend đếm các trạng thái này trước khi gửi số liệu cho AI.",
-    "source": "FAQ nháp từ nghiệp vụ PhongHub"
+    "title": "Phiếu sửa chữa đang mở",
+    "question": "Phiếu sửa chữa nào được tính là đang mở?",
+    "answer": "Gồm các phiếu mới báo, đang chờ chủ trọ duyệt, chờ người thuê đồng ý báo giá, đã giao kỹ thuật viên, đang sửa hoặc đang chờ thanh toán.",
+    "source": "Hướng dẫn sử dụng PhongHub"
   },
   {
     "id": "operations-unpaid-invoices",
     "category": "operations",
     "title": "Tổng hợp hóa đơn chưa thanh toán",
     "question": "Khoản chưa thanh toán được tính và phân nhóm ra sao?",
-    "answer": "Backend cộng số còn phải trả của hóa đơn còn hiệu lực, bỏ qua hóa đơn không thể thanh toán, DRAFT và VOIDED. Số dư được tách thành tiền thuê, bảo trì và các khoản khác.",
-    "source": "FAQ nháp từ nghiệp vụ PhongHub"
+    "answer": "Hệ thống cộng số tiền còn phải trả của các hóa đơn còn hiệu lực, không tính hóa đơn nháp và hóa đơn đã hủy. Số tiền được chia thành tiền thuê, tiền sửa chữa và các khoản khác.",
+    "source": "Hướng dẫn sử dụng PhongHub"
   },
   {
     "id": "maintenance-priority-values",
     "category": "maintenance",
-    "title": "Các mức độ ưu tiên bảo trì",
-    "question": "Mức độ ưu tiên của phiếu bảo trì gồm những mức nào?",
-    "answer": "Các mức lưu trong hệ thống là Chưa phân loại, Thấp, Trung bình và Cao. Người tạo phiếu chọn mức; AI không tự gán hoặc thay đổi mức độ.",
-    "source": "FAQ nháp từ nghiệp vụ PhongHub"
+    "title": "Các mức ưu tiên của phiếu sửa chữa",
+    "question": "Mức ưu tiên của phiếu sửa chữa gồm những mức nào?",
+    "answer": "Có bốn mức: Chưa phân loại, Thấp, Trung bình và Cao. Người tạo phiếu chọn mức; trợ lý không tự đặt hay đổi mức ưu tiên.",
+    "source": "Hướng dẫn sử dụng PhongHub"
   },
   {
     "id": "assistant-read-only",
     "category": "general",
     "title": "Trợ lý chỉ đọc dữ liệu",
-    "question": "Trợ lý AI có thể sửa hóa đơn, hợp đồng hoặc phiếu bảo trì không?",
-    "answer": "Không. Trợ lý này trả lời dựa trên dữ liệu được cấp, không có quyền thực hiện thao tác ghi và không thay đổi hóa đơn, hợp đồng, phòng hoặc phiếu bảo trì.",
-    "source": "FAQ nháp từ nghiệp vụ PhongHub"
+    "question": "Trợ lý AI có thể sửa hóa đơn, hợp đồng hoặc phiếu sửa chữa không?",
+    "answer": "Không. Trợ lý chỉ đọc dữ liệu để trả lời, không thể sửa hóa đơn, hợp đồng, phòng hay phiếu sửa chữa.",
+    "source": "Hướng dẫn sử dụng PhongHub"
   }
 ]
