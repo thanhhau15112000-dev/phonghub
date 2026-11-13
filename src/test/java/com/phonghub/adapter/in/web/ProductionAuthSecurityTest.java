@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
@@ -138,6 +139,18 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(get("/"))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void unauthenticatedHtmxRequestReturnsUnauthorizedWithRedirect() throws Exception {
+        mockMvc.perform(get("/dashboard").header("HX-Request", "true"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().string("HX-Redirect", "/login"));
+    }
+
+    @Test
+    void htmxAssetIsPublic() throws Exception {
+        mockMvc.perform(get("/js/vendor/htmx.min.js")).andExpect(status().isOk());
     }
 
     @Test
@@ -1363,6 +1376,17 @@ class ProductionAuthSecurityTest {
             .andExpect(redirectedUrl("/login"));
 
         assertTrue(session.isInvalid(), "Session must be invalidated immediately when user is deleted");
+    }
+
+    @Test
+    void deletedUserHtmxSessionIsInvalidatedAndRedirected() throws Exception {
+        MockHttpSession session = loginAsAdmin();
+        when(userRepository.findById(any())).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/admin/users").session(session).header("HX-Request", "true"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().string("HX-Redirect", "/login"));
+        assertTrue(session.isInvalid());
     }
 
     @Test

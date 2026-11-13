@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -47,6 +48,11 @@ class MaintenanceBranchFlowIntegrationTest extends SeededWebTest {
     @Autowired private InMemoryNotificationRepository notifications;
     @Autowired private InMemoryInvoiceRepository invoices;
     @Autowired private MaintenanceApprovalService approvalService;
+
+    @BeforeEach
+    void clearNotifications() {
+        notifications.clear();
+    }
 
     private String report(String cause) throws Exception {
         String body = "{\"roomId\":\"" + DataSeeder.ROOM_101_ID + "\",\"title\":\"Vòi nước hỏng\","
@@ -89,7 +95,7 @@ class MaintenanceBranchFlowIntegrationTest extends SeededWebTest {
     /** Số thông báo của người dùng về đúng phiếu này (các test dùng chung kho thông báo nên lọc theo đường dẫn phiếu). */
     private long notificationsFor(String ticketId, String userId, String titleFragment) {
         return notifications.findAll().stream()
-            .filter(n -> n.targetUserId().toString().equals(userId) && n.title().contains(titleFragment)
+            .filter(n -> n.targetUserId() != null && n.targetUserId().toString().equals(userId) && n.title().contains(titleFragment)
                 && n.link() != null && n.link().endsWith(ticketId)).count();
     }
 

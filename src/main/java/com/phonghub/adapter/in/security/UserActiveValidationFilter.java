@@ -42,7 +42,12 @@ public class UserActiveValidationFilter extends OncePerRequestFilter {
                     if (session != null) {
                         session.invalidate();
                     }
-                    response.sendRedirect(request.getContextPath() + "/login");
+                    if ("true".equalsIgnoreCase(request.getHeader("HX-Request"))) {
+                        response.setHeader("HX-Redirect", request.getContextPath() + "/login");
+                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    } else {
+                        response.sendRedirect(request.getContextPath() + "/login");
+                    }
                     return;
                 }
             }
