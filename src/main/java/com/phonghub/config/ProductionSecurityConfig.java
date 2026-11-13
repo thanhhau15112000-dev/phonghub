@@ -89,13 +89,20 @@ public class ProductionSecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/health", "/login", "/session/logout", "/forgot-password").permitAll()
-                .requestMatchers("/static/**", "/css/**", "/favicon.ico").permitAll()
+                .requestMatchers("/static/**", "/css/**", "/js/**", "/favicon.ico").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(new UserActiveValidationFilter(userRepository), AuthorizationFilter.class)
             .addFilterBefore(new PasswordChangeGate(), AuthorizationFilter.class)
             .exceptionHandling(exceptions -> exceptions
-                .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login"))
+                .authenticationEntryPoint((request, response, exception) -> {
+                    if ("true".equalsIgnoreCase(request.getHeader("HX-Request"))) {
+                        response.setHeader("HX-Redirect", request.getContextPath() + "/login");
+                        response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                    } else {
+                        new LoginUrlAuthenticationEntryPoint("/login").commence(request, response, exception);
+                    }
+                })
             )
             .securityContext(securityContext -> securityContext
                 .securityContextRepository(new org.springframework.security.web.context.HttpSessionSecurityContextRepository())

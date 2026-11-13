@@ -3,8 +3,31 @@
 <head th:fragment="head(title)">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta th:if="${_csrf != null}" name="_csrf" th:content="${_csrf.token}">
+    <meta th:if="${_csrf != null}" name="_csrf_header" th:content="${_csrf.headerName}">
     <title th:text="${title} + ' — PhongHub'">PhongHub — Quản lý nhà trọ</title>
     <link rel="stylesheet" th:href="@{/css/style.css}">
+    <script th:src="@{/js/vendor/htmx.min.js}" defer></script>
+    <script>
+        document.addEventListener('htmx:configRequest', function (evt) {
+            var csrfToken = document.querySelector('meta[name="_csrf"]');
+            var csrfHeader = document.querySelector('meta[name="_csrf_header"]');
+            if (csrfToken && csrfHeader) {
+                evt.detail.headers[csrfHeader.content] = csrfToken.content;
+            }
+        });
+        document.addEventListener('htmx:responseError', function (evt) {
+            if (evt.detail.xhr && (evt.detail.xhr.status === 401 || evt.detail.xhr.status === 403)) {
+                window.location.href = '/login';
+            }
+        });
+        document.addEventListener('htmx:beforeSwap', function (evt) {
+            if (evt.detail.xhr && evt.detail.xhr.responseURL && evt.detail.xhr.responseURL.indexOf('/login') !== -1) {
+                evt.detail.shouldSwap = false;
+                window.location.href = '/login';
+            }
+        });
+    </script>
 </head>
 <body>
 
