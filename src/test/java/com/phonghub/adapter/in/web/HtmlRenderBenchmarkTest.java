@@ -162,7 +162,8 @@ class HtmlRenderBenchmarkTest {
         // 2. Unauthenticated page (login) loads layout head and htmx without error
         mockMvc.perform(get("/login"))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("/js/vendor/htmx.min.js")));
+            .andExpect(content().string(containsString("/js/vendor/htmx.min.js")))
+            .andExpect(content().string(containsString("defer")));
 
         // 3. Authenticated page includes CSRF headers
         mockMvc.perform(get("/dashboard").header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))

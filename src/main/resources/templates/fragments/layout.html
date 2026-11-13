@@ -7,7 +7,7 @@
     <meta th:if="${_csrf != null}" name="_csrf_header" th:content="${_csrf.headerName}">
     <title th:text="${title} + ' — PhongHub'">PhongHub — Quản lý nhà trọ</title>
     <link rel="stylesheet" th:href="@{/css/style.css}">
-    <script th:src="@{/js/vendor/htmx.min.js}"></script>
+    <script th:src="@{/js/vendor/htmx.min.js}" defer></script>
     <script>
         document.addEventListener('htmx:configRequest', function (evt) {
             var csrfToken = document.querySelector('meta[name="_csrf"]');

@@ -82,6 +82,11 @@ public class UserActiveValidationFilter extends OncePerRequestFilter {
                 + REVOKED_DETAIL + "\"}");
             return;
         }
+        if ("true".equalsIgnoreCase(request.getHeader("HX-Request"))) {
+            response.setHeader("HX-Redirect", request.getContextPath() + "/login");
+            response.setStatus(HttpStatus.UNAUTHORIZED.value());
+            return;
+        }
         response.sendRedirect(request.getContextPath() + "/login");
     }
 

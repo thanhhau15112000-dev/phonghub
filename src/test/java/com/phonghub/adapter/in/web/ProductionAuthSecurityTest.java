@@ -1621,4 +1621,17 @@ class ProductionAuthSecurityTest {
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/login"));
     }
+
+    @Test
+    void revokedHtmxSessionReturnsUnauthorizedAndRedirectHeader() throws Exception {
+        UUID id = UUID.randomUUID();
+        MockHttpSession session = loginBrowserSession(id, UserRole.OWNER);
+        when(userRepository.findById(id)).thenReturn(Optional.of(
+            sessionUser(id, UserRole.OWNER, User.UserStatus.SUSPENDED)));
+
+        mockMvc.perform(get("/dashboard").session(session).header("HX-Request", "true"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().string("HX-Redirect", "/login"));
+        assertTrue(session.isInvalid());
+    }
 }
