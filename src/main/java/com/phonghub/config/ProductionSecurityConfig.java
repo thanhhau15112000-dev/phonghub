@@ -93,7 +93,7 @@ public class ProductionSecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/health", "/login", "/session/logout", "/forgot-password", "/reset-password").permitAll()
-                .requestMatchers("/static/**", "/css/**", "/favicon.ico").permitAll()
+                .requestMatchers("/static/**", "/css/**", "/js/**", "/favicon.ico").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(new UserActiveValidationFilter(userRepository), AuthorizationFilter.class)

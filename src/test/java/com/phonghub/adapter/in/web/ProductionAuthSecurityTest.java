@@ -138,6 +138,15 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void staticAssetsArePermittedWithoutAuthenticationInProd() throws Exception {
+        mockMvc.perform(get("/css/style.css"))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/js/vendor/htmx.min.js"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
     void browserUiRedirectsUnauthenticatedRequestsToLogin() throws Exception {
         mockMvc.perform(get("/"))
             .andExpect(status().is3xxRedirection())
