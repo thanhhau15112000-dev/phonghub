@@ -16,6 +16,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
@@ -138,10 +139,27 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void staticAssetsArePermittedWithoutAuthenticationInProd() throws Exception {
+        mockMvc.perform(get("/css/style.css"))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/js/vendor/htmx.min.js"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
     void browserUiRedirectsUnauthenticatedRequestsToLogin() throws Exception {
         mockMvc.perform(get("/"))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void unauthenticatedHtmxRequestReturns401WithHxRedirectHeader() throws Exception {
+        mockMvc.perform(get("/dashboard")
+                .header("HX-Request", "true"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().string("HX-Redirect", "/login"));
     }
 
     @Test
@@ -1602,5 +1620,18 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(get("/").session(uiSession))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void revokedHtmxSessionReturnsUnauthorizedAndRedirectHeader() throws Exception {
+        UUID id = UUID.randomUUID();
+        MockHttpSession session = loginBrowserSession(id, UserRole.OWNER);
+        when(userRepository.findById(id)).thenReturn(Optional.of(
+            sessionUser(id, UserRole.OWNER, User.UserStatus.SUSPENDED)));
+
+        mockMvc.perform(get("/dashboard").session(session).header("HX-Request", "true"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().string("HX-Redirect", "/login"));
+        assertTrue(session.isInvalid());
     }
 }

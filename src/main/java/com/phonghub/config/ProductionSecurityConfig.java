@@ -4,6 +4,7 @@ import com.phonghub.adapter.in.security.PasswordChangeGate;
 import com.phonghub.adapter.in.security.SupabaseJwtAuthenticationConverter;
 import com.phonghub.adapter.in.security.UserActiveValidationFilter;
 import com.phonghub.application.port.out.UserRepositoryPort;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -93,13 +94,20 @@ public class ProductionSecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/health", "/login", "/session/logout", "/forgot-password", "/reset-password").permitAll()
-                .requestMatchers("/static/**", "/css/**", "/favicon.ico").permitAll()
+                .requestMatchers("/static/**", "/css/**", "/js/**", "/favicon.ico").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(new UserActiveValidationFilter(userRepository), AuthorizationFilter.class)
             .addFilterBefore(new PasswordChangeGate(), AuthorizationFilter.class)
             .exceptionHandling(exceptions -> exceptions
-                .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login"))
+                .authenticationEntryPoint((request, response, authException) -> {
+                    if ("true".equalsIgnoreCase(request.getHeader("HX-Request"))) {
+                        response.setHeader("HX-Redirect", "/login");
+                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        return;
+                    }
+                    new LoginUrlAuthenticationEntryPoint("/login").commence(request, response, authException);
+                })
             )
             .securityContext(securityContext -> securityContext
                 .securityContextRepository(new org.springframework.security.web.context.HttpSessionSecurityContextRepository())
