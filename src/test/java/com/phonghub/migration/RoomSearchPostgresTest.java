@@ -1,6 +1,6 @@
 package com.phonghub.migration;
 
-import com.phonghub.adapter.out.persistence.postgres.PostgresRoomRepository;
+import com.phonghub.application.port.out.RoomRepositoryPort;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomPage;
 import com.phonghub.domain.model.RoomSearchCriteria;
@@ -60,7 +60,7 @@ class RoomSearchPostgresTest {
             assertEquals("1", scalar(st, "SELECT COUNT(*) FROM pg_indexes WHERE indexname = 'idx_rooms_property_filter'"),
                 "index lọc phòng phải tồn tại");
         }
-        PostgresRoomRepository repo = new PostgresRoomRepository(new NamedParameterJdbcTemplate(ds));
+        RoomRepositoryPort repo = JpaTestContext.over(ds).rooms();
         UUID p103 = null;
         Object[][] data = {
             {"P101", 1, "3000000", RoomStatus.AVAILABLE}, {"P102", 1, "3500000", RoomStatus.OCCUPIED},

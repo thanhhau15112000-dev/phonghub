@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPaymentClaimRepository;
 import com.phonghub.domain.model.Contract;
@@ -41,7 +40,7 @@ class PaymentClaimPostgresTest {
 
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
         PostgresInvoiceRepository invoices = new PostgresInvoiceRepository(jdbc);
-        Contract contract = new PostgresContractRepository(jdbc).findById(UUID.fromString(
+        Contract contract = JpaTestContext.over(ds).contracts().findById(UUID.fromString(
             jdbc.getJdbcTemplate().queryForObject("SELECT id::text FROM contracts WHERE status = 'ACTIVE' LIMIT 1",
                 String.class))).orElseThrow();
         Invoice invoice = invoices.save(Invoice.issueMonthlyRent(contract,

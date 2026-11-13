@@ -1,6 +1,5 @@
 package com.phonghub.migration;
 
-import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresServiceRateRepository;
 import com.phonghub.domain.model.ChargeType;
@@ -38,7 +37,7 @@ class CheckoutInvoiceRevisionPostgresTest {
         Flyway.configure().dataSource(ds).locations("classpath:db/migration", "classpath:db/seed/docker").load().migrate();
         var jdbc = new NamedParameterJdbcTemplate(ds);
         var invoices = new PostgresInvoiceRepository(jdbc);
-        var contracts = new PostgresContractRepository(jdbc);
+        var contracts = JpaTestContext.over(ds).contracts();
         UUID contractId = jdbc.getJdbcTemplate().queryForObject("SELECT id FROM contracts WHERE status = 'ACTIVE' LIMIT 1", UUID.class);
         var contract = contracts.findById(contractId).orElseThrow();
         UUID rateId = UUID.randomUUID();

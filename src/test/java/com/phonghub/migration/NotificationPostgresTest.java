@@ -1,12 +1,12 @@
 package com.phonghub.migration;
 
+import com.phonghub.application.port.out.ContractRepositoryPort;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.phonghub.adapter.out.persistence.postgres.PostgresContractRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceReminderRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresNotificationRepository;
@@ -53,6 +53,7 @@ class NotificationPostgresTest {
             .load().migrate();
 
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
+        JpaTestContext jpa = JpaTestContext.over(ds);
         var protector = TestTenantDataProtection.createProtector();
         PostgresNotificationRepository notifications = new PostgresNotificationRepository(jdbc, protector);
         User tenant = new PostgresUserRepository(jdbc, protector).findById(TENANT_USER).orElseThrow();
@@ -99,7 +100,7 @@ class NotificationPostgresTest {
             """, Map.of("id", UUID.randomUUID())));
 
         // hóa đơn còn phải trả theo hạn thanh toán; mỗi (hóa đơn, hạn) chỉ nhắc một lần
-        PostgresContractRepository contracts = new PostgresContractRepository(jdbc);
+        ContractRepositoryPort contracts = jpa.contracts();
         UUID contractId = jdbc.queryForObject("SELECT id FROM contracts WHERE status = 'ACTIVE' LIMIT 1", Map.of(),
             UUID.class);
         Contract contract = contracts.findById(contractId).orElseThrow();
