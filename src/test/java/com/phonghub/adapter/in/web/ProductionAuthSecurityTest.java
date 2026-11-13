@@ -16,6 +16,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
@@ -151,6 +152,14 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(get("/"))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void unauthenticatedHtmxRequestReturns401WithHxRedirectHeader() throws Exception {
+        mockMvc.perform(get("/dashboard")
+                .header("HX-Request", "true"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().string("HX-Redirect", "/login"));
     }
 
     @Test

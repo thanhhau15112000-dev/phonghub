@@ -21,6 +21,12 @@
                 window.location.href = '/login';
             }
         });
+        document.addEventListener('htmx:beforeSwap', function (evt) {
+            if (evt.detail.xhr && evt.detail.xhr.responseURL && evt.detail.xhr.responseURL.indexOf('/login') !== -1) {
+                evt.detail.shouldSwap = false;
+                window.location.href = '/login';
+            }
+        });
     </script>
 </head>
 <body>
