@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Quên mật khẩu tự phục vụ (#330): gửi liên kết qua email của Supabase, người dùng đặt mật khẩu mới bằng token trong
  * liên kết. Không có email hoặc không gửi được email thì giữ cách cũ là báo Quản trị viên cấp lại mật khẩu tạm.
+ * Trả về đúng việc đã làm, kể cả khi không có tài khoản, để trang không báo thành công sai (#341).
  */
 public class PasswordRecoveryService implements PasswordRecoveryUseCase {
     private static final Logger LOGGER = LoggerFactory.getLogger(PasswordRecoveryService.class);
@@ -55,32 +56,31 @@ public class PasswordRecoveryService implements PasswordRecoveryUseCase {
     }
 
     @Override
-    public void requestRecovery(String identifier) {
+    public RecoveryResult requestRecovery(String identifier) {
         String clean = identifier == null ? "" : identifier.trim().toLowerCase();
         if (clean.isEmpty()) {
-            return;
+            return RecoveryResult.NOT_FOUND;
         }
         Optional<User> found = clean.contains("@") ? userRepository.findByEmail(clean) : userRepository.findByUsername(clean);
         if (found.isEmpty()) {
-            return;
+            return RecoveryResult.NOT_FOUND;
         }
         User user = found.get();
         if (user.status() != User.UserStatus.ACTIVE) {
             // Tài khoản bị khóa không tự mở lại được bằng email; Quản trị viên quyết định
-            notifyAdmin(user);
-            return;
+            return notifyAdmin(user);
         }
         if (recoveryPort != null && user.email() != null && !user.email().isBlank()) {
             try {
                 recoveryPort.sendRecoveryEmail(user.email(), redirectUrl());
-                return;
+                return RecoveryResult.EMAIL_SENT;
             } catch (RuntimeException ex) {
                 // Không ghi email hay thông báo lỗi của nhà cung cấp; chuyển sang báo Quản trị viên
                 LOGGER.warn("Không gửi được email đặt lại mật khẩu: userId={}, error={}", user.id(),
                     ex.getClass().getSimpleName());
             }
         }
-        notifyAdmin(user);
+        return notifyAdmin(user);
     }
 
     @Override
@@ -132,10 +132,12 @@ public class PasswordRecoveryService implements PasswordRecoveryUseCase {
         return publicBaseUrl.isEmpty() ? null : publicBaseUrl + RESET_PATH;
     }
 
-    private void notifyAdmin(User user) {
+    private RecoveryResult notifyAdmin(User user) {
         // Quản trị viên tự xử lý mật khẩu của mình qua Supabase Dashboard: không tạo thông báo cho chính họ
-        if (notificationUseCase != null && user.role() != UserRole.ADMIN) {
-            notificationUseCase.requestPasswordReset(user);
+        if (notificationUseCase == null || user.role() == UserRole.ADMIN) {
+            return RecoveryResult.NOT_SENT;
         }
+        notificationUseCase.requestPasswordReset(user);
+        return RecoveryResult.ADMIN_NOTIFIED;
     }
 }

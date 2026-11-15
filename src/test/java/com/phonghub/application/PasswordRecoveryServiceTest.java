@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import com.phonghub.adapter.out.audit.InMemoryAuditAdapter;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
 import com.phonghub.application.port.in.NotificationUseCase;
+import com.phonghub.application.port.in.PasswordRecoveryUseCase.RecoveryResult;
 import com.phonghub.application.port.out.IdentityProviderPort;
 import com.phonghub.application.port.out.PasswordRecoveryPort;
 import com.phonghub.application.service.PasswordRecoveryService;
@@ -59,19 +60,21 @@ class PasswordRecoveryServiceTest {
     @Test
     @DisplayName("Có email: gửi liên kết về trang đặt lại của app, không báo Quản trị viên")
     void sendsRecoveryEmailWithAppRedirect() {
-        service.requestRecovery("  TENANT7 ");
+        assertEquals(RecoveryResult.EMAIL_SENT, service.requestRecovery("  TENANT7 "));
         assertEquals(List.of("tenant7@mail.test -> https://phonghub.example.com/reset-password"), recovery.sent);
         verify(notifications, never()).requestPasswordReset(any());
 
-        service.requestRecovery("tenant7@mail.test");
+        assertEquals(RecoveryResult.EMAIL_SENT, service.requestRecovery("tenant7@mail.test"));
         assertEquals(2, recovery.sent.size());
     }
 
     @Test
-    @DisplayName("Không có tài khoản: không gửi gì, không lộ thông tin")
+    @DisplayName("Không có tài khoản: không gửi gì và báo không tìm thấy (#341)")
     void unknownAccountDoesNothing() {
-        service.requestRecovery("khongco");
-        service.requestRecovery("");
+        assertEquals(RecoveryResult.NOT_FOUND, service.requestRecovery("khongco"));
+        assertEquals(RecoveryResult.NOT_FOUND, service.requestRecovery("khongco@mail.test"));
+        assertEquals(RecoveryResult.NOT_FOUND, service.requestRecovery(""));
+        assertEquals(RecoveryResult.NOT_FOUND, service.requestRecovery(null));
         assertTrue(recovery.sent.isEmpty());
         verify(notifications, never()).requestPasswordReset(any());
     }
@@ -80,7 +83,7 @@ class PasswordRecoveryServiceTest {
     @DisplayName("Gửi email lỗi (Supabase sập, vượt hạn mức email): quay về báo Quản trị viên")
     void fallsBackToAdminNotification() {
         recovery.failSend = true;
-        service.requestRecovery("tenant7");
+        assertEquals(RecoveryResult.ADMIN_NOTIFIED, service.requestRecovery("tenant7"));
         verify(notifications).requestPasswordReset(tenant);
     }
 
@@ -88,7 +91,7 @@ class PasswordRecoveryServiceTest {
     @DisplayName("Tài khoản bị khóa không nhận email đặt lại; Quản trị viên quyết định")
     void lockedAccountGetsNoEmail() {
         User locked = users.save(user("locked1", "locked1@mail.test", UserRole.TENANT, User.UserStatus.SUSPENDED, false));
-        service.requestRecovery("locked1");
+        assertEquals(RecoveryResult.ADMIN_NOTIFIED, service.requestRecovery("locked1"));
         assertTrue(recovery.sent.isEmpty());
         verify(notifications).requestPasswordReset(locked);
     }
@@ -164,7 +167,7 @@ class PasswordRecoveryServiceTest {
     void withoutProviderFallsBackToAdmin() {
         PasswordRecoveryService demo = new PasswordRecoveryService(users, identity, null, notifications, audit, BASE_URL, null);
         assertFalse(demo.isEmailRecoveryAvailable());
-        demo.requestRecovery("tenant7");
+        assertEquals(RecoveryResult.ADMIN_NOTIFIED, demo.requestRecovery("tenant7"));
         verify(notifications).requestPasswordReset(tenant);
         assertThrows(DomainException.class, () -> demo.resetPassword("tok", "MatKhauMoi#2026", "MatKhauMoi#2026"));
     }
@@ -174,7 +177,7 @@ class PasswordRecoveryServiceTest {
     void adminIsNotNotifiedAboutThemselves() {
         users.save(user("admin2", "admin2@mail.test", UserRole.ADMIN, User.UserStatus.ACTIVE, false));
         recovery.failSend = true;
-        service.requestRecovery("admin2");
+        assertEquals(RecoveryResult.NOT_SENT, service.requestRecovery("admin2"));
         verify(notifications, never()).requestPasswordReset(any());
     }
 
