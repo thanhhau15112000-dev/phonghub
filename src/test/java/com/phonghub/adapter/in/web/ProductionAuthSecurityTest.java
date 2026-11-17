@@ -649,8 +649,8 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
-    void forgotPasswordWithUnknownUserReturnsNeutralSuccessMessage() throws Exception {
-        // Anti-enumeration: không tiết lộ tài khoản có tồn tại hay không — luôn trả successMessage trung lập
+    void forgotPasswordWithUnknownUserSaysAccountNotFound() throws Exception {
+        // #341: không có tài khoản thì báo rõ, không hiện khung "đã gửi"; giữ lại chữ đã nhập để sửa
         when(userRepository.findByUsername("unknown_user")).thenReturn(Optional.empty());
         when(userRepository.findByEmail("unknown_user")).thenReturn(Optional.empty());
 
@@ -658,8 +658,10 @@ class ProductionAuthSecurityTest {
                 .with(csrf())
                 .param("identifier", "unknown_user"))
             .andExpect(status().isOk())
-            .andExpect(model().attributeExists("successMessage"))
-            .andExpect(model().attributeDoesNotExist("errorMessage"));
+            .andExpect(model().attributeDoesNotExist("successMessage"))
+            .andExpect(model().attribute("identifier", "unknown_user"))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Không tìm thấy tài khoản")))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("name=\"identifier\"")));
     }
 
     @Test

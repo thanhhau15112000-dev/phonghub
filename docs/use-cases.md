@@ -526,14 +526,15 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 **Luồng chính**
 1. Khách nhập tên đăng nhập hoặc email.
 2. Hệ thống tìm tài khoản và tạo thông báo yêu cầu đặt lại mật khẩu cho quản trị viên.
-3. Hệ thống luôn hiện cùng một thông báo trung tính ("Nếu tài khoản tồn tại, quản trị viên sẽ liên hệ…").
+3. Hệ thống báo đúng việc đã làm: "Đã gửi email hướng dẫn…" hoặc "Đã gửi yêu cầu tới Quản trị viên…".
 
 **Ngoại lệ**
 - E1. Ô nhập để trống: báo "Vui lòng nhập tên đăng nhập hoặc email".
 - E2. Gửi quá nhiều lần: E-429.
+- E3. Không có tài khoản với tên đăng nhập/email đã nhập: báo "Không tìm thấy tài khoản…", giữ form để nhập lại (#341).
 
 **Quy tắc nghiệp vụ**
-- BR1. Không tiết lộ tài khoản có tồn tại hay không: tài khoản không tồn tại cũng nhận cùng thông báo ở bước 3.
+- BR1. Báo rõ khi không có tài khoản (#341, thay cho cách trả cùng một câu trước đây). Việc dò tên đăng nhập hàng loạt bị chặn bằng hạn mức theo IP và theo tài khoản (E2).
 - BR2. Tài khoản quản trị viên không tạo yêu cầu (quản trị viên tự xử lý trên dịch vụ xác thực).
 
 #### UC-03. Đổi mật khẩu

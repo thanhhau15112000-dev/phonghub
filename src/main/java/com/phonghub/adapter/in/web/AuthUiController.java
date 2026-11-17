@@ -180,14 +180,24 @@ public class AuthUiController {
             model.addAttribute("errorMessage", "Vui lòng nhập tên đăng nhập hoặc email.");
             return "auth/forgot-password";
         }
-        // Thông báo trung lập, không tiết lộ tài khoản có tồn tại hay không (anti-enumeration)
-        passwordRecoveryUseCase.requestRecovery(cleanIdentifier);
-        model.addAttribute("successMessage", passwordRecoveryUseCase.isEmailRecoveryAvailable()
-            ? "Nếu thông tin bạn nhập khớp với một tài khoản trong hệ thống, bạn sẽ nhận được email hướng dẫn đặt lại "
-                + "mật khẩu trong vài phút (hãy kiểm tra cả thư rác). Tài khoản chưa có email sẽ được Quản trị viên "
-                + "liên hệ để cấp lại mật khẩu tạm thời."
-            : "Nếu thông tin bạn nhập khớp với một tài khoản trong hệ thống, Quản trị viên sẽ được thông báo "
-                + "và liên hệ với bạn để cấp lại mật khẩu tạm thời.");
+        // Báo đúng việc đã làm, kể cả khi không có tài khoản (#341). Dò tên đăng nhập hàng loạt bị chặn bởi hạn mức
+        // theo IP và theo tài khoản trong RateLimitFilter.
+        switch (passwordRecoveryUseCase.requestRecovery(cleanIdentifier)) {
+            case NOT_FOUND -> {
+                model.addAttribute("identifier", cleanIdentifier);
+                model.addAttribute("errorMessage", "Không tìm thấy tài khoản có tên đăng nhập hoặc email \""
+                    + cleanIdentifier + "\". Hãy kiểm tra lại.");
+            }
+            case EMAIL_SENT -> model.addAttribute("successMessage", "Đã gửi email hướng dẫn đặt lại mật khẩu tới "
+                + "địa chỉ email của tài khoản. Email thường đến trong vài phút, hãy kiểm tra cả thư rác.");
+            case ADMIN_NOTIFIED -> model.addAttribute("successMessage", "Đã gửi yêu cầu tới Quản trị viên. "
+                + "Quản trị viên sẽ liên hệ với bạn để cấp lại mật khẩu tạm thời.");
+            case NOT_SENT -> {
+                model.addAttribute("identifier", cleanIdentifier);
+                model.addAttribute("errorMessage", "Không gửi được yêu cầu cho tài khoản này. Tài khoản Quản trị viên "
+                    + "cần đặt lại mật khẩu trong trang quản lý Supabase.");
+            }
+        }
         return "auth/forgot-password";
     }
 
