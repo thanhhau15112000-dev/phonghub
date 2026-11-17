@@ -116,7 +116,8 @@ class MaintenanceAttachmentUploadAllUnitTest {
         doNothing().doThrow(new IllegalStateException("storage down"))
             .when(storage).put(anyString(), anyString(), any());
 
-        assertThrows(IllegalStateException.class, () -> service.uploadAll(ticket.getId(), images(3)));
+        assertThrows(com.phonghub.domain.exception.FileStorageUnavailableException.class,
+            () -> service.uploadAll(ticket.getId(), images(3)));
 
         ArgumentCaptor<String> putKeys = ArgumentCaptor.forClass(String.class);
         verify(storage, times(2)).put(putKeys.capture(), anyString(), any());

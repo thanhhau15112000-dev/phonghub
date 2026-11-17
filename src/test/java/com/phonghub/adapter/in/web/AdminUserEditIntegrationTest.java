@@ -118,8 +118,21 @@ class AdminUserEditIntegrationTest extends SeededWebTest {
 
         mockMvc.perform(post("/admin/users/" + OWNER_1 + "/edit").header("X-User-Id", ADMIN)
                 .param("fullName", "Chủ trọ Nguyễn Văn B").param("role", "STAFF").param("status", "ACTIVE"))
-            .andExpect(redirectedUrl("/admin/users/" + OWNER_1 + "/edit"))
-            .andExpect(flash().attribute("errorMessage", containsString("đang sở hữu")));
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.view().name("admin/user-edit"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "errorMessage", containsString("đang sở hữu")))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "form", org.hamcrest.Matchers.hasEntry("fullName", "Chủ trọ Nguyễn Văn B")));
+
+        // #247: nhiều trường sai cùng lúc: báo lỗi từng trường, giữ nguyên giá trị đã nhập
+        mockMvc.perform(post("/admin/users/" + OWNER_2 + "/edit").header("X-User-Id", ADMIN)
+                .param("fullName", " ").param("phone", "12ab").param("role", "STAFF").param("status", "ACTIVE"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.view().name("admin/user-edit"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "fieldErrors", org.hamcrest.Matchers.allOf(org.hamcrest.Matchers.hasKey("fullName"),
+                    org.hamcrest.Matchers.hasKey("phone"))))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "form", org.hamcrest.Matchers.hasEntry("phone", "12ab")));
 
         mockMvc.perform(get("/admin/users/" + ADMIN + "/edit").header("X-User-Id", ADMIN))
             .andExpect(redirectedUrl("/admin/users"));

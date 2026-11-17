@@ -28,12 +28,24 @@ public interface TenantUseCase {
     /** Gắn hồ sơ người thuê với tài khoản TENANT đã tồn tại theo email, không tạo tài khoản mới. */
     Tenant linkAccountByEmail(UUID tenantId, String email);
 
+    /**
+     * Danh sách thả xuống khi liên kết tài khoản (#249): tài khoản TENANT đang hoạt động chưa gắn hồ sơ người thuê nào,
+     * tìm theo họ tên, tên đăng nhập, email hoặc 4 số cuối số điện thoại; mỗi dòng chỉ có họ tên và liên hệ đã che.
+     * Hồ sơ đã có tài khoản thì danh sách rỗng.
+     */
+    List<AccountCandidate> listLinkableAccounts(UUID propertyId, UUID tenantId, String query, int limit);
+
+    /** Như {@link #linkAccountByEmail} nhưng theo tài khoản chọn trong {@link #listLinkableAccounts}. */
+    Tenant linkAccountById(UUID tenantId, UUID userId);
+
     /** Ẩn tenant khỏi danh sách của nhà trọ; bị chặn khi còn hợp đồng ACTIVE tại nhà trọ đó. */
     PropertyTenantView hideTenant(UUID propertyId, UUID tenantId);
 
     PropertyTenantView restoreTenant(UUID propertyId, UUID tenantId);
 
     record PropertyTenantView(Tenant tenant, boolean hidden, boolean hasActiveContract) implements java.io.Serializable {}
+
+    record AccountCandidate(UUID userId, String fullName, String maskedContact) {}
 
     record TenantAccountResult(PropertyTenantView tenant, String username, String temporaryPassword,
                                boolean accountCreated) implements java.io.Serializable {}

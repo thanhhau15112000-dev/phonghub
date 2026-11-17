@@ -15,6 +15,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -29,10 +30,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private final RateLimitProperties props;
     private final FixedWindowRateLimiter limiter;
+    private final MeterRegistry meterRegistry;
 
     public RateLimitFilter(RateLimitProperties props, FixedWindowRateLimiter limiter) {
+        this(props, limiter, null);
+    }
+
+    public RateLimitFilter(RateLimitProperties props, FixedWindowRateLimiter limiter, MeterRegistry meterRegistry) {
         this.props = props;
         this.limiter = limiter;
+        this.meterRegistry = meterRegistry;
     }
 
     @Override
@@ -42,7 +49,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
         String path = request.getRequestURI();
         return !(path.equals("/login") || path.equals("/api/auth/login")
-            || path.equals("/forgot-password") || path.equals(WEBHOOK_PATH));
+            || path.equals("/forgot-password") || path.equals("/reset-password") || path.equals(WEBHOOK_PATH));
     }
 
     @Override
@@ -80,11 +87,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
                         props.getForgotPasswordTarget());
                 }
             }
+            // Đặt lại mật khẩu dùng chung hạn mức theo IP với quên mật khẩu (#330)
+            case "/reset-password" -> decision = check("forgot-password", ip, props.getForgotPassword());
             default -> decision = check("webhook", ip, props.getWebhook());
         }
         if (decision.allowed()) {
             chain.doFilter(forwarded, response);
             return;
+        }
+        if (meterRegistry != null) {
+            meterRegistry.counter("phonghub.ratelimit.rejected", "path", path).increment();
         }
         reject(request, response, decision.retryAfterSeconds());
     }

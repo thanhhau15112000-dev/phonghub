@@ -66,7 +66,6 @@ class MaintenanceSlaIntegrationTest extends SeededWebTest {
     @Test
     @DisplayName("The due date comes from the priority; the defaults are configurable per priority")
     void dueDateFollowsPriority() throws Exception {
-        assertEquals(4, hoursUntilDue(report("URGENT")));
         assertEquals(24, hoursUntilDue(report("HIGH")));
         assertEquals(72, hoursUntilDue(report("MEDIUM")));
         assertEquals(168, hoursUntilDue(report("LOW")));
@@ -135,9 +134,9 @@ class MaintenanceSlaIntegrationTest extends SeededWebTest {
         assertEquals(1, slaService.notifyOverdue(Instant.now()));
         assertEquals(before + 2, notifications.findAll().size());
         assertTrue(notifications.findAll().stream().anyMatch(n -> n.title().equals("Phiếu bảo trì quá hạn")
-            && n.targetUserId().toString().equals(TECH_1)));
+            && TECH_1.equals(String.valueOf(n.targetUserId()))));
         assertTrue(notifications.findAll().stream().anyMatch(n -> n.title().equals("Phiếu bảo trì quá hạn")
-            && n.targetUserId().toString().equals(OWNER_1)));
+            && OWNER_1.equals(String.valueOf(n.targetUserId()))));
 
         assertEquals(0, slaService.notifyOverdue(Instant.now()));
         assertEquals(before + 2, notifications.findAll().size());

@@ -56,6 +56,7 @@
                         <div style="display: flex; gap: 6px; flex-wrap: wrap;">
                             <a th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${v.tenant().id()} + '/edit'}" class="btn btn-sm btn-secondary">Sửa</a>
                             <a th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${v.tenant().id()} + '/documents'}" class="btn btn-sm btn-secondary">Giấy tờ</a>
+                            <a th:if="${currentUser != null and currentUser.role().name() != 'ADMIN'}" th:href="@{'/tenants/' + ${v.tenant().id()} + '/payments'}" class="btn btn-sm btn-secondary">Lịch sử thanh toán</a>
                             <details th:if="${v.tenant().userId() == null}" style="display: inline-block;">
                                 <summary class="btn btn-sm btn-secondary" style="cursor: pointer;">Cấp tài khoản</summary>
                                 <form th:action="@{'/properties/' + ${property.id()} + '/tenants/' + ${v.tenant().id()} + '/issue-account'}"
@@ -67,9 +68,14 @@
                             </details>
                             <form th:if="${!v.hidden() and !v.hasActiveContract()}"
                                   th:action="@{'/properties/' + ${property.id()} + '/tenants/' + ${v.tenant().id()} + '/hide'}"
-                                  method="post" style="margin: 0;" onsubmit="return confirm('Ẩn người thuê này khỏi danh sách?');">
+                                  method="post" style="margin: 0;">
                                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                <button type="submit" class="btn btn-sm btn-danger">Ẩn</button>
+                                <button type="button" class="btn btn-sm btn-danger"
+                                        data-confirm="Bạn có chắc chắn muốn ẩn người thuê này khỏi danh sách?"
+                                        data-confirm-title="Ẩn người thuê"
+                                        th:data-confirm-target="'Người thuê: ' + ${v.tenant().fullName()}"
+                                        data-confirm-consequence="Người thuê sẽ bị ẩn khỏi danh sách chính. Có thể khôi phục lại bất kỳ lúc nào."
+                                        data-confirm-btn="Ẩn người thuê">Ẩn</button>
                             </form>
                             <form th:if="${v.hidden()}"
                                   th:action="@{'/properties/' + ${property.id()} + '/tenants/' + ${v.tenant().id()} + '/restore'}"

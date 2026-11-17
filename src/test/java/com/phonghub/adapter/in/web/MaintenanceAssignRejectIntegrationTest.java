@@ -119,7 +119,7 @@ class MaintenanceAssignRejectIntegrationTest extends SeededWebTest {
 
         assertEquals(before + 1, notifications.findAll().size());
         assertTrue(notifications.findAll().stream().anyMatch(n ->
-            n.targetUserId().toString().equals(TENANT_1) && n.message().contains("không thuộc phạm vi bảo trì")));
+            TENANT_1.equals(String.valueOf(n.targetUserId())) && n.message().contains("không thuộc phạm vi bảo trì")));
         // Phiếu đã từ chối thì không từ chối hay giao lại được.
         reject(id, "Lần hai", OWNER_1).andExpect(status().isBadRequest());
         assign(id, TECH_1, OWNER_1).andExpect(status().isBadRequest());

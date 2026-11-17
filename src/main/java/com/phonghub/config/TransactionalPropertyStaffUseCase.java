@@ -20,6 +20,12 @@ public class TransactionalPropertyStaffUseCase implements PropertyStaffUseCase {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<Candidate> listCandidates(UUID propertyId, String query, int limit) {
+        return delegate.listCandidates(propertyId, query, limit);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public Member assign(AssignCommand command) {
         return delegate.assign(command);

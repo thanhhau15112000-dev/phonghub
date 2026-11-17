@@ -267,6 +267,38 @@ public class TenantService implements TenantUseCase {
     }
 
     @Override
+    public List<AccountCandidate> listLinkableAccounts(UUID propertyId, UUID tenantId, String query, int limit) {
+        PropertyTenantView view = getPropertyTenant(propertyId, tenantId);
+        authorizationService.assertCanUpdateTenant(currentUserPort.getCurrentUser(), tenantId);
+        if (view.tenant().userId() != null || userRepository == null) {
+            return List.of();
+        }
+        return userRepository.findByRole(UserRole.TENANT).stream()
+            .filter(user -> user.status() == User.UserStatus.ACTIVE)
+            .filter(user -> PersonLookup.matches(user, query))
+            .filter(user -> tenantRepository.findByUserId(user.id()).isEmpty())
+            .sorted(Comparator.comparing((User user) -> PersonLookup.fold(user.fullName())).thenComparing(User::id))
+            .limit(PersonLookup.clampLimit(limit))
+            .map(user -> new AccountCandidate(user.id(), user.fullName(), PersonLookup.maskedContact(user)))
+            .toList();
+    }
+
+    @Override
+    public Tenant linkAccountById(UUID tenantId, UUID userId) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+            .orElseThrow(() -> new TenantNotFoundException("Không tìm thấy người thuê."));
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        authorizationService.assertCanUpdateTenant(currentUser, tenantId);
+        if (userId == null) {
+            throw new IllegalArgumentException("Cần chọn tài khoản người thuê trong danh sách.");
+        }
+        // linkTenantUser chỉ nhận tài khoản TENANT đang hoạt động chưa gắn hồ sơ khác: đúng tập của danh sách chọn.
+        Tenant saved = linkTenantUser(tenant, userId);
+        audit("TENANT_ACCOUNT_LINKED", currentUser, saved, null, Map.of("userId", userId.toString()));
+        return saved;
+    }
+
+    @Override
     public TenantAccountResult createTenantAccount(CreateTenantAccountCommand command) {
         CurrentUser actor = currentUserPort.getCurrentUser();
         authorizationService.assertCanManageProperty(actor, command.propertyId());

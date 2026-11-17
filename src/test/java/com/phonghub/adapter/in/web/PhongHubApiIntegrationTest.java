@@ -237,6 +237,7 @@ class PhongHubApiIntegrationTest {
     @Test
     @DisplayName("Create and activate contract on available room changes room to OCCUPIED")
     void testContractCreationAndActivation() throws Exception {
+        // Hợp đồng do chủ trọ lập; quản trị viên không lập hợp đồng (#304)
         UUID tenantId = createAvailableTenant();
         ContractApiController.CreateContractRequest req = new ContractApiController.CreateContractRequest(
             DataSeeder.PROP_1_ID,
@@ -250,7 +251,7 @@ class PhongHubApiIntegrationTest {
         );
 
         String response = mockMvc.perform(post("/api/contracts")
-                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isCreated())
@@ -261,17 +262,17 @@ class PhongHubApiIntegrationTest {
 
         // API cannot activate without an approved check-in.
         mockMvc.perform(post("/api/contracts/" + contractId + "/activate")
-                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isConflict());
 
-        java.util.UUID actorId = LocalDemoAuthenticationAdapter.ADMIN_ID;
+        java.util.UUID actorId = LocalDemoAuthenticationAdapter.OWNER_1_ID;
         Handover checkIn = Handover.draft(java.util.UUID.fromString(contractId), HandoverType.CHECK_IN,
             BigDecimal.ZERO, BigDecimal.ZERO, "Phòng đã kiểm tra", null, actorId)
             .send("terms-hash", null, null, actorId).tenantConfirm(actorId).approve(actorId);
         handoverRepository.save(checkIn);
 
         mockMvc.perform(post("/api/contracts/" + contractId + "/activate")
-                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status", is("ACTIVE")));
 
@@ -298,7 +299,7 @@ class PhongHubApiIntegrationTest {
         );
 
         mockMvc.perform(post("/api/contracts")
-                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString())
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isConflict())
@@ -627,7 +628,7 @@ class PhongHubApiIntegrationTest {
     @DisplayName("OWNER 1 updates room info in owned property successfully (200 OK)")
     void testOwner1UpdatesRoomSuccess() throws Exception {
         RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
-            "P104-VIP", 2, new BigDecimal("35.0"), new BigDecimal("4500000"), 4
+            "P104-VIP", 2, new BigDecimal("35.0"), new BigDecimal("4500000"), 4, currentVersion(DataSeeder.ROOM_104_ID)
         );
 
         mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
@@ -647,7 +648,7 @@ class PhongHubApiIntegrationTest {
     @DisplayName("ADMIN updates room info successfully (200 OK)")
     void testAdminUpdatesRoomSuccess() throws Exception {
         RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
-            "P104-ADM", 1, new BigDecimal("32.0"), new BigDecimal("4200000"), 3
+            "P104-ADM", 1, new BigDecimal("32.0"), new BigDecimal("4200000"), 3, currentVersion(DataSeeder.ROOM_104_ID)
         );
 
         mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
@@ -662,7 +663,7 @@ class PhongHubApiIntegrationTest {
     @DisplayName("STAFF attempting to update room returns 403 Forbidden")
     void testStaffUpdatingRoomForbidden() throws Exception {
         RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
-            "P104-HACK", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 3
+            "P104-HACK", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 3, currentVersion(DataSeeder.ROOM_104_ID)
         );
 
         mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
@@ -678,7 +679,7 @@ class PhongHubApiIntegrationTest {
     @DisplayName("OWNER 2 attempting to update room in unowned property returns 403 Forbidden")
     void testOwner2UpdatingRoomInUnownedPropertyForbidden() throws Exception {
         RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
-            "P104-HACK", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 3
+            "P104-HACK", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 3, currentVersion(DataSeeder.ROOM_104_ID)
         );
 
         mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
@@ -695,7 +696,7 @@ class PhongHubApiIntegrationTest {
     void testUpdatingRoomDuplicateNumberConflict() throws Exception {
         // P101 already exists in PROP_1_ID
         RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
-            "p101", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 3
+            "p101", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 3, currentVersion(DataSeeder.ROOM_104_ID)
         );
 
         mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
@@ -711,7 +712,7 @@ class PhongHubApiIntegrationTest {
     @DisplayName("Updating room keeping same room number succeeds (200 OK)")
     void testUpdatingRoomSameNumberSuccess() throws Exception {
         RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
-            "P104", 1, new BigDecimal("31.0"), new BigDecimal("4100000"), 3
+            "P104", 1, new BigDecimal("31.0"), new BigDecimal("4100000"), 3, currentVersion(DataSeeder.ROOM_104_ID)
         );
 
         mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
@@ -733,7 +734,7 @@ class PhongHubApiIntegrationTest {
 
         // Active contract now has 2 occupants. Attempt to reduce maxOccupants to 1.
         RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
-            "P101", 1, new BigDecimal("25.0"), new BigDecimal("3500000"), 1
+            "P101", 1, new BigDecimal("25.0"), new BigDecimal("3500000"), 1, currentVersion(DataSeeder.ROOM_101_ID)
         );
 
         mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_101_ID)
@@ -749,7 +750,7 @@ class PhongHubApiIntegrationTest {
     @DisplayName("Updating room with negative basePrice returns 400 Bad Request")
     void testUpdatingRoomWithNegativePriceBadRequest() throws Exception {
         RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
-            "P104", 1, new BigDecimal("30.0"), new BigDecimal("-500"), 3
+            "P104", 1, new BigDecimal("30.0"), new BigDecimal("-500"), 3, currentVersion(DataSeeder.ROOM_104_ID)
         );
 
         mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
@@ -765,7 +766,7 @@ class PhongHubApiIntegrationTest {
     @DisplayName("Updating room with maxOccupants = 0 returns 400 Bad Request")
     void testUpdatingRoomWithZeroOccupantsBadRequest() throws Exception {
         RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
-            "P104", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 0
+            "P104", 1, new BigDecimal("30.0"), new BigDecimal("4000000"), 0, currentVersion(DataSeeder.ROOM_104_ID)
         );
 
         mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_104_ID)
@@ -784,7 +785,7 @@ class PhongHubApiIntegrationTest {
         BigDecimal originalRent = contractBefore.getRentAmount();
 
         RoomApiController.UpdateRoomRequest req = new RoomApiController.UpdateRoomRequest(
-            "P101", 1, new BigDecimal("25.0"), new BigDecimal("5500000"), 2
+            "P101", 1, new BigDecimal("25.0"), new BigDecimal("5500000"), 2, currentVersion(DataSeeder.ROOM_101_ID)
         );
 
         mockMvc.perform(put("/api/rooms/" + DataSeeder.ROOM_101_ID)
@@ -1125,5 +1126,9 @@ class PhongHubApiIntegrationTest {
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.title", is("Invalid Argument")))
             .andExpect(jsonPath("$.status", is(400)));
+    }
+
+    private Long currentVersion(java.util.UUID roomId) {
+        return roomRepository.findById(roomId).orElseThrow().getVersion();
     }
 }

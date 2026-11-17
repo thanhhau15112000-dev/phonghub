@@ -140,15 +140,22 @@ public class DashboardUiController {
         YearMonth current = YearMonth.now(StatisticsQueryPort.ZONE);
         StatsQuery query;
         try {
-            query = StatsQuery.of(parseUuid(propertyParam), parseMonth(fromParam), parseMonth(toParam),
-                Granularity.MONTH, current);
+            YearMonth from = parseMonth(fromParam);
+            YearMonth to = parseMonth(toParam);
+            // Mở trang lần đầu: chỉ hiện tháng hiện tại; muốn xem lâu hơn thì chọn khoảng tháng hoặc bấm nút nhanh.
+            if (from == null && to == null) {
+                from = current;
+            }
+            query = StatsQuery.of(parseUuid(propertyParam), from, to, Granularity.MONTH, current);
             model.addAttribute("opsSummary", statisticsUseCase.ownerSummary(query));
         } catch (IllegalArgumentException | DomainException ex) {
             model.addAttribute("errorMessage", ex.getMessage());
-            query = StatsQuery.of(null, null, null, Granularity.MONTH, current);
+            query = StatsQuery.of(null, current, null, Granularity.MONTH, current);
             model.addAttribute("opsSummary", statisticsUseCase.ownerSummary(query));
         }
-        List<PeriodStat> revenue = statisticsUseCase.ownerRevenue(query);
+        // Tháng mới nhất nằm trên cùng để chủ trọ thấy doanh thu hiện tại trước.
+        List<PeriodStat> revenue = new java.util.ArrayList<>(statisticsUseCase.ownerRevenue(query));
+        java.util.Collections.reverse(revenue);
         BigDecimal maxBilled = revenue.stream().map(PeriodStat::billed).max(BigDecimal::compareTo)
             .orElse(BigDecimal.ZERO);
         // Độ dài thanh doanh thu (% so với tháng phát sinh cao nhất) cho biểu đồ thanh ngang.

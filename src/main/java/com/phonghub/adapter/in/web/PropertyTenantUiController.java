@@ -157,13 +157,20 @@ public class PropertyTenantUiController {
     public String linkAccount(
         @PathVariable UUID propertyId,
         @PathVariable UUID tenantId,
-        @RequestParam String email,
+        @RequestParam(required = false) UUID userId,
+        @RequestParam(required = false) String email,
         RedirectAttributes redirectAttributes
     ) {
         try {
             tenantUseCase.getPropertyTenant(propertyId, tenantId);
-            tenantUseCase.linkAccountByEmail(tenantId, email);
-            redirectAttributes.addFlashAttribute("successMessage", "Đã liên kết tài khoản người thuê theo email.");
+            // Chọn từ danh sách thả xuống thì có userId; gõ tay thì liên kết theo email như trước (#249).
+            if (userId != null) {
+                tenantUseCase.linkAccountById(tenantId, userId);
+                redirectAttributes.addFlashAttribute("successMessage", "Đã liên kết tài khoản người thuê đã chọn.");
+            } else {
+                tenantUseCase.linkAccountByEmail(tenantId, email);
+                redirectAttributes.addFlashAttribute("successMessage", "Đã liên kết tài khoản người thuê theo email.");
+            }
         } catch (DomainException | IllegalArgumentException ex) {
             redirectAttributes.addFlashAttribute("errorMessage", ex.getMessage());
         }

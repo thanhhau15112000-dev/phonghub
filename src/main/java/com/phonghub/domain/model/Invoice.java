@@ -506,6 +506,47 @@ public class Invoice {
         return true;
     }
 
+    /** Khoản phí sửa chữa phát hành theo quy định hạn 3 ngày và phạt 10% khi quá hạn. */
+    public boolean hasMaintenancePenaltyPolicy() {
+        return type == InvoiceType.MAINTENANCE
+            && !createdAt.atZone(VIETNAM_ZONE).toLocalDate().isBefore(MAINTENANCE_PENALTY_FROM);
+    }
+
+    /**
+     * Cộng phạt 10% tổng tiền sửa chữa một lần khi quá hạn (kể cả đã trả một phần). Gọi lặp lại không cộng thêm.
+     * Trả về true nếu hóa đơn thực sự thay đổi.
+     */
+    public boolean applyMaintenanceLateFee(LocalDate today) {
+        if (!hasMaintenancePenaltyPolicy() || !isOverdue(today) || lateFeeItem().isPresent()) {
+            return false;
+        }
+        BigDecimal fee = totalAmount.multiply(MAINTENANCE_LATE_FEE_RATE).setScale(0, java.math.RoundingMode.HALF_UP);
+        if (fee.signum() <= 0) {
+            return false;
+        }
+        items.add(InvoiceItem.maintenanceLateFee(fee));
+        totalAmount = totalAmount.add(fee);
+        this.updatedAt = Instant.now();
+        return true;
+    }
+
+    /** Số tiền phạt sẽ cộng nếu quá hạn (chưa cộng): dùng để cảnh báo người thuê. */
+    public BigDecimal maintenanceLateFeePreview() {
+        if (!hasMaintenancePenaltyPolicy()) {
+            return BigDecimal.ZERO;
+        }
+        return principalAmount().multiply(MAINTENANCE_LATE_FEE_RATE).setScale(0, java.math.RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Khoản phí sửa chữa có thể gộp vào hóa đơn tháng: chưa gộp, chưa trả đồng nào, và nếu thuộc quy định mới thì
+     * đã quá hạn và đã bị phạt (giữ hóa đơn riêng và hạn riêng trong 3 ngày đầu).
+     */
+    public boolean isRollableFee(LocalDate today) {
+        return isRollableFee()
+            && (!hasMaintenancePenaltyPolicy() || (isOverdue(today) && lateFeeItem().isPresent()));
+    }
+
     /** Khoản phí sửa chữa chưa trả đồng nào và chưa được gộp: đủ điều kiện gộp vào hóa đơn tháng. */
     public boolean isRollableFee() {
         return type == InvoiceType.MAINTENANCE
@@ -531,7 +572,15 @@ public class Invoice {
     }
 
     /** Số ngày người thuê có để thanh toán phí sửa chữa kể từ ngày phát hành. */
-    public static final int MAINTENANCE_FEE_DUE_DAYS = 7;
+    public static final int MAINTENANCE_FEE_DUE_DAYS = 3;
+
+    /** Phạt trễ hạn phí sửa chữa: 10% tổng tiền sửa chữa, cộng một lần. */
+    public static final BigDecimal MAINTENANCE_LATE_FEE_RATE = new BigDecimal("0.10");
+
+    /** Khoản phí phát hành từ ngày này mới bị phạt; khoản cũ giữ hạn 7 ngày và không bị phạt. */
+    public static final LocalDate MAINTENANCE_PENALTY_FROM = LocalDate.of(2026, 11, 1);
+
+    private static final java.time.ZoneId VIETNAM_ZONE = java.time.ZoneId.of("Asia/Ho_Chi_Minh");
 
     /**
      * Khoản phí sửa chữa người thuê phải trả cho một phiếu bảo trì, gắn với hợp đồng ACTIVE của phòng.
@@ -551,7 +600,9 @@ public class Invoice {
         if (paymentCode == null || paymentCode.isBlank()) {
             throw new IllegalArgumentException("Payment code is required");
         }
-        Instant now = Instant.now();
+        // Thời điểm phát hành theo ngày được truyền vào (ngày Việt Nam); ngày hôm nay thì dùng giờ thực.
+        Instant now = today.equals(LocalDate.now(VIETNAM_ZONE))
+            ? Instant.now() : today.atTime(12, 0).atZone(VIETNAM_ZONE).toInstant();
         return new Invoice(
             UUID.randomUUID(),
             contract.getId(),

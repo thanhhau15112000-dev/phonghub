@@ -106,7 +106,11 @@ class MaintenanceQuoteAndVerifyUnitTest {
         assertThrows(InvalidMaintenanceStateException.class,
             () -> ticket(MaintenanceStatus.VERIFIED, null).reopenByTenant("muộn"));
         assertThrows(InvalidMaintenanceStateException.class,
-            () -> ticket(MaintenanceStatus.AWAITING_PAYMENT, null).reopenByTenant("chưa trả"));
+            () -> ticket(MaintenanceStatus.IN_PROGRESS, null).reopenByTenant("chưa xong"));
+        // #234: chưa trả phí vẫn được báo chưa đạt, phiếu mở lại để sửa tiếp
+        MaintenanceTicket awaiting = ticket(MaintenanceStatus.AWAITING_PAYMENT, null);
+        awaiting.reopenByTenant("chưa trả");
+        assertEquals(MaintenanceStatus.REPORTED, awaiting.getStatus());
     }
 
     @Test

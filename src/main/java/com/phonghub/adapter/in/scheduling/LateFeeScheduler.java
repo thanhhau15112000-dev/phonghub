@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -26,9 +28,16 @@ public class LateFeeScheduler {
     private static final Logger log = LoggerFactory.getLogger(LateFeeScheduler.class);
 
     private final LateFeeAssessmentUseCase assessment;
+    private final MeterRegistry meterRegistry;
 
     public LateFeeScheduler(LateFeeAssessmentUseCase assessment) {
+        this(assessment, (ObjectProvider<MeterRegistry>) null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public LateFeeScheduler(LateFeeAssessmentUseCase assessment, ObjectProvider<MeterRegistry> meterRegistryProvider) {
         this.assessment = assessment;
+        this.meterRegistry = meterRegistryProvider != null ? meterRegistryProvider.getIfAvailable() : null;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -48,9 +57,11 @@ public class LateFeeScheduler {
             invoiceIds = assessment.findInvoicesToAssess(today);
         } catch (Exception ex) {
             log.error("Không lấy được danh sách hóa đơn quá hạn để tính phạt", ex);
+            recordExecution("error");
             return 0;
         }
         int changed = 0;
+        boolean hasError = false;
         for (UUID invoiceId : invoiceIds) {
             try {
                 if (assessment.assessInvoice(invoiceId, today)) {
@@ -59,8 +70,16 @@ public class LateFeeScheduler {
                 }
             } catch (Exception ex) {
                 log.error("Không tính được phạt trả trễ cho hóa đơn {}", invoiceId, ex);
+                hasError = true;
             }
         }
+        recordExecution(hasError ? "error" : "success");
         return changed;
+    }
+
+    private void recordExecution(String status) {
+        if (meterRegistry != null) {
+            meterRegistry.counter("phonghub.scheduled.job.executions", "job", "late_fee", "status", status).increment();
+        }
     }
 }

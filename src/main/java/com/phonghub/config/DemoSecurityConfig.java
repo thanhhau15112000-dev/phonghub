@@ -8,7 +8,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
-@Profile({"test", "docker & !prod"})
+@Profile({"test", "docker & local-demo"})
 @EnableWebSecurity
 public class DemoSecurityConfig {
 

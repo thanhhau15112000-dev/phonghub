@@ -74,7 +74,7 @@ public class MaintenanceApiController {
             request.roomId(),
             request.title(),
             request.description(),
-            request.priority() != null ? request.priority() : MaintenancePriority.MEDIUM,
+            request.priority() != null ? request.priority() : MaintenancePriority.UNCLASSIFIED,
             request.setRoomMaintenance(),
             request.cause()
         ));
@@ -101,7 +101,7 @@ public class MaintenanceApiController {
             }
         }
         MaintenanceTicket ticket = submissionUseCase.createTicketWithAttachments(new MaintenanceUseCase.CreateMaintenanceTicketCommand(
-            roomId, title, description, priority != null ? priority : MaintenancePriority.MEDIUM, setRoomMaintenance,
+            roomId, title, description, priority != null ? priority : MaintenancePriority.UNCLASSIFIED, setRoomMaintenance,
             cause), uploads);
         MaintenanceTicketResponse response = MaintenanceTicketResponse.from(ticket);
         return ResponseEntity.created(URI.create("/api/maintenance/" + response.id())).body(response);

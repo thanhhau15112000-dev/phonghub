@@ -16,3 +16,8 @@ phonghub:
   sepay:
     allow-unsigned-webhook: true
     sandbox-checkout-enabled: false
+
+management:
+  health:
+    redis:
+      enabled: false

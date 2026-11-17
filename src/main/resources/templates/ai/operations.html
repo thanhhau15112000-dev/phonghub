@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Trợ lý vận hành')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+    <div class="page-title-row">
+        <div>
+            <h1>Trợ lý vận hành</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">Hỏi về phòng trống, hợp đồng sắp hết hạn, bảo trì đang mở và công nợ trong một nhà trọ.</p>
+        </div>
+        <a th:href="@{/dashboard}" class="btn">Bảng điều khiển</a>
+    </div>
+
+    <section class="card" th:if="${!#lists.isEmpty(properties)}">
+        <form data-ai-form data-ai-endpoint="/api/v1/ai/operations/ask">
+            <div class="form-group">
+                <label class="form-label" for="operations-property">Nhà trọ</label>
+                <select id="operations-property" name="propertyId" class="form-control" required>
+                    <option value="">Chọn nhà trọ</option>
+                    <option th:each="property : ${properties}" th:value="${property.id()}" th:text="${property.name()}">Nhà trọ</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="operations-question">Câu hỏi</label>
+                <textarea id="operations-question" name="question" class="form-control" maxlength="1200" rows="3" required
+                          placeholder="Ví dụ: Hiện có bao nhiêu phòng trống và khoản công nợ còn lại?"></textarea>
+            </div>
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button type="submit" class="btn btn-primary">Hỏi trợ lý</button>
+        </form>
+        <div id="operations-ai-answer" class="ai-answer" aria-live="polite" style="display: none; margin-top: 16px;"></div>
+    </section>
+    <div th:if="${#lists.isEmpty(properties)}" class="empty-state">
+        <p>Chưa có nhà trọ nào trong phạm vi có quyền xem công nợ.</p>
+    </div>
+</main>
+
+<script th:src="@{/js/ai-assistant.js}" defer></script>
+</body>
+</html>

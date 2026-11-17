@@ -200,11 +200,12 @@ public class RoomService implements RoomUseCase {
         }
 
         Map<String, Object> before = describe(room);
+        // Người quản lý phòng không có quyền tài chính không thấy giá hiện tại: để trống thì giữ nguyên (#326)
         room.updateInfo(
             command.roomNumber(),
             command.floor(),
             command.areaSqm(),
-            command.basePrice(),
+            command.basePrice() != null ? command.basePrice() : room.getBasePrice(),
             command.maxOccupants()
         );
 

@@ -23,9 +23,14 @@
             <form th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() == 'PENDING'}"
                   th:action="@{'/properties/' + ${property.id()} + '/verify'}" method="post" style="display: inline;">
                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                <button type="submit" class="btn btn-sm btn-primary"
+                <button type="button" class="btn btn-sm btn-primary"
                         style="background-color: var(--status-available, #047857); border-color: var(--status-available, #047857); color: white;"
-                        onclick="return confirm('Bạn có chắc chắn muốn duyệt nhà trọ này không?');">Duyệt nhà trọ</button>
+                        data-confirm="Bạn có chắc chắn muốn duyệt nhà trọ này không?"
+                        data-confirm-title="Phê duyệt nhà trọ"
+                        th:data-confirm-target="'Nhà trọ: ' + ${property.name()}"
+                        data-confirm-consequence="Nhà trọ sẽ được kích hoạt công khai và chủ trọ có thể bắt đầu quản lý phòng, hợp đồng."
+                        data-confirm-btn="Duyệt nhà trọ"
+                        data-confirm-variant="primary">Duyệt nhà trọ</button>
             </form>
             <!-- Nút Từ chối cho Quản trị viên khi nhà trọ PENDING -->
             <button th:if="${currentUser != null and currentUser.role().name() == 'ADMIN' and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() == 'PENDING'}"
@@ -276,11 +281,11 @@
                             th:selected="${s.name() == filterStatus}">Trống</option>
                 </select>
             </div>
-            <div class="form-group" style="min-width: 140px; margin: 0;">
+            <div th:if="${canViewRoomPrice}" class="form-group" style="min-width: 140px; margin: 0;">
                 <label class="form-label" for="filterMinPrice">Giá từ (đ)</label>
                 <input id="filterMinPrice" type="number" name="minPrice" min="0" step="1000" class="form-control" th:value="${filterMinPrice}">
             </div>
-            <div class="form-group" style="min-width: 140px; margin: 0;">
+            <div th:if="${canViewRoomPrice}" class="form-group" style="min-width: 140px; margin: 0;">
                 <label class="form-label" for="filterMaxPrice">Giá đến (đ)</label>
                 <input id="filterMaxPrice" type="number" name="maxPrice" min="0" step="1000" class="form-control" th:value="${filterMaxPrice}">
             </div>
@@ -307,7 +312,7 @@
                     <th style="min-width: 100px;">Số phòng</th>
                     <th class="col-number">Tầng</th>
                     <th>Diện tích</th>
-                    <th>Giá cơ bản</th>
+                    <th th:if="${canViewRoomPrice}">Giá cơ bản</th>
                     <th>Sức chứa</th>
                     <th>Người ở / chỗ trống</th>
                     <th>Trạng thái</th>
@@ -321,11 +326,11 @@
                     </td>
                     <td class="col-number" th:text="${r.getFloor()}">1</td>
                     <td th:text="${r.getAreaSqm() != null ? r.getAreaSqm() + ' m²' : '—'}">25 m²</td>
-                    <td style="font-weight: 500;" th:text="${#numbers.formatDecimal(r.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
+                    <td th:if="${canViewRoomPrice}" style="font-weight: 500;" th:text="${#numbers.formatDecimal(r.getBasePrice(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     <td th:text="${r.getMaxOccupants()} + ' người'">2 người</td>
                     <td>
                         <strong th:text="${roomOccupantCounts.get(r.getId()) + '/' + r.getMaxOccupants()}">0/2</strong>
-                        <small style="display: block; color: var(--text-secondary);"
+                        <small th:unless="${currentUser.role().name() == 'TECHNICIAN'}" style="display: block; color: var(--text-secondary);"
                                th:text="${roomOccupantNames.get(r.getId()).isEmpty() ? 'Chưa có người ở' : #strings.listJoin(roomOccupantNames.get(r.getId()), ', ')}">Chưa có người ở</small>
                         <small th:if="${r.getStatus().name() == 'MAINTENANCE'}" style="display: block; color: var(--danger-color, #b91c1c);">Đang bảo trì, tạm không nhận người</small>
                         <small th:if="${r.getStatus().name() == 'RESERVED'}" style="display: block; color: var(--text-secondary);">Đã giữ chỗ, chờ ký hợp đồng</small>
@@ -342,7 +347,7 @@
                                 <span>Chi tiết</span>
                             </a>
                             <a th:if="${(r.getStatus().name() == 'AVAILABLE' or r.getStatus().name() == 'RESERVED') and property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED'
-                                        and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                                        and (currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                                th:href="@{'/contracts/new?propertyId=' + ${property.id()} + '&roomId=' + ${r.getId()}}"
                                class="btn btn-sm btn-primary" title="Tạo hợp đồng thuê mới">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -380,7 +385,7 @@
                                th:text="${' · ' + t.maskedIdentityCardNumber() + (t.userId() != null ? ' · có tài khoản app' : ' · chưa có tài khoản app')}"> · ****1111</small>
                     </span>
                     <a th:if="${property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED'
-                                and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                                and (currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                        th:href="@{/contracts/new(propertyId=${property.id()}, tenantProfileId=${t.id()})}"
                        class="btn btn-sm btn-primary">Tạo hợp đồng</a>
                 </li>
@@ -429,8 +434,12 @@
         </p>
         <form th:action="@{'/properties/' + ${property.id()} + '/archive'}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-            <button type="submit" class="btn btn-sm btn-danger"
-                    onclick="return confirm('Ẩn nhà trọ này? Có thể khôi phục lại sau.');">Ẩn nhà trọ</button>
+            <button type="button" class="btn btn-sm btn-danger"
+                    data-confirm="Bạn có chắc chắn muốn ẩn nhà trọ này?"
+                    data-confirm-title="Ẩn nhà trọ"
+                    th:data-confirm-target="'Nhà trọ: ' + ${property.name()}"
+                    data-confirm-consequence="Nhà trọ đã ẩn không hiện trong danh sách và không tạo thêm phòng, hợp đồng. Dữ liệu cũ vẫn được giữ và có thể khôi phục lại sau."
+                    data-confirm-btn="Ẩn nhà trọ">Ẩn nhà trọ</button>
         </form>
     </div>
 

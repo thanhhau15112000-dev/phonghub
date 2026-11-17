@@ -2,7 +2,12 @@ package com.phonghub.adapter.in.web;
 
 import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoicePaymentRecordRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceReminderRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryPaymentClaimRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryPaymentRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomAssetRepository;
@@ -53,6 +58,11 @@ abstract class SeededWebTest {
     @Autowired private InMemoryTenantRepository seedTenants;
     @Autowired private InMemoryContractRepository seedContracts;
     @Autowired private InMemoryMaintenanceTicketRepository seedTickets;
+    @Autowired private InMemoryInvoiceRepository seedInvoices;
+    @Autowired private InMemoryPaymentRepository seedPayments;
+    @Autowired private InMemoryInvoicePaymentRecordRepository seedPaymentRecords;
+    @Autowired private InMemoryInvoiceReminderRepository seedInvoiceReminders;
+    @Autowired private InMemoryPaymentClaimRepository seedPaymentClaims;
 
     /** Người thuê của nhà trọ 1 đã có tài khoản TENANT đang hoạt động, chưa ở hợp đồng nào (#219). */
     protected Tenant accountTenant(String name, String cccd, String phone) {
@@ -95,6 +105,13 @@ abstract class SeededWebTest {
         seedTenants.clear();
         seedContracts.clear();
         seedTickets.clear();
+        // Dữ liệu mẫu không có hóa đơn: hóa đơn/thanh toán do test trước tạo cho hợp đồng mẫu làm kích hoạt lại hợp đồng
+        // hoặc chọn kỳ trống phụ thuộc thứ tự chạy test (lỗi chập chờn ở CI staging 813ce84).
+        seedPayments.clear();
+        seedPaymentRecords.clear();
+        seedPaymentClaims.clear();
+        seedInvoiceReminders.clear();
+        seedInvoices.clear();
         DataSeeder.seedAll(seedUsers, seedProperties, seedAssignments, seedRooms, seedTenants, seedContracts,
             seedTickets);
     }

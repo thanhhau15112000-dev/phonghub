@@ -341,8 +341,12 @@ class TransactionRollbackFaultInjectionTest {
         UUID contractId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         UUID tenantUserId = UUID.randomUUID();
-        CurrentUser admin = new CurrentUser(UUID.randomUUID(), "admin@phonghub.local", "Admin", UserRole.ADMIN);
-        when(mockCurrentUserPort.getCurrentUser()).thenReturn(admin);
+        // Hợp đồng do chủ trọ quản lý; quản trị viên không quản lý hợp đồng (#304)
+        CurrentUser owner = new CurrentUser(UUID.randomUUID(), "owner@phonghub.local", "Owner", UserRole.OWNER);
+        when(mockCurrentUserPort.getCurrentUser()).thenReturn(owner);
+        when(mockPropertyRepo.findById(propertyId)).thenReturn(java.util.Optional.of(new com.phonghub.domain.model.Property(
+            propertyId, "Nhà trọ", "Địa chỉ", "", 5, owner.id(),
+            com.phonghub.domain.model.PropertyApprovalStatus.VERIFIED, null, Instant.now())));
 
         realUserRepo.save(new User(tenantUserId, "tenant_rollback", "tenant-rollback@example.test", "Tenant",
             "0900000001", UserRole.TENANT, User.UserStatus.ACTIVE, false, Instant.now()));
@@ -361,10 +365,10 @@ class TransactionRollbackFaultInjectionTest {
         realRoomRepo.save(room);
 
         Handover approvedCheckIn = Handover.draft(contractId, HandoverType.CHECK_IN, BigDecimal.ZERO,
-            BigDecimal.ZERO, "Tình trạng đã ghi nhận", null, admin.id())
-            .send("terms", null, null, admin.id())
-            .tenantConfirm(admin.id())
-            .approve(admin.id());
+            BigDecimal.ZERO, "Tình trạng đã ghi nhận", null, owner.id())
+            .send("terms", null, null, owner.id())
+            .tenantConfirm(owner.id())
+            .approve(owner.id());
         realHandoverRepo.save(approvedCheckIn);
 
         // Inject fault on 2nd write: contractRepository.save fails
@@ -390,8 +394,12 @@ class TransactionRollbackFaultInjectionTest {
         UUID roomId = UUID.randomUUID();
         UUID contractId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        CurrentUser admin = new CurrentUser(UUID.randomUUID(), "admin@phonghub.local", "Admin", UserRole.ADMIN);
-        when(mockCurrentUserPort.getCurrentUser()).thenReturn(admin);
+        // Hợp đồng do chủ trọ quản lý; quản trị viên không quản lý hợp đồng (#304)
+        CurrentUser owner = new CurrentUser(UUID.randomUUID(), "owner@phonghub.local", "Owner", UserRole.OWNER);
+        when(mockCurrentUserPort.getCurrentUser()).thenReturn(owner);
+        when(mockPropertyRepo.findById(propertyId)).thenReturn(java.util.Optional.of(new com.phonghub.domain.model.Property(
+            propertyId, "Nhà trọ", "Địa chỉ", "", 5, owner.id(),
+            com.phonghub.domain.model.PropertyApprovalStatus.VERIFIED, null, Instant.now())));
 
         Contract contract = new Contract(
             contractId, propertyId, roomId, tenantId,
@@ -408,7 +416,7 @@ class TransactionRollbackFaultInjectionTest {
             BigDecimal.ZERO, "Tình trạng đã ghi nhận", null, tenantId)
             .send("terms", null, null, tenantId)
             .tenantConfirm(tenantId)
-            .approve(admin.id());
+            .approve(owner.id());
         realHandoverRepo.save(approvedCheckOut);
 
         // Inject fault on 2nd write: contractRepository.save fails

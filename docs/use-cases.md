@@ -526,14 +526,15 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 **Luồng chính**
 1. Khách nhập tên đăng nhập hoặc email.
 2. Hệ thống tìm tài khoản và tạo thông báo yêu cầu đặt lại mật khẩu cho quản trị viên.
-3. Hệ thống luôn hiện cùng một thông báo trung tính ("Nếu tài khoản tồn tại, quản trị viên sẽ liên hệ…").
+3. Hệ thống báo đúng việc đã làm: "Đã gửi email hướng dẫn…" hoặc "Đã gửi yêu cầu tới Quản trị viên…".
 
 **Ngoại lệ**
 - E1. Ô nhập để trống: báo "Vui lòng nhập tên đăng nhập hoặc email".
 - E2. Gửi quá nhiều lần: E-429.
+- E3. Không có tài khoản với tên đăng nhập/email đã nhập: báo "Không tìm thấy tài khoản…", giữ form để nhập lại (#341).
 
 **Quy tắc nghiệp vụ**
-- BR1. Không tiết lộ tài khoản có tồn tại hay không: tài khoản không tồn tại cũng nhận cùng thông báo ở bước 3.
+- BR1. Báo rõ khi không có tài khoản (#341, thay cho cách trả cùng một câu trước đây). Việc dò tên đăng nhập hàng loạt bị chặn bằng hạn mức theo IP và theo tài khoản (E2).
 - BR2. Tài khoản quản trị viên không tạo yêu cầu (quản trị viên tự xử lý trên dịch vụ xác thực).
 
 #### UC-03. Đổi mật khẩu
@@ -570,6 +571,9 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 **Luồng chính**
 1. Người dùng mở trang hồ sơ, sửa thông tin.
 2. Hệ thống kiểm tra định dạng (số điện thoại 10 số, bắt đầu bằng 0) và lưu.
+
+**Luồng thay thế**
+- 1a. Người thuê có mục "Ảnh CCCD" và "Giấy phép lái xe (GPLX)" trên trang hồ sơ: xem trạng thái (số che, có mặt sau, ngày cập nhật) và tải hoặc thay ảnh CCCD, GPLX theo UC-27 (#244, #252).
 
 **Ngoại lệ**
 - E1. Sửa hồ sơ của người khác (không phải quản trị viên): E-403.
@@ -757,11 +761,11 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Mô tả | Gán nhân viên hoặc kỹ thuật viên vào nhà trọ, cấp hoặc thu quyền, gỡ phân công. |
 | Tiền điều kiện | Nhà trọ của mình; người được gán đã có tài khoản `STAFF` hoặc `TECHNICIAN`. |
 | Hậu điều kiện | Người được gán thấy nhà trọ trong phạm vi của mình, với đúng các quyền được cấp. |
-| Kênh | Web `/properties/{id}/staff`; API `/api/properties/{id}/staff` |
+| Kênh | Web `/properties/{id}/staff`; API `/api/properties/{id}/staff`, danh sách chọn `GET /api/properties/{id}/staff/candidates?q=` |
 
 **Luồng chính**
-1. Tác nhân nhập tên đăng nhập hoặc email của người cần gán.
-2. Hệ thống kiểm tra vai trò của tài khoản (BR1) và tạo phân công.
+1. Tác nhân chọn người cần gán trong danh sách thả xuống (BR3), hoặc gõ đúng tên đăng nhập hoặc email như trước.
+2. Hệ thống kiểm tra vai trò của tài khoản (BR1); nếu chọn từ danh sách thì kiểm tra người đó đúng là một dòng của danh sách (BR3). Hệ thống tạo phân công.
 3. Với nhân viên, tác nhân bật hoặc tắt từng quyền: *quản lý hợp đồng*, *thu tiền*, *xem giấy tờ*.
 4. Hệ thống lưu và ghi nhật ký.
 
@@ -769,12 +773,14 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 - 1a. Gỡ phân công: tác nhân chọn "Gỡ", hệ thống xóa phân công; người đó mất quyền truy cập nhà trọ ngay.
 
 **Ngoại lệ**
-- E1. Tài khoản không phải `STAFF` hoặc `TECHNICIAN`: từ chối.
+- E1. Tài khoản không phải `STAFF` hoặc `TECHNICIAN`: từ chối. Gõ tay sai thì báo lỗi chung, không lộ tài khoản nào tồn tại.
 - E2. Cấp quyền tiền, hợp đồng hoặc giấy tờ cho kỹ thuật viên: từ chối.
+- E3. Gửi `userId` ngoài danh sách (bị khóa, vai trò khác, không tồn tại): từ chối (E-400). Người đã được phân công vào nhà trọ này: báo xung đột (E-409), chỉnh quyền ở bảng nhân sự.
 
 **Quy tắc nghiệp vụ**
 - BR1. Chỉ phân công được tài khoản `STAFF` hoặc `TECHNICIAN`.
 - BR2. Kỹ thuật viên phải được phân công vào nhà trọ thì mới hiện trong danh sách giao việc ở UC-58.
+- BR3. Danh sách thả xuống (#249) gồm mọi tài khoản `STAFF`/`TECHNICIAN` đang hoạt động, kể cả người đang làm cho chủ trọ khác, trừ người đã ở nhà trọ này; chia nhóm theo vai trò. Tìm theo họ tên (không dấu), tên đăng nhập, email hoặc 4 số cuối số điện thoại. Mỗi dòng chỉ có họ tên, vai trò và email hoặc số điện thoại đã che (`ng***@gmail.com`, `09******12`); không hiện người đó đang làm ở nhà trọ nào.
 
 #### UC-14. Soạn nội quy nhà trọ
 
@@ -983,6 +989,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 **Quy tắc nghiệp vụ**
 - BR1. CCCD 9 hoặc 12 chữ số; số điện thoại 10 chữ số bắt đầu bằng 0.
 - BR2. Nhân viên được phân công có thể dùng màn hình này như chủ trọ. Tạo người thuê luôn tạo hoặc gắn tài khoản; hồ sơ cũ chưa có tài khoản có thể được cấp qua nút "Cấp tài khoản".
+- BR3. Ở trang sửa hồ sơ chưa có tài khoản, "Liên kết tài khoản có sẵn" cho chọn từ danh sách thả xuống (#249, `GET /api/properties/{id}/tenants/{tenantId}/account-candidates?q=`) hoặc gõ email như trước. Danh sách chỉ gồm tài khoản `TENANT` đang hoạt động chưa gắn hồ sơ người thuê nào, mỗi dòng chỉ có họ tên và liên hệ đã che; máy chủ kiểm tra lại tài khoản được chọn.
 
 #### UC-25. Tìm kiếm, ẩn, khôi phục người thuê
 
@@ -1033,7 +1040,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Mô tả | Tải lên ảnh mặt trước/sau và số của CCCD hoặc giấy phép lái xe (GPLX); xóa giấy tờ. |
 | Tiền điều kiện | Người thuê thuộc nhà trọ trên đường dẫn; hồ sơ chưa bị khóa. |
 | Hậu điều kiện | Ảnh và số giấy tờ được mã hóa khi lưu; danh sách chỉ hiện số đã che. |
-| Kênh | Web `/properties/{id}/tenants/{tenantId}/documents`; API `/api/properties/{id}/tenants/{tenantId}/documents/{type}` |
+| Kênh | Web `/properties/{id}/tenants/{tenantId}/documents`, `/account/profile` mục "Ảnh CCCD" (#244) và "Giấy phép lái xe (GPLX)" (#252); API `/api/properties/{id}/tenants/{tenantId}/documents/{type}` |
 
 **Luồng chính**
 1. Tác nhân chọn loại giấy tờ (`CCCD`, `GPLX`), nhập số và chọn ảnh.
@@ -1042,6 +1049,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 
 **Luồng thay thế**
 - 1a. Xóa giấy tờ (chỉ người quản lý): hệ thống xóa ảnh và số.
+- 1b. Người thuê tải CCCD hoặc GPLX ở Hồ sơ cá nhân (`/account/profile`), kể cả khi chưa có hợp đồng nào: giấy tờ lưu theo người thuê, chưa gắn nhà trọ. Khi được lập hợp đồng, chủ trọ thấy ngay ảnh này ở trang giấy tờ của nhà trọ, không phải tải lại (#244, #252).
 
 **Ngoại lệ**
 - E1. Người thuê xóa giấy tờ: từ chối, người thuê không tự xóa được.
@@ -1049,6 +1057,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 
 **Quy tắc nghiệp vụ**
 - BR1. Ảnh CCCD là điều kiện để người thuê chính xác nhận biên bản check-in (UC-40).
+- BR2. Mỗi người thuê có một bản CCCD (và một GPLX) dùng chung cho mọi nhà trọ và hợp đồng của họ; tải lại thì thay bản cũ.
 
 #### UC-28. Xem đầy đủ giấy tờ
 
@@ -1334,11 +1343,11 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 4. Hệ thống kiểm tra tiền điều kiện, lưu xác nhận, chuyển sang `PENDING_APPROVAL` và báo người quản lý. Với check-out, đồng thời lập hóa đơn chốt điện/nước theo tiêu thụ từ lần ghi gần nhất của hợp đồng nếu có đơn giá.
 
 **Luồng thay thế**
-- 2a. Chưa có ảnh CCCD (check-in): người thuê chọn "Tải giấy tờ" để làm UC-27, rồi quay lại bước 3.
+- 2a. Chưa có ảnh CCCD (check-in): người thuê chọn "Tải ảnh CCCD ở Hồ sơ cá nhân" để làm UC-27, rồi quay lại bước 3. Đã tải từ trước ở hồ sơ thì trang hiện "Đã có ảnh CCCD trong Hồ sơ cá nhân" (nếu đã có thêm GPLX thì hiện thêm huy hiệu "Đã có GPLX trong Hồ sơ cá nhân", #252).
 
 **Ngoại lệ**
 - E1. Người ở cùng hoặc người không phải người thuê chính: E-403.
-- E2. Thiếu ảnh CCCD khi check-in: báo "Vui lòng tải ảnh CCCD trước khi xác nhận biên bản".
+- E2. Thiếu ảnh CCCD khi check-in: báo "Vui lòng tải ảnh CCCD ở Hồ sơ cá nhân trước khi xác nhận biên bản".
 
 #### UC-41. Duyệt, từ chối, mở lại biên bản
 
@@ -1390,6 +1399,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 - BR1. Chỉ cấn trừ hóa đơn payable của chính hợp đồng; thanh toán đồng thời được tuần tự hóa bằng khóa hóa đơn. Hóa đơn được bù từ cọc chuyển sang `PAID` hoặc `PARTIALLY_PAID` theo số tiền còn thiếu.
 - BR2. Hóa đơn chốt điện/nước chỉ được lập sau khi người thuê xác nhận check-out; bỏ qua chỉ số lùi (thay đồng hồ).
 - BR3. Nếu biên bản bị từ chối, mở lại và sửa chỉ số, lần người thuê xác nhận tiếp theo cập nhật điện/nước trên chính hóa đơn check-out/phí hủy đã có. Giữ mã hóa đơn, hạn thanh toán, tiền đã thu và các khoản phí khác; điều chỉnh khoản hoàn/đối trừ theo chênh lệch, không cộng khoản hoàn hai lần. Chỉ số bằng mốc ban đầu thì bỏ khoản điện/nước đó.
+- BR2a (#248). Trang "Lịch sử thanh toán" (`/account/payments`, API `GET /api/me/payments`) gom giao dịch SePay đã gắn hóa đơn, yêu cầu báo chuyển khoản (chờ/từ chối kèm lý do), khoản chủ trọ ghi nhận tay và cấn trừ cọc, gồm cả hợp đồng đã kết thúc. Người thuê chính chỉ xem của mình; chủ trọ và nhân viên có quyền thu tiền xem của người thuê trong nhà trọ họ (`/tenants/{id}/payments`); quản trị viên và kỹ thuật viên bị 403 (#163).
 - BR3. Giao dịch cấn trừ xuất hiện trong lịch sử thanh toán và biên lai; quyết toán tính tiền cọc − khấu trừ tài sản − cấn trừ − công nợ chưa thu − hóa đơn chốt chưa thanh toán.
 
 #### UC-43. So sánh check-in/check-out và xuất PDF
@@ -1838,28 +1848,33 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 | Mục | Nội dung |
 |---|---|
 | Tác nhân chính | Người dùng đã đăng nhập |
-| Mô tả | Nhắn tin văn bản trong kênh chung hoặc nhắn riêng 1-1, nhận tin theo thời gian thực, xem trạng thái "Đã xem" và số tin chưa đọc. |
+| Mô tả | Nhắn tin văn bản, gửi ảnh và video trong kênh chung hoặc nhắn riêng 1-1, nhận tin theo thời gian thực, xem trạng thái "Đã xem" và số tin chưa đọc. |
 | Tiền điều kiện | Đã đăng nhập. |
 | Hậu điều kiện | Tin được lưu và chỉ đẩy tới thành viên của phòng chat. |
-| Kênh | Khung chat nổi trên mọi trang; API `/api/chat/…` (luồng SSE `/api/chat/stream`) |
+| Kênh | Khung chat nổi trên mọi trang; API `/api/chat/…` (luồng SSE `/api/chat/stream`; gửi ảnh/video `POST /api/chat/rooms/{id}/attachments`; xem tệp `GET /api/chat/rooms/{id}/messages/{messageId}/attachments/{attachmentId}`; tệp ở tin cũ `GET /api/chat/rooms/{id}/messages/{messageId}/legacy-media`) |
 
 **Luồng chính**
 1. Người dùng mở khung chat; hệ thống hiện kênh chung đầu tiên, rồi các cuộc trò chuyện riêng.
 2. Người dùng chọn người nhận trong danh bạ để mở (hoặc tạo) cuộc trò chuyện riêng.
-3. Người dùng nhập nội dung và gửi.
+3. Người dùng nhập nội dung và gửi. Muốn gửi ảnh/video thì bấm nút ảnh, chọn tệp, xem trước và bỏ bớt nếu cần, có thể kèm chữ (BR1).
 4. Hệ thống lưu tin, đánh dấu người gửi đã đọc, đẩy tin qua kết nối thời gian thực tới các thành viên của phòng.
 5. Người nhận mở cuộc trò chuyện; hệ thống đánh dấu đã đọc và báo "Đã xem" cho người gửi.
 
 **Luồng thay thế**
 - 4a. Mất kết nối (mạng, máy ngủ): khung chat tự kết nối lại, tải lại tin đã lỡ, số tin chưa đọc và trạng thái "Đã xem".
+- 4b. Tin có ảnh/video: khung chat hiện tiến độ tải lên; người nhận thấy ảnh (bấm để mở to) và video có nút phát, tua được.
 
 **Ngoại lệ**
 - E1. Nội dung trống: báo lỗi.
-- E2. Mở phòng chat mà mình không phải thành viên: E-403.
+- E2. Mở phòng chat mà mình không phải thành viên: E-403. Mở link ảnh/video của phòng đó cũng E-403.
+- E3. Tệp sai định dạng (gif, avi, mkv, tệp đổi đuôi), quá dung lượng, quá 5 tệp hoặc quá 1 video: E-400 kèm thông báo tiếng Việt, không tạo tin. Khung chat kiểm tra trước khi gửi để tệp quá lớn không bị máy chủ cắt kết nối.
+- E4. Kho lưu trữ lỗi: E-503 "Không lưu được ảnh/video vào kho lưu trữ…", không tạo tin rỗng; tệp đã tải lên kho trong lần gửi đó bị xóa lại.
 
 **Quy tắc nghiệp vụ**
-- BR1. Chỉ gửi văn bản; không gửi ảnh hoặc video. Tin đính kèm cũ chỉ hiện chữ "Tệp đính kèm không còn được hỗ trợ".
+- BR1. Ảnh và video (#251, đảo lại #201): mỗi tin tối đa 5 tệp, trong đó tối đa 1 video. Ảnh JPEG/PNG/WebP, kiểm tra chữ ký tệp, bỏ EXIF và vị trí, xoay đúng chiều, tối đa `STORAGE_MAX_FILE_SIZE_BYTES`. Video MP4/WebM/MOV, chỉ kiểm tra chữ ký, không chuyển mã, tối đa `phonghub.chat.max-video-bytes` (mặc định 10 MB, không vượt giới hạn chung). Video không bỏ được thông tin đi kèm trong tệp (ví dụ vị trí) nên khung chat nhắc khi chọn video.
 - BR2. Máy chủ gửi tín hiệu giữ kết nối mỗi 25 giây để kết nối không bị cắt khi rảnh.
+- BR3. Tệp lưu ở kho riêng tư với khóa `chat/{roomId}/{uuid}.{đuôi}`; cơ sở dữ liệu (bảng `chat_message_attachments`, V59) chỉ lưu khóa. REST và SSE không trả khóa, chỉ trả đường dẫn xem tệp của phòng chat. Quyền xem tệp = quyền đọc phòng. Kho cho URL có chữ ký thì chuyển hướng (hết hạn sau 10 phút); kho in-memory (profile docker) thì máy chủ trả tệp trực tiếp, hỗ trợ `Range` (206) để tua video.
+- BR4. Kênh chung gửi được ảnh/video với người được gửi tin ở kênh đó. Tin cũ trước #201 (tệp ở bucket công khai `chat-media` trên Supabase) vẫn xem được qua `legacy-media`: kiểm tra quyền đọc phòng như tệp mới rồi mới chuyển tới URL cũ; API không trả URL cũ. Tệp không ở bucket đó (ví dụ `/uploads/chat-media/…` của bản chạy cục bộ, đã gỡ cùng #201) hoặc đã mất thì hiện ghi chú "Tệp đính kèm cũ không còn xem được".
 
 #### UC-65. Xem thông báo
 
@@ -1910,23 +1925,33 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
    - **Người thuê:** phòng đang thuê, hợp đồng, hóa đơn còn nợ.
    - **Quản trị viên:** số nhà trọ theo trạng thái duyệt, nhà trọ chờ duyệt, số tài khoản theo vai trò, tỷ lệ lấp đầy (không có số liệu tiền).
 
-#### UC-67. Xuất dữ liệu (Excel, PDF, CSV)
+#### UC-67. Xuất dữ liệu (Excel, PDF)
 
 | Mục | Nội dung |
 |---|---|
 | Tác nhân chính | Chủ trọ; Nhân viên có quyền quản lý hợp đồng hoặc quyền thu tiền |
-| Mô tả | Xuất danh sách hóa đơn theo khoảng tháng, công nợ, hợp đồng. |
-| Tiền điều kiện | Có quyền xem tiền của nhà trọ được chọn. |
-| Hậu điều kiện | File được tải về; nhật ký `DATA_EXPORTED` ghi tập dữ liệu và nhà trọ. |
-| Kênh | Web `/exports`; API `GET /api/exports/{dataset}` |
+| Mô tả | Lọc hóa đơn, công nợ hoặc hợp đồng theo nhiều tiêu chí, xem trước, chọn dòng rồi xuất ra Excel hoặc PDF. |
+| Tiền điều kiện | Có quyền xem tiền (hóa đơn, công nợ) hoặc quyền quản lý hợp đồng (hợp đồng) ở nhà trọ được chọn. |
+| Hậu điều kiện | File chỉ gồm các dòng đã chọn, tên file ghi khoảng thời gian và số dòng; nhật ký `DATA_EXPORTED` ghi tập dữ liệu, nhà trọ, định dạng và số dòng. |
+| Kênh | Web `/exports`, `/exports/preview`, `/exports/download` (GET xuất theo bộ lọc, POST xuất theo dòng đã chọn); API `GET /api/exports/{dataset}`, `GET /api/exports/{dataset}/preview`, `POST /api/exports/{dataset}` |
 
 **Luồng chính**
-1. Tác nhân chọn tập dữ liệu (hóa đơn, công nợ, hợp đồng), nhà trọ, khoảng tháng, định dạng.
-2. Hệ thống kiểm tra quyền và tạo file.
+1. Tác nhân chọn tập dữ liệu (hóa đơn, công nợ, hợp đồng) và bộ lọc: nhà trọ (chọn nhiều), phòng, người thuê (không phân biệt dấu); hóa đơn và công nợ thêm khoảng tháng, trạng thái, loại, hạn thanh toán, chỉ hóa đơn còn nợ; hợp đồng thêm trạng thái, ngày bắt đầu và ngày kết thúc.
+2. Tác nhân bấm "Lọc"; hệ thống hiện bảng xem trước có phân trang, đúng các cột sẽ xuất, mỗi dòng có ô chọn.
+3. Tác nhân chọn từng dòng hoặc "Chọn tất cả" (toàn bộ kết quả lọc, mọi trang) và bấm "Tải xuống".
+4. Hệ thống kiểm tra quyền, tính lại dữ liệu ở máy chủ, tạo file và ghi nhật ký.
 
 **Ngoại lệ**
 - E1. Tháng bắt đầu sau tháng kết thúc: báo lỗi.
-- E2. Quản trị viên hoặc kỹ thuật viên: E-403.
+- E2. Quản trị viên (hóa đơn, công nợ) hoặc kỹ thuật viên: E-403.
+- E3. Không có dòng nào: "Không có dữ liệu phù hợp để xuất", không tạo file và không ghi nhật ký; API trả `422`.
+- E4. Vượt 5.000 dòng mỗi lần: báo lọc hẹp lại hoặc chọn bớt dòng; API trả `422`.
+- E5. Có nhà trọ hoặc id dòng nằm ngoài phạm vi của người xuất: E-403 cho cả yêu cầu, không xuất phần còn lại.
+
+**Quy tắc nghiệp vụ**
+- BR1. "Chọn tất cả" do máy chủ tính lại theo bộ lọc, không tin danh sách id do trình duyệt tự liệt kê.
+- BR2. Id hóa đơn là id hóa đơn; id công nợ và hợp đồng là id hợp đồng. Khoản phí đã gộp vào hóa đơn tháng không xuất riêng.
+- BR3. Số CCCD luôn được che trong file.
 
 #### UC-68. Xem nhật ký hoạt động
 
@@ -2021,7 +2046,8 @@ Các use case dưới đây **chưa có** trên `staging` (25/10/2026), hoặc m
 | Thông báo tiến độ xử lý phiếu (được giao, đang sửa, đã xong) | Chưa có; phiếu chỉ gửi thông báo khi bị từ chối hoặc quá hạn | #204 |
 | Nhân viên hoặc chủ trọ xác nhận thanh toán tiền mặt / chuyển khoản sai nội dung | Chưa có; tiền chỉ vào qua SePay (UC-51) | #205 |
 | Giao diện đặt đơn giá điện nước (UC-16) và ghi chỉ số của người quản lý (UC-46) | Chỉ có API | — |
-| Kỹ thuật viên gửi ảnh hoàn thành; nhân viên kiểm tra kết quả trước khi người thuê nghiệm thu | Chưa có | — |
+| Kỹ thuật viên gửi ảnh hoàn thành | Đã có (#232): kỹ thuật viên được giao và người quản lý tải ảnh/video kết quả (loại RESULT) khi sửa hoặc trong form hoàn tất, khóa sau khi người thuê nghiệm thu. Chưa có: đánh số đợt sửa | #232 |
+| Nhân viên kiểm tra kết quả trước khi người thuê nghiệm thu | Chưa có | — |
 | Báo người thuê khi có hóa đơn mới; hạn và phạt khi người thuê không gửi chỉ số | Chưa có (chỉ nhắc sắp đến hạn, UC-53) | — |
 | Kênh chat chung chỉ đọc với người thuê | Chưa có trên `staging` (PR đang mở) | #129 |
 | AI: trợ lý trong chat, phân tích hóa đơn, đánh giá tài sản; MCP cho quản trị viên | Chưa có | #154–#157, #197 |

@@ -61,6 +61,10 @@ import com.phonghub.application.port.out.PaymentRepositoryPort;
 import com.phonghub.application.port.out.SepayGatewayOrderRepositoryPort;
 import com.phonghub.application.service.SepayPaymentService;
 import com.phonghub.application.port.in.InvoiceUseCase;
+import com.phonghub.application.port.in.AiAssistantUseCase;
+import com.phonghub.application.port.out.AiCompletionPort;
+import com.phonghub.application.port.out.AiEmbeddingPort;
+import com.phonghub.application.port.out.FaqSearchPort;
 import com.phonghub.application.port.in.FileStorageUseCase;
 import com.phonghub.application.port.out.FileStoragePort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
@@ -80,13 +84,64 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties({SepayProperties.class, TenantDataProtectionProperties.class, RateLimitProperties.class})
+@EnableConfigurationProperties({SepayProperties.class, TenantDataProtectionProperties.class, RateLimitProperties.class,
+    AiAssistantProperties.class})
 public class PhongHubConfiguration {
 
     @Bean
-    public FilterRegistrationBean<RateLimitFilter> rateLimitFilter(RateLimitProperties props) {
+    public AiCompletionPort aiCompletionPort(AiAssistantProperties properties) {
+        return new com.phonghub.adapter.out.ai.LiteLlmChatCompletionAdapter(properties);
+    }
+
+    @Bean
+    public AiEmbeddingPort aiEmbeddingPort(AiAssistantProperties properties) {
+        return new com.phonghub.adapter.out.ai.LiteLlmEmbeddingAdapter(properties);
+    }
+
+    @Bean
+    public FaqSearchPort faqSearchPort(AiEmbeddingPort embeddingPort, AiAssistantProperties properties,
+                                      tools.jackson.databind.ObjectMapper objectMapper) {
+        return new com.phonghub.adapter.out.ai.FaqSearchAdapter(
+            new org.springframework.core.io.ClassPathResource("faq/faq-index.json"), embeddingPort, objectMapper,
+            properties.getEmbeddingDimensions(), properties.getFaqMinimumSimilarity(), 256);
+    }
+
+    @Bean
+    public AiAssistantUseCase aiAssistantUseCase(
+        InvoiceUseCase invoiceUseCase,
+        ContractUseCase contractUseCase,
+        InvoiceRepositoryPort invoiceRepository,
+        ContractRepositoryPort contractRepository,
+        RoomRepositoryPort roomRepository,
+        MaintenanceTicketRepositoryPort ticketRepository,
+        PropertyRepositoryPort propertyRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AiCompletionPort completionPort,
+        FaqSearchPort faqSearchPort,
+        AiAssistantProperties properties,
+        tools.jackson.databind.ObjectMapper objectMapper
+    ) {
+        return new com.phonghub.application.service.AiAssistantService(
+            invoiceUseCase, contractUseCase, invoiceRepository, contractRepository, roomRepository, ticketRepository,
+            propertyRepository, currentUserPort, authorizationService, completionPort, faqSearchPort, properties, objectMapper);
+    }
+
+    @Bean
+    public FilterRegistrationBean<com.phonghub.adapter.in.web.MdcLoggingFilter> mdcLoggingFilter() {
+        FilterRegistrationBean<com.phonghub.adapter.in.web.MdcLoggingFilter> bean =
+            new FilterRegistrationBean<>(new com.phonghub.adapter.in.web.MdcLoggingFilter());
+        bean.setOrder(org.springframework.core.Ordered.HIGHEST_PRECEDENCE);
+        return bean;
+    }
+
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> rateLimitFilter(
+        RateLimitProperties props,
+        org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> meterRegistryProvider
+    ) {
         FilterRegistrationBean<RateLimitFilter> bean = new FilterRegistrationBean<>(
-            new RateLimitFilter(props, new FixedWindowRateLimiter(Clock.systemUTC())));
+            new RateLimitFilter(props, new FixedWindowRateLimiter(Clock.systemUTC()), meterRegistryProvider.getIfAvailable()));
         bean.setOrder(-150);
         return bean;
     }
@@ -442,12 +497,11 @@ public class PhongHubConfiguration {
 
     @Bean
     public com.phonghub.application.service.MaintenanceSlaPolicy maintenanceSlaPolicy(
-        @org.springframework.beans.factory.annotation.Value("${phonghub.maintenance.sla-hours.urgent:4}") long urgent,
         @org.springframework.beans.factory.annotation.Value("${phonghub.maintenance.sla-hours.high:24}") long high,
         @org.springframework.beans.factory.annotation.Value("${phonghub.maintenance.sla-hours.medium:72}") long medium,
         @org.springframework.beans.factory.annotation.Value("${phonghub.maintenance.sla-hours.low:168}") long low
     ) {
-        return new com.phonghub.application.service.MaintenanceSlaPolicy(urgent, high, medium, low);
+        return new com.phonghub.application.service.MaintenanceSlaPolicy(high, medium, low);
     }
 
     @Bean
@@ -530,9 +584,10 @@ public class PhongHubConfiguration {
     @Bean
     public com.phonghub.application.service.MaintenanceFeeSettlement maintenanceFeeSettlement(
         InvoiceRepositoryPort invoiceRepo,
-        MaintenanceTicketRepositoryPort ticketRepo
+        MaintenanceTicketRepositoryPort ticketRepo,
+        com.phonghub.application.service.MaintenanceNotifier notifier
     ) {
-        return new com.phonghub.application.service.MaintenanceFeeSettlement(invoiceRepo, ticketRepo);
+        return new com.phonghub.application.service.MaintenanceFeeSettlement(invoiceRepo, ticketRepo, notifier);
     }
 
     @Bean
@@ -581,9 +636,11 @@ public class PhongHubConfiguration {
     public com.phonghub.application.port.in.AuditLogUseCase auditLogUseCase(
         com.phonghub.application.port.out.AuditQueryPort auditQueryPort,
         PropertyRepositoryPort propertyRepo,
-        CurrentUserPort currentUserPort
+        CurrentUserPort currentUserPort,
+        com.phonghub.application.port.out.StaffPropertyAssignmentPort staffAssignments
     ) {
-        return new com.phonghub.application.service.AuditLogService(auditQueryPort, propertyRepo, currentUserPort);
+        return new com.phonghub.application.service.AuditLogService(
+            auditQueryPort, propertyRepo, currentUserPort, staffAssignments);
     }
 
     @Bean
@@ -612,6 +669,19 @@ public class PhongHubConfiguration {
         return new UserService(
             userRepo, assignmentRepo, currentUserPort, authorizationService, propertyRepo, tenantRepo, auditPort
         );
+    }
+
+    @Bean
+    public com.phonghub.application.port.in.PasswordRecoveryUseCase passwordRecoveryUseCase(
+        UserRepositoryPort userRepo,
+        IdentityProviderPort identityProviderPort,
+        org.springframework.beans.factory.ObjectProvider<com.phonghub.application.port.out.PasswordRecoveryPort> recoveryPort,
+        org.springframework.beans.factory.ObjectProvider<NotificationUseCase> notificationUseCase,
+        AuditPort auditPort,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.public-base-url:}") String publicBaseUrl
+    ) {
+        return new com.phonghub.application.service.PasswordRecoveryService(userRepo, identityProviderPort,
+            recoveryPort.getIfAvailable(), notificationUseCase.getIfAvailable(), auditPort, publicBaseUrl, Clock.systemUTC());
     }
 
     @Bean
@@ -729,7 +799,9 @@ public class PhongHubConfiguration {
         CurrentUserPort currentUserPort,
         AuthorizationService authorizationService,
         SepayProperties sepayProperties,
-        SepayGatewayOrderRepositoryPort gatewayOrderRepository
+        SepayGatewayOrderRepositoryPort gatewayOrderRepository,
+        com.phonghub.application.service.MaintenanceNotifier maintenanceNotifier,
+        AuditPort auditPort
     ) {
         SepayPaymentService service = new SepayPaymentService(
             paymentRepository,
@@ -743,7 +815,7 @@ public class PhongHubConfiguration {
             authorizationService,
             sepayProperties,
             gatewayOrderRepository
-        );
+        ).withMaintenanceNotifier(maintenanceNotifier).withAuditPort(auditPort);
         return new TransactionalSepayWebhookUseCase(service);
     }
 
@@ -784,6 +856,24 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.PaymentHistoryUseCase paymentHistoryUseCase(
+        PaymentRepositoryPort paymentRepository,
+        com.phonghub.application.port.out.InvoicePaymentRecordRepositoryPort paymentRecordRepository,
+        com.phonghub.application.port.out.PaymentClaimRepositoryPort claimRepository,
+        InvoiceRepositoryPort invoiceRepository,
+        ContractRepositoryPort contractRepository,
+        PropertyRepositoryPort propertyRepository,
+        RoomRepositoryPort roomRepository,
+        TenantRepositoryPort tenantRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService
+    ) {
+        return new com.phonghub.application.service.PaymentHistoryService(paymentRepository, paymentRecordRepository,
+            claimRepository, invoiceRepository, contractRepository, propertyRepository, roomRepository,
+            tenantRepository, currentUserPort, authorizationService);
+    }
+
+    @Bean
     public com.phonghub.application.port.in.LateFeePolicyUseCase lateFeePolicyUseCase(
         com.phonghub.application.port.out.LateFeePolicyRepositoryPort policyRepository,
         CurrentUserPort currentUserPort,
@@ -799,10 +889,12 @@ public class PhongHubConfiguration {
         InvoiceRepositoryPort invoiceRepository,
         ContractRepositoryPort contractRepository,
         com.phonghub.application.port.out.LateFeePolicyRepositoryPort policyRepository,
-        AuditPort auditPort
+        AuditPort auditPort,
+        MaintenanceTicketRepositoryPort ticketRepository,
+        com.phonghub.application.service.MaintenanceNotifier maintenanceNotifier
     ) {
         return new TransactionalLateFeeUseCases.Assessment(new com.phonghub.application.service.LateFeeAssessmentService(
-            invoiceRepository, contractRepository, policyRepository, auditPort));
+            invoiceRepository, contractRepository, policyRepository, auditPort, ticketRepository, maintenanceNotifier));
     }
 
     @Bean
@@ -868,8 +960,10 @@ public class PhongHubConfiguration {
     }
 
     @Bean
-    public com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher() {
-        return new com.phonghub.adapter.out.event.SseChatEventPublisher();
+    public com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher(
+        org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> meterRegistryProvider
+    ) {
+        return new com.phonghub.adapter.out.event.SseChatEventPublisher(meterRegistryProvider.getIfAvailable());
     }
 
     @Bean
@@ -877,10 +971,15 @@ public class PhongHubConfiguration {
         com.phonghub.application.port.out.ChatRoomRepositoryPort chatRoomRepository,
         com.phonghub.application.port.out.ChatMessageRepositoryPort chatMessageRepository,
         UserRepositoryPort userRepository,
-        com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher
+        com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher,
+        FileStoragePort fileStoragePort,
+        StorageProperties storageProperties,
+        @org.springframework.beans.factory.annotation.Value("${phonghub.chat.max-video-bytes:10485760}") long maxVideoBytes
     ) {
+        // Ảnh theo STORAGE_MAX_FILE_SIZE_BYTES; video giới hạn riêng nhưng không vượt giới hạn chung của tệp (#251)
         return new com.phonghub.application.service.ChatService(
-            chatRoomRepository, chatMessageRepository, userRepository, sseChatEventPublisher,
+            chatRoomRepository, chatMessageRepository, userRepository, sseChatEventPublisher, fileStoragePort,
+            storageProperties.getMaxFileSizeBytes(), Math.min(maxVideoBytes, storageProperties.getMaxFileSizeBytes()),
             java.time.Clock.systemUTC()
         );
     }

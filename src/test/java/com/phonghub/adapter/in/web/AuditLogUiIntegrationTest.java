@@ -115,11 +115,15 @@ class AuditLogUiIntegrationTest extends SeededWebTest {
     }
 
     @Test
-    @DisplayName("owner chọn nhà trọ của người khác thì bị chuyển hướng, người thuê bị chặn")
+    @DisplayName("owner chọn nhà trọ của người khác thì bị chuyển hướng; người thuê xem được nhưng không chọn được nhà trọ")
     void accessControl() throws Exception {
         mockMvc.perform(get("/audit").header("X-User-Id", OWNER_2).param("propertyId", DataSeeder.PROP_1_ID.toString()))
             .andExpect(status().is3xxRedirection());
-        mockMvc.perform(get("/audit").header("X-User-Id", TENANT_1)).andExpect(status().is3xxRedirection());
+        String tenantPage = page(TENANT_1);
+        assertTrue(tenantPage.contains("Hoạt động của tôi"));
+        assertFalse(tenantPage.contains("id=\"propertyId\""), "người thuê không có bộ lọc nhà trọ");
+        mockMvc.perform(get("/audit").header("X-User-Id", TENANT_1).param("propertyId", DataSeeder.PROP_1_ID.toString()))
+            .andExpect(status().is3xxRedirection());
     }
 
     @Test

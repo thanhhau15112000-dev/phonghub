@@ -18,7 +18,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class PropertyStaffService implements PropertyStaffUseCase {
 
@@ -58,17 +61,28 @@ public class PropertyStaffService implements PropertyStaffUseCase {
     }
 
     @Override
+    public List<Candidate> listCandidates(UUID propertyId, String query, int limit) {
+        authorizationService.assertOwnerOrAdmin(currentUserPort.getCurrentUser(), propertyId);
+        Set<UUID> assigned = assignedUserIds(propertyId);
+        return assignableUsers()
+            .filter(user -> !assigned.contains(user.id()))
+            .filter(user -> PersonLookup.matches(user, query))
+            .sorted(Comparator.comparing((User user) -> user.role() == UserRole.STAFF ? 0 : 1)
+                .thenComparing(user -> PersonLookup.fold(user.fullName()))
+                .thenComparing(User::id))
+            .limit(PersonLookup.clampLimit(limit))
+            .map(user -> new Candidate(user.id(), user.fullName(), user.role(), PersonLookup.maskedContact(user)))
+            .toList();
+    }
+
+    @Override
     public Member assign(AssignCommand command) {
         CurrentUser actor = currentUserPort.getCurrentUser();
         authorizationService.assertOwnerOrAdmin(actor, command.propertyId());
 
-        String key = command.usernameOrEmail().trim();
-        // Thông báo chung cho mọi trường hợp không hợp lệ để không dò được tài khoản nào tồn tại.
-        User target = userRepository.findByUsername(key).or(() -> userRepository.findByEmail(key))
-            .filter(user -> user.status() == User.UserStatus.ACTIVE)
-            .filter(user -> user.role() == UserRole.STAFF || user.role() == UserRole.TECHNICIAN)
-            .orElseThrow(() -> new IllegalArgumentException(
-                "Không tìm thấy tài khoản nhân viên hoặc kỹ thuật viên đang hoạt động với thông tin này"));
+        User target = command.userId() != null
+            ? selectedCandidate(command.propertyId(), command.userId())
+            : typedAccount(command.usernameOrEmail());
 
         boolean technician = target.role() == UserRole.TECHNICIAN;
         Optional<StaffPropertyAssignment> existing = assignmentPort.find(target.id(), command.propertyId());
@@ -126,6 +140,45 @@ public class PropertyStaffService implements PropertyStaffUseCase {
         }
         assignmentPort.deleteByUserIdAndPropertyId(userId, propertyId);
         audit("STAFF_UNASSIGNED", actor, current, target);
+    }
+
+    /** Người chọn từ danh sách: phải đúng là một dòng của {@link #listCandidates}, không tin id từ trình duyệt. */
+    private User selectedCandidate(UUID propertyId, UUID userId) {
+        User target = userRepository.findById(userId)
+            .filter(PropertyStaffService::isAssignable)
+            .orElseThrow(() -> new IllegalArgumentException(
+                "Người được chọn không có trong danh sách nhân viên hoặc kỹ thuật viên có thể phân công"));
+        if (assignedUserIds(propertyId).contains(target.id())) {
+            throw new StaffAssignmentConflictException(
+                "Nhân sự này đã được phân công vào nhà trọ; chỉnh quyền ở bảng danh sách nhân sự.");
+        }
+        return target;
+    }
+
+    private User typedAccount(String usernameOrEmail) {
+        String key = usernameOrEmail.trim();
+        // Thông báo chung cho mọi trường hợp không hợp lệ để không dò được tài khoản nào tồn tại.
+        return userRepository.findByUsername(key).or(() -> userRepository.findByEmail(key))
+            .filter(PropertyStaffService::isAssignable)
+            .orElseThrow(() -> new IllegalArgumentException(
+                "Không tìm thấy tài khoản nhân viên hoặc kỹ thuật viên đang hoạt động với thông tin này"));
+    }
+
+    private Stream<User> assignableUsers() {
+        return Stream.concat(userRepository.findByRole(UserRole.STAFF).stream(),
+                userRepository.findByRole(UserRole.TECHNICIAN).stream())
+            .filter(PropertyStaffService::isAssignable);
+    }
+
+    private static boolean isAssignable(User user) {
+        return user.status() == User.UserStatus.ACTIVE
+            && (user.role() == UserRole.STAFF || user.role() == UserRole.TECHNICIAN);
+    }
+
+    private Set<UUID> assignedUserIds(UUID propertyId) {
+        return assignmentPort.findByPropertyId(propertyId).stream()
+            .map(StaffPropertyAssignment::staffUserId)
+            .collect(Collectors.toSet());
     }
 
     private void audit(String action, CurrentUser actor, StaffPropertyAssignment assignment, User target) {

@@ -32,7 +32,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Danh sách chọn người thuê chính khi tạo hợp đồng: admin chọn được người thuê của mọi nhà trọ, vai trò khác theo nhà trọ. */
+/**
+ * Danh sách chọn người thuê chính khi tạo hợp đồng: chủ trọ và nhân viên có quyền chọn theo nhà trọ của mình. Quản trị
+ * viên không lập hợp đồng (#304), nên phần chọn người thuê của mọi nhà trọ (#246) đã bỏ.
+ */
 class ContractServiceCrossPropertyTenantPickerUnitTest {
 
     private InMemoryContractRepository contractRepo;
@@ -57,7 +60,7 @@ class ContractServiceCrossPropertyTenantPickerUnitTest {
         userRepo = new InMemoryUserRepository();
         assignmentRepo = new InMemoryStaffPropertyAssignmentRepository();
         auth = new LocalDemoAuthenticationAdapter();
-        auth.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_ADMIN);
+        auth.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_OWNER_1);
         AuthorizationService authService = new AuthorizationService(assignmentRepo, propertyRepo, tenantRepo, contractRepo);
         contractService = new ContractService(contractRepo, roomRepo, propertyRepo, tenantRepo, userRepo, null,
             auth, authService, null, new InMemoryHandoverRepository());
@@ -69,20 +72,24 @@ class ContractServiceCrossPropertyTenantPickerUnitTest {
     }
 
     @Test
-    @DisplayName("Admin thấy người thuê đã gắn với nhà trọ khác")
-    void adminSeesTenantLinkedToAnotherProperty() {
-        Tenant tenant = tenantAt(propertyB, "Tenant Một", User.UserStatus.ACTIVE);
+    @DisplayName("Quản trị viên không lập hợp đồng nên không mở được danh sách chọn người thuê và không tạo được (#304)")
+    void adminCannotPickTenantsOrCreateContract() {
+        Tenant tenant = tenantAt(propertyA, "Tenant Một", User.UserStatus.ACTIVE);
+        auth.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_ADMIN);
 
-        assertTrue(containsTenant(propertyA, tenant));
+        assertThrows(UnauthorizedPropertyAccessException.class,
+            () -> contractService.listAvailablePrimaryTenants(propertyA.id(), null));
+        assertThrows(UnauthorizedPropertyAccessException.class,
+            () -> contractService.createContract(new ContractUseCase.CreateContractCommand(
+                propertyA.id(), roomA.getId(), tenant.id(), new BigDecimal("3000000"), new BigDecimal("3000000"),
+                LocalDate.now(), LocalDate.now().plusMonths(6), 5)));
+        assertTrue(contractRepo.findByPropertyId(propertyA.id()).isEmpty());
     }
 
     @Test
-    @DisplayName("Admin thấy người thuê từng có hợp đồng đã kết thúc ở nhà trọ khác")
-    void adminSeesTenantWithEndedContractElsewhere() {
-        Tenant tenant = tenantAt(propertyB, "Tenant Hai", User.UserStatus.ACTIVE);
-        Contract ended = Contract.create(propertyB.id(), roomB.getId(), tenant.id(), BigDecimal.ONE, BigDecimal.ONE,
-            LocalDate.now().minusMonths(6), LocalDate.now().minusMonths(1), 5);
-        contractRepo.save(ended);
+    @DisplayName("Chủ nhà trọ thấy người thuê đã gắn với nhà trọ của mình")
+    void ownerSeesTenantLinkedToOwnProperty() {
+        Tenant tenant = tenantAt(propertyA, "Tenant Hai", User.UserStatus.ACTIVE);
 
         assertTrue(containsTenant(propertyA, tenant));
     }
@@ -91,7 +98,17 @@ class ContractServiceCrossPropertyTenantPickerUnitTest {
     @DisplayName("Chủ nhà trọ không thấy người thuê của chủ nhà trọ khác")
     void ownerStillCannotSeeTenantOfAnotherOwner() {
         Tenant tenant = tenantAt(propertyB, "Tenant Ba", User.UserStatus.ACTIVE);
-        auth.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_OWNER_1);
+
+        assertFalse(containsTenant(propertyA, tenant));
+    }
+
+    @Test
+    @DisplayName("Chủ nhà trọ không thấy người thuê chỉ từng có hợp đồng ở nhà trọ của chủ khác")
+    void ownerDoesNotSeeTenantWithEndedContractAtAnotherOwner() {
+        Tenant tenant = tenantAt(propertyB, "Tenant Bốn", User.UserStatus.ACTIVE);
+        Contract ended = Contract.create(propertyB.id(), roomB.getId(), tenant.id(), BigDecimal.ONE, BigDecimal.ONE,
+            LocalDate.now().minusMonths(6), LocalDate.now().minusMonths(1), 5);
+        contractRepo.save(ended);
 
         assertFalse(containsTenant(propertyA, tenant));
     }
@@ -123,10 +140,11 @@ class ContractServiceCrossPropertyTenantPickerUnitTest {
     }
 
     @Test
-    @DisplayName("Người đang ở phòng khác vẫn bị loại với admin")
-    void adminDoesNotSeeResidingTenant() {
-        Tenant tenant = tenantAt(propertyB, "Tenant Bốn", User.UserStatus.ACTIVE);
-        Contract active = Contract.create(propertyB.id(), roomB.getId(), tenant.id(), BigDecimal.ONE, BigDecimal.ONE,
+    @DisplayName("Người đang ở phòng khác bị loại")
+    void ownerDoesNotSeeResidingTenant() {
+        Tenant tenant = tenantAt(propertyA, "Tenant Năm", User.UserStatus.ACTIVE);
+        Room otherRoom = roomRepo.save(room(propertyA, "A102"));
+        Contract active = Contract.create(propertyA.id(), otherRoom.getId(), tenant.id(), BigDecimal.ONE, BigDecimal.ONE,
             LocalDate.now().minusDays(10), LocalDate.now().plusMonths(6), 5);
         active.activate();
         contractRepo.save(active);
@@ -135,43 +153,29 @@ class ContractServiceCrossPropertyTenantPickerUnitTest {
     }
 
     @Test
-    @DisplayName("Người bị ẩn khỏi nhà trọ này vẫn bị loại với admin")
-    void adminDoesNotSeeTenantHiddenAtThisProperty() {
-        Tenant tenant = tenantAt(propertyA, "Tenant Năm", User.UserStatus.ACTIVE);
-        tenantRepo.setHidden(tenant.id(), propertyA.id(), Instant.now(), LocalDemoAuthenticationAdapter.DEMO_ADMIN.id());
+    @DisplayName("Người bị ẩn khỏi nhà trọ này bị loại")
+    void ownerDoesNotSeeTenantHiddenAtThisProperty() {
+        Tenant tenant = tenantAt(propertyA, "Tenant Sáu", User.UserStatus.ACTIVE);
+        tenantRepo.setHidden(tenant.id(), propertyA.id(), Instant.now(), LocalDemoAuthenticationAdapter.DEMO_OWNER_1.id());
 
         assertFalse(containsTenant(propertyA, tenant));
     }
 
     @Test
     @DisplayName("Tài khoản bị khóa hoặc hồ sơ chưa có tài khoản không được chọn")
-    void adminDoesNotSeeSuspendedAccountOrProfileWithoutAccount() {
-        Tenant suspended = tenantAt(propertyB, "Tenant Sáu", User.UserStatus.SUSPENDED);
-        Tenant noAccount = tenantRepo.save(Tenant.create(null, "Tenant Bảy", "700000007", "0900000007", null, null));
-        tenantRepo.linkToProperty(noAccount.id(), propertyB.id(), LocalDemoAuthenticationAdapter.DEMO_ADMIN.id());
+    void suspendedAccountOrProfileWithoutAccountIsNotSelectable() {
+        Tenant suspended = tenantAt(propertyA, "Tenant Bảy", User.UserStatus.SUSPENDED);
+        Tenant noAccount = tenantRepo.save(Tenant.create(null, "Tenant Tám", "700000007", "0900000007", null, null));
+        tenantRepo.linkToProperty(noAccount.id(), propertyA.id(), LocalDemoAuthenticationAdapter.DEMO_OWNER_1.id());
 
         assertFalse(containsTenant(propertyA, suspended));
         assertFalse(containsTenant(propertyA, noAccount));
     }
 
     @Test
-    @DisplayName("Admin tạo hợp đồng với người thuê của nhà trọ khác và hồ sơ được gắn vào nhà trọ này")
-    void adminCanCreateContractForTenantOfAnotherProperty() {
-        Tenant tenant = tenantAt(propertyB, "Tenant Tám", User.UserStatus.ACTIVE);
-
-        Contract created = contractService.createContract(new ContractUseCase.CreateContractCommand(
-            propertyA.id(), roomA.getId(), tenant.id(), new BigDecimal("3000000"), new BigDecimal("3000000"),
-            LocalDate.now(), LocalDate.now().plusMonths(6), 5));
-
-        assertTrue(created.getPrimaryTenantId().equals(tenant.id()));
-        assertTrue(tenantRepo.findLinkedPropertyIds(tenant.id()).contains(propertyA.id()));
-    }
-
-    @Test
     @DisplayName("Chủ nhà trọ không tạo được hợp đồng với người thuê của chủ khác")
     void ownerCannotCreateContractForTenantOfAnotherOwner() {
         Tenant tenant = tenantAt(propertyB, "Tenant Chín", User.UserStatus.ACTIVE);
-        auth.setCurrentUser(LocalDemoAuthenticationAdapter.DEMO_OWNER_1);
 
         assertThrows(RuntimeException.class, () -> contractService.createContract(new ContractUseCase.CreateContractCommand(
             propertyA.id(), roomA.getId(), tenant.id(), new BigDecimal("3000000"), new BigDecimal("3000000"),

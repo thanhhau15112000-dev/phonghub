@@ -62,15 +62,20 @@
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <h2 style="font-size: 15px;">Tài khoản đăng nhập</h2>
             <p style="margin: 0 0 8px; font-size: 12px; color: var(--text-secondary);">
-                Người thuê này chưa có tài khoản app. Gắn tài khoản TENANT đã có theo email, hoặc cấp tài khoản mới
-                (mật khẩu tạm chỉ hiển thị một lần).
+                Người thuê này chưa có tài khoản app. Gắn tài khoản TENANT đã có (chọn từ danh sách hoặc theo email),
+                hoặc cấp tài khoản mới theo email (mật khẩu tạm chỉ hiển thị một lần).
             </p>
-            <label class="form-label" for="linkAccountEmail">Email</label>
+            <label class="form-label">Chọn tài khoản có sẵn</label>
+            <div th:replace="~{fragments/user-picker :: field('userId',
+                    @{'/api/properties/' + ${property.id()} + '/tenants/' + ${tenant.id()} + '/account-candidates'},
+                    'Gõ họ tên, tên đăng nhập, email hoặc 4 số cuối SĐT',
+                    'Không có tài khoản người thuê nào chưa gắn hồ sơ. Gõ email bên dưới hoặc cấp tài khoản mới.')}"></div>
+            <label class="form-label" for="linkAccountEmail" style="margin-top: 10px;">hoặc email</label>
             <input type="email" id="linkAccountEmail" name="email" class="form-control" required
                    th:value="${tenant.email()}" placeholder="tenant@example.com">
             <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;">
                 <button type="submit" class="btn btn-secondary">Liên kết tài khoản có sẵn</button>
-                <button type="submit" class="btn btn-primary"
+                <button type="submit" id="issueAccountButton" class="btn btn-primary"
                         th:formaction="@{'/properties/' + ${property.id()} + '/tenants/' + ${tenant.id()} + '/issue-account'}">Cấp tài khoản mới</button>
             </div>
         </form>
@@ -82,6 +87,21 @@
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>
+<th:block th:if="${tenant != null and tenant.userId() == null}">
+<script th:replace="~{fragments/user-picker :: script}"></script>
+<script>
+    // Chọn tài khoản có sẵn thì "Liên kết" gửi userId; "Cấp tài khoản mới" vẫn theo email nên tạm khóa khi đã chọn.
+    (function () {
+        var email = document.getElementById('linkAccountEmail');
+        var issueButton = document.getElementById('issueAccountButton');
+        wireUserPicker(document.querySelector('.user-picker'), {
+            typed: email,
+            keepTypedEnabled: true,
+            onChange: function (person) { issueButton.disabled = !!person; }
+        });
+    })();
+</script>
+</th:block>
 <th:block th:if="${tenant == null}">
 <div th:replace="~{fragments/tenant-picker :: script}"></div>
 <script>

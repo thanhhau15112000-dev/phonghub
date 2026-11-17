@@ -1,6 +1,9 @@
 package com.phonghub.adapter.in.web;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -14,6 +17,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
@@ -135,6 +139,15 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void staticAssetsArePermittedWithoutAuthenticationInProd() throws Exception {
+        mockMvc.perform(get("/css/style.css"))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/js/vendor/htmx.min.js"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
     void browserUiRedirectsUnauthenticatedRequestsToLogin() throws Exception {
         mockMvc.perform(get("/"))
             .andExpect(status().is3xxRedirection())
@@ -142,8 +155,9 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
-    void unauthenticatedHtmxRequestReturnsUnauthorizedWithRedirect() throws Exception {
-        mockMvc.perform(get("/dashboard").header("HX-Request", "true"))
+    void unauthenticatedHtmxRequestReturns401WithHxRedirectHeader() throws Exception {
+        mockMvc.perform(get("/dashboard")
+                .header("HX-Request", "true"))
             .andExpect(status().isUnauthorized())
             .andExpect(header().string("HX-Redirect", "/login"));
     }
@@ -299,6 +313,49 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(get("/properties").session(session))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/account/password"));
+    }
+
+    @Test
+    void loginFormHasExactlyOneCsrfField() throws Exception {
+        String page = mockMvc.perform(get("/login"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+
+        int formStart = page.indexOf("action=\"/login\"");
+        String loginForm = page.substring(formStart, page.indexOf("</form>", formStart));
+        assertEquals(1, loginForm.split("name=\"_csrf\"", -1).length - 1, "Form đăng nhập chỉ có một ô _csrf (#313)");
+    }
+
+    @Test
+    void shortPasswordErrorIsShownOnceInVietnamese() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(authUseCase.login("temporary", "secret123")).thenReturn(new AuthTokenResponse(
+            "temporary-access-token",
+            "temporary-refresh-token",
+            "Bearer",
+            3600L,
+            new AuthTokenResponse.UserInfo(userId, "temporary", "temporary@example.com", "Temporary User", UserRole.TENANT, true)
+        ));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(new User(
+            userId, "temporary", "temporary@phonghub.local", "Temporary User", "0900000001",
+            UserRole.TENANT, User.UserStatus.ACTIVE, true, Instant.now()
+        )));
+        doThrow(new IllegalArgumentException(AuthUseCase.PASSWORD_TOO_SHORT)).when(authUseCase).changePassword("1234567");
+        MockHttpSession session = (MockHttpSession) mockMvc.perform(post("/login").with(csrf())
+                .param("username", "temporary").param("password", "secret123"))
+            .andExpect(redirectedUrl("/account/password"))
+            .andReturn().getRequest().getSession(false);
+
+        String page = mockMvc.perform(post("/account/password").session(session).with(csrf())
+                .param("newPassword", "1234567"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+
+        assertEquals(1, page.split(AuthUseCase.PASSWORD_TOO_SHORT, -1).length - 1, "Câu báo chỉ hiện một lần (#313)");
+        assertTrue(!page.contains("at least 8 characters"));
+        int formStart = page.indexOf("action=\"/account/password\"");
+        String passwordForm = page.substring(formStart, page.indexOf("</form>", formStart));
+        assertEquals(1, passwordForm.split("name=\"_csrf\"", -1).length - 1, "Form đổi mật khẩu chỉ có một ô _csrf (#313)");
     }
 
     @Test
@@ -502,9 +559,12 @@ class ProductionAuthSecurityTest {
                 .param("email", "duplicate@phonghub.local")
                 .param("fullName", "Tenant Two")
                 .param("role", "TENANT"))
-            .andExpect(status().is3xxRedirection())
-            .andExpect(redirectedUrl("/admin/users"))
-            .andExpect(flash().attribute("errorMessage", "Email đã được sử dụng bởi một tài khoản khác: duplicate@phonghub.local"));
+            .andExpect(status().isOk())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.view().name("admin/users"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "createFieldErrors", org.hamcrest.Matchers.hasEntry("email", "Email đã được dùng.")))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "createForm", org.hamcrest.Matchers.hasEntry("fullName", "Tenant Two")));
     }
 
     @Test
@@ -519,9 +579,12 @@ class ProductionAuthSecurityTest {
                 .param("email", "unique@phonghub.local")
                 .param("fullName", "Tenant Two")
                 .param("role", "TENANT"))
-            .andExpect(status().is3xxRedirection())
-            .andExpect(redirectedUrl("/admin/users"))
-            .andExpect(flash().attribute("errorMessage", "Tên đăng nhập đã tồn tại trong hệ thống: duplicateuser"));
+            .andExpect(status().isOk())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.view().name("admin/users"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "createFieldErrors", org.hamcrest.Matchers.hasEntry("username", "Tên đăng nhập đã được dùng.")))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.model().attribute(
+                "createForm", org.hamcrest.Matchers.hasEntry("email", "unique@phonghub.local")));
     }
 
     @Test
@@ -591,8 +654,8 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
-    void forgotPasswordWithUnknownUserReturnsNeutralSuccessMessage() throws Exception {
-        // Anti-enumeration: không tiết lộ tài khoản có tồn tại hay không — luôn trả successMessage trung lập
+    void forgotPasswordWithUnknownUserSaysAccountNotFound() throws Exception {
+        // #341: không có tài khoản thì báo rõ, không hiện khung "đã gửi"; giữ lại chữ đã nhập để sửa
         when(userRepository.findByUsername("unknown_user")).thenReturn(Optional.empty());
         when(userRepository.findByEmail("unknown_user")).thenReturn(Optional.empty());
 
@@ -600,8 +663,37 @@ class ProductionAuthSecurityTest {
                 .with(csrf())
                 .param("identifier", "unknown_user"))
             .andExpect(status().isOk())
-            .andExpect(model().attributeExists("successMessage"))
-            .andExpect(model().attributeDoesNotExist("errorMessage"));
+            .andExpect(model().attributeDoesNotExist("successMessage"))
+            .andExpect(model().attribute("identifier", "unknown_user"))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Không tìm thấy tài khoản")))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("name=\"identifier\"")));
+    }
+
+    @Test
+    void resetPasswordPageIsPublicAndRejectsForgedToken() throws Exception {
+        // #330: trang mở từ liên kết email, chưa đăng nhập vẫn vào được; token giả bị từ chối
+        when(jwtDecoder.decode("khong-phai-jwt"))
+            .thenThrow(new org.springframework.security.oauth2.jwt.BadJwtException("malformed"));
+        mockMvc.perform(get("/reset-password"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("emailRecoveryAvailable", true));
+        mockMvc.perform(post("/reset-password")
+                .with(csrf())
+                .param("recoveryToken", "khong-phai-jwt")
+                .param("newPassword", "MatKhauMoi#2026")
+                .param("confirmPassword", "MatKhauMoi#2026"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("errorMessage",
+                com.phonghub.domain.exception.InvalidPasswordRecoveryLinkException.MESSAGE));
+    }
+
+    @Test
+    void resetPasswordRequiresCsrf() throws Exception {
+        mockMvc.perform(post("/reset-password")
+                .param("recoveryToken", "x")
+                .param("newPassword", "MatKhauMoi#2026")
+                .param("confirmPassword", "MatKhauMoi#2026"))
+            .andExpect(status().isForbidden());
     }
 
     @Test
@@ -629,7 +721,12 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(get("/account/profile").session(session))
             .andExpect(status().isOk())
             .andExpect(model().attributeExists("user"))
-            .andExpect(model().attributeExists("currentUser"));
+            .andExpect(model().attributeExists("currentUser"))
+            .andExpect(content().string(containsString("id=\"accountMenuButton\"")))
+            .andExpect(content().string(containsString("class=\"account-menu-name\">Admin User</span>")))
+            .andExpect(content().string(containsString("Chi tiết hồ sơ")))
+            .andExpect(content().string(containsString("action=\"/session/logout\"")))
+            .andExpect(content().string(not(containsString("id=\"demoUserSwitcher\""))));
     }
 
     @Test
@@ -688,6 +785,15 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(post(property + "/archive")).andExpect(status().isUnauthorized());
         mockMvc.perform(post(property + "/restore")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/properties").param("archived", "true")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void userPickerCandidateEndpointsRequireAuthenticationInProd() throws Exception {
+        String property = "/api/properties/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+        mockMvc.perform(get(property + "/staff/candidates").param("q", "staff"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(property + "/tenants/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/account-candidates"))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -1453,5 +1559,97 @@ class ProductionAuthSecurityTest {
             .andExpect(status().is3xxRedirection())
             .andReturn();
         return (MockHttpSession) result.getRequest().getSession(false);
+    }
+
+    // ---- #305: phiên đăng nhập của tài khoản bị khóa hoặc đổi vai trò không còn gọi được API ----
+
+    private User sessionUser(UUID id, UserRole role, User.UserStatus status) {
+        return new User(id, "sessionuser", "sessionuser@example.com", "Session User", "0901234567", role, status,
+            false, Instant.now());
+    }
+
+    private MockHttpSession loginBrowserSession(UUID id, UserRole role) throws Exception {
+        when(userRepository.findById(id)).thenReturn(Optional.of(sessionUser(id, role, User.UserStatus.ACTIVE)));
+        when(authUseCase.login("sessionuser", "secret123")).thenReturn(new AuthTokenResponse("session-access",
+            "session-refresh", "Bearer", 3600L,
+            new AuthTokenResponse.UserInfo(id, "sessionuser", "sessionuser@example.com", "Session User", role, false)));
+        when(chatRoomUseCase.getRoomsForUser(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+        return (MockHttpSession) mockMvc.perform(post("/login").with(csrf())
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .param("username", "sessionuser").param("password", "secret123"))
+            .andExpect(status().is3xxRedirection())
+            .andReturn().getRequest().getSession(false);
+    }
+
+    @Test
+    @DisplayName("#305: phiên của tài khoản còn hoạt động vẫn gọi được API")
+    void activeBrowserSessionReachesApi() throws Exception {
+        UUID id = UUID.randomUUID();
+        MockHttpSession session = loginBrowserSession(id, UserRole.OWNER);
+
+        mockMvc.perform(get("/api/chat/rooms").session(session))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("#305: tài khoản bị khóa thì phiên cũ gọi API nhận 401 và phiên bị hủy")
+    void suspendedBrowserSessionIsRevokedForApi() throws Exception {
+        UUID id = UUID.randomUUID();
+        MockHttpSession session = loginBrowserSession(id, UserRole.OWNER);
+        when(userRepository.findById(id)).thenReturn(Optional.of(
+            sessionUser(id, UserRole.OWNER, User.UserStatus.SUSPENDED)));
+
+        mockMvc.perform(get("/api/chat/rooms").session(session))
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.status").value(401));
+        assertTrue(session.isInvalid(), "Phiên của tài khoản bị khóa phải bị hủy");
+    }
+
+    @Test
+    @DisplayName("#305: tài khoản ngừng hoạt động hoặc bị xóa cũng không gọi được API bằng phiên cũ")
+    void inactiveOrDeletedAccountSessionIsRevokedForApi() throws Exception {
+        UUID inactiveId = UUID.randomUUID();
+        MockHttpSession inactive = loginBrowserSession(inactiveId, UserRole.STAFF);
+        when(userRepository.findById(inactiveId)).thenReturn(Optional.of(
+            sessionUser(inactiveId, UserRole.STAFF, User.UserStatus.INACTIVE)));
+        mockMvc.perform(post("/api/chat/rooms/direct").session(inactive)
+                .contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isUnauthorized());
+
+        UUID deletedId = UUID.randomUUID();
+        MockHttpSession deleted = loginBrowserSession(deletedId, UserRole.TENANT);
+        when(userRepository.findById(deletedId)).thenReturn(Optional.empty());
+        mockMvc.perform(get("/api/chat/rooms").session(deleted))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("#305: đổi vai trò thì phiên cũ bị hủy ở cả API và giao diện")
+    void roleChangeRevokesBrowserSession() throws Exception {
+        UUID id = UUID.randomUUID();
+        MockHttpSession apiSession = loginBrowserSession(id, UserRole.OWNER);
+        when(userRepository.findById(id)).thenReturn(Optional.of(sessionUser(id, UserRole.STAFF, User.UserStatus.ACTIVE)));
+        mockMvc.perform(get("/api/chat/rooms").session(apiSession))
+            .andExpect(status().isUnauthorized());
+
+        MockHttpSession uiSession = loginBrowserSession(id, UserRole.OWNER);
+        when(userRepository.findById(id)).thenReturn(Optional.of(sessionUser(id, UserRole.STAFF, User.UserStatus.ACTIVE)));
+        mockMvc.perform(get("/").session(uiSession))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"));
+    }
+
+    @Test
+    void revokedHtmxSessionReturnsUnauthorizedAndRedirectHeader() throws Exception {
+        UUID id = UUID.randomUUID();
+        MockHttpSession session = loginBrowserSession(id, UserRole.OWNER);
+        when(userRepository.findById(id)).thenReturn(Optional.of(
+            sessionUser(id, UserRole.OWNER, User.UserStatus.SUSPENDED)));
+
+        mockMvc.perform(get("/dashboard").session(session).header("HX-Request", "true"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().string("HX-Redirect", "/login"));
+        assertTrue(session.isInvalid());
     }
 }

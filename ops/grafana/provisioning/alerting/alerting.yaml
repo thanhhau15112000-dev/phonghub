@@ -1,0 +1,88 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: 'PhongHub Alert Rules'
+    folder: 'PhongHub'
+    interval: 30s
+    rules:
+      - uid: alert-app-down
+        title: 'App không phản hồi (PhongHub App Down)'
+        condition: 'A'
+        data:
+          - refId: 'A'
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: 'Prometheus'
+            model:
+              expr: 'up{job="phonghub-app"} == 0'
+              intervalMs: 1000
+              maxDataPoints: 43200
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Ứng dụng PhongHub không phản hồi hoặc đã dừng hoạt động.'
+          description: 'Prometheus không thể scrape được /actuator/prometheus trong vòng 1 phút qua.'
+
+      - uid: alert-high-5xx-rate
+        title: 'Tỷ lệ lỗi 5xx tăng cao'
+        condition: 'A'
+        data:
+          - refId: 'A'
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: 'Prometheus'
+            model:
+              expr: 'sum(rate(http_server_requests_seconds_count{status=~"5.."}[1m])) > 0.05'
+              intervalMs: 1000
+              maxDataPoints: 43200
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Hệ thống đang phát sinh nhiều lỗi HTTP 5xx bất thường.'
+          description: 'Tỷ lệ lỗi 5xx vượt quá ngưỡng cho phép trong 2 phút liên tục.'
+
+      - uid: alert-sepay-ipn-error
+        title: 'SePay IPN Webhook liên tiếp gặp lỗi'
+        condition: 'A'
+        data:
+          - refId: 'A'
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: 'Prometheus'
+            model:
+              expr: 'increase(phonghub_sepay_ipn_total{status!="success"}[5m]) >= 3'
+              intervalMs: 1000
+              maxDataPoints: 43200
+        for: 1m
+        labels:
+          severity: high
+        annotations:
+          summary: 'Webhook thanh toán SePay bị lỗi liên tiếp.'
+          description: 'Có từ 3 lượt gọi webhook SePay bị lỗi, sai chữ ký hoặc thất bại trong 5 phút qua.'
+
+      - uid: alert-db-pool-exhausted
+        title: 'Hồ kết nối Database cạn kiệt (DB Pool Exhausted)'
+        condition: 'A'
+        data:
+          - refId: 'A'
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: 'Prometheus'
+            model:
+              expr: 'hikaricp_connections_pending > 0 or (hikaricp_connections_active / hikaricp_connections_max > 0.9)'
+              intervalMs: 1000
+              maxDataPoints: 43200
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Database connection pool đang bị cạn hoặc có thread phải chờ kết nối.'
+          description: 'Số active connections vượt quá 90% hoặc có thread pending.'
+

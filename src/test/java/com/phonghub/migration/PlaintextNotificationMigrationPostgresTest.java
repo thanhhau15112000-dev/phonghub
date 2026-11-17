@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.phonghub.adapter.out.persistence.postgres.PostgresNotificationRepository;
-import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
+import com.phonghub.application.port.out.TenantDataProtectionPort;
 import com.phonghub.domain.model.Notification;
 import java.sql.Connection;
 import java.sql.Statement;
@@ -43,9 +43,8 @@ class PlaintextNotificationMigrationPostgresTest {
         Flyway.configure().dataSource(ds).locations(MAIN, FIXTURE).target("48").load().migrate();
 
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
-        // Cùng khóa với biến môi trường TENANT_DATA_* mà surefire đặt cho migration
-        var protector = new AesGcmTenantDataProtector("test-v1",
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
+        // Dùng cùng cấu hình TENANT_DATA_* mà Surefire cấp cho migration.
+        var protector = TestTenantDataProtection.createProtector();
         PostgresNotificationRepository notifications = new PostgresNotificationRepository(jdbc, protector);
 
         UUID plainId = UUID.randomUUID();
@@ -81,7 +80,7 @@ class PlaintextNotificationMigrationPostgresTest {
     }
 
     private static com.phonghub.domain.model.User notificationsTarget(
-        NamedParameterJdbcTemplate jdbc, AesGcmTenantDataProtector protector
+        NamedParameterJdbcTemplate jdbc, TenantDataProtectionPort protector
     ) {
         return new com.phonghub.adapter.out.persistence.postgres.PostgresUserRepository(jdbc, protector)
             .findById(TENANT_USER).orElseThrow();

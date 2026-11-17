@@ -7,9 +7,16 @@
 <main class="container">
     <div class="page-title-row">
         <div>
-            <h1>Nhật ký hoạt động</h1>
-            <p style="color: var(--text-secondary); font-size: 13px;">
-                Lịch sử đăng nhập, thay đổi dữ liệu và xem giấy tờ. Mật khẩu, token và số giấy tờ đầy đủ không bao giờ được lưu.
+            <h1 th:text="${currentUser != null and currentUser.role().name() == 'TENANT'} ? 'Hoạt động của tôi' : 'Nhật ký hoạt động'">Nhật ký hoạt động</h1>
+            <p id="auditScopeNote" style="color: var(--text-secondary); font-size: 13px;"
+               th:text="${currentUser == null ? '' : currentUser.role().name() == 'TENANT'
+                   ? 'Hóa đơn, thanh toán, tài khoản của bạn và các thay đổi ở phòng bạn đang thuê. Chỉ để xem.'
+                   : currentUser.role().name() == 'TECHNICIAN'
+                   ? 'Lịch sử các phiếu sửa chữa được giao cho bạn. Chỉ để xem.'
+                   : currentUser.role().name() == 'STAFF'
+                   ? 'Sự kiện của các nhà trọ bạn được phân công; số tiền và giấy tờ hiện theo quyền của bạn. Chỉ để xem.'
+                   : 'Lịch sử đăng nhập, thay đổi dữ liệu và xem giấy tờ. Mật khẩu, token và số giấy tờ đầy đủ không bao giờ được lưu.'}">
+                Lịch sử đăng nhập, thay đổi dữ liệu và xem giấy tờ.
             </p>
             <p th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" id="auditMoneyHiddenNote"
                style="color: var(--text-secondary); font-size: 13px;">
@@ -22,7 +29,7 @@
 
     <div class="card">
         <form method="get" th:action="@{/audit}" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
-            <div class="form-group" style="flex: 1; min-width: 180px;">
+            <div class="form-group" style="flex: 1; min-width: 180px;" th:unless="${#lists.isEmpty(properties)}">
                 <label class="form-label" for="propertyId">Nhà trọ</label>
                 <select id="propertyId" name="propertyId" class="form-control">
                     <option value="">Tất cả</option>

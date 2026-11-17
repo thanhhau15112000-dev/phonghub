@@ -84,7 +84,8 @@ public interface RoomUseCase {
             if (roomNumber == null || roomNumber.isBlank()) {
                 throw new IllegalArgumentException("Số phòng không được để trống.");
             }
-            if (basePrice == null || basePrice.compareTo(BigDecimal.ZERO) < 0) {
+            // basePrice null = giữ giá hiện tại (người không có quyền tài chính không đọc được giá, #326)
+            if (basePrice != null && basePrice.compareTo(BigDecimal.ZERO) < 0) {
                 throw new IllegalArgumentException("Giá thuê không được âm.");
             }
             if (maxOccupants <= 0) {

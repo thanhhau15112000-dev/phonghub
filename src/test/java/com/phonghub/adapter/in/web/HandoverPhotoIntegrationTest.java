@@ -101,8 +101,17 @@ class HandoverPhotoIntegrationTest extends SeededWebTest {
         createDraft("handover");
         String photoPath = uploadAndFindPhoto("handover");
 
+        // #230: 403 phải kèm trang thông báo, không để tab trống, và không lộ ảnh thuộc hợp đồng nào
         mockMvc.perform(get(photoPath).header("X-User-Id", OWNER_2))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isForbidden())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().contentTypeCompatibleWith("text/html"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(
+                org.hamcrest.Matchers.containsString("Bạn không có quyền xem tệp này.")));
+        mockMvc.perform(get(photoPath.substring(0, photoPath.lastIndexOf('/') + 1) + java.util.UUID.randomUUID())
+                .header("X-User-Id", OWNER_1))
+            .andExpect(status().isNotFound())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(
+                org.hamcrest.Matchers.containsString("Không tìm thấy tệp này.")));
         mockMvc.perform(multipart(API + "/handover/photos").file(png()).param("kind", "ROOM")
                 .header("X-User-Id", OWNER_2))
             .andExpect(status().isForbidden());
@@ -135,15 +144,16 @@ class HandoverPhotoIntegrationTest extends SeededWebTest {
     }
 
     @Test
-    @DisplayName("Kho lưu trữ lỗi khi xem ảnh: quay lại trang biên bản kèm thông báo thay vì trang lỗi 500")
+    @DisplayName("Kho lưu trữ lỗi khi xem ảnh: trả trang thông báo 503 thay vì trang lỗi 500 hay tab trống")
     void storageFailureOnViewShowsMessage() throws Exception {
         createDraft("handover");
         String photoPath = uploadAndFindPhoto("handover");
         doThrow(new RestClientException("timeout")).when(storage).createSignedUrl(anyString(), any());
 
         mockMvc.perform(get(photoPath).header("X-User-Id", OWNER_1))
-            .andExpect(status().is3xxRedirection())
-            .andExpect(flash().attribute("errorMessage", containsString("Không mở được ảnh")));
+            .andExpect(status().isServiceUnavailable())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(
+                containsString("Không mở được tệp từ kho lưu trữ")));
     }
 
     @Test

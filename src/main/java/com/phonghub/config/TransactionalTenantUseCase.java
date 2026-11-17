@@ -2,6 +2,7 @@ package com.phonghub.config;
 
 import com.phonghub.application.port.in.TenantUseCase;
 import com.phonghub.domain.model.Tenant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +49,18 @@ public class TransactionalTenantUseCase implements TenantUseCase {
     @Transactional(rollbackFor = Exception.class)
     public Tenant linkAccountByEmail(UUID tenantId, String email) {
         return delegate.linkAccountByEmail(tenantId, email);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AccountCandidate> listLinkableAccounts(UUID propertyId, UUID tenantId, String query, int limit) {
+        return delegate.listLinkableAccounts(propertyId, tenantId, query, limit);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Tenant linkAccountById(UUID tenantId, UUID userId) {
+        return delegate.linkAccountById(tenantId, userId);
     }
 
     @Override

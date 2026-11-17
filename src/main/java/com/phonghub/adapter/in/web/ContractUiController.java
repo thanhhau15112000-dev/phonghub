@@ -96,8 +96,12 @@ public class ContractUiController {
     }
 
     @GetMapping
-    public String listContracts(Model model) {
+    public String listContracts(Model model, RedirectAttributes redirectAttributes) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
+        if (!authorizationService.canViewContracts(currentUser)) {
+            redirectAttributes.addFlashAttribute("errorMessage", AuthorizationService.TECHNICIAN_CONTRACT_DENIED);
+            return "redirect:/maintenance";
+        }
         List<Contract> contracts = new ArrayList<>();
 
         if (currentUser.role() == UserRole.TENANT) {
@@ -121,6 +125,16 @@ public class ContractUiController {
         model.addAttribute("roomNames", roomNames);
         model.addAttribute("tenantNames", tenantNames);
         model.addAttribute("contracts", contracts);
+        // Tiền thuê, tiền cọc chỉ hiện với người có quyền xem tiền của nhà trọ đó (#304)
+        java.util.Map<UUID, Boolean> moneyByProperty = new java.util.HashMap<>();
+        java.util.Set<UUID> moneyContractIds = new java.util.HashSet<>();
+        for (Contract contract : contracts) {
+            if (moneyByProperty.computeIfAbsent(contract.getPropertyId(),
+                ignored -> authorizationService.canViewContractMoney(currentUser, contract))) {
+                moneyContractIds.add(contract.getId());
+            }
+        }
+        model.addAttribute("moneyContractIds", moneyContractIds);
         return "contracts/list";
     }
 
@@ -133,8 +147,8 @@ public class ContractUiController {
         RedirectAttributes redirectAttributes
     ) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
-        if (currentUser.role() != UserRole.ADMIN && currentUser.role() != UserRole.STAFF && currentUser.role() != UserRole.OWNER) {
-            redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên, chủ nhà trọ hoặc nhân viên mới có thể tạo hợp đồng.");
+        if (currentUser.role() != UserRole.STAFF && currentUser.role() != UserRole.OWNER) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Chỉ chủ nhà trọ hoặc nhân viên được cấp quyền mới có thể tạo hợp đồng.");
             return "redirect:/contracts";
         }
 
@@ -207,6 +221,10 @@ public class ContractUiController {
     @GetMapping("/{id}")
     public String viewContract(@PathVariable UUID id, Model model, RedirectAttributes redirectAttributes) {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
+        if (!authorizationService.canViewContracts(currentUser)) {
+            redirectAttributes.addFlashAttribute("errorMessage", AuthorizationService.TECHNICIAN_CONTRACT_DENIED);
+            return "redirect:/maintenance";
+        }
         try {
             Contract contract = contractUseCase.getContract(id);
             // getContract has already checked that a tenant is the primary tenant or a linked occupant.
@@ -265,6 +283,7 @@ public class ContractUiController {
             model.addAttribute("billingCycles", contract.billingCycles());
             model.addAttribute("checkOut", checkOut);
             model.addAttribute("canManageContracts", authorizationService.canManageContracts(currentUser, contract.getPropertyId()));
+            model.addAttribute("canViewMoney", authorizationService.canViewContractMoney(currentUser, contract));
             model.addAttribute("property", property);
             model.addAttribute("room", room);
             model.addAttribute("currentOccupantCount", currentOccupantCount);
@@ -573,6 +592,13 @@ public class ContractUiController {
         @RequestParam(required = false) String permanentAddress,
         RedirectAttributes redirectAttributes
     ) {
+        CurrentUser currentUser = currentUserPort.getCurrentUser();
+        if (currentUser != null && currentUser.role() == UserRole.ADMIN) {
+            // Quản trị viên không quản lý hợp đồng (#304) nên không sửa hồ sơ người thuê từ trang hợp đồng (#327)
+            redirectAttributes.addFlashAttribute("errorMessage",
+                "Quản trị viên không sửa hồ sơ người thuê trên trang hợp đồng. Chủ trọ của nhà trọ sẽ cập nhật thông tin này.");
+            return "redirect:/contracts/" + contractId;
+        }
         try {
             tenantUseCase.updateTenant(new TenantUseCase.UpdateTenantCommand(
                 tenantId,

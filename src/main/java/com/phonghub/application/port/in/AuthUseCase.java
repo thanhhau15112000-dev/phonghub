@@ -5,15 +5,25 @@ import com.phonghub.domain.model.UserRole;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public interface AuthUseCase {
+
+    /** Câu báo khi mật khẩu mới quá ngắn; dùng chung cho giao diện và API (#313). */
+    String PASSWORD_TOO_SHORT = "Mật khẩu mới phải có ít nhất 8 ký tự.";
     AuthTokenResponse login(String username, String password);
     AuthTokenResponse refreshToken(String refreshToken);
     void logout(String accessToken);
     void changePassword(String newPassword);
     PasswordResetResult adminResetPassword(UUID targetUserId);
     AdminCreateUserResult adminCreateUser(CreateUserCommand command);
+
+    /**
+     * Kiểm tra hết các trường của form tạo tài khoản trong một lần, không ghi gì (#247).
+     * Trả về tên trường (username, email, fullName, phone, role, identityCardNumber) -> câu lỗi; rỗng nếu hợp lệ.
+     */
+    Map<String, String> validateCreateUser(CreateUserCommand command);
     List<User> listTenantAccountsMissingProfiles();
     void adminAttachTenantProfile(UUID targetUserId, String identityCardNumber, String phone);
     void adminDeleteUser(UUID targetUserId);

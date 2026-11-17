@@ -336,19 +336,19 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
-    @Profile("prod")
+    @Profile({"prod", "docker & !local-demo"})
     public CurrentUserPort currentUserPort() {
         return new SecurityCurrentUserAdapter();
     }
 
     @Bean
-    @Profile("prod")
+    @Profile({"prod", "docker & !local-demo"})
     public RestClient restClient() {
         return RestClient.create();
     }
 
     @Bean
-    @Profile("prod")
+    @Profile({"prod", "docker & !local-demo"})
     public IdentityProviderPort identityProviderPort(
         RestClient restClient,
         SupabaseProperties supabaseProperties
@@ -360,6 +360,18 @@ public class PostgresPersistenceConfig {
             supabaseProperties.getServiceRoleKey(),
             new ObjectMapper()
         );
+    }
+
+    /** Quên mật khẩu qua email Supabase (#330); dùng cùng bộ giải mã JWT của API để kiểm token khôi phục. */
+    @Bean
+    @Profile({"prod", "docker & !local-demo"})
+    public com.phonghub.application.port.out.PasswordRecoveryPort passwordRecoveryPort(
+        RestClient restClient,
+        SupabaseProperties supabaseProperties,
+        org.springframework.security.oauth2.jwt.JwtDecoder jwtDecoder
+    ) {
+        return new com.phonghub.adapter.out.supabase.auth.SupabasePasswordRecoveryAdapter(
+            restClient, supabaseProperties.getUrl(), supabaseProperties.getAnonKey(), jwtDecoder);
     }
 
     @Bean

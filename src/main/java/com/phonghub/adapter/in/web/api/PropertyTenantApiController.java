@@ -69,6 +69,19 @@ public class PropertyTenantApiController {
             new TenantUseCase.IssueTenantAccountCommand(propertyId, tenantId, request.email())));
     }
 
+    /** Tài khoản TENANT chưa gắn hồ sơ, cho danh sách thả xuống "Liên kết tài khoản có sẵn" (#249). */
+    @GetMapping("/{tenantId}/account-candidates")
+    public List<AccountCandidateResponse> accountCandidates(
+        @PathVariable UUID propertyId,
+        @PathVariable UUID tenantId,
+        @RequestParam(required = false) String q,
+        @RequestParam(defaultValue = "20") int limit
+    ) {
+        return tenantUseCase.listLinkableAccounts(propertyId, tenantId, q, limit).stream()
+            .map(c -> new AccountCandidateResponse(c.userId(), c.fullName(), "TENANT", c.maskedContact()))
+            .toList();
+    }
+
     @PostMapping("/{tenantId}/hide")
     public TenantDetail hide(@PathVariable UUID propertyId, @PathVariable UUID tenantId) {
         return TenantDetail.from(tenantUseCase.hideTenant(propertyId, tenantId));
@@ -86,6 +99,8 @@ public class PropertyTenantApiController {
         @NotBlank(message = "Email là bắt buộc để tạo tài khoản") String email,
         String permanentAddress
     ) {}
+
+    public record AccountCandidateResponse(UUID userId, String fullName, String role, String maskedContact) {}
 
     public record IssueTenantAccountRequest(@NotBlank(message = "Email là bắt buộc") String email) {}
 

@@ -37,17 +37,27 @@ public class AuthApiController {
     public record LoginRequest(
         @NotBlank(message = "Username cannot be blank") String username,
         @NotBlank(message = "Password cannot be blank") String password
-    ) {}
+    ) {
+        @Override
+        public String toString() {
+            return "LoginRequest[username=" + username + ", password=***]";
+        }
+    }
 
     public record RefreshTokenRequest(
         @NotBlank(message = "Refresh token cannot be blank") String refreshToken
     ) {}
 
     public record ChangePasswordRequest(
-        @NotBlank(message = "New password cannot be blank")
-        @Size(min = 8, message = "Password must be at least 8 characters")
+        @NotBlank(message = "Vui lòng nhập mật khẩu mới.")
+        @Size(min = 8, message = AuthUseCase.PASSWORD_TOO_SHORT)
         String newPassword
-    ) {}
+    ) {
+        @Override
+        public String toString() {
+            return "ChangePasswordRequest[newPassword=***]";
+        }
+    }
 
     public record CreateUserRequest(
         @NotBlank(message = "Username cannot be blank")

@@ -2,8 +2,6 @@ package com.phonghub.adapter.in.web.api;
 
 import com.phonghub.application.port.in.PropertyStaffUseCase;
 import com.phonghub.application.port.in.PropertyStaffUseCase.Member;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
@@ -16,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -33,14 +32,26 @@ public class PropertyStaffApiController {
         return useCase.listMembers(propertyId).stream().map(MemberResponse::from).toList();
     }
 
+    /** Nhân viên/kỹ thuật viên có thể phân công vào nhà trọ, cho danh sách thả xuống (#249). */
+    @GetMapping("/candidates")
+    public List<CandidateResponse> candidates(
+        @PathVariable UUID propertyId,
+        @RequestParam(required = false) String q,
+        @RequestParam(defaultValue = "20") int limit
+    ) {
+        return useCase.listCandidates(propertyId, q, limit).stream()
+            .map(c -> new CandidateResponse(c.userId(), c.fullName(), c.role().name(), c.maskedContact()))
+            .toList();
+    }
+
     @PostMapping
     public ResponseEntity<MemberResponse> assign(
         @PathVariable UUID propertyId,
-        @Valid @RequestBody AssignRequest request
+        @RequestBody AssignRequest request
     ) {
-        Member member = useCase.assign(new PropertyStaffUseCase.AssignCommand(propertyId, request.usernameOrEmail(),
-            on(request.canCollectPayment()), on(request.canManageContracts()), on(request.canViewDocuments()),
-            on(request.canManageRoomsAndAssets())));
+        Member member = useCase.assign(new PropertyStaffUseCase.AssignCommand(propertyId, request.userId(),
+            request.usernameOrEmail(), on(request.canCollectPayment()), on(request.canManageContracts()),
+            on(request.canViewDocuments()), on(request.canManageRoomsAndAssets())));
         return ResponseEntity.created(URI.create("/api/properties/" + propertyId + "/staff/" + member.user().id()))
             .body(MemberResponse.from(member));
     }
@@ -61,8 +72,10 @@ public class PropertyStaffApiController {
         return ResponseEntity.noContent().build();
     }
 
+    /** Gửi {@code userId} (chọn từ {@code /candidates}) hoặc {@code usernameOrEmail} (gõ đúng tài khoản). */
     public record AssignRequest(
-        @NotBlank(message = "Cần nhập tên đăng nhập hoặc email") String usernameOrEmail,
+        UUID userId,
+        String usernameOrEmail,
         Boolean canCollectPayment,
         Boolean canManageContracts,
         Boolean canViewDocuments,
@@ -76,6 +89,8 @@ public class PropertyStaffApiController {
     private static boolean on(Boolean value) {
         return Boolean.TRUE.equals(value);
     }
+
+    public record CandidateResponse(UUID userId, String fullName, String role, String maskedContact) {}
 
     public record MemberResponse(UUID userId, String username, String fullName, String role,
                                  boolean canCollectPayment, boolean canManageContracts, boolean canViewDocuments,

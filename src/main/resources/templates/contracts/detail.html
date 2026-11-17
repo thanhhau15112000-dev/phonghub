@@ -15,13 +15,34 @@
             </p>
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <a th:if="${contract.isResiding() and currentUser != null and currentUser.role().name() != 'TECHNICIAN'}"
-               th:href="@{'/contracts/' + ${contract.getId()} + '/handover'}" class="btn btn-secondary">Biên bản check-in</a>
-            <a th:if="${contract.isResiding() and currentUser != null and currentUser.role().name() != 'TECHNICIAN'}"
-               th:href="@{'/contracts/' + ${contract.getId()} + '/check-out'}" class="btn btn-secondary">Check-out</a>
+            <!-- Chỉ người mở được biên bản mới thấy nút: người quản lý hợp đồng hoặc người thuê của hợp đồng (#312) -->
+            <a th:if="${contract.isResiding() and (canManageContracts or currentUser.role().name() == 'TENANT')}"
+               th:href="@{'/contracts/' + ${contract.getId()} + '/handover'}" class="btn btn-secondary">Biên bản nhận phòng</a>
+            <a th:if="${contract.isResiding() and (canManageContracts or currentUser.role().name() == 'TENANT')}"
+               th:href="@{'/contracts/' + ${contract.getId()} + '/check-out'}" class="btn btn-secondary">Biên bản trả phòng</a>
             <a th:href="@{/contracts}" class="btn">&larr; Quay lại danh sách hợp đồng</a>
         </div>
     </div>
+
+    <section class="card" style="margin-bottom: 20px;">
+        <h2 style="margin: 0 0 4px; font-size: 16px;">Hỏi về hợp đồng</h2>
+        <p style="margin: 0 0 12px; color: var(--text-secondary); font-size: 13px;">
+            Trợ lý dùng các trường hợp đồng đang lưu. Văn bản điều khoản hoặc bản scan không có trong nguồn hỏi đáp.
+        </p>
+        <form data-ai-form th:attr="data-ai-endpoint=@{'/api/v1/ai/contracts/' + ${contract.getId()} + '/ask'}">
+            <label class="form-label" th:for="'contract-ai-question-' + ${contract.getId()}">Câu hỏi</label>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start;">
+                <textarea class="form-control" name="question" maxlength="1200" required rows="2"
+                          th:id="'contract-ai-question-' + ${contract.getId()}"
+                          placeholder="Ví dụ: Ngày thanh toán và tiền cọc là bao nhiêu?"></textarea>
+                <button type="submit" class="btn btn-primary">Gửi câu hỏi</button>
+            </div>
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        </form>
+        <div id="contract-ai-answer" class="ai-answer" aria-live="polite" style="display: none; margin-top: 12px;"></div>
+    </section>
+
+    <script th:src="@{/js/ai-assistant.js}" defer></script>
 
     <!-- Trạng thái và thao tác hợp đồng -->
     <div class="card" style="margin-bottom: 20px;">
@@ -32,11 +53,11 @@
             </div>
 
             <!-- Các nút thao tác -->
-            <div th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}" class="inline-actions">
+            <div th:if="${canManageContracts}" class="inline-actions">
             <!-- Bắt đầu quy trình check-in; hợp đồng chỉ có hiệu lực sau khi duyệt biên bản. -->
                 <form th:if="${contract.getStatus().name() == 'DRAFT'}" th:action="@{'/contracts/' + ${contract.getId()} + '/activate'}" method="post">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <button type="submit" class="btn btn-primary" th:text="${checkIn == null} ? 'Lập biên bản check-in' : 'Mở biên bản check-in'">Lập biên bản check-in</button>
+                    <button type="submit" class="btn btn-primary" th:text="${checkIn == null} ? 'Lập biên bản nhận phòng' : 'Mở biên bản nhận phòng'">Lập biên bản nhận phòng</button>
                 </form>
 
                 <!-- Hợp đồng nháp sửa / hủy được (#89); hủy giữ lại bản ghi với trạng thái "Đã hủy" -->
@@ -44,8 +65,13 @@
                         onclick="document.getElementById('editDraftModal').showModal()">Sửa điều khoản</button>
                 <form th:if="${contract.getStatus().name() == 'DRAFT'}" th:action="@{'/contracts/' + ${contract.getId()} + '/cancel'}" method="post">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <button type="submit" class="btn btn-danger"
-                            onclick="return confirm('Hủy hợp đồng nháp này? Hợp đồng sẽ chuyển sang trạng thái Đã hủy và không kích hoạt được nữa.');">Hủy hợp đồng nháp</button>
+                    <button type="button" class="btn btn-danger"
+                            data-confirm="Bạn có chắc chắn muốn hủy hợp đồng nháp này không?"
+                            data-confirm-title="Hủy hợp đồng nháp"
+                            th:data-confirm-target="'Hợp đồng phòng ' + ${room.getRoomNumber()}"
+                            data-confirm-consequence="Hợp đồng sẽ chuyển sang trạng thái Đã hủy và không thể kích hoạt lại."
+                            data-confirm-phrase="HỦY HỢP ĐỒNG"
+                            data-confirm-btn="Hủy hợp đồng">Hủy hợp đồng nháp</button>
                 </form>
 
                 <!-- Hợp đồng còn người ở (đang hiệu lực hoặc hết hạn chưa trả phòng, #87): gia hạn hoặc mở check-out sớm -->
@@ -58,25 +84,25 @@
         </div>
         <section th:if="${contract.getStatus().name() == 'DRAFT'}" style="margin-top: 14px;">
             <h2 style="font-size: 16px; margin-bottom: 8px;">Tiến độ nhận phòng</h2>
-            <p th:if="${checkIn == null}" style="margin: 0;">Chưa lập biên bản check-in.</p>
-            <p th:if="${checkIn != null and checkIn.handover().status().name() == 'DRAFT' or checkIn != null and checkIn.handover().status().name() == 'REJECTED'}" style="margin: 0;">Bước hiện tại: hoàn thiện biên bản check-in và gửi người thuê.</p>
+            <p th:if="${checkIn == null}" style="margin: 0;">Chưa lập biên bản nhận phòng.</p>
+            <p th:if="${checkIn != null and checkIn.handover().status().name() == 'DRAFT' or checkIn != null and checkIn.handover().status().name() == 'REJECTED'}" style="margin: 0;">Bước hiện tại: hoàn thiện biên bản nhận phòng và gửi người thuê.</p>
             <p th:if="${checkIn != null and checkIn.handover().status().name() == 'PENDING_TENANT'}" style="margin: 0;">Bước hiện tại: chờ người thuê chính xác nhận.</p>
             <p th:if="${checkIn != null and checkIn.handover().status().name() == 'PENDING_APPROVAL'}" style="margin: 0;">Bước hiện tại: chờ người quản lý duyệt.</p>
-            <a th:if="${checkIn != null}" th:href="@{'/contracts/' + ${contract.getId()} + '/handover'}" class="btn btn-sm btn-secondary" style="margin-top: 8px;">Mở biên bản</a>
+            <a th:if="${checkIn != null and (canManageContracts or currentUser.role().name() == 'TENANT')}" th:href="@{'/contracts/' + ${contract.getId()} + '/handover'}" class="btn btn-sm btn-secondary" style="margin-top: 8px;">Mở biên bản</a>
         </section>
         <section th:if="${contract.isResiding()}" style="margin-top: 14px;">
             <h2 style="font-size: 16px; margin-bottom: 8px;">Tiến độ trả phòng</h2>
-            <p th:if="${checkOut == null}" style="margin: 0;">Chưa lập biên bản check-out.</p>
-            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'DRAFT'}" style="margin: 0;">Đang hoàn thiện biên bản check-out.</p>
-            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'PENDING_TENANT'}" style="margin: 0;">Chờ người thuê kiểm tra và xác nhận check-out.</p>
+            <p th:if="${checkOut == null}" style="margin: 0;">Chưa lập biên bản trả phòng.</p>
+            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'DRAFT'}" style="margin: 0;">Đang hoàn thiện biên bản trả phòng.</p>
+            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'PENDING_TENANT'}" style="margin: 0;">Chờ người thuê kiểm tra và xác nhận trả phòng.</p>
             <p th:if="${checkOut != null and checkOut.handover().status().name() == 'PENDING_APPROVAL'}" style="margin: 0;">
                 Người thuê đã xác nhận; chờ quản lý duyệt và chốt tiền cọc.
                 <span th:if="${openInvoiceCount != null and openInvoiceCount > 0}"
                       th:text="${' Còn ' + openInvoiceCount + ' hóa đơn chưa thanh toán; cần thanh toán hoặc cấn trừ từ tiền cọc trước khi duyệt.'}">Còn hóa đơn chưa thanh toán.</span>
             </p>
-            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'REJECTED'}" style="margin: 0;">Biên bản check-out bị từ chối; cần mở lại và hoàn thiện.</p>
-            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'APPROVED'}" style="margin: 0;">Check-out đã được duyệt; hợp đồng đã kết thúc.</p>
-            <a th:if="${checkOut != null}" th:href="@{'/contracts/' + ${contract.getId()} + '/check-out'}" class="btn btn-sm btn-secondary" style="margin-top: 8px;">Mở biên bản check-out</a>
+            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'REJECTED'}" style="margin: 0;">Biên bản trả phòng bị từ chối; cần mở lại và hoàn thiện.</p>
+            <p th:if="${checkOut != null and checkOut.handover().status().name() == 'APPROVED'}" style="margin: 0;">Trả phòng đã được duyệt; hợp đồng đã kết thúc.</p>
+            <a th:if="${checkOut != null and (canManageContracts or currentUser.role().name() == 'TENANT')}" th:href="@{'/contracts/' + ${contract.getId()} + '/check-out'}" class="btn btn-sm btn-secondary" style="margin-top: 8px;">Mở biên bản trả phòng</a>
         </section>
     </div>
 
@@ -99,11 +125,11 @@
                         <td style="color: var(--text-secondary);">Ngày kết thúc:</td>
                         <td th:text="${uiText.date(contract.getEndDate())}">2027-01-01</td>
                     </tr>
-                    <tr>
+                    <tr th:if="${canViewMoney}">
                         <td style="color: var(--text-secondary);">Tiền thuê hàng tháng:</td>
                         <td th:text="${#numbers.formatDecimal(contract.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     </tr>
-                    <tr>
+                    <tr th:if="${canViewMoney}">
                         <td style="color: var(--text-secondary);">Tiền đặt cọc:</td>
                         <td th:text="${#numbers.formatDecimal(contract.getDepositAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
                     </tr>
@@ -120,7 +146,7 @@
                        th:href="@{'/properties/' + ${property.id()} + '/tenants/' + ${primaryTenant.id()} + '/documents'}"
                        class="btn btn-sm btn-secondary">Giấy tờ</a>
                 </div>
-                <button th:if="${primaryTenant != null and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+                <button th:if="${primaryTenant != null and currentUser != null and currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()}"
                         type="button"
                         id="editPrimaryTenantBtn"
                         class="btn btn-sm btn-secondary"
@@ -374,16 +400,20 @@
                         <a th:if="${inv.isPayable()}" th:href="@{'/invoices/' + ${inv.getId()} + '/pay'}" class="btn btn-sm btn-primary">Thanh toán</a>
                         <a th:if="${inv.getPaidAmount().signum() > 0}" th:href="@{'/invoices/' + ${inv.getId()} + '/receipt'}" class="btn btn-sm">Biên lai</a>
                         <!-- Hủy hóa đơn tiền thuê chưa có tiền (#89); hủy xong có thể phát hành lại kỳ đó -->
-                        <details th:if="${canVoidInvoice and inv.isPayable() and inv.getPaidAmount().signum() == 0 and inv.getType().name() == 'RENT'}"
-                                 class="invoice-void" style="display: inline-block; margin-left: 4px;">
-                            <summary class="btn btn-sm btn-danger" style="list-style: none; cursor: pointer;">Hủy</summary>
-                            <form th:action="@{'/contracts/' + ${contract.getId()} + '/invoices/' + ${inv.getId()} + '/void'}" method="post"
-                                  style="display: flex; gap: 6px; margin-top: 6px;">
-                                <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                <input type="text" name="reason" class="form-control" required maxlength="500" placeholder="Lý do hủy" style="min-width: 160px;">
-                                <button type="submit" class="btn btn-sm btn-danger">Xác nhận hủy</button>
-                            </form>
-                        </details>
+                        <form th:if="${canVoidInvoice and inv.isPayable() and inv.getPaidAmount().signum() == 0 and inv.getType().name() == 'RENT'}"
+                              th:action="@{'/contracts/' + ${contract.getId()} + '/invoices/' + ${inv.getId()} + '/void'}" method="post"
+                              style="display: inline-block; margin-left: 4px;">
+                            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                            <button type="button" class="btn btn-sm btn-danger"
+                                    data-confirm="Bạn có chắc chắn muốn hủy hóa đơn tiền thuê này không?"
+                                    data-confirm-title="Hủy hóa đơn tiền thuê"
+                                    th:data-confirm-target="${uiText.invoiceLabel(inv)} + ' · ' + ${#numbers.formatDecimal(inv.getTotalAmount(), 0, 'POINT', 0, 'COMMA')} + ' đ'"
+                                    data-confirm-consequence="Hóa đơn sẽ chuyển sang trạng thái ĐÃ HỦY và không thể thanh toán được nữa. Bạn có thể phát hành lại hóa đơn cho kỳ này sau."
+                                    data-confirm-phrase="HỦY HÓA ĐƠN"
+                                    data-confirm-require-reason="true"
+                                    data-confirm-reason-placeholder="Nhập lý do hủy hóa đơn (bắt buộc)..."
+                                    data-confirm-btn="Xác nhận hủy">Hủy</button>
+                        </form>
                     </td>
                 </tr>
             </tbody>
@@ -618,8 +648,8 @@
         })();
     </script>
 
-    <!-- Dialog sửa hồ sơ người thuê (Chủ nhà hoặc Quản trị viên) -->
-    <dialog th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+    <!-- Dialog sửa hồ sơ người thuê: chỉ chủ trọ của nhà trọ (#327) -->
+    <dialog th:if="${currentUser != null and currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()}"
             id="editTenantModal"
             class="modal-dialog"
             style="max-width: 500px;">
@@ -676,7 +706,7 @@
     </dialog>
 
     <!-- Dialog ghi nhận rời phòng cho người ở cùng (Chủ nhà hoặc Quản trị viên) -->
-    <dialog th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+    <dialog th:if="${contract.getStatus().name() == 'ACTIVE' and currentUser != null and currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()}"
             id="checkOutModal"
             class="modal-dialog"
             style="max-width: 450px;">
@@ -747,7 +777,7 @@
     </script>
 
     <!-- Dialog sửa điều khoản hợp đồng nháp (#89) -->
-    <dialog th:if="${contract.getStatus().name() == 'DRAFT' and currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+    <dialog th:if="${contract.getStatus().name() == 'DRAFT' and canManageContracts}"
             id="editDraftModal" class="modal-dialog" style="max-width: 520px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
             <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Sửa điều khoản hợp đồng nháp</h3>
@@ -788,16 +818,19 @@
     </dialog>
 
     <!-- Dialog gia hạn hợp đồng người thuê còn ở (đang hiệu lực hoặc đã hết hạn chưa trả phòng) -->
-    <dialog th:if="${contract.isResiding() and currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'STAFF' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+    <dialog th:if="${contract.isResiding() and canManageContracts}"
             id="renewModal" class="modal-dialog" style="max-width: 480px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
             <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Gia hạn hợp đồng</h3>
             <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('renewModal').close()">✕</button>
         </div>
-        <p style="font-size: 13px; color: var(--text-secondary); margin-top: 0;">
+        <p style="font-size: 13px; color: var(--text-secondary); margin-top: 0 0 10px;">
             Ngày kết thúc hiện tại: <strong th:text="${uiText.date(contract.getEndDate())}">01/01/2027</strong>.
             <span th:if="${contract.getStatus().name() == 'EXPIRED'}">Hợp đồng đã hết hạn sẽ trở lại hiệu lực.</span>
         </p>
+        <div style="padding: 8px 12px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; font-size: 12.5px; color: #92400e; margin-bottom: 12px;">
+            <strong>Lưu ý:</strong> Gia hạn sẽ cập nhật thời hạn hợp đồng và áp dụng mức giá thuê mới cho các chu kỳ tiếp theo.
+        </div>
         <form th:action="@{'/contracts/' + ${contract.getId()} + '/renew'}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <input type="hidden" name="version" th:value="${contract.getVersion()}">
@@ -812,9 +845,15 @@
                        th:placeholder="${'Giữ nguyên ' + #numbers.formatDecimal(contract.getRentAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">
                 <small style="color: var(--text-secondary); font-size: 11px;">Bỏ trống để giữ nguyên. Tiền thuê mới áp dụng cho các kỳ hóa đơn phát hành sau khi gia hạn.</small>
             </div>
-            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+            <div class="form-group" style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border-color);">
+                <label class="form-label" for="renewConfirmPhraseInput">
+                    Nhập cụm từ <strong style="color: var(--primary-color, #2563eb);">GIA HẠN HỢP ĐỒNG</strong> để xác nhận:
+                </label>
+                <input type="text" id="renewConfirmPhraseInput" class="form-control" autocomplete="off" placeholder="Gõ GIA HẠN HỢP ĐỒNG...">
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
                 <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('renewModal').close()">Đóng</button>
-                <button type="submit" class="btn btn-sm btn-primary">Gia hạn</button>
+                <button type="submit" id="renewSubmitBtn" class="btn btn-sm btn-primary" disabled>Gia hạn</button>
             </div>
         </form>
     </dialog>
@@ -827,8 +866,8 @@
             <button type="button" class="btn btn-sm btn-secondary" style="padding: 2px 7px; height: 26px;" onclick="document.getElementById('terminateModal').close()">✕</button>
         </div>
         <div style="font-size: 13px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 12px;">
-            Hệ thống sẽ mở biên bản check-out và lưu lý do. Hợp đồng chỉ kết thúc sau khi người thuê xác nhận,
-            quản lý kiểm tra tài sản, xử lý công nợ và duyệt biên bản.
+            <p style="margin: 0 0 6px;">Hệ thống sẽ mở biên bản trả phòng và lưu lý do. Hợp đồng chỉ kết thúc sau khi người thuê xác nhận, quản lý kiểm tra tài sản, xử lý công nợ và duyệt biên bản.</p>
+            <span style="color: #dc2626; font-size: 12px; font-weight: 600;">Hậu quả: Thao tác này sẽ bắt đầu quy trình thanh lý hợp đồng và trả phòng.</span>
         </div>
         <form th:action="@{'/contracts/' + ${contract.getId()} + '/terminate'}" method="post">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -837,9 +876,15 @@
                 <textarea id="terminateReason" name="reason" class="form-control" rows="3" maxlength="500" required
                           placeholder="Ví dụ: Người thuê bỏ đi không báo, vi phạm nội quy..."></textarea>
             </div>
-            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+            <div class="form-group" style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border-color);">
+                <label class="form-label" for="terminateConfirmPhraseInput">
+                    Nhập cụm từ <strong style="color: #dc2626;">CHẤM DỨT HỢP ĐỒNG</strong> để xác nhận:
+                </label>
+                <input type="text" id="terminateConfirmPhraseInput" class="form-control" autocomplete="off" placeholder="Gõ CHẤM DỨT HỢP ĐỒNG...">
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
                 <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('terminateModal').close()">Đóng</button>
-                <button type="submit" class="btn btn-sm btn-danger">Mở biên bản check-out</button>
+                <button type="submit" id="terminateSubmitBtn" class="btn btn-sm btn-danger" disabled>Mở biên bản trả phòng</button>
             </div>
         </form>
     </dialog>
@@ -848,6 +893,78 @@
 <footer th:replace="~{fragments/layout :: footer}"></footer>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
+        const normalizeText = s => (s || '').trim().normalize('NFC').toUpperCase();
+
+        // Renew modal phrase validation (#213)
+        const renewModal = document.getElementById('renewModal');
+        const renewPhraseInput = document.getElementById('renewConfirmPhraseInput');
+        const renewSubmitBtn = document.getElementById('renewSubmitBtn');
+        const renewForm = renewModal ? renewModal.querySelector('form') : null;
+
+        if (renewModal && renewPhraseInput && renewSubmitBtn && renewForm) {
+            const updateRenewState = () => {
+                const isMatch = normalizeText(renewPhraseInput.value) === 'GIA HẠN HỢP ĐỒNG';
+                renewSubmitBtn.disabled = !isMatch;
+            };
+            renewPhraseInput.addEventListener('input', updateRenewState);
+            renewPhraseInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (!renewSubmitBtn.disabled) renewForm.submit();
+                }
+            });
+            renewForm.addEventListener('submit', (e) => {
+                if (renewSubmitBtn.disabled) e.preventDefault();
+            });
+            renewModal.addEventListener('close', () => {
+                renewPhraseInput.value = '';
+                updateRenewState();
+            });
+            renewModal.addEventListener('click', (e) => {
+                const rect = renewModal.getBoundingClientRect();
+                const inDialog = (rect.top <= e.clientY && e.clientY <= rect.top + rect.height
+                    && rect.left <= e.clientX && e.clientX <= rect.left + rect.width);
+                if (!inDialog) renewModal.close();
+            });
+        }
+
+        // Terminate modal phrase validation (#213)
+        const terminateModal = document.getElementById('terminateModal');
+        const terminateReason = document.getElementById('terminateReason');
+        const terminatePhraseInput = document.getElementById('terminateConfirmPhraseInput');
+        const terminateSubmitBtn = document.getElementById('terminateSubmitBtn');
+        const terminateForm = terminateModal ? terminateModal.querySelector('form') : null;
+
+        if (terminateModal && terminatePhraseInput && terminateSubmitBtn && terminateForm && terminateReason) {
+            const updateTerminateState = () => {
+                const phraseMatch = normalizeText(terminatePhraseInput.value) === 'CHẤM DỨT HỢP ĐỒNG';
+                const hasReason = terminateReason.value.trim().length > 0;
+                terminateSubmitBtn.disabled = !(phraseMatch && hasReason);
+            };
+            terminatePhraseInput.addEventListener('input', updateTerminateState);
+            terminateReason.addEventListener('input', updateTerminateState);
+            terminatePhraseInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (!terminateSubmitBtn.disabled) terminateForm.submit();
+                }
+            });
+            terminateForm.addEventListener('submit', (e) => {
+                if (terminateSubmitBtn.disabled) e.preventDefault();
+            });
+            terminateModal.addEventListener('close', () => {
+                terminatePhraseInput.value = '';
+                terminateReason.value = '';
+                updateTerminateState();
+            });
+            terminateModal.addEventListener('click', (e) => {
+                const rect = terminateModal.getBoundingClientRect();
+                const inDialog = (rect.top <= e.clientY && e.clientY <= rect.top + rect.height
+                    && rect.left <= e.clientX && e.clientX <= rect.left + rect.width);
+                if (!inDialog) terminateModal.close();
+            });
+        }
+
         const picker = document.getElementById('bulkOccupantPicker');
         const search = document.getElementById('occupantSearch');
         const counter = document.getElementById('bulkOccupantCount');
