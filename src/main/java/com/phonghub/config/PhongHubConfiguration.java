@@ -778,6 +778,18 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.InvoiceAnomalyUseCase invoiceAnomalyUseCase(
+        com.phonghub.application.port.out.InvoiceAnomalyQueryPort anomalyQueryPort,
+        PropertyRepositoryPort propertyRepo,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        com.phonghub.application.port.in.PaymentReconciliationUseCase paymentReconciliationUseCase
+    ) {
+        return new com.phonghub.application.service.InvoiceAnomalyService(anomalyQueryPort, propertyRepo,
+            currentUserPort, authorizationService, paymentReconciliationUseCase, java.time.Clock.systemUTC());
+    }
+
+    @Bean
     public NotificationUseCase notificationUseCase(
         NotificationRepositoryPort notificationRepository,
         AuthUseCase authUseCase,
