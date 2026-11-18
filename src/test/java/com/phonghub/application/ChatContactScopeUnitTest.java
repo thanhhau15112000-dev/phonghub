@@ -38,6 +38,9 @@ class ChatContactScopeUnitTest {
     private CurrentUser viewer;
     private Set<UUID> reachable;
     private ChatService chat;
+    private ChatEventPublisherPort publisher;
+    private int unrestrictedPublishes;
+    private Set<UUID> lastAudience;
 
     @BeforeEach
     void setUp() {
@@ -49,7 +52,17 @@ class ChatContactScopeUnitTest {
         }
         viewer = new CurrentUser(viewerId, viewerId + "@x", "Người xem", UserRole.STAFF);
         reachable = Set.of(colleagueId);
-        ChatEventPublisherPort publisher = (room, message) -> { };
+        publisher = new ChatEventPublisherPort() {
+            @Override
+            public void publishNewMessage(ChatRoom room, ChatMessage message) {
+                unrestrictedPublishes++;
+            }
+
+            @Override
+            public void publishNewMessage(ChatRoom room, ChatMessage message, Set<UUID> audience) {
+                lastAudience = audience;
+            }
+        };
         ChatContactScope scope = v -> reachable;
         chat = new ChatService(rooms, new InMemoryChatMessageRepository(), users, publisher, null, 1, 1,
             Clock.fixed(Instant.parse("2026-10-14T05:00:00Z"), ZoneOffset.UTC), scope);
@@ -76,5 +89,40 @@ class ChatContactScopeUnitTest {
 
         assertEquals(created.id(), chat.getOrCreateDirectRoom(viewer, colleagueId).id());
         assertTrue(chat.getAvailableContacts(viewer).isEmpty());
+    }
+
+    @Test
+    @DisplayName("tin kênh chung chỉ đẩy tới người cùng nhà trọ với người gửi và chính người gửi")
+    void globalMessageIsPushedOnlyToTheSendersProperty() {
+        chat.sendMessage(viewer, ChatRoom.GLOBAL_ROOM_ID, "Thông báo");
+
+        assertEquals(Set.of(colleagueId, viewerId), lastAudience);
+        assertEquals(0, unrestrictedPublishes);
+    }
+
+    @Test
+    @DisplayName("tin phòng riêng đẩy như cũ tới hai thành viên, không dùng danh sách người nhận của kênh chung")
+    void directMessageUsesMembershipDelivery() {
+        ChatRoom room = chat.getOrCreateDirectRoom(viewer, colleagueId);
+
+        chat.sendMessage(viewer, room.id(), "Chào");
+
+        assertEquals(1, unrestrictedPublishes);
+        assertEquals(null, lastAudience);
+    }
+
+    @Test
+    @DisplayName("tin kênh chung của người ngoài phạm vi không hiện trong danh sách tin, tin của mình và đồng nghiệp thì có")
+    void globalMessagesAreFilteredBySender() {
+        CurrentUser colleague = new CurrentUser(colleagueId, colleagueId + "@x", "Đồng nghiệp", UserRole.STAFF);
+        CurrentUser stranger = new CurrentUser(strangerId, strangerId + "@x", "Người lạ", UserRole.STAFF);
+        chat.sendMessage(colleague, ChatRoom.GLOBAL_ROOM_ID, "từ đồng nghiệp");
+        chat.sendMessage(stranger, ChatRoom.GLOBAL_ROOM_ID, "từ người lạ");
+        chat.sendMessage(viewer, ChatRoom.GLOBAL_ROOM_ID, "của tôi");
+
+        List<String> seen = chat.getMessages(viewer, ChatRoom.GLOBAL_ROOM_ID, null, 30).stream()
+            .map(ChatMessage::content).toList();
+
+        assertEquals(List.of("từ đồng nghiệp", "của tôi"), seen);
     }
 }

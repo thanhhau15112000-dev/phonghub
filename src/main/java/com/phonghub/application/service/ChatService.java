@@ -42,6 +42,9 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
     static final int MAX_ATTACHMENTS = 5;
     static final int MAX_VIDEOS = 1;
+    /** Số tin gần nhất của kênh chung dùng để tính xem trước và số chưa đọc (#345). */
+    private static final int UNREAD_SCAN_LIMIT = 100;
+    private static final int MAX_SCAN_PAGES = 10;
     private static final Duration ATTACHMENT_URL_TTL = Duration.ofMinutes(10);
 
     private final ChatRoomRepositoryPort chatRoomRepositoryPort;
@@ -136,9 +139,20 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
 
         List<ChatRoomSummary> summaries = new ArrayList<>();
         for (ChatRoom room : userRooms) {
-            Optional<ChatMessage> latestMsgOpt = chatMessageRepositoryPort.findLatestMessageByRoomId(room.id());
             Instant lastRead = chatRoomRepositoryPort.getLastRead(room.id(), currentUser.id());
-            int unreadCount = chatMessageRepositoryPort.countUnreadMessages(room.id(), currentUser.id(), lastRead);
+            Optional<ChatMessage> latestMsgOpt;
+            int unreadCount;
+            if (room.isGlobal() && contactScope.reachableUserIds(currentUser) != null) {
+                // Kênh chung chỉ hiện tin của người cùng nhà trọ: xem trước và số chưa đọc cũng theo phạm vi đó (#345).
+                List<ChatMessage> visible = visibleMessages(currentUser, room, null, UNREAD_SCAN_LIMIT);
+                latestMsgOpt = visible.isEmpty() ? Optional.empty() : Optional.of(visible.get(visible.size() - 1));
+                unreadCount = (int) visible.stream()
+                    .filter(m -> !m.senderId().equals(currentUser.id()))
+                    .filter(m -> lastRead == null || m.createdAt().isAfter(lastRead)).count();
+            } else {
+                latestMsgOpt = chatMessageRepositoryPort.findLatestMessageByRoomId(room.id());
+                unreadCount = chatMessageRepositoryPort.countUnreadMessages(room.id(), currentUser.id(), lastRead);
+            }
 
             String lastMsgText = latestMsgOpt.map(m -> {
                 if (m.hasAttachments()) {
@@ -273,7 +287,7 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         chatRoomRepositoryPort.updateLastRead(roomId, currentUser.id(), clock.instant());
 
         // Phát sự kiện real-time tới những người được đọc phòng
-        chatEventPublisherPort.publishNewMessage(room, saved);
+        publishNew(room, saved, currentUser);
 
         return saved;
     }
@@ -315,7 +329,7 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
             throw ex;
         }
         chatRoomRepositoryPort.updateLastRead(roomId, currentUser.id(), clock.instant());
-        chatEventPublisherPort.publishNewMessage(room, saved);
+        publishNew(room, saved, currentUser);
         return saved;
     }
 
@@ -381,6 +395,7 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         ChatRoom room = getRoomById(currentUser, roomId);
         return chatMessageRepositoryPort.findById(messageId)
             .filter(message -> message.chatRoomId().equals(room.id()) && message.hasMedia())
+            .filter(message -> canSee(currentUser, room, message))
             .map(ChatMessage::mediaUrl)
             .orElseThrow(() -> new ChatMessageNotFoundException("Không tìm thấy tệp đính kèm."));
     }
@@ -394,10 +409,59 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         }
         return chatMessageRepositoryPort.findById(messageId)
             .filter(message -> message.chatRoomId().equals(room.id()))
+            .filter(message -> canSee(currentUser, room, message))
             .flatMap(message -> message.attachments().stream()
                 .filter(attachment -> attachment.id().equals(attachmentId))
                 .findFirst())
             .orElseThrow(() -> new ChatMessageNotFoundException("Không tìm thấy tệp đính kèm."));
+    }
+
+    /** Tin kênh chung chỉ thấy được khi người gửi là chính mình hoặc người cùng nhà trọ (#345). */
+    private boolean canSee(CurrentUser viewer, ChatRoom room, ChatMessage message) {
+        if (!room.isGlobal() || message.senderId().equals(viewer.id())) {
+            return true;
+        }
+        Set<UUID> reachable = contactScope.reachableUserIds(viewer);
+        return reachable == null || reachable.contains(message.senderId());
+    }
+
+    /**
+     * Tin của phòng theo thứ tự cũ → mới. Kênh chung lọc theo người gửi cùng nhà trọ; để trang không bị thưa, đọc thêm
+     * các trang cũ hơn cho tới khi đủ số tin hoặc hết dữ liệu.
+     */
+    private List<ChatMessage> visibleMessages(CurrentUser viewer, ChatRoom room, Instant before, int limit) {
+        Set<UUID> reachable = room.isGlobal() ? contactScope.reachableUserIds(viewer) : null;
+        if (reachable == null) {
+            return chatMessageRepositoryPort.findByRoomId(room.id(), before, limit);
+        }
+        List<ChatMessage> result = new ArrayList<>();
+        Instant cursor = before;
+        for (int pages = 0; pages < MAX_SCAN_PAGES && result.size() < limit; pages++) {
+            List<ChatMessage> page = chatMessageRepositoryPort.findByRoomId(room.id(), cursor, limit);
+            if (page.isEmpty()) {
+                break;
+            }
+            List<ChatMessage> visible = page.stream()
+                .filter(m -> m.senderId().equals(viewer.id()) || reachable.contains(m.senderId())).toList();
+            result.addAll(0, visible);
+            cursor = page.get(0).createdAt();
+            if (page.size() < limit) {
+                break;
+            }
+        }
+        return result.size() > limit ? new ArrayList<>(result.subList(result.size() - limit, result.size())) : result;
+    }
+
+    /** Kênh chung chỉ đẩy tới người cùng nhà trọ với người gửi (#345); phòng riêng đẩy tới hai thành viên như cũ. */
+    private void publishNew(ChatRoom room, ChatMessage message, CurrentUser sender) {
+        Set<UUID> reachable = room.isGlobal() ? contactScope.reachableUserIds(sender) : null;
+        if (reachable == null) {
+            chatEventPublisherPort.publishNewMessage(room, message);
+            return;
+        }
+        Set<UUID> audience = new java.util.HashSet<>(reachable);
+        audience.add(sender.id());
+        chatEventPublisherPort.publishNewMessage(room, message, audience);
     }
 
     private FileStorageUnavailableException openFailed(ChatAttachment attachment, RuntimeException cause) {
@@ -422,7 +486,7 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         ChatRoom room = getRoomById(currentUser, roomId);
 
         int queryLimit = (limit <= 0 || limit > 100) ? 30 : limit;
-        List<ChatMessage> messages = chatMessageRepositoryPort.findByRoomId(roomId, before, queryLimit);
+        List<ChatMessage> messages = visibleMessages(currentUser, room, before, queryLimit);
 
         // Khi người dùng tải tin nhắn của phòng, tự động đánh dấu đã đọc
         markRoomAsRead(currentUser, room);

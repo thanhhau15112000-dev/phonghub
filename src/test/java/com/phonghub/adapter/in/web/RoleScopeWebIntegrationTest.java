@@ -158,13 +158,14 @@ class RoleScopeWebIntegrationTest extends SeededWebTest {
     }
 
     @Test
-    @DisplayName("kỹ thuật viên thấy chủ trọ và nhân viên của nhà được giao, không thấy người thuê hay nhà khác")
+    @DisplayName("kỹ thuật viên thấy chủ trọ, nhân viên, người thuê của nhà được giao, không thấy nhà khác")
     void technicianContactsAreScoped() throws Exception {
         Set<String> ids = contactIds(TECH_1);
 
-        assertEquals(Set.of(OWNER_1, STAFF_1, ADMIN), ids);
-        assertEquals(403, direct(TECH_1, TENANT_1));
+        assertEquals(Set.of(OWNER_1, STAFF_1, TENANT_1, ADMIN), ids);
+        assertEquals(200, direct(TECH_1, TENANT_1));
         assertEquals(403, direct(TECH_1, OWNER_2));
+        assertEquals(403, direct(TECH_1, STAFF_2));
     }
 
     @Test
@@ -198,5 +199,59 @@ class RoleScopeWebIntegrationTest extends SeededWebTest {
 
         assertTrue(ids.containsAll(Set.of(OWNER_1, OWNER_2, STAFF_1, STAFF_2, TECH_1, TENANT_1)), ids.toString());
         assertEquals(200, direct(ADMIN, OWNER_2));
+    }
+
+    // ---------- Kênh chung theo nhà trọ ----------
+
+    private static final String GLOBAL = com.phonghub.domain.model.ChatRoom.GLOBAL_ROOM_ID.toString();
+
+    private void postGlobal(String user, String text) throws Exception {
+        mockMvc.perform(post("/api/chat/rooms/" + GLOBAL + "/messages").header("X-User-Id", user)
+                .contentType("application/json").content("{\"content\":\"" + text + "\"}"))
+            .andExpect(status().isOk());
+    }
+
+    private String globalMessages(String user) throws Exception {
+        return body("/api/chat/rooms/" + GLOBAL + "/messages", user);
+    }
+
+    private String globalSummary(String user) throws Exception {
+        for (JsonNode room : json.readTree(body("/api/chat/rooms", user))) {
+            if ("GLOBAL".equals(room.path("type").asString())) {
+                return room.toString();
+            }
+        }
+        throw new AssertionError("không có kênh chung");
+    }
+
+    @Test
+    @DisplayName("kênh chung: tin của nhân viên nhà 1 chỉ tới người cùng nhà trọ, không tới nhân viên và chủ trọ nhà khác")
+    void globalChannelOnlyReachesSameProperty() throws Exception {
+        postGlobal(STAFF_1, "Thông báo cắt nước nhà 1");
+        postGlobal(STAFF_2, "Thông báo nhà 2");
+
+        for (String user : new String[] {STAFF_1, TENANT_1, OWNER_1, TECH_1, ADMIN}) {
+            assertTrue(globalMessages(user).contains("Thông báo cắt nước nhà 1"), user);
+        }
+        for (String user : new String[] {STAFF_2, OWNER_2}) {
+            assertFalse(globalMessages(user).contains("Thông báo cắt nước nhà 1"), user);
+        }
+        assertFalse(globalMessages(TENANT_1).contains("Thông báo nhà 2"), "người thuê nhà 1 không thấy tin nhà 2");
+        assertTrue(globalMessages(STAFF_2).contains("Thông báo nhà 2"), "người gửi luôn thấy tin của mình");
+        assertTrue(globalMessages(ADMIN).contains("Thông báo nhà 2"), "quản trị viên thấy mọi tin");
+    }
+
+    @Test
+    @DisplayName("kênh chung: xem trước và số chưa đọc không lộ tin của người ngoài nhà trọ")
+    void globalSummaryDoesNotLeakOtherProperties() throws Exception {
+        postGlobal(STAFF_1, "Bí mật nhà 1");
+
+        String ownerTwo = globalSummary(OWNER_2);
+        assertFalse(ownerTwo.contains("Bí mật nhà 1"), ownerTwo);
+        assertEquals(0, json.readTree(ownerTwo).path("unreadCount").asInt());
+
+        String tenant = globalSummary(TENANT_1);
+        assertTrue(tenant.contains("Bí mật nhà 1"), tenant);
+        assertEquals(1, json.readTree(tenant).path("unreadCount").asInt());
     }
 }

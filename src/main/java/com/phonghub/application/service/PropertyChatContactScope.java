@@ -23,15 +23,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Giới hạn danh bạ chat theo quan hệ trong nhà trọ (#345), cùng phạm vi dữ liệu với {@code docs/use-cases.md} §2.1:
- *
- * <ul>
- *   <li>Quản trị viên: mọi người. Mọi vai trò đều liên hệ được quản trị viên.</li>
- *   <li>Người thuê: chủ trọ, nhân viên và kỹ thuật viên của nhà trọ đang ở.</li>
- *   <li>Kỹ thuật viên: chủ trọ và nhân viên của nhà trọ được phân công.</li>
- *   <li>Nhân viên: chủ trọ, nhân viên, kỹ thuật viên và người thuê của nhà trọ được phân công.</li>
- *   <li>Chủ trọ: nhân viên, kỹ thuật viên và người thuê của nhà trọ mình.</li>
- * </ul>
+ * Giới hạn danh bạ chat theo nhà trọ (#345): mỗi người chỉ liên hệ được người cùng nhà trọ với mình, gồm chủ trọ, nhân
+ * viên và kỹ thuật viên được phân công, và người thuê đang ở (chủ hợp đồng hoặc người ở cùng). Quan hệ này đối xứng nên
+ * dùng được cho cả việc gửi lẫn nhận. Quản trị viên liên hệ được mọi người và mọi người liên hệ được quản trị viên.
  */
 public class PropertyChatContactScope implements ChatContactScope {
 
@@ -67,19 +61,11 @@ public class PropertyChatContactScope implements ChatContactScope {
         Set<UUID> reachable = new HashSet<>();
         all.stream().filter(u -> u.role() == UserRole.ADMIN).forEach(u -> reachable.add(u.id()));
         for (UUID propertyId : propertyIdsOf(viewer)) {
-            if (viewer.role() != UserRole.OWNER) {
-                properties.findById(propertyId).map(Property::ownerId).ifPresent(reachable::add);
-            }
+            properties.findById(propertyId).map(Property::ownerId).ifPresent(reachable::add);
             for (StaffPropertyAssignment assignment : assignments.findByPropertyId(propertyId)) {
-                User member = byId.get(assignment.staffUserId());
-                // Kỹ thuật viên chỉ làm việc với chủ trọ và nhân viên, không nhắn riêng cho kỹ thuật viên khác.
-                if (member != null && !(viewer.role() == UserRole.TECHNICIAN && member.role() == UserRole.TECHNICIAN)) {
-                    reachable.add(member.id());
-                }
+                reachable.add(assignment.staffUserId());
             }
-            if (viewer.role() == UserRole.OWNER || viewer.role() == UserRole.STAFF) {
-                addResidents(propertyId, reachable);
-            }
+            addResidents(propertyId, reachable);
         }
         reachable.remove(viewer.id());
         reachable.retainAll(byId.keySet());
