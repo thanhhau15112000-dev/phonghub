@@ -237,6 +237,11 @@ public class InMemoryPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.application.port.out.InvoiceAnomalyQueryPort invoiceAnomalyQueryPort() {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceAnomalyQueryAdapter();
+    }
+
+    @Bean
     public StatisticsQueryPort statisticsQueryPort(
         com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository invoiceRepo,
         InMemoryContractRepository contractRepo,

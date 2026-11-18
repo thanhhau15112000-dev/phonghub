@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -47,6 +48,11 @@ class MaintenanceBranchFlowIntegrationTest extends SeededWebTest {
     @Autowired private InMemoryNotificationRepository notifications;
     @Autowired private InMemoryInvoiceRepository invoices;
     @Autowired private MaintenanceApprovalService approvalService;
+
+    @BeforeEach
+    void clearNotifications() {
+        notifications.clear();
+    }
 
     private String report(String cause) throws Exception {
         String body = "{\"roomId\":\"" + DataSeeder.ROOM_101_ID + "\",\"title\":\"Vòi nước hỏng\","

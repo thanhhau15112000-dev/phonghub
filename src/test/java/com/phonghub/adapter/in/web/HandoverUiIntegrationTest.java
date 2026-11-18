@@ -6,6 +6,7 @@ import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverItemReposit
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverPhotoRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryHandoverRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyHouseRulesRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantDocumentRepository;
@@ -49,6 +50,7 @@ class HandoverUiIntegrationTest extends SeededWebTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private InMemoryContractRepository contracts;
+    @Autowired private InMemoryInvoiceRepository invoices;
     @Autowired private InMemoryRoomRepository rooms;
     @Autowired private InMemoryHandoverRepository handovers;
     @Autowired private InMemoryHandoverPhotoRepository photos;
@@ -58,6 +60,7 @@ class HandoverUiIntegrationTest extends SeededWebTest {
 
     @BeforeEach
     void reset() {
+        invoices.clear();
         handovers.clear();
         photos.clear();
         items.clear();

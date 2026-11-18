@@ -303,6 +303,13 @@ public class PostgresPersistenceConfig {
     }
 
     @Bean
+    public com.phonghub.application.port.out.InvoiceAnomalyQueryPort invoiceAnomalyQueryPort(
+        NamedParameterJdbcTemplate jdbcTemplate
+    ) {
+        return new com.phonghub.adapter.out.persistence.postgres.PostgresInvoiceAnomalyQueryAdapter(jdbcTemplate);
+    }
+
+    @Bean
     public StatisticsQueryPort statisticsQueryPort(
         NamedParameterJdbcTemplate jdbcTemplate,
         TenantDataProtectionPort tenantDataProtection
