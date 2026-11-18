@@ -180,15 +180,18 @@ public class RoomAssetService implements RoomAssetUseCase {
         CurrentUser user = currentUserPort.getCurrentUser();
         Room room = findRoom(roomId);
         assertCanView(user, room);
-        return assetRepository.findActiveByRoomId(roomId);
+        boolean money = canSeeMoney(user, room.getPropertyId());
+        return assetRepository.findActiveByRoomId(roomId).stream()
+            .map(asset -> money ? asset : asset.withoutMoney()).toList();
     }
 
     @Override
     public RoomAsset get(UUID assetId) {
         CurrentUser user = currentUserPort.getCurrentUser();
         RoomAsset asset = findActiveAsset(assetId);
-        assertCanView(user, findRoom(asset.roomId()));
-        return asset;
+        Room room = findRoom(asset.roomId());
+        assertCanView(user, room);
+        return canSeeMoney(user, room.getPropertyId()) ? asset : asset.withoutMoney();
     }
 
     @Override
@@ -214,8 +217,11 @@ public class RoomAssetService implements RoomAssetUseCase {
     public List<RoomAssetEvent> history(UUID assetId) {
         CurrentUser user = currentUserPort.getCurrentUser();
         RoomAsset asset = findActiveAsset(assetId);
-        assertCanView(user, findRoom(asset.roomId()));
-        return eventRepository.findByAssetId(assetId);
+        Room room = findRoom(asset.roomId());
+        assertCanView(user, room);
+        boolean money = canSeeMoney(user, room.getPropertyId());
+        return eventRepository.findByAssetId(assetId).stream()
+            .map(event -> money ? event : event.withoutMoney()).toList();
     }
 
     @Override
@@ -268,6 +274,16 @@ public class RoomAssetService implements RoomAssetUseCase {
         return assetRepository.findById(assetId)
             .filter(asset -> !asset.isDeleted())
             .orElseThrow(() -> new RoomAssetNotFoundException(assetId));
+    }
+
+    /**
+     * Giá trị ước tính và chi phí sửa là số tiền của chủ trọ (#346). Người thuê xem được (cần để hiểu khoản đền bù),
+     * người xem được tiền của nhà trọ hoặc quản lý phòng và tài sản cũng xem được. Kỹ thuật viên và nhân viên không có
+     * hai quyền đó thì không.
+     */
+    private boolean canSeeMoney(CurrentUser user, UUID propertyId) {
+        return authorizationService.canViewPropertyFinance(user, propertyId)
+            || authorizationService.canManageRoomsAndAssets(user, propertyId);
     }
 
     private UUID propertyOf(RoomAsset asset) {

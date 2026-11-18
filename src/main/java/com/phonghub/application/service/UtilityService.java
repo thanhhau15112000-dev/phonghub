@@ -269,6 +269,7 @@ public class UtilityService implements UtilityUseCase {
     @Override
     public List<ServiceRate> listRates(UUID propertyId) {
         CurrentUser user = currentUserPort.getCurrentUser();
+        assertNotTechnician(user);
         authorizationService.assertCanAccessProperty(user, propertyId);
         return rateRepository.findByPropertyId(propertyId);
     }
@@ -279,7 +280,16 @@ public class UtilityService implements UtilityUseCase {
                 "chargeType", rate.chargeType().name(), "pricePerUnit", rate.pricePerUnit().toPlainString())));
     }
 
+    /** Đơn giá và chỉ số điện nước thuộc phần tính tiền; kỹ thuật viên chỉ xử lý sửa chữa nên không xem (#346). */
+    private static void assertNotTechnician(CurrentUser user) {
+        if (user != null && user.role() == com.phonghub.domain.model.UserRole.TECHNICIAN) {
+            throw new UnauthorizedPropertyAccessException(
+                "Kỹ thuật viên chỉ xử lý phiếu bảo trì, không xem đơn giá và chỉ số điện nước.");
+        }
+    }
+
     private void assertCanView(CurrentUser user, Room room) {
+        assertNotTechnician(user);
         if (user != null && user.isTenant()) {
             if (!authorizationService.canTenantViewRoom(user, room.getId())) {
                 throw new UnauthorizedPropertyAccessException("Tenant has no active occupancy in room " + room.getId());

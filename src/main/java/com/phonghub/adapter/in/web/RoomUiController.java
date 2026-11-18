@@ -199,6 +199,8 @@ public class RoomUiController {
         model.addAttribute("assets", assets);
         model.addAttribute("assetHistory", history);
         model.addAttribute("canManageAssets", canManage);
+        // Giá trị ước tính tài sản là tiền của chủ trọ: kỹ thuật viên, nhân viên không có quyền tiền/phòng không thấy (#346).
+        model.addAttribute("showAssetMoney", canManage || authorizationService.canViewPropertyFinance(user, property.id()));
         // Các phòng khác cùng nhà trọ để áp dụng thêm khi thêm nhiều tài sản một lần.
         model.addAttribute("batchOtherRooms", canManage
             ? roomUseCase.listRoomsForProperty(property.id()).stream().filter(r -> !r.getId().equals(roomId)).toList()

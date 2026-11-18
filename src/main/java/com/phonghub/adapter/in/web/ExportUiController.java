@@ -47,6 +47,13 @@ public class ExportUiController {
                 com.phonghub.application.service.AuthorizationService.ADMIN_FINANCE_DENIED);
             return "redirect:/dashboard";
         }
+        if (currentUser != null && (currentUser.role() == com.phonghub.domain.model.UserRole.TECHNICIAN
+            || currentUser.role() == com.phonghub.domain.model.UserRole.TENANT)) {
+            // Kỹ thuật viên và người thuê không có dữ liệu nào để xuất; trang xuất chỉ cho chủ trọ và nhân viên (#346)
+            redirectAttributes.addFlashAttribute("errorMessage",
+                "Trang xuất dữ liệu chỉ dành cho chủ trọ và nhân viên của nhà trọ.");
+            return "redirect:/dashboard";
+        }
         model.addAttribute("currentUser", currentUser);
         model.addAttribute("properties", propertyUseCase.listAccessibleProperties());
         model.addAttribute("currentMonth", YearMonth.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
