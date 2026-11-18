@@ -66,7 +66,7 @@ PhongHub là ứng dụng web quản lý nhà trọ cho thuê: nhà trọ, phòn
 | **Quản trị viên** (`ADMIN`) | Chính | Vận hành nền tảng: quản lý tài khoản, duyệt nhà trọ, xem nhật ký. | Toàn hệ thống, **trừ số liệu tiền** (hóa đơn, giao dịch, doanh thu, #163). |
 | **Chủ trọ** (`OWNER`) | Chính | Sở hữu và điều hành nhà trọ. | Nhà trọ của mình. |
 | **Nhân viên** (`STAFF`) | Chính | Được chủ trọ phân công vào nhà trọ. Ngoài quyền cơ bản (phòng, người thuê, điện nước, báo hỏng), có thể được cấp thêm 3 quyền: *quản lý hợp đồng*, *thu tiền*, *xem giấy tờ*. | Nhà trọ được phân công. |
-| **Kỹ thuật viên** (`TECHNICIAN`) | Chính | Nhận và xử lý phiếu bảo trì. Không có quyền tiền, hợp đồng hay giấy tờ. | Nhà trọ được phân công; phiếu được giao cho mình. |
+| **Kỹ thuật viên** (`TECHNICIAN`) | Chính | Nhận và xử lý phiếu bảo trì. Không có quyền tiền, hợp đồng hay giấy tờ; không xem đơn giá, chỉ số điện nước và giá trị ước tính của tài sản (#346). | Nhà trọ được phân công; phiếu được giao cho mình. |
 | **Người thuê** (`TENANT`) | Chính | Người thuê chính hoặc người ở cùng, có tài khoản đăng nhập. | Hợp đồng, phòng, hóa đơn và phiếu của chính mình. |
 | **Bộ hẹn giờ hệ thống** | Chính (tự động) | Các tác vụ chạy định kỳ theo giờ Việt Nam và lúc ứng dụng khởi động. | Toàn hệ thống. |
 | **SePay** | Phụ (hệ thống ngoài) | Cổng thanh toán. Gửi webhook biến động số dư và IPN của trang thanh toán. | Giao dịch chuyển khoản. |
@@ -830,6 +830,7 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 **Quy tắc nghiệp vụ**
 - BR1. Chưa có đơn giá thì hóa đơn không có dòng điện nước, và trang hợp đồng cảnh báo "nhà trọ chưa cấu hình đơn giá".
 - BR2. Dịch vụ cố định chỉ tính lúc phát hành hóa đơn; đơn giá thêm sau không làm đổi hóa đơn đã phát hành.
+- BR3 (#346). Kỹ thuật viên không xem đơn giá (`GET /api/properties/{id}/service-rates`) và chỉ số điện nước của phòng: E-403. Người thuê xem được đơn giá của nhà đang ở.
 
 ### 5.3. Phòng và tài sản
 
@@ -1869,12 +1870,14 @@ Mỗi use case gồm: thông tin chung, **luồng chính** (các bước đánh 
 - E2. Mở phòng chat mà mình không phải thành viên: E-403. Mở link ảnh/video của phòng đó cũng E-403.
 - E3. Tệp sai định dạng (gif, avi, mkv, tệp đổi đuôi), quá dung lượng, quá 5 tệp hoặc quá 1 video: E-400 kèm thông báo tiếng Việt, không tạo tin. Khung chat kiểm tra trước khi gửi để tệp quá lớn không bị máy chủ cắt kết nối.
 - E4. Kho lưu trữ lỗi: E-503 "Không lưu được ảnh/video vào kho lưu trữ…", không tạo tin rỗng; tệp đã tải lên kho trong lần gửi đó bị xóa lại.
+- E5 (#345). Tạo chat riêng với người ngoài phạm vi danh bạ (BR5): E-403.
 
 **Quy tắc nghiệp vụ**
 - BR1. Ảnh và video (#251, đảo lại #201): mỗi tin tối đa 5 tệp, trong đó tối đa 1 video. Ảnh JPEG/PNG/WebP, kiểm tra chữ ký tệp, bỏ EXIF và vị trí, xoay đúng chiều, tối đa `STORAGE_MAX_FILE_SIZE_BYTES`. Video MP4/WebM/MOV, chỉ kiểm tra chữ ký, không chuyển mã, tối đa `phonghub.chat.max-video-bytes` (mặc định 10 MB, không vượt giới hạn chung). Video không bỏ được thông tin đi kèm trong tệp (ví dụ vị trí) nên khung chat nhắc khi chọn video.
 - BR2. Máy chủ gửi tín hiệu giữ kết nối mỗi 25 giây để kết nối không bị cắt khi rảnh.
 - BR3. Tệp lưu ở kho riêng tư với khóa `chat/{roomId}/{uuid}.{đuôi}`; cơ sở dữ liệu (bảng `chat_message_attachments`, V59) chỉ lưu khóa. REST và SSE không trả khóa, chỉ trả đường dẫn xem tệp của phòng chat. Quyền xem tệp = quyền đọc phòng. Kho cho URL có chữ ký thì chuyển hướng (hết hạn sau 10 phút); kho in-memory (profile docker) thì máy chủ trả tệp trực tiếp, hỗ trợ `Range` (206) để tua video.
 - BR4. Kênh chung gửi được ảnh/video với người được gửi tin ở kênh đó. Tin cũ trước #201 (tệp ở bucket công khai `chat-media` trên Supabase) vẫn xem được qua `legacy-media`: kiểm tra quyền đọc phòng như tệp mới rồi mới chuyển tới URL cũ; API không trả URL cũ. Tệp không ở bucket đó (ví dụ `/uploads/chat-media/…` của bản chạy cục bộ, đã gỡ cùng #201) hoặc đã mất thì hiện ghi chú "Tệp đính kèm cũ không còn xem được".
+- BR5 (#345). Danh bạ và việc tạo chat riêng theo quan hệ trong nhà trọ, không theo toàn hệ thống: người thuê thấy chủ trọ, nhân viên, kỹ thuật viên của nhà đang ở; kỹ thuật viên thấy chủ trọ và nhân viên của nhà được phân công; nhân viên thấy chủ trọ, nhân viên, kỹ thuật viên và người thuê của nhà được phân công; chủ trọ thấy nhân viên, kỹ thuật viên và người thuê của nhà mình. Quản trị viên liên hệ được mọi người và mọi vai trò liên hệ được quản trị viên. Cuộc trò chuyện riêng đã có từ trước vẫn mở được khi quan hệ thay đổi.
 
 #### UC-65. Xem thông báo
 

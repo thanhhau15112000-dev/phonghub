@@ -90,6 +90,12 @@ public record RoomAsset(
             estimatedValue, deletedAt, createdAt, createdBy, Instant.now(), actorId);
     }
 
+    /** Bản che giá trị ước tính cho người không được xem tiền (#346): giá trị về 0, các trường khác giữ nguyên. */
+    public RoomAsset withoutMoney() {
+        return new RoomAsset(id, roomId, assetCode, name, serialNumber, quantity, status, note, imageUrl,
+            BigDecimal.ZERO, deletedAt, createdAt, createdBy, updatedAt, updatedBy);
+    }
+
     public RoomAsset softDelete(UUID actorId) {
         Instant now = Instant.now();
         return new RoomAsset(id, roomId, assetCode, name, serialNumber, quantity, status, note, imageUrl,

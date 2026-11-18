@@ -32,6 +32,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,6 +52,7 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
     private final long maxImageBytes;
     private final long maxVideoBytes;
     private final Clock clock;
+    private final ChatContactScope contactScope;
 
     /** Chat chỉ văn bản: gửi ảnh/video báo chưa cấu hình kho lưu trữ. */
     public ChatService(
@@ -74,6 +76,22 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         long maxVideoBytes,
         Clock clock
     ) {
+        this(chatRoomRepositoryPort, chatMessageRepositoryPort, userRepositoryPort, chatEventPublisherPort,
+            storagePort, maxImageBytes, maxVideoBytes, clock, ChatContactScope.unrestricted());
+    }
+
+    /** {@code contactScope} quyết định danh bạ và người được tạo chat riêng (#345). */
+    public ChatService(
+        ChatRoomRepositoryPort chatRoomRepositoryPort,
+        ChatMessageRepositoryPort chatMessageRepositoryPort,
+        UserRepositoryPort userRepositoryPort,
+        ChatEventPublisherPort chatEventPublisherPort,
+        FileStoragePort storagePort,
+        long maxImageBytes,
+        long maxVideoBytes,
+        Clock clock,
+        ChatContactScope contactScope
+    ) {
         if (maxImageBytes <= 0 || maxVideoBytes <= 0) {
             throw new IllegalArgumentException("Media size limits must be positive");
         }
@@ -85,6 +103,7 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         this.userRepositoryPort = Objects.requireNonNull(userRepositoryPort, "userRepositoryPort must not be null");
         this.chatEventPublisherPort = Objects.requireNonNull(chatEventPublisherPort, "chatEventPublisherPort must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.contactScope = Objects.requireNonNull(contactScope, "contactScope must not be null");
     }
 
     private void assertAuthenticated(CurrentUser user) {
@@ -193,6 +212,11 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         if (existingRoom.isPresent()) {
             return existingRoom.get();
         }
+        // Chỉ tạo mới với người cùng nhà trọ (#345); cuộc trò chuyện đã có từ trước vẫn mở được.
+        Set<UUID> reachable = contactScope.reachableUserIds(currentUser);
+        if (reachable != null && !reachable.contains(targetUserId)) {
+            throw new UnauthorizedChatAccessException("Bạn chỉ nhắn riêng được cho người cùng nhà trọ với mình.");
+        }
 
         ChatRoomMember member1 = ChatRoomMember.create(
             UUID.randomUUID(), currentUser.id(), currentUser.fullName(), currentUser.role()
@@ -221,8 +245,10 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
     @Override
     public List<ChatContactSummary> getAvailableContacts(CurrentUser currentUser) {
         assertAuthenticated(currentUser);
+        Set<UUID> reachable = contactScope.reachableUserIds(currentUser);
         return userRepositoryPort.findAll().stream()
             .filter(u -> !u.id().equals(currentUser.id()))
+            .filter(u -> reachable == null || reachable.contains(u.id()))
             .sorted(Comparator.comparing(User::fullName))
             .map(u -> new ChatContactSummary(u.id(), u.fullName(), u.email(), u.role()))
             .toList();
