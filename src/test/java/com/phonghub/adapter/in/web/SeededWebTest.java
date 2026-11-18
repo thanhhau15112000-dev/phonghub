@@ -63,6 +63,7 @@ abstract class SeededWebTest {
     @Autowired private InMemoryInvoicePaymentRecordRepository seedPaymentRecords;
     @Autowired private InMemoryInvoiceReminderRepository seedInvoiceReminders;
     @Autowired private InMemoryPaymentClaimRepository seedPaymentClaims;
+    @Autowired private com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository seedNotifications;
 
     /** Người thuê của nhà trọ 1 đã có tài khoản TENANT đang hoạt động, chưa ở hợp đồng nào (#219). */
     protected Tenant accountTenant(String name, String cccd, String phone) {
@@ -112,6 +113,8 @@ abstract class SeededWebTest {
         seedPaymentClaims.clear();
         seedInvoiceReminders.clear();
         seedInvoices.clear();
+        // Thông báo do test trước tạo làm các test đếm thông báo theo tiêu đề phụ thuộc thứ tự chạy (CI PR #343, #344).
+        seedNotifications.clear();
         DataSeeder.seedAll(seedUsers, seedProperties, seedAssignments, seedRooms, seedTenants, seedContracts,
             seedTickets);
     }
