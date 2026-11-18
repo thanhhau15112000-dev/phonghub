@@ -32,4 +32,10 @@ public record RoomAssetEvent(
             createdAt = Instant.now();
         }
     }
+
+    /** Bản che chi phí cho người không được xem tiền (#346). */
+    public RoomAssetEvent withoutMoney() {
+        return new RoomAssetEvent(id, assetId, type, description, BigDecimal.ZERO, maintenanceTicketId, createdAt,
+            createdBy);
+    }
 }

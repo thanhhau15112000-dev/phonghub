@@ -8,9 +8,11 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -74,6 +76,16 @@ public class SseChatEventPublisher implements ChatEventPublisherPort, ChatSubscr
     }
 
     @Override
+    public void publishNewMessage(ChatRoom room, ChatMessage message, Set<UUID> audience) {
+        if (audience == null) {
+            publishNewMessage(room, message);
+            return;
+        }
+        sendToReaders(room, audience::contains, () -> SseEmitter.event().name("new_message")
+            .data(com.phonghub.adapter.in.web.api.ChatMessageResponse.from(message)));
+    }
+
+    @Override
     public void publishReadReceipt(ChatRoom room, UUID userId, Instant readAt) {
         Map<String, String> receipt = Map.of(
             "roomId", room.id().toString(),
@@ -98,8 +110,12 @@ public class SseChatEventPublisher implements ChatEventPublisherPort, ChatSubscr
 
     /** Mỗi lần gửi cần builder mới: {@code build()} ghi thêm vào chính builder. */
     private void sendToReaders(ChatRoom room, Supplier<SseEmitter.SseEventBuilder> event) {
+        sendToReaders(room, userId -> true, event);
+    }
+
+    private void sendToReaders(ChatRoom room, Predicate<UUID> recipient, Supplier<SseEmitter.SseEventBuilder> event) {
         userEmitters.forEach((userId, emitters) -> {
-            if (!room.hasMember(userId)) {
+            if (!room.hasMember(userId) || !recipient.test(userId)) {
                 return;
             }
             for (SseEmitter emitter : emitters) {

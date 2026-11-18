@@ -778,6 +778,18 @@ public class PhongHubConfiguration {
     }
 
     @Bean
+    public com.phonghub.application.port.in.InvoiceAnomalyUseCase invoiceAnomalyUseCase(
+        com.phonghub.application.port.out.InvoiceAnomalyQueryPort anomalyQueryPort,
+        PropertyRepositoryPort propertyRepo,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        com.phonghub.application.port.in.PaymentReconciliationUseCase paymentReconciliationUseCase
+    ) {
+        return new com.phonghub.application.service.InvoiceAnomalyService(anomalyQueryPort, propertyRepo,
+            currentUserPort, authorizationService, paymentReconciliationUseCase, java.time.Clock.systemUTC());
+    }
+
+    @Bean
     public NotificationUseCase notificationUseCase(
         NotificationRepositoryPort notificationRepository,
         AuthUseCase authUseCase,
@@ -974,13 +986,19 @@ public class PhongHubConfiguration {
         com.phonghub.adapter.out.event.SseChatEventPublisher sseChatEventPublisher,
         FileStoragePort fileStoragePort,
         StorageProperties storageProperties,
-        @org.springframework.beans.factory.annotation.Value("${phonghub.chat.max-video-bytes:10485760}") long maxVideoBytes
+        @org.springframework.beans.factory.annotation.Value("${phonghub.chat.max-video-bytes:10485760}") long maxVideoBytes,
+        PropertyRepositoryPort propertyRepo,
+        StaffPropertyAssignmentPort assignmentRepo,
+        ContractRepositoryPort contractRepo,
+        TenantRepositoryPort tenantRepo
     ) {
         // Ảnh theo STORAGE_MAX_FILE_SIZE_BYTES; video giới hạn riêng nhưng không vượt giới hạn chung của tệp (#251)
         return new com.phonghub.application.service.ChatService(
             chatRoomRepository, chatMessageRepository, userRepository, sseChatEventPublisher, fileStoragePort,
             storageProperties.getMaxFileSizeBytes(), Math.min(maxVideoBytes, storageProperties.getMaxFileSizeBytes()),
-            java.time.Clock.systemUTC()
+            java.time.Clock.systemUTC(),
+            new com.phonghub.application.service.PropertyChatContactScope(
+                userRepository, propertyRepo, assignmentRepo, contractRepo, tenantRepo)
         );
     }
 

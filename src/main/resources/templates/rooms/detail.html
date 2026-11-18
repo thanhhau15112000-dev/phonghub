@@ -167,7 +167,7 @@
                 <tbody><tr th:each="item : ${initialCondition.items()}">
                     <td th:text="${item.name()}"></td><td th:text="${item.quantity()}"></td>
                     <td th:text="${uiText.assetStatus(item.status())}"></td><td th:text="${item.note()}"></td>
-                    <td th:text="${#numbers.formatDecimal(item.estimatedValue(), 0, 'POINT', 0, 'COMMA') + ' đ'}"></td>
+                    <td th:text="${showAssetMoney} ? ${#numbers.formatDecimal(item.estimatedValue(), 0, 'POINT', 0, 'COMMA') + ' đ'} : '—'"></td>
                 </tr></tbody>
             </table>
         </div>
@@ -223,7 +223,7 @@
                                   th:classappend="${a.status().name() == 'GOOD'} ? 'badge-ACTIVE' : (${a.status().name() == 'DAMAGED'} ? 'badge-REPORTED' : 'badge-REJECTED')"
                                   th:text="${uiText.assetStatus(a.status())}">Tốt</span>
                         </td>
-                        <td th:text="${#numbers.formatDecimal(a.estimatedValue(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</td>
+                        <td th:text="${showAssetMoney} ? ${#numbers.formatDecimal(a.estimatedValue(), 0, 'POINT', 0, 'COMMA') + ' đ'} : '—'">0 đ</td>
                         <td>
                             <a th:href="@{'/rooms/' + ${room.getId()} + '/assets/' + ${a.id()} + '/qr'}" target="_blank" class="btn btn-sm">Mã QR</a>
                         </td>
