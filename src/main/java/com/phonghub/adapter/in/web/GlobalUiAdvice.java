@@ -116,15 +116,4 @@ public class GlobalUiAdvice {
         }
         return Collections.emptyList();
     }
-
-    @ModelAttribute("unreadChatCount")
-    public int unreadChatCount(HttpServletRequest request) {
-        CurrentUser user = currentUser(request);
-        if (user != null && chatMessageUseCase.isPresent()) {
-            try {
-                return chatMessageUseCase.get().getTotalUnreadCount(user);
-            } catch (Exception ignored) {}
-        }
-        return 0;
-    }
 }

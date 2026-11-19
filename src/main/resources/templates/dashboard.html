@@ -244,7 +244,7 @@
         <div class="card" id="rent-payment">
             <div class="flex-between" style="margin-bottom: 12px;">
                 <h2>Thanh toán tiền thuê</h2>
-                <div style="display: flex; gap: 8px;">
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                     <a th:if="${nextInvoice != null}" th:href="@{'/invoices/' + ${nextInvoice.getId()} + '/pay'}" class="btn btn-sm btn-primary">Thanh toán</a>
                     <a th:if="${tenantContract != null}" th:href="@{'/contracts/' + ${tenantContract.getId()} + '#payments'}" class="btn btn-sm btn-secondary">Tất cả khoản thanh toán</a>
                     <a th:href="@{/account/payments}" class="btn btn-sm btn-secondary">Lịch sử thanh toán</a>

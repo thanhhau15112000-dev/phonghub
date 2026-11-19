@@ -17,37 +17,11 @@
                 </span>
             </p>
         </div>
-        <div style="display: flex; gap: 8px;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <a th:if="${invoice.getPaidAmount().signum() > 0}" th:href="@{'/invoices/' + ${invoice.getId()} + '/receipt'}" class="btn" id="receipt-link">Xem biên lai</a>
             <a th:href="@{'/contracts/' + ${invoice.getContractId()} + '#payments'}" class="btn">&larr; Quay lại hợp đồng</a>
         </div>
     </div>
-
-    <section class="card" style="margin-bottom: 20px;">
-        <div class="flex-between" style="gap: 12px; flex-wrap: wrap;">
-            <div>
-                <h2 style="margin: 0 0 4px; font-size: 16px;">Hỏi về hóa đơn</h2>
-                <p th:if="${invoice.getType().name() == 'RENT'}" style="margin: 0; color: var(--text-secondary); font-size: 13px;">
-                    So sánh tối đa 3 kỳ tiền thuê trước của hợp đồng này. Phí sửa chữa được tách riêng.
-                </p>
-            </div>
-            <button th:if="${invoice.getType().name() == 'RENT'}" type="button" class="btn btn-secondary" data-ai-analysis
-                    th:attr="data-ai-endpoint=@{'/api/v1/ai/invoices/' + ${invoice.getId()} + '/analysis'}"
-                    data-ai-target="invoice-ai-answer">Phân tích hóa đơn</button>
-        </div>
-        <form data-ai-form style="margin-top: 12px;"
-              th:attr="data-ai-endpoint=@{'/api/v1/ai/invoices/' + ${invoice.getId()} + '/ask'}">
-            <label class="form-label" th:for="'invoice-ai-question-' + ${invoice.getId()}">Câu hỏi</label>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start;">
-                <textarea class="form-control" name="question" maxlength="1200" required rows="2"
-                          th:id="'invoice-ai-question-' + ${invoice.getId()}"
-                          placeholder="Ví dụ: Vì sao tiền điện kỳ này thay đổi?"></textarea>
-                <button type="submit" class="btn btn-primary">Gửi câu hỏi</button>
-            </div>
-            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-        </form>
-        <div id="invoice-ai-answer" class="ai-answer" aria-live="polite" style="display: none; margin-top: 12px;"></div>
-    </section>
 
     <div class="card" id="invoice-pay">
         <div th:if="${invoice.getStatus().name() == 'PAID'}" class="empty-state" id="paid-notice">
@@ -71,33 +45,14 @@
         <div th:each="warning : ${utilityWarnings}" style="margin-bottom: 8px; font-size: 13px; color: var(--warning, #b45309);"
              th:text="'⚠ ' + ${warning}">Cảnh báo</div>
 
-        <!-- Chi tiết các mục của hóa đơn -->
-        <div th:if="${!#lists.isEmpty(invoice.getItems())}" style="margin-bottom: 16px;">
-            <h2 style="font-size: 14px; margin-bottom: 8px;">Chi tiết hóa đơn</h2>
-            <table class="data-table" style="font-size: 13px;">
-                <thead>
-                    <tr><th>Mục</th><th style="text-align: right;">Thành tiền</th></tr>
-                </thead>
-                <tbody>
-                    <tr th:each="item : ${invoice.getItems()}">
-                        <td th:text="${item.name()}">Tiền thuê phòng tháng 10/2026</td>
-                        <td style="text-align: right;" th:text="${#numbers.formatDecimal(item.totalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
-                    </tr>
-                    <tr>
-                        <td style="font-weight: 600;">Tổng cộng</td>
-                        <td style="text-align: right; font-weight: 600;" th:text="${#numbers.formatDecimal(invoice.getTotalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
-                    </tr>
-                    <tr th:if="${invoice.getSettlementCreditAmount().signum() > 0}">
-                        <td>Tiền hoàn/đối trừ từ chu kỳ đã thu</td>
-                        <td style="text-align: right;" th:text="${#numbers.formatDecimal(invoice.getSettlementCreditAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div th:if="${invoice.isPayable()}" style="display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start;">
-            <img th:if="${paymentQrUrl != null and !sandboxCheckoutEnabled}" th:src="${paymentQrUrl}" alt="Mã QR chuyển khoản" width="220" height="220" style="border: 1px solid var(--border-color);">
-            <div style="flex: 1; min-width: 280px;">
+        <!-- Phần quét mã QR & thông tin chuyển khoản ưu tiên hiển thị trên cùng -->
+        <div th:if="${invoice.isPayable()}" class="pay-transfer-layout">
+            <div th:if="${paymentQrUrl != null and !sandboxCheckoutEnabled}" class="pay-qr-box">
+                <img th:src="${paymentQrUrl}" alt="Mã QR chuyển khoản" width="220" height="220">
+                <span style="font-size: 12px; color: var(--text-secondary);">Quét mã QR bằng ứng dụng ngân hàng</span>
+            </div>
+            <div class="pay-info-box">
+                <div class="table-scroll">
                 <table class="data-table">
                     <tbody>
                         <tr>
@@ -121,7 +76,12 @@
                         </tr>
                         <tr th:unless="${sandboxCheckoutEnabled}">
                             <td style="color: var(--text-secondary);">Nội dung chuyển khoản:</td>
-                            <td style="font-family: monospace; font-weight: 700; font-size: 16px;" th:text="${invoice.getPaymentCode()}">PHXXXXXXXX</td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                    <span style="font-family: monospace; font-weight: 700; font-size: 16px;" th:text="${invoice.getPaymentCode()}">PHXXXXXXXX</span>
+                                    <button type="button" class="btn btn-sm btn-secondary copy-pay-btn" th:attr="data-copy=${invoice.getPaymentCode()}">Sao chép</button>
+                                </div>
+                            </td>
                         </tr>
                         <tr th:if="${bankConfigured and !sandboxCheckoutEnabled}">
                             <td style="color: var(--text-secondary);">Ngân hàng:</td>
@@ -129,7 +89,12 @@
                         </tr>
                         <tr th:if="${bankConfigured and !sandboxCheckoutEnabled}">
                             <td style="color: var(--text-secondary);">Số tài khoản:</td>
-                            <td style="font-family: monospace;" th:text="${bankAccountNumber}">0123456789</td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                    <span style="font-family: monospace;" th:text="${bankAccountNumber}">0123456789</span>
+                                    <button type="button" class="btn btn-sm btn-secondary copy-pay-btn" th:attr="data-copy=${bankAccountNumber}">Sao chép</button>
+                                </div>
+                            </td>
                         </tr>
                         <tr th:if="${bankConfigured and !sandboxCheckoutEnabled and bankAccountName != null and !#strings.isEmpty(bankAccountName)}">
                             <td style="color: var(--text-secondary);">Chủ tài khoản:</td>
@@ -137,6 +102,7 @@
                         </tr>
                     </tbody>
                 </table>
+                </div>
                 <form th:if="${sandboxCheckoutEnabled}" th:action="@{'/invoices/' + ${invoice.getId()} + '/sepay-checkout'}" method="post"
                       style="margin-top: 14px;">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -147,6 +113,33 @@
                     Trang này tự cập nhật khi nhận được tiền.
                     <span th:unless="${bankConfigured}">Hệ thống chưa cấu hình tài khoản nhận tiền, vui lòng liên hệ chủ trọ để nhận số tài khoản.</span>
                 </p>
+            </div>
+        </div>
+
+        <!-- Chi tiết các mục của hóa đơn -->
+        <div th:if="${!#lists.isEmpty(invoice.getItems())}"
+             th:style="${invoice.isPayable()} ? 'margin-top: 20px; padding-top: 16px; border-top: 1px solid #e2e8f0;' : ''">
+            <h2 style="font-size: 15px; margin-bottom: 8px;">Chi tiết hóa đơn</h2>
+            <div class="table-scroll">
+            <table class="data-table" style="font-size: 13px;">
+                <thead>
+                    <tr><th>Mục</th><th style="text-align: right;">Thành tiền</th></tr>
+                </thead>
+                <tbody>
+                    <tr th:each="item : ${invoice.getItems()}">
+                        <td th:text="${item.name()}">Tiền thuê phòng tháng 10/2026</td>
+                        <td style="text-align: right;" th:text="${#numbers.formatDecimal(item.totalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight: 600;">Tổng cộng</td>
+                        <td style="text-align: right; font-weight: 600;" th:text="${#numbers.formatDecimal(invoice.getTotalAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">3,500,000 đ</td>
+                    </tr>
+                    <tr th:if="${invoice.getSettlementCreditAmount().signum() > 0}">
+                        <td>Tiền hoàn/đối trừ từ chu kỳ đã thu</td>
+                        <td style="text-align: right;" th:text="${#numbers.formatDecimal(invoice.getSettlementCreditAmount(), 0, 'POINT', 0, 'COMMA') + ' đ'}">0 đ</td>
+                    </tr>
+                </tbody>
+            </table>
             </div>
         </div>
     </div>
@@ -172,7 +165,7 @@
                     <option value="BANK_TRANSFER">Chuyển khoản</option>
                 </select>
             </div>
-            <div class="form-group" style="margin: 0; flex: 1; min-width: 200px;">
+            <div class="form-group" style="margin: 0; flex: 1; min-width: 180px;">
                 <label class="form-label" for="claimNote">Ghi chú</label>
                 <input type="text" id="claimNote" name="note" class="form-control" maxlength="1000">
             </div>
@@ -198,7 +191,7 @@
                     <option value="BANK_TRANSFER">Chuyển khoản</option>
                 </select>
             </div>
-            <div class="form-group" style="margin: 0; flex: 1; min-width: 200px;">
+            <div class="form-group" style="margin: 0; flex: 1; min-width: 180px;">
                 <label class="form-label" for="recordNote">Ghi chú</label>
                 <input type="text" id="recordNote" name="note" class="form-control" maxlength="1000">
             </div>
@@ -208,6 +201,7 @@
 
     <div th:if="${!claims.isEmpty()}" class="card" id="claim-history" style="margin-top: 20px;">
         <h2>Lịch sử xác nhận thanh toán</h2>
+        <div class="table-scroll">
         <table class="data-table" style="font-size: 13px;">
             <thead><tr><th>Thời gian</th><th>Số tiền</th><th>Hình thức</th><th>Nguồn</th><th>Trạng thái</th></tr></thead>
             <tbody>
@@ -223,9 +217,56 @@
                 </tr>
             </tbody>
         </table>
+        </div>
     </div>
 
+    <section class="card" style="margin-top: 20px;">
+        <div class="flex-between" style="gap: 12px; flex-wrap: wrap;">
+            <div>
+                <h2 style="margin: 0 0 4px; font-size: 16px;">Hỏi về hóa đơn</h2>
+                <p th:if="${invoice.getType().name() == 'RENT'}" style="margin: 0; color: var(--text-secondary); font-size: 13px;">
+                    So sánh tối đa 3 kỳ tiền thuê trước của hợp đồng này. Phí sửa chữa được tách riêng.
+                </p>
+            </div>
+            <button th:if="${invoice.getType().name() == 'RENT'}" type="button" class="btn btn-secondary" data-ai-analysis
+                    th:attr="data-ai-endpoint=@{'/api/v1/ai/invoices/' + ${invoice.getId()} + '/analysis'}"
+                    data-ai-target="invoice-ai-answer">Phân tích hóa đơn</button>
+        </div>
+        <form data-ai-form style="margin-top: 12px;"
+              th:attr="data-ai-endpoint=@{'/api/v1/ai/invoices/' + ${invoice.getId()} + '/ask'}">
+            <label class="form-label" th:for="'invoice-ai-question-' + ${invoice.getId()}">Câu hỏi</label>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start;">
+                <textarea class="form-control" name="question" maxlength="1200" required rows="2"
+                          style="flex: 1; min-width: 220px;"
+                          th:id="'invoice-ai-question-' + ${invoice.getId()}"
+                          placeholder="Ví dụ: Vì sao tiền điện kỳ này thay đổi?"></textarea>
+                <button type="submit" class="btn btn-primary">Gửi câu hỏi</button>
+            </div>
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        </form>
+        <div id="invoice-ai-answer" class="ai-answer" aria-live="polite" style="display: none; margin-top: 12px;"></div>
+    </section>
+
     <script th:src="@{/js/ai-assistant.js}" defer></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('.copy-pay-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var value = btn.getAttribute('data-copy');
+                    if (!value) return;
+                    var original = btn.textContent;
+                    var done = function () {
+                        btn.textContent = 'Đã sao chép';
+                        setTimeout(function () { btn.textContent = original; }, 1500);
+                    };
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(value).then(done).catch(function () {});
+                    }
+                });
+            });
+        });
+    </script>
 
     <script th:if="${invoice.isPayable()}" th:inline="javascript">
         (function () {
