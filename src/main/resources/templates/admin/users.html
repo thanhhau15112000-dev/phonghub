@@ -18,12 +18,18 @@
         </div>
     </div>
 
-    <div class="card" th:if="${!#lists.isEmpty(tenantAccountsMissingProfiles)}" style="margin-bottom: 20px;">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="card" th:if="${!#lists.isEmpty(tenantAccountsMissingProfiles) or profileErrorMessage != null}" style="margin-bottom: 20px;">
         <h2>Tài khoản người thuê chưa có hồ sơ CCCD</h2>
         <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 16px;">
             Bổ sung CCCD để gắn các tài khoản cũ vào hồ sơ người thuê. Mỗi CCCD chỉ liên kết được với một tài khoản.
         </p>
-        <div class="table-responsive">
+        <div th:if="${profileErrorMessage != null}" class="inline-alert inline-alert-danger" style="margin-top: 0; margin-bottom: 14px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <span th:text="${profileErrorMessage}">Lỗi gắn hồ sơ</span>
+        </div>
+        <div class="table-responsive" th:if="${!#lists.isEmpty(tenantAccountsMissingProfiles)}">
             <table class="data-table">
                 <thead><tr><th>Tài khoản</th><th>Họ và tên</th><th>Email</th><th>Bổ sung SĐT và CCCD</th></tr></thead>
                 <tbody>
@@ -117,7 +123,10 @@
                     Đã tạo tài khoản <span th:text="${createdUser.username()}" style="font-weight: 700;">username</span> thành công!
                 </div>
                 <p style="margin: 0 0 8px; font-size: 13px;">Mật khẩu tạm thời chỉ hiển thị một lần. Gửi riêng cho người dùng và yêu cầu đổi ở lần đăng nhập đầu tiên:</p>
-                <code th:text="${createdUser.temporaryPassword()}" style="font-size: 15px; font-weight: 700; padding: 4px 10px; background: rgba(0,0,0,0.06); border-radius: 4px; display: inline-block;">temporary-password</code>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <code id="createdTempPasswordCode" th:text="${createdUser.temporaryPassword()}" style="font-size: 15px; font-weight: 700; padding: 4px 10px; background: rgba(0,0,0,0.06); border-radius: 4px; display: inline-block;">temporary-password</code>
+                    <button type="button" class="btn btn-sm" onclick="if (navigator.clipboard) navigator.clipboard.writeText(document.getElementById('createdTempPasswordCode').innerText); this.innerText='Đã sao chép!';" style="padding: 4px 8px; font-size: 12px;">Sao chép</button>
+                </div>
             </div>
         </form>
     </div>
@@ -133,7 +142,10 @@
                 Đã đặt lại mật khẩu cho <span th:text="${resetResult.username()}" style="font-weight: 700;">user</span> thành công!
             </div>
             <p style="margin: 0 0 8px; font-size: 13px;">Mật khẩu tạm thời chỉ hiển thị một lần. Người dùng phải đổi mật khẩu sau khi đăng nhập:</p>
-            <code th:text="${resetResult.temporaryPassword()}" style="font-size: 15px; font-weight: 700; padding: 4px 10px; background: rgba(0,0,0,0.06); border-radius: 4px; display: inline-block;">temporary-password</code>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <code id="resetTempPasswordCode" th:text="${resetResult.temporaryPassword()}" style="font-size: 15px; font-weight: 700; padding: 4px 10px; background: rgba(0,0,0,0.06); border-radius: 4px; display: inline-block;">temporary-password</code>
+                <button type="button" class="btn btn-sm" onclick="if (navigator.clipboard) navigator.clipboard.writeText(document.getElementById('resetTempPasswordCode').innerText); this.innerText='Đã sao chép!';" style="padding: 4px 8px; font-size: 12px;">Sao chép</button>
+            </div>
         </div>
         <div th:if="${tableSuccessMessage != null}" class="inline-alert inline-alert-success" style="margin-bottom: 14px; margin-top: 0;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
@@ -185,7 +197,7 @@
             </div>
 
             <!-- Search Component -->
-            <form th:action="@{/admin/users}" method="get" class="search-box-form">
+            <form th:action="@{/admin/users}" method="get" class="search-box-form" style="display: flex; gap: 8px; align-items: center;">
                 <input type="hidden" name="role" th:if="${selectedRole != 'ALL'}" th:value="${selectedRole}">
                 <input type="hidden" name="size" th:value="${pageSize}">
                 <div class="search-input-wrapper">
@@ -203,6 +215,7 @@
                        class="search-clear-btn"
                        title="Xóa tìm kiếm">&times;</a>
                 </div>
+                <button type="submit" class="btn btn-sm btn-secondary">Tìm kiếm</button>
             </form>
         </div>
 
@@ -241,7 +254,14 @@
                                th:title="'Sửa thông tin, vai trò, trạng thái của ' + ${user.fullName()}">Sửa</a>
                             <form th:action="@{'/admin/users/' + ${user.id()} + '/reset-password'}" method="post" style="margin: 0;">
                                 <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                                <button type="submit" class="btn btn-sm btn-secondary" th:title="'Sinh mật khẩu tạm thời mới cho ' + ${user.fullName()}">Reset mật khẩu</button>
+                                <button type="button" class="btn btn-sm btn-secondary"
+                                        th:title="'Sinh mật khẩu tạm thời mới cho ' + ${user.fullName()}"
+                                        data-confirm="Bạn có chắc chắn muốn cấp lại mật khẩu mới cho tài khoản này không?"
+                                        data-confirm-title="Reset mật khẩu"
+                                        th:data-confirm-target="'Tài khoản: ' + ${user.username() != null ? user.username() : user.email()}"
+                                        data-confirm-consequence="Mật khẩu cũ sẽ bị hủy. Mật khẩu mới chỉ hiển thị một lần sau khi xác nhận."
+                                        data-confirm-btn="Reset mật khẩu"
+                                        data-confirm-variant="primary">Reset mật khẩu</button>
                             </form>
                             <button type="button"
                                     class="btn btn-sm btn-danger"
@@ -259,7 +279,7 @@
         </table>
 
         <!-- Pagination with Quick Jump Input [...] -->
-        <nav th:if="${!#lists.isEmpty(users)}" class="pagination-container" aria-label="Phân trang">
+        <nav th:if="${!#lists.isEmpty(users) and totalPages > 1}" class="pagination-container" aria-label="Phân trang">
             <ul class="pagination">
                 <!-- Về trang đầu << -->
                 <li class="page-item">
@@ -295,49 +315,84 @@
                     <span th:if="${currentPage == 1}" class="page-link current">1</span>
                 </li>
 
-                <!-- Trang hiện tại (nếu currentPage > 2 và chưa phải trang cuối) -->
-                <li th:if="${currentPage > 2 and currentPage < totalPages}" class="page-item active">
-                    <span class="page-link current" th:text="${currentPage}">3</span>
-                </li>
+                <!-- Khi có <= 3 trang: hiện đầy đủ các trang còn lại không cần ô jump -->
+                <th:block th:if="${totalPages <= 3}">
+                    <li th:if="${totalPages >= 2}" class="page-item" th:classappend="${currentPage == 2 ? 'active' : ''}">
+                        <a th:if="${currentPage != 2}"
+                           th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=2, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
+                           class="page-link">2</a>
+                        <span th:if="${currentPage == 2}" class="page-link current">2</span>
+                    </li>
+                    <li th:if="${totalPages == 3}" class="page-item" th:classappend="${currentPage == 3 ? 'active' : ''}">
+                        <a th:if="${currentPage != 3}"
+                           th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=3, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
+                           class="page-link">3</a>
+                        <span th:if="${currentPage == 3}" class="page-link current">3</span>
+                    </li>
+                </th:block>
 
-                <!-- Ô nhập [...] cho phép gõ trang muốn đến -->
-                <li class="page-item">
-                    <form th:action="@{/admin/users}" method="get" class="page-jump-form">
-                        <input type="hidden" name="role" th:if="${selectedRole != 'ALL'}" th:value="${selectedRole}">
-                        <input type="hidden" name="size" th:value="${pageSize}">
-                        <input type="hidden" name="q" th:if="${!#strings.isEmpty(q)}" th:value="${q}">
-                        <input type="number"
-                               name="page"
-                               min="1"
-                               th:max="${totalPages}"
-                               class="page-jump-input"
-                               placeholder="..."
-                               th:title="${'Nhập số trang từ 1 đến ' + totalPages + ' rồi bấm Enter'}">
-                    </form>
-                </li>
+                <!-- Khi có > 3 trang: hiển thị trang 2 / trang hiện tại / trang kế tiếp + ô jump [...] -->
+                <th:block th:if="${totalPages > 3}">
+                    <!-- Ô nhập [...] (sau trang 1 khi đang ở trang >= 3) -->
+                    <li th:if="${currentPage > 2}" class="page-item">
+                        <form th:action="@{/admin/users}" method="get" class="page-jump-form">
+                            <input type="hidden" name="role" th:if="${selectedRole != 'ALL'}" th:value="${selectedRole}">
+                            <input type="hidden" name="size" th:value="${pageSize}">
+                            <input type="hidden" name="q" th:if="${!#strings.isEmpty(q)}" th:value="${q}">
+                            <input type="number"
+                                   name="page"
+                                   min="1"
+                                   th:max="${totalPages}"
+                                   class="page-jump-input"
+                                   placeholder="..."
+                                   th:title="${'Nhập số trang từ 1 đến ' + totalPages + ' rồi bấm Enter'}">
+                        </form>
+                    </li>
 
-                <!-- Trang kế tiếp (nếu có) -->
-                <li th:if="${currentPage + 1 < totalPages and currentPage > 1}" class="page-item">
-                    <a th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=${currentPage + 1}, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
-                       class="page-link"
-                       th:text="${currentPage + 1}">4</a>
-                </li>
+                    <!-- Trang 2 (nếu đang ở trang 1) -->
+                    <li th:if="${currentPage == 1}" class="page-item">
+                        <a th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=2, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
+                           class="page-link">2</a>
+                    </li>
 
-                <!-- Trang 2 (nếu totalPages >= 2 và đang ở trang 1) -->
-                <li th:if="${totalPages >= 2 and currentPage == 1}" class="page-item">
-                    <a th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=2, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
-                       class="page-link">2</a>
-                </li>
+                    <!-- Trang hiện tại (bao gồm cả currentPage == 2) -->
+                    <li th:if="${currentPage > 1 and currentPage < totalPages}" class="page-item active">
+                        <span class="page-link current" th:text="${currentPage}">2</span>
+                    </li>
 
-                <!-- Trang cuối (nếu totalPages > 2) -->
-                <li th:if="${totalPages > 2 and currentPage != totalPages}" class="page-item">
-                    <a th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=${totalPages}, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
-                       class="page-link"
-                       th:text="${totalPages}">10</a>
-                </li>
-                <li th:if="${totalPages > 1 and currentPage == totalPages}" class="page-item active">
-                    <span class="page-link current" th:text="${totalPages}">10</span>
-                </li>
+                    <!-- Trang kế tiếp (nếu chưa tới trang cuối) -->
+                    <li th:if="${currentPage > 1 and currentPage + 1 < totalPages}" class="page-item">
+                        <a th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=${currentPage + 1}, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
+                           class="page-link"
+                           th:text="${currentPage + 1}">3</a>
+                    </li>
+
+                    <!-- Ô nhập [...] (trước trang cuối khi đang ở trang <= 2) -->
+                    <li th:if="${currentPage <= 2}" class="page-item">
+                        <form th:action="@{/admin/users}" method="get" class="page-jump-form">
+                            <input type="hidden" name="role" th:if="${selectedRole != 'ALL'}" th:value="${selectedRole}">
+                            <input type="hidden" name="size" th:value="${pageSize}">
+                            <input type="hidden" name="q" th:if="${!#strings.isEmpty(q)}" th:value="${q}">
+                            <input type="number"
+                                   name="page"
+                                   min="1"
+                                   th:max="${totalPages}"
+                                   class="page-jump-input"
+                                   placeholder="..."
+                                   th:title="${'Nhập số trang từ 1 đến ' + totalPages + ' rồi bấm Enter'}">
+                        </form>
+                    </li>
+
+                    <!-- Trang cuối -->
+                    <li th:if="${currentPage != totalPages}" class="page-item">
+                        <a th:href="@{/admin/users(role=${selectedRole == 'ALL' ? null : selectedRole}, page=${totalPages}, size=${pageSize}, q=${!#strings.isEmpty(q) ? q : null})}"
+                           class="page-link"
+                           th:text="${totalPages}">10</a>
+                    </li>
+                    <li th:if="${currentPage == totalPages}" class="page-item active">
+                        <span class="page-link current" th:text="${totalPages}">10</span>
+                    </li>
+                </th:block>
 
                 <!-- Tiến 1 trang > -->
                 <li class="page-item">
@@ -429,6 +484,8 @@
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     if (submitBtn && !submitBtn.disabled && deleteForm) {
+                        submitBtn.disabled = true;
+                        submitBtn.textContent = 'Đang xử lý...';
                         deleteForm.submit();
                     }
                 }
@@ -441,6 +498,10 @@
                     e.preventDefault();
                     return false;
                 }
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Đang xử lý...';
+                }
             });
         }
 
@@ -452,6 +513,9 @@
                 nameSpan.textContent = userName || 'này';
                 if (phraseInput) {
                     phraseInput.value = '';
+                }
+                if (submitBtn) {
+                    submitBtn.textContent = 'Xoá tài khoản';
                 }
                 updateDeleteSubmitState();
                 modal.style.display = 'flex';
@@ -467,6 +531,9 @@
                 modal.style.display = 'none';
                 if (phraseInput) {
                     phraseInput.value = '';
+                }
+                if (submitBtn) {
+                    submitBtn.textContent = 'Xoá tài khoản';
                 }
                 updateDeleteSubmitState();
             }

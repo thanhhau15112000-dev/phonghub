@@ -15,8 +15,8 @@
         </div>
     </div>
 
-    <!-- Chỉ số tổng quan (người thuê chỉ có một phòng nên không cần) -->
-    <div class="grid-cols-4" th:if="${currentUser.role().name() != 'TENANT'}">
+    <!-- Chỉ số tổng quan (người thuê chỉ có một phòng và quản trị viên đã có Toàn hệ thống nên không cần) -->
+    <div class="grid-cols-4" th:if="${currentUser.role().name() != 'TENANT' and currentUser.role().name() != 'ADMIN'}">
         <div class="metric-card">
             <div class="metric-label">Nhà trọ bạn quản lý</div>
             <div class="metric-value" th:text="${propertiesCount}">0</div>
