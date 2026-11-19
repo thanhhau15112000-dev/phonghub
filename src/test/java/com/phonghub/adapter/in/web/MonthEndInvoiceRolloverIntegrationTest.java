@@ -101,7 +101,12 @@ class MonthEndInvoiceRolloverIntegrationTest {
             .param("resolutionNotes", "Đã sửa")
             .param("repairCost", cost)
             .param("releaseRoomToAvailable", "false"));
-        return invoiceRepository.findActiveByTicketId(ticket.getId()).orElseThrow();
+        Invoice fee = invoiceRepository.findActiveByTicketId(ticket.getId()).orElseThrow();
+        // Khoản phí phát hành trước 01/11/2026 (quy tắc cũ, #234) được gộp vào hóa đơn tháng ngay cả khi chưa quá hạn.
+        return invoiceRepository.save(new Invoice(fee.getId(), fee.getContractId(), fee.getRoomId(), fee.getTenantId(),
+            fee.getMonth(), fee.getYear(), fee.getRentAmount(), fee.getTotalAmount(), fee.getPaidAmount(),
+            fee.getDueDate(), fee.getStatus(), fee.getPaymentCode(), fee.getType(), fee.getTicketId(), fee.getPaidAt(),
+            java.time.Instant.parse("2026-10-20T05:00:00Z"), fee.getUpdatedAt()));
     }
 
     private void pay(String code, String amount) throws Exception {

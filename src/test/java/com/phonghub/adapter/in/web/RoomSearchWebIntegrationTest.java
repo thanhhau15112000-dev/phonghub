@@ -132,9 +132,15 @@ class RoomSearchWebIntegrationTest extends SeededWebTest {
         mockMvc.perform(get(API).header("X-User-Id", STAFF_1).param("status", "AVAILABLE"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$", hasSize(1)));
-        mockMvc.perform(get(API).header("X-User-Id", TECH_1).param("maxPrice", "3500000"))
+        mockMvc.perform(get(API).header("X-User-Id", STAFF_1).param("maxPrice", "3500000"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$", hasSize(2)));
+        // Kỹ thuật viên không có quyền tài chính: lọc theo giá bị từ chối, lọc theo tầng vẫn được (#326)
+        mockMvc.perform(get(API).header("X-User-Id", TECH_1).param("maxPrice", "3500000"))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(get(API).header("X-User-Id", TECH_1).param("floor", "1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].basePrice").doesNotExist());
         mockMvc.perform(get(API).header("X-User-Id", STAFF_2).param("status", "AVAILABLE"))
             .andExpect(status().isForbidden());
         mockMvc.perform(get(API).header("X-User-Id", STAFF_2))

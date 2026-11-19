@@ -8,33 +8,56 @@ import com.phonghub.application.port.out.ChatEventPublisherPort;
 import com.phonghub.application.port.out.ChatMessageRepositoryPort;
 import com.phonghub.application.port.out.ChatRoomRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
+import com.phonghub.application.port.out.FileStoragePort;
 import com.phonghub.application.port.out.UserRepositoryPort;
+import com.phonghub.domain.exception.ChatMessageNotFoundException;
 import com.phonghub.domain.exception.ChatRoomNotFoundException;
+import com.phonghub.domain.exception.FileStorageUnavailableException;
 import com.phonghub.domain.exception.InvalidChatTargetException;
 import com.phonghub.domain.exception.UnauthorizedChatAccessException;
 import com.phonghub.domain.exception.UserNotFoundException;
+import com.phonghub.domain.model.ChatAttachment;
 import com.phonghub.domain.model.ChatMessage;
 import com.phonghub.domain.model.ChatRoom;
 import com.phonghub.domain.model.ChatRoomMember;
 import com.phonghub.domain.model.ChatRoomType;
 import com.phonghub.domain.model.User;
+import com.phonghub.domain.model.UserRole;
+import java.net.URI;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(ChatService.class);
+    static final int MAX_ATTACHMENTS = 5;
+    static final int MAX_VIDEOS = 1;
+    /** Số tin gần nhất của kênh chung dùng để tính xem trước và số chưa đọc (#345). */
+    private static final int UNREAD_SCAN_LIMIT = 100;
+    private static final int MAX_SCAN_PAGES = 10;
+    private static final Duration ATTACHMENT_URL_TTL = Duration.ofMinutes(10);
 
     private final ChatRoomRepositoryPort chatRoomRepositoryPort;
     private final ChatMessageRepositoryPort chatMessageRepositoryPort;
     private final UserRepositoryPort userRepositoryPort;
     private final ChatEventPublisherPort chatEventPublisherPort;
+    private final FileStoragePort storagePort;
+    private final long maxImageBytes;
+    private final long maxVideoBytes;
     private final Clock clock;
+    private final ChatContactScope contactScope;
 
+    /** Chat chỉ văn bản: gửi ảnh/video báo chưa cấu hình kho lưu trữ. */
     public ChatService(
         ChatRoomRepositoryPort chatRoomRepositoryPort,
         ChatMessageRepositoryPort chatMessageRepositoryPort,
@@ -42,16 +65,61 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         ChatEventPublisherPort chatEventPublisherPort,
         Clock clock
     ) {
+        this(chatRoomRepositoryPort, chatMessageRepositoryPort, userRepositoryPort, chatEventPublisherPort, null, 1, 1,
+            clock);
+    }
+
+    public ChatService(
+        ChatRoomRepositoryPort chatRoomRepositoryPort,
+        ChatMessageRepositoryPort chatMessageRepositoryPort,
+        UserRepositoryPort userRepositoryPort,
+        ChatEventPublisherPort chatEventPublisherPort,
+        FileStoragePort storagePort,
+        long maxImageBytes,
+        long maxVideoBytes,
+        Clock clock
+    ) {
+        this(chatRoomRepositoryPort, chatMessageRepositoryPort, userRepositoryPort, chatEventPublisherPort,
+            storagePort, maxImageBytes, maxVideoBytes, clock, ChatContactScope.unrestricted());
+    }
+
+    /** {@code contactScope} quyết định danh bạ và người được tạo chat riêng (#345). */
+    public ChatService(
+        ChatRoomRepositoryPort chatRoomRepositoryPort,
+        ChatMessageRepositoryPort chatMessageRepositoryPort,
+        UserRepositoryPort userRepositoryPort,
+        ChatEventPublisherPort chatEventPublisherPort,
+        FileStoragePort storagePort,
+        long maxImageBytes,
+        long maxVideoBytes,
+        Clock clock,
+        ChatContactScope contactScope
+    ) {
+        if (maxImageBytes <= 0 || maxVideoBytes <= 0) {
+            throw new IllegalArgumentException("Media size limits must be positive");
+        }
+        this.storagePort = storagePort;
+        this.maxImageBytes = maxImageBytes;
+        this.maxVideoBytes = maxVideoBytes;
         this.chatRoomRepositoryPort = Objects.requireNonNull(chatRoomRepositoryPort, "chatRoomRepositoryPort must not be null");
         this.chatMessageRepositoryPort = Objects.requireNonNull(chatMessageRepositoryPort, "chatMessageRepositoryPort must not be null");
         this.userRepositoryPort = Objects.requireNonNull(userRepositoryPort, "userRepositoryPort must not be null");
         this.chatEventPublisherPort = Objects.requireNonNull(chatEventPublisherPort, "chatEventPublisherPort must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.contactScope = Objects.requireNonNull(contactScope, "contactScope must not be null");
     }
 
     private void assertAuthenticated(CurrentUser user) {
         if (user == null) {
             throw new UnauthorizedChatAccessException("Yêu cầu xác thực tài khoản để truy cập chat");
+        }
+    }
+
+    /** Kênh chung là kênh thông báo của ban quản lý: người thuê chỉ đọc, không gửi tin hay ảnh/video (#320, QA-10.7). */
+    private void assertCanPost(CurrentUser user, ChatRoom room) {
+        if (room.isGlobal() && user.role() == UserRole.TENANT) {
+            throw new UnauthorizedChatAccessException(
+                "Kênh chung chỉ dành cho ban quản lý gửi thông báo. Người thuê chỉ xem được, hãy nhắn riêng cho chủ trọ.");
         }
     }
 
@@ -71,11 +139,26 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
 
         List<ChatRoomSummary> summaries = new ArrayList<>();
         for (ChatRoom room : userRooms) {
-            Optional<ChatMessage> latestMsgOpt = chatMessageRepositoryPort.findLatestMessageByRoomId(room.id());
             Instant lastRead = chatRoomRepositoryPort.getLastRead(room.id(), currentUser.id());
-            int unreadCount = chatMessageRepositoryPort.countUnreadMessages(room.id(), currentUser.id(), lastRead);
+            Optional<ChatMessage> latestMsgOpt;
+            int unreadCount;
+            if (room.isGlobal() && contactScope.reachableUserIds(currentUser) != null) {
+                // Kênh chung chỉ hiện tin của người cùng nhà trọ: xem trước và số chưa đọc cũng theo phạm vi đó (#345).
+                List<ChatMessage> visible = visibleMessages(currentUser, room, null, UNREAD_SCAN_LIMIT);
+                latestMsgOpt = visible.isEmpty() ? Optional.empty() : Optional.of(visible.get(visible.size() - 1));
+                unreadCount = (int) visible.stream()
+                    .filter(m -> !m.senderId().equals(currentUser.id()))
+                    .filter(m -> lastRead == null || m.createdAt().isAfter(lastRead)).count();
+            } else {
+                latestMsgOpt = chatMessageRepositoryPort.findLatestMessageByRoomId(room.id());
+                unreadCount = chatMessageRepositoryPort.countUnreadMessages(room.id(), currentUser.id(), lastRead);
+            }
 
             String lastMsgText = latestMsgOpt.map(m -> {
+                if (m.hasAttachments()) {
+                    String mediaLabel = m.attachments().stream().anyMatch(ChatAttachment::isVideo) ? "[Video]" : "[Hình ảnh]";
+                    return m.content() != null && !m.content().isBlank() ? mediaLabel + " " + m.content() : mediaLabel;
+                }
                 if (m.hasMedia()) {
                     String mediaLabel = m.isImage() ? "[Hình ảnh]" : "[Video]";
                     return (m.content() != null && !m.content().isBlank()) ? mediaLabel + " " + m.content() : mediaLabel;
@@ -143,6 +226,11 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         if (existingRoom.isPresent()) {
             return existingRoom.get();
         }
+        // Chỉ tạo mới với người cùng nhà trọ (#345); cuộc trò chuyện đã có từ trước vẫn mở được.
+        Set<UUID> reachable = contactScope.reachableUserIds(currentUser);
+        if (reachable != null && !reachable.contains(targetUserId)) {
+            throw new UnauthorizedChatAccessException("Bạn chỉ nhắn riêng được cho người cùng nhà trọ với mình.");
+        }
 
         ChatRoomMember member1 = ChatRoomMember.create(
             UUID.randomUUID(), currentUser.id(), currentUser.fullName(), currentUser.role()
@@ -171,8 +259,10 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
     @Override
     public List<ChatContactSummary> getAvailableContacts(CurrentUser currentUser) {
         assertAuthenticated(currentUser);
+        Set<UUID> reachable = contactScope.reachableUserIds(currentUser);
         return userRepositoryPort.findAll().stream()
             .filter(u -> !u.id().equals(currentUser.id()))
+            .filter(u -> reachable == null || reachable.contains(u.id()))
             .sorted(Comparator.comparing(User::fullName))
             .map(u -> new ChatContactSummary(u.id(), u.fullName(), u.email(), u.role()))
             .toList();
@@ -187,6 +277,7 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
 
         // Kiểm tra quyền truy cập phòng trước khi gửi tin
         ChatRoom room = getRoomById(currentUser, roomId);
+        assertCanPost(currentUser, room);
 
         ChatMessage message = ChatMessage.create(room.id(), currentUser.id(), currentUser.fullName(), content.trim(),
             clock.instant());
@@ -196,9 +287,196 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         chatRoomRepositoryPort.updateLastRead(roomId, currentUser.id(), clock.instant());
 
         // Phát sự kiện real-time tới những người được đọc phòng
-        chatEventPublisherPort.publishNewMessage(room, saved);
+        publishNew(room, saved, currentUser);
 
         return saved;
+    }
+
+    @Override
+    public ChatMessage sendMediaMessage(CurrentUser currentUser, UUID roomId, String caption, List<MediaUpload> uploads) {
+        assertAuthenticated(currentUser);
+        // Cùng quyền với gửi tin chữ: phòng 1-1 chỉ thành viên, kênh chung theo quy tắc gửi tin của kênh
+        ChatRoom room = getRoomById(currentUser, roomId);
+        assertCanPost(currentUser, room);
+        if (storagePort == null) {
+            throw new IllegalStateException("Chưa cấu hình kho lưu trữ cho ảnh/video trong chat.");
+        }
+        List<FileSanitizer.SanitizedFile> files = sanitize(uploads);
+
+        List<ChatAttachment> attachments = new ArrayList<>();
+        try {
+            for (FileSanitizer.SanitizedFile file : files) {
+                String key = "chat/" + room.id() + "/" + UUID.randomUUID() + "." + file.extension();
+                storagePort.put(key, file.contentType(), file.content());
+                attachments.add(new ChatAttachment(UUID.randomUUID(), attachments.size(), key, file.contentType(),
+                    FileSanitizer.isVideo(file.contentType()) ? ChatAttachment.VIDEO : ChatAttachment.IMAGE,
+                    file.content().length));
+            }
+        } catch (RuntimeException ex) {
+            // Chưa ghi tin nên chỉ dọn các tệp đã lên kho; lỗi gốc (bucket, khóa, mạng) chỉ ghi log
+            log.error("Không lưu được ảnh/video chat của phòng {} vào kho lưu trữ", room.id(), ex);
+            deleteQuietly(attachments);
+            throw new FileStorageUnavailableException(
+                "Không lưu được ảnh/video vào kho lưu trữ, vui lòng thử lại sau. Nếu lỗi lặp lại, hãy báo quản trị viên.", ex);
+        }
+
+        ChatMessage saved;
+        try {
+            saved = chatMessageRepositoryPort.save(ChatMessage.createWithAttachments(room.id(), currentUser.id(),
+                currentUser.fullName(), caption, attachments, clock.instant()));
+        } catch (RuntimeException ex) {
+            deleteQuietly(attachments);
+            throw ex;
+        }
+        chatRoomRepositoryPort.updateLastRead(roomId, currentUser.id(), clock.instant());
+        publishNew(room, saved, currentUser);
+        return saved;
+    }
+
+    /** Kiểm tra số lượng, định dạng và dung lượng của cả tin trước khi đưa tệp nào lên kho. */
+    private List<FileSanitizer.SanitizedFile> sanitize(List<MediaUpload> uploads) {
+        if (uploads == null || uploads.isEmpty()) {
+            throw new IllegalArgumentException("Cần chọn ít nhất một ảnh hoặc video.");
+        }
+        if (uploads.size() > MAX_ATTACHMENTS) {
+            throw new IllegalArgumentException("Mỗi tin gửi tối đa " + MAX_ATTACHMENTS + " ảnh hoặc video.");
+        }
+        long videos = uploads.stream().filter(upload -> FileSanitizer.isVideo(upload.contentType())).count();
+        if (videos > MAX_VIDEOS) {
+            throw new IllegalArgumentException("Mỗi tin chỉ gửi được " + MAX_VIDEOS + " video.");
+        }
+        List<FileSanitizer.SanitizedFile> files = new ArrayList<>();
+        for (MediaUpload upload : uploads) {
+            byte[] content = upload.content();
+            if (FileSanitizer.isVideo(upload.contentType())) {
+                if (content != null && content.length > maxVideoBytes) {
+                    throw new IllegalArgumentException("Video vượt quá dung lượng cho phép (tối đa " + megabytes(maxVideoBytes) + " MB).");
+                }
+                files.add(FileSanitizer.sanitizeVideo(upload.contentType(), content, maxVideoBytes));
+            } else if (FileSanitizer.isImage(upload.contentType())) {
+                if (content != null && content.length > maxImageBytes) {
+                    throw new IllegalArgumentException("Ảnh vượt quá dung lượng cho phép (tối đa " + megabytes(maxImageBytes) + " MB).");
+                }
+                files.add(FileSanitizer.sanitize(upload.contentType(), content, maxImageBytes));
+            } else {
+                throw new IllegalArgumentException("Chỉ gửi được ảnh JPEG/PNG/WebP hoặc video MP4/WebM/MOV.");
+            }
+        }
+        return files;
+    }
+
+    private static long megabytes(long bytes) {
+        return Math.max(1, bytes / (1024 * 1024));
+    }
+
+    @Override
+    public URI attachmentSignedUrl(CurrentUser currentUser, UUID roomId, UUID messageId, UUID attachmentId) {
+        ChatAttachment attachment = findAttachment(currentUser, roomId, messageId, attachmentId);
+        try {
+            return storagePort.createSignedUrl(attachment.objectKey(), ATTACHMENT_URL_TTL);
+        } catch (RuntimeException ex) {
+            throw openFailed(attachment, ex);
+        }
+    }
+
+    @Override
+    public AttachmentFile attachmentFile(CurrentUser currentUser, UUID roomId, UUID messageId, UUID attachmentId) {
+        ChatAttachment attachment = findAttachment(currentUser, roomId, messageId, attachmentId);
+        try {
+            return new AttachmentFile(attachment.contentType(), storagePort.get(attachment.objectKey()));
+        } catch (RuntimeException ex) {
+            throw openFailed(attachment, ex);
+        }
+    }
+
+    @Override
+    public String legacyMediaUrl(CurrentUser currentUser, UUID roomId, UUID messageId) {
+        assertAuthenticated(currentUser);
+        ChatRoom room = getRoomById(currentUser, roomId);
+        return chatMessageRepositoryPort.findById(messageId)
+            .filter(message -> message.chatRoomId().equals(room.id()) && message.hasMedia())
+            .filter(message -> canSee(currentUser, room, message))
+            .map(ChatMessage::mediaUrl)
+            .orElseThrow(() -> new ChatMessageNotFoundException("Không tìm thấy tệp đính kèm."));
+    }
+
+    /** Quyền xem tệp = quyền đọc phòng chat; tin hoặc tệp không thuộc phòng thì báo không tìm thấy. */
+    private ChatAttachment findAttachment(CurrentUser currentUser, UUID roomId, UUID messageId, UUID attachmentId) {
+        assertAuthenticated(currentUser);
+        ChatRoom room = getRoomById(currentUser, roomId);
+        if (storagePort == null) {
+            throw new ChatMessageNotFoundException("Không tìm thấy tệp đính kèm.");
+        }
+        return chatMessageRepositoryPort.findById(messageId)
+            .filter(message -> message.chatRoomId().equals(room.id()))
+            .filter(message -> canSee(currentUser, room, message))
+            .flatMap(message -> message.attachments().stream()
+                .filter(attachment -> attachment.id().equals(attachmentId))
+                .findFirst())
+            .orElseThrow(() -> new ChatMessageNotFoundException("Không tìm thấy tệp đính kèm."));
+    }
+
+    /** Tin kênh chung chỉ thấy được khi người gửi là chính mình hoặc người cùng nhà trọ (#345). */
+    private boolean canSee(CurrentUser viewer, ChatRoom room, ChatMessage message) {
+        if (!room.isGlobal() || message.senderId().equals(viewer.id())) {
+            return true;
+        }
+        Set<UUID> reachable = contactScope.reachableUserIds(viewer);
+        return reachable == null || reachable.contains(message.senderId());
+    }
+
+    /**
+     * Tin của phòng theo thứ tự cũ → mới. Kênh chung lọc theo người gửi cùng nhà trọ; để trang không bị thưa, đọc thêm
+     * các trang cũ hơn cho tới khi đủ số tin hoặc hết dữ liệu.
+     */
+    private List<ChatMessage> visibleMessages(CurrentUser viewer, ChatRoom room, Instant before, int limit) {
+        Set<UUID> reachable = room.isGlobal() ? contactScope.reachableUserIds(viewer) : null;
+        if (reachable == null) {
+            return chatMessageRepositoryPort.findByRoomId(room.id(), before, limit);
+        }
+        List<ChatMessage> result = new ArrayList<>();
+        Instant cursor = before;
+        for (int pages = 0; pages < MAX_SCAN_PAGES && result.size() < limit; pages++) {
+            List<ChatMessage> page = chatMessageRepositoryPort.findByRoomId(room.id(), cursor, limit);
+            if (page.isEmpty()) {
+                break;
+            }
+            List<ChatMessage> visible = page.stream()
+                .filter(m -> m.senderId().equals(viewer.id()) || reachable.contains(m.senderId())).toList();
+            result.addAll(0, visible);
+            cursor = page.get(0).createdAt();
+            if (page.size() < limit) {
+                break;
+            }
+        }
+        return result.size() > limit ? new ArrayList<>(result.subList(result.size() - limit, result.size())) : result;
+    }
+
+    /** Kênh chung chỉ đẩy tới người cùng nhà trọ với người gửi (#345); phòng riêng đẩy tới hai thành viên như cũ. */
+    private void publishNew(ChatRoom room, ChatMessage message, CurrentUser sender) {
+        Set<UUID> reachable = room.isGlobal() ? contactScope.reachableUserIds(sender) : null;
+        if (reachable == null) {
+            chatEventPublisherPort.publishNewMessage(room, message);
+            return;
+        }
+        Set<UUID> audience = new java.util.HashSet<>(reachable);
+        audience.add(sender.id());
+        chatEventPublisherPort.publishNewMessage(room, message, audience);
+    }
+
+    private FileStorageUnavailableException openFailed(ChatAttachment attachment, RuntimeException cause) {
+        log.error("Không mở được tệp chat {} từ kho lưu trữ", attachment.id(), cause);
+        return new FileStorageUnavailableException("Không mở được ảnh/video từ kho lưu trữ, vui lòng thử lại sau.", cause);
+    }
+
+    private void deleteQuietly(List<ChatAttachment> attachments) {
+        for (ChatAttachment attachment : attachments) {
+            try {
+                storagePort.delete(attachment.objectKey());
+            } catch (RuntimeException ignored) {
+                // dọn dẹp tốt nhất có thể; tệp mồ côi không lộ ra vì không có tin nào trỏ tới
+            }
+        }
     }
 
     @Override
@@ -208,7 +486,7 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         ChatRoom room = getRoomById(currentUser, roomId);
 
         int queryLimit = (limit <= 0 || limit > 100) ? 30 : limit;
-        List<ChatMessage> messages = chatMessageRepositoryPort.findByRoomId(roomId, before, queryLimit);
+        List<ChatMessage> messages = visibleMessages(currentUser, room, before, queryLimit);
 
         // Khi người dùng tải tin nhắn của phòng, tự động đánh dấu đã đọc
         markRoomAsRead(currentUser, room);

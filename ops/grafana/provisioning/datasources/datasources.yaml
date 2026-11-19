@@ -1,0 +1,22 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+
+  - name: OpenSearch
+    type: grafana-opensearch-datasource
+    access: proxy
+    url: http://opensearch:9200
+    isDefault: false
+    jsonData:
+      version: '2.17.1'
+      database: 'phonghub-logs-*'
+      timeField: '@timestamp'
+      flavor: 'opensearch'
+    editable: true
+

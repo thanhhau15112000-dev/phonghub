@@ -30,9 +30,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import com.phonghub.application.port.in.DemoActorPort;
 import com.phonghub.application.port.in.NotificationUseCase;
+import com.phonghub.application.port.in.PasswordRecoveryUseCase;
+import com.phonghub.application.port.in.TenantDocumentUseCase;
 import com.phonghub.application.port.in.UserUseCase;
+import com.phonghub.domain.model.DocumentType;
 import com.phonghub.application.port.out.CurrentUserPort;
-import com.phonghub.adapter.out.identity.LocalDemoAuthenticationAdapter;
+import com.phonghub.application.port.out.DemoFixturePort;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 @Controller
@@ -44,6 +47,8 @@ public class AuthUiController {
     private final CurrentUserPort currentUserPort;
     private final Optional<DemoActorPort> demoActorPort;
     private final Optional<NotificationUseCase> notificationUseCase;
+    private final TenantDocumentUseCase tenantDocumentUseCase;
+    private final PasswordRecoveryUseCase passwordRecoveryUseCase;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
     public AuthUiController(
@@ -52,7 +57,9 @@ public class AuthUiController {
         UserUseCase userUseCase,
         CurrentUserPort currentUserPort,
         Optional<DemoActorPort> demoActorPort,
-        Optional<NotificationUseCase> notificationUseCase
+        Optional<NotificationUseCase> notificationUseCase,
+        TenantDocumentUseCase tenantDocumentUseCase,
+        PasswordRecoveryUseCase passwordRecoveryUseCase
     ) {
         this.authUseCase = authUseCase;
         this.userRepository = userRepository;
@@ -60,6 +67,8 @@ public class AuthUiController {
         this.currentUserPort = currentUserPort;
         this.demoActorPort = demoActorPort;
         this.notificationUseCase = notificationUseCase;
+        this.tenantDocumentUseCase = tenantDocumentUseCase;
+        this.passwordRecoveryUseCase = passwordRecoveryUseCase;
     }
 
     private static final String SESSION_LOGIN_FAILED_ATTEMPTS = "LOGIN_FAILED_ATTEMPTS";
@@ -171,26 +180,56 @@ public class AuthUiController {
             model.addAttribute("errorMessage", "Vui lòng nhập tên đăng nhập hoặc email.");
             return "auth/forgot-password";
         }
-
-        // Thông báo trung lập — KHÔNG tiết lộ tài khoản có tồn tại hay không (anti-enumeration)
-        final String NEUTRAL_SUCCESS =
-            "Nếu thông tin bạn nhập khớp với một tài khoản trong hệ thống, Quản trị viên sẽ được thông báo " +
-            "và liên hệ với bạn để cấp lại mật khẩu tạm thời.";
-
-        Optional<User> userOpt = cleanIdentifier.contains("@")
-            ? userRepository.findByEmail(cleanIdentifier.toLowerCase())
-            : userRepository.findByUsername(cleanIdentifier.toLowerCase());
-
-        if (userOpt.isPresent()) {
-            User user = userOpt.get();
-            // ADMIN tự xử lý mật khẩu qua Supabase dashboard — không gửi notification
-            if (user.role() != UserRole.ADMIN) {
-                notificationUseCase.ifPresent(n -> n.requestPasswordReset(user));
+        // Báo đúng việc đã làm, kể cả khi không có tài khoản (#341). Dò tên đăng nhập hàng loạt bị chặn bởi hạn mức
+        // theo IP và theo tài khoản trong RateLimitFilter.
+        switch (passwordRecoveryUseCase.requestRecovery(cleanIdentifier)) {
+            case NOT_FOUND -> {
+                model.addAttribute("identifier", cleanIdentifier);
+                model.addAttribute("errorMessage", "Không tìm thấy tài khoản có tên đăng nhập hoặc email \""
+                    + cleanIdentifier + "\". Hãy kiểm tra lại.");
+            }
+            case EMAIL_SENT -> model.addAttribute("successMessage", "Đã gửi email hướng dẫn đặt lại mật khẩu tới "
+                + "địa chỉ email của tài khoản. Email thường đến trong vài phút, hãy kiểm tra cả thư rác.");
+            case ADMIN_NOTIFIED -> model.addAttribute("successMessage", "Đã gửi yêu cầu tới Quản trị viên. "
+                + "Quản trị viên sẽ liên hệ với bạn để cấp lại mật khẩu tạm thời.");
+            case NOT_SENT -> {
+                model.addAttribute("identifier", cleanIdentifier);
+                model.addAttribute("errorMessage", "Không gửi được yêu cầu cho tài khoản này. Tài khoản Quản trị viên "
+                    + "cần đặt lại mật khẩu trong trang quản lý Supabase.");
             }
         }
-        // Luôn trả về cùng một thông báo dù tài khoản có tồn tại hay không
-        model.addAttribute("successMessage", NEUTRAL_SUCCESS);
         return "auth/forgot-password";
+    }
+
+    /** Trang mở từ liên kết trong email; token nằm sau dấu # nên do JavaScript của trang đọc (#330). */
+    @GetMapping("/reset-password")
+    public String resetPasswordPage(Model model) {
+        model.addAttribute("emailRecoveryAvailable", passwordRecoveryUseCase.isEmailRecoveryAvailable());
+        return "auth/reset-password";
+    }
+
+    @PostMapping("/reset-password")
+    public String handleResetPassword(
+        @RequestParam(defaultValue = "") String recoveryToken,
+        @RequestParam(defaultValue = "") String newPassword,
+        @RequestParam(defaultValue = "") String confirmPassword,
+        Model model,
+        RedirectAttributes redirectAttributes
+    ) {
+        try {
+            passwordRecoveryUseCase.resetPassword(recoveryToken, newPassword, confirmPassword);
+        } catch (DomainException | IllegalArgumentException ex) {
+            model.addAttribute("emailRecoveryAvailable", passwordRecoveryUseCase.isEmailRecoveryAvailable());
+            model.addAttribute("errorMessage", ex.getMessage());
+            // Lỗi do mật khẩu nhập sai thì giữ token để nhập lại; liên kết hỏng thì không
+            if (ex instanceof IllegalArgumentException) {
+                model.addAttribute("recoveryToken", recoveryToken);
+            }
+            return "auth/reset-password";
+        }
+        redirectAttributes.addFlashAttribute("successMessage",
+            "Đã đặt lại mật khẩu. Hãy đăng nhập bằng mật khẩu mới.");
+        return "redirect:/login";
     }
 
     @GetMapping("/account/password")
@@ -249,6 +288,15 @@ public class AuthUiController {
         User user = userUseCase.getUser(current.id());
         model.addAttribute("currentUser", current);
         model.addAttribute("user", user);
+        if (current.isTenant()) {
+            // Ảnh CCCD và GPLX tải ở đây được dùng cho mọi hợp đồng và biên bản check-in của người thuê (#244, #252).
+            TenantDocumentUseCase.OwnDocuments own = tenantDocumentUseCase.ownDocuments();
+            model.addAttribute("ownDocuments", own);
+            model.addAttribute("identityCard", own.documents().stream()
+                .filter(document -> document.type() == DocumentType.CCCD).findFirst().orElse(null));
+            model.addAttribute("driverLicense", own.documents().stream()
+                .filter(document -> document.type() == DocumentType.GPLX).findFirst().orElse(null));
+        }
         return "account/profile";
     }
 
@@ -333,7 +381,7 @@ public class AuthUiController {
             }
             demoActorPort.ifPresent(p -> {
                 p.clear();
-                p.switchActor(LocalDemoAuthenticationAdapter.ADMIN_ID);
+                p.switchActor(DemoFixturePort.ADMIN_ID);
             });
         }
         return "redirect:/login?loggedOut=true";

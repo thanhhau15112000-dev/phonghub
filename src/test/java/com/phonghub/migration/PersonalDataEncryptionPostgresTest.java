@@ -4,7 +4,6 @@ import com.phonghub.adapter.out.audit.PostgresAuditAdapter;
 import com.phonghub.adapter.out.persistence.postgres.PostgresPaymentRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresTenantRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresUserRepository;
-import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.TenantDataProtectionPort;
 import com.phonghub.domain.model.PaymentTransaction;
@@ -63,8 +62,7 @@ class PersonalDataEncryptionPostgresTest {
         ds.setPassword(POSTGRES.getPassword());
         Flyway.configure().dataSource(ds).locations(MAIN, FIXTURE).target("16").load().migrate();
 
-        TenantDataProtectionPort protector = new AesGcmTenantDataProtector("test-v1",
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
+        TenantDataProtectionPort protector = TestTenantDataProtection.createProtector();
         TenantDataProtectionPort.ProtectedValue identity = protector.protect("079201004321");
         UUID legacyUser = UUID.randomUUID();
         UUID legacyTenant = UUID.randomUUID();

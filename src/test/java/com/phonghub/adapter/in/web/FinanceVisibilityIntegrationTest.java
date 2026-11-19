@@ -100,10 +100,13 @@ class FinanceVisibilityIntegrationTest {
     @Test
     @DisplayName("Kỹ thuật viên và nhân viên không có quyền: trang hợp đồng không có hóa đơn, không mở được trang thanh toán")
     void technicianAndUnprivilegedStaffSeeNoInvoices() throws Exception {
+        // Kỹ thuật viên không mở được trang hợp đồng (#312)
+        mockMvc.perform(get(CONTRACT_PAGE).header("X-User-Id", TECH_1))
+            .andExpect(status().is3xxRedirection());
+        mockMvc.perform(get(CONTRACT_PAGE).header("X-User-Id", STAFF_2))
+            .andExpect(status().isOk())
+            .andExpect(content().string(not(containsString(invoice.getPaymentCode()))));
         for (String user : new String[] {TECH_1, STAFF_2}) {
-            mockMvc.perform(get(CONTRACT_PAGE).header("X-User-Id", user))
-                .andExpect(status().isOk())
-                .andExpect(content().string(not(containsString(invoice.getPaymentCode()))));
             mockMvc.perform(get("/invoices/" + invoice.getId() + "/status").header("X-User-Id", user))
                 .andExpect(status().isForbidden());
         }

@@ -91,11 +91,13 @@ class PhongHubUiIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Bảng điều khiển quản lý nhà trọ")))
-            .andExpect(content().string(containsString("Nhà trọ được truy cập")))
+            .andExpect(content().string(containsString("Nhà trọ bạn quản lý")))
             .andExpect(content().string(containsString("PhongHub")))
             .andExpect(content().string(containsString("Trạng thái duyệt")))
             .andExpect(content().string(not(containsString("PhongHub Ops"))))
-            .andExpect(content().string(containsString("aria-label=\"Chọn người dùng demo\"")))
+            .andExpect(content().string(containsString("id=\"accountMenuButton\"")))
+            .andExpect(content().string(not(containsString("aria-label=\"Chọn người dùng demo\""))))
+            .andExpect(content().string(not(containsString("action=\"/switch-user\""))))
             .andExpect(content().string(not(containsString("Người dùng hiện tại"))))
             .andExpect(content().string(not(containsString("style=\"font-weight: 500;\""))));
     }
@@ -183,10 +185,11 @@ class PhongHubUiIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Nguyễn Văn A")))
-            .andExpect(content().string(containsString("Đang hiệu lực")));
+            .andExpect(content().string(containsString("Đang thuê")));
 
+        // Form tạo hợp đồng dành cho chủ trọ, nhân viên được cấp quyền; quản trị viên không lập hợp đồng (#304)
         mockMvc.perform(get("/contracts/new")
-                .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Chọn nhà trọ")))
             .andExpect(content().string(containsString("Chọn phòng")))
@@ -200,7 +203,7 @@ class PhongHubUiIntegrationTest {
         mockMvc.perform(get("/maintenance")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Yêu cầu bảo trì")));
+            .andExpect(content().string(containsString("Phiếu báo hỏng & sửa chữa")));
 
         mockMvc.perform(get("/maintenance/" + DataSeeder.TICKET_1_ID)
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
@@ -212,7 +215,7 @@ class PhongHubUiIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Báo hỏng phòng")))
-            .andExpect(content().string(containsString("Mức độ")));
+            .andExpect(content().string(containsString("Mức ưu tiên")));
     }
 
     @Test

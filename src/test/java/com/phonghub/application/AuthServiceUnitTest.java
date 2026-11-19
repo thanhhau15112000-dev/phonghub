@@ -151,6 +151,19 @@ class AuthServiceUnitTest {
     }
 
     @Test
+    void changePasswordRejectsShortPasswordWithVietnameseMessage() {
+        when(currentUserPort.getCurrentUser()).thenReturn(
+            new CurrentUser(UUID.randomUUID(), "tenant@phonghub.local", "Người thuê", UserRole.TENANT));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> authService.changePassword("1234567"));
+
+        assertEquals(AuthUseCase.PASSWORD_TOO_SHORT, error.getMessage());
+        assertEquals("Mật khẩu mới phải có ít nhất 8 ký tự.", error.getMessage());
+        verify(identityProviderPort, never()).changePassword(any(), anyString());
+    }
+
+    @Test
     void adminResetPasswordGenerates16CharTempPasswordAndUpdatesMustChangePassword() {
         UUID adminId = UUID.randomUUID();
         CurrentUser adminActor = new CurrentUser(adminId, "admin@phonghub.local", "Admin", UserRole.ADMIN);

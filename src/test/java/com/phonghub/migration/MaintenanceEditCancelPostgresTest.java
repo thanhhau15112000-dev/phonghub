@@ -47,13 +47,13 @@ class MaintenanceEditCancelPostgresTest {
             null, Duration.ofHours(72)));
 
         MaintenanceTicket loaded = tickets.findById(ticket.getId()).orElseThrow();
-        loaded.updateRequest("Đèn hỏng cả dãy", "Cả dãy hành lang tối", MaintenancePriority.URGENT, Duration.ofHours(4));
+        loaded.updateRequest("Đèn hỏng cả dãy", "Cả dãy hành lang tối", MaintenancePriority.HIGH, Duration.ofHours(24));
         tickets.save(loaded);
         MaintenanceTicket edited = tickets.findById(ticket.getId()).orElseThrow();
         assertEquals("Đèn hỏng cả dãy", edited.getTitle());
         assertEquals("Cả dãy hành lang tối", edited.getDescription());
-        assertEquals(MaintenancePriority.URGENT, edited.getPriority());
-        assertEquals(edited.getCreatedAt().plus(Duration.ofHours(4)).truncatedTo(ChronoUnit.MILLIS),
+        assertEquals(MaintenancePriority.HIGH, edited.getPriority());
+        assertEquals(edited.getCreatedAt().plus(Duration.ofHours(24)).truncatedTo(ChronoUnit.MILLIS),
             edited.getDueAt().truncatedTo(ChronoUnit.MILLIS));
 
         edited.cancel("Trùng phiếu");

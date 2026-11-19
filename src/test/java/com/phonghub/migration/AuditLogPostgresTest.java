@@ -1,7 +1,6 @@
 package com.phonghub.migration;
 
 import com.phonghub.adapter.out.audit.PostgresAuditAdapter;
-import com.phonghub.adapter.out.security.AesGcmTenantDataProtector;
 import com.phonghub.adapter.out.security.PersonalDataFields;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.AuditQueryPort;
@@ -66,8 +65,7 @@ class AuditLogPostgresTest {
             actor = UUID.fromString(scalar(st, "SELECT id FROM users LIMIT 1"));
         }
 
-        TenantDataProtectionPort protector = new AesGcmTenantDataProtector("test-v1",
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=");
+        TenantDataProtectionPort protector = TestTenantDataProtection.createProtector();
         NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
         PostgresAuditAdapter audit = new PostgresAuditAdapter(jdbc, new ObjectMapper(), protector);
         // users.full_name lưu dạng mã hóa (V17): trang Nhật ký phải hiện tên đã giải mã, không phải chuỗi enc1.

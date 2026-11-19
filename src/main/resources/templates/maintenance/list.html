@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Yêu cầu bảo trì')}"></head>
+<head th:replace="~{fragments/layout :: head('Phiếu báo hỏng & sửa chữa')}"></head>
 <body>
 <header th:replace="~{fragments/layout :: header}"></header>
 
@@ -9,7 +9,7 @@
 
     <div class="page-title-row">
         <div>
-            <h1>Yêu cầu bảo trì</h1>
+            <h1>Phiếu báo hỏng & sửa chữa</h1>
             <p style="color: var(--text-secondary); font-size: 13px;">Quản lý sự cố kỹ thuật, phân công, tiến độ xử lý và kết quả.</p>
         </div>
         <div>
@@ -46,6 +46,15 @@
             </a>
         </div>
 
+        <!-- Priority tabs show only the tickets in the viewer's existing scope. -->
+        <div th:if="${currentUser.role().name() != 'TENANT'}" class="filter-tabs" style="margin-bottom: 12px;">
+            <a th:each="pr : ${priorities}" th:href="${filter.priorityTabHref(pr)}"
+               class="filter-tab" th:classappend="${filter.priority() == pr} ? 'active'">
+                <span th:text="${uiText.maintenancePriority(pr)}">Chưa phân loại</span>
+                <span class="badge-count" th:text="${priorityCounts.get(pr)}">0</span>
+            </a>
+        </div>
+
         <!-- Lọc theo cơ sở, mức độ, thời gian báo cáo (không dành cho người thuê) -->
         <form th:if="${currentUser.role().name() != 'TENANT'}" th:action="@{/maintenance}" method="get"
               style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px;">
@@ -61,9 +70,9 @@
                 </select>
             </div>
             <div class="form-group" style="margin: 0;">
-                <label class="form-label" for="filterPriority">Mức độ</label>
+                <label class="form-label" for="filterPriority">Mức ưu tiên</label>
                 <select id="filterPriority" name="priority" class="form-control">
-                    <option value="">Tất cả mức độ</option>
+                    <option value="">Tất cả mức ưu tiên</option>
                     <option th:each="pr : ${priorities}" th:value="${pr.name()}" th:text="${uiText.maintenancePriority(pr)}"
                             th:selected="${filter.priority() == pr}"></option>
                 </select>
@@ -92,7 +101,7 @@
                 <tr>
                     <th>Tiêu đề và mô tả</th>
                     <th>Phòng</th>
-                    <th>Mức độ</th>
+                    <th>Mức ưu tiên</th>
                     <th>Trạng thái</th>
                     <th>Chi phí sửa chữa</th>
                     <th>Ngày báo cáo</th>
@@ -109,7 +118,8 @@
                         <strong th:text="${roomNumbers.get(t.getRoomId()) != null ? roomNumbers.get(t.getRoomId()) : '—'}">P101</strong>
                         <div th:if="${currentUser.role().name() != 'TENANT'}" style="font-size: 12px; color: var(--text-secondary);" th:text="${propertyNames.get(t.getPropertyId())}">Cơ sở</div>
                     </td>
-                    <td><span class="badge" th:text="${uiText.maintenancePriority(t.getPriority())}">Trung bình</span>
+                    <td><span class="badge" th:class="'badge badge-priority-' + ${t.getPriority().name().toLowerCase()}"
+                              th:text="${uiText.maintenancePriority(t.getPriority())}">Chưa phân loại</span>
                         <span th:if="${t.isOverdue(now)}" class="badge" style="background: #ef4444; color: #fff;">Quá hạn</span></td>
                     <td><span th:class="'badge badge-' + ${t.getStatus()}" th:text="${uiText.maintenanceStatus(t.getStatus())}">Đã báo</span></td>
                     <td th:text="${t.getRepairCost() != null and t.getRepairCost().compareTo(T(java.math.BigDecimal).ZERO) > 0 ? #numbers.formatDecimal(t.getRepairCost(), 0, 'POINT', 0, 'COMMA') + ' đ' : '—'}">—</td>
@@ -126,9 +136,9 @@
                                class="btn btn-sm btn-primary" title="Khoản này nằm trong hóa đơn tháng">
                                 <span>Thanh toán (hóa đơn tháng)</span>
                             </a>
-                            <a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm btn-secondary" title="Xem và cập nhật sự cố">
+                            <a th:href="@{'/maintenance/' + ${t.getId()}}" class="btn btn-sm btn-secondary" title="Xem chi tiết sự cố">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                <span>Quản lý</span>
+                                <span>Xem chi tiết</span>
                             </a>
                         </div>
                     </td>

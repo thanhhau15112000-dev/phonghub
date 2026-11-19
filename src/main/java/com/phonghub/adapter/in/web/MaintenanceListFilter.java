@@ -62,12 +62,9 @@ public record MaintenanceListFilter(
             || ticket.getStatus() == MaintenanceStatus.CANCELLED;
     }
 
-    /** Điều kiện chung của cả hai tab: cơ sở, mức độ, ngày báo cáo (theo giờ Việt Nam, gồm cả hai đầu mút). */
-    public boolean matchesCommon(MaintenanceTicket ticket) {
+    /** Điều kiện phạm vi và ngày báo cáo, không xét mức độ. */
+    public boolean matchesScope(MaintenanceTicket ticket) {
         if (propertyId != null && !propertyId.equals(ticket.getPropertyId())) {
-            return false;
-        }
-        if (priority != null && priority != ticket.getPriority()) {
             return false;
         }
         LocalDate reported = ticket.getCreatedAt().atZone(ZONE).toLocalDate();
@@ -75,6 +72,20 @@ public record MaintenanceListFilter(
             return false;
         }
         return to == null || !reported.isAfter(to);
+    }
+
+    public boolean matchesPriority(MaintenanceTicket ticket) {
+        if (priority == null) {
+            return true;
+        }
+        MaintenancePriority effective = ticket.getPriority() == null
+            ? MaintenancePriority.UNCLASSIFIED : ticket.getPriority();
+        return priority == effective;
+    }
+
+    /** Điều kiện chung: cơ sở, mức độ, ngày báo cáo (theo giờ Việt Nam, gồm cả hai đầu mút). */
+    public boolean matchesCommon(MaintenanceTicket ticket) {
+        return matchesScope(ticket) && matchesPriority(ticket);
     }
 
     public boolean matchesTab(MaintenanceTicket ticket) {
@@ -90,8 +101,28 @@ public record MaintenanceListFilter(
         if (propertyId != null) {
             builder.queryParam("propertyId", propertyId);
         }
+        if (from != null) {
+            builder.queryParam("from", from);
+        }
+        if (to != null) {
+            builder.queryParam("to", to);
+        }
         if (priority != null) {
             builder.queryParam("priority", priority.name());
+        }
+        String query = builder.build().encode().getQuery();
+        return query == null ? "" : query;
+    }
+
+    /** Liên kết tab mức độ, giữ lại tab trạng thái và các bộ lọc phạm vi khác. */
+    public String priorityTabHref(MaintenancePriority selectedPriority) {
+        UriComponentsBuilder builder = UriComponentsBuilder.fromPath("/maintenance")
+            .queryParam("tab", tab.name().toLowerCase());
+        if (status != null) {
+            builder.queryParam("status", status.name());
+        }
+        if (propertyId != null) {
+            builder.queryParam("propertyId", propertyId);
         }
         if (from != null) {
             builder.queryParam("from", from);
@@ -99,8 +130,8 @@ public record MaintenanceListFilter(
         if (to != null) {
             builder.queryParam("to", to);
         }
-        String query = builder.build().encode().getQuery();
-        return query == null ? "" : query;
+        builder.queryParam("priority", selectedPriority.name());
+        return builder.build().encode().toUriString();
     }
 
     private static UUID parseUuid(String value) {

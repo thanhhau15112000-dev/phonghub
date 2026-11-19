@@ -91,7 +91,12 @@ public class TenantDocumentApiController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
     }
 
-    public record RevealRequest(@NotBlank String password) {}
+    public record RevealRequest(@NotBlank String password) {
+        @Override
+        public String toString() {
+            return "RevealRequest[password=***]";
+        }
+    }
 
     public record SummaryResponse(
         String type,

@@ -72,15 +72,17 @@ git pull --ff-only origin staging
 JDK chỉ bắt buộc khi chạy test hoặc chạy backend bằng Maven/IDE trên máy host.
 Nếu chỉ chạy toàn bộ stack bằng Docker Compose, image builder dùng JDK bên
 trong Docker. Node.js/`npm` chỉ cần khi làm riêng Cloudflare Worker; Worker
-hiện không nằm trong đường deploy Spring production. Tài khoản Supabase không
-cần cho local.
+hiện không nằm trong đường deploy Spring production. Profile `docker` cần cấu
+hình Supabase; profile `local-demo` là lựa chọn cá nhân không dùng Supabase.
 
 ## Setup local cho thành viên mới
 
 ### Cấu hình mặc định
 
-Local dùng PostgreSQL trong Docker, không cần tạo `.env`. Các giá trị mặc định
-được khai báo trong `compose.yaml` và `application-docker.yml`:
+Local dùng PostgreSQL trong Docker. Profile `docker` mặc định dùng xác thực
+Supabase; cần tạo `.env` từ `.env.example`, điền các biến Supabase và khóa bảo
+vệ dữ liệu tenant trước khi khởi động. Các giá trị PostgreSQL/Redis local được
+khai báo trong `compose.yaml` và `application-docker.yml`:
 
 | Biến | Chạy backend trên host | Chạy app trong Compose |
 | --- | --- | --- |
@@ -92,9 +94,43 @@ Local dùng PostgreSQL trong Docker, không cần tạo `.env`. Các giá trị 
 | `PHONGHUB_REDIS_HOST` | `localhost` | `redis` |
 | `PHONGHUB_REDIS_PORT` | `16379` | `6379` |
 
-Không copy `.env.example` thành `.env` để chạy local. File đó là template cho
-staging/production và chứa cấu hình kết nối Supabase; secret thật không được
-đưa vào Git.
+Compose mặc định chỉ publish app, PostgreSQL và Redis trên loopback
+(`127.0.0.1`). Không đưa secret thật vào Git.
+
+### Bật trợ lý AI local (#294)
+
+Điền `GEMINI_API_KEY` trong `.env`, đặt `PHONGHUB_AI_ENABLED=true`, rồi chạy:
+
+```bash
+docker compose --profile ai up --build
+```
+
+Compose chạy LiteLLM ở `127.0.0.1:14000`; app gọi gateway nội bộ và dùng
+`LITELLM_MASTER_KEY` làm khóa gateway. `PHONGHUB_AI_API_KEY` phải trùng khóa đó
+khi chạy app trực tiếp trên máy host. Mặc định AI tắt. LiteLLM tắt ghi log nội
+dung prompt. Hỏi đáp hợp đồng chỉ dùng các trường có cấu trúc hiện lưu; hệ thống
+không có văn bản điều khoản để tra cứu. Trợ lý vận hành chỉ nhận dữ liệu tổng hợp
+của một nhà trọ mà người dùng được quyền xem tài chính.
+Lỗi gọi mô hình (mã HTTP, hết thời gian chờ) được ghi log WARN, không kèm nội dung
+câu hỏi hay câu trả lời. Nếu trỏ `PHONGHUB_AI_BASE_URL` thẳng tới mô hình không nhận
+tham số `reasoning_effort` (vd. OpenAI `gpt-4o-mini`), đặt `PHONGHUB_AI_REASONING_EFFORT=`
+(để trống) để không gửi tham số này.
+
+FAQ RAG dùng bản nháp nghiệp vụ tại `ops/faq/assistant-faq.vi.json`. Tìm kiếm lấy
+vector Gemini Embedding 2 đã tạo sẵn trong `src/main/resources/faq/faq-index.json`;
+các câu hỏi chỉ gọi embedding khi chưa có trong cache tiến trình. Khi sửa FAQ, tạo
+lại index bằng PowerShell script scripts\reindex-faq.ps1; script đọc `GEMINI_API_KEY` từ môi
+trường hoặc `.env` và không in khóa ra output. Mỗi lần trả lời chỉ gửi tối đa ba
+FAQ liên quan cùng số liệu đã được backend tính; danh sách chi tiết vận hành chỉ
+được thêm khi câu hỏi yêu cầu và giới hạn ở 20 dòng mỗi nhóm. Khi đổi model hoặc
+chiều vector, tạo lại index để hai phía dùng cùng không gian embedding.
+
+Lời khuyên (#302): với hóa đơn tiền thuê, backend tính sẵn `usageSignals` (lượng điện, nước
+và tổng tiền định kỳ so với trung bình các kỳ trước, xu hướng `SPIKE` từ +30%, `INCREASE` từ
++10%, `STABLE`, `DECREASE` từ -10%, `NO_HISTORY`); phí sửa chữa và phí trễ hạn không tính vào
+xu hướng. Với hợp đồng, backend tính `timeline` (số tháng, ngày còn lại; `EXPIRING_SOON` khi còn
+không quá 30 ngày). Mô hình chỉ diễn giải các tín hiệu này và đưa lời khuyên theo hướng dẫn trong
+system prompt (`AiAssistantService`), không tự tính số.
 
 ## Chạy local với Docker
 
@@ -114,7 +150,9 @@ GET http://localhost:8080/health
 ```
 
 Khi khởi động profile `docker`, Flyway tự chạy migration schema và fixture
-local. Database được lưu trong Docker volume `phonghub_pgdata`.
+local. Database được lưu trong Docker volume `phonghub_pgdata`. UI/API yêu cầu
+xác thực Supabase; thiếu cấu hình Supabase thì ứng dụng fail-fast thay vì mở
+quyền truy cập.
 
 ### Chạy database bằng Docker, backend bằng Maven
 
@@ -128,6 +166,13 @@ PowerShell:
 
 ```powershell
 $env:SPRING_PROFILES_ACTIVE = "docker"
+.\mvnw.cmd spring-boot:run
+```
+
+Để chạy mock demo trên máy host, đặt profile tường minh:
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE = "docker,local-demo"
 .\mvnw.cmd spring-boot:run
 ```
 
@@ -151,7 +196,7 @@ chmod +x mvnw
 Có thể chạy project bằng IntelliJ IDEA/Eclipse/VS Code với profile `docker`;
 entry point là `com.phonghub.PhongHubApplication`.
 
-### Tài khoản và dữ liệu demo local
+### Dữ liệu demo local
 
 Profile `docker` có sẵn dữ liệu fixture cho các actor sau:
 
@@ -165,10 +210,19 @@ Profile `docker` có sẵn dữ liệu fixture cho các actor sau:
 | `TECHNICIAN` | `tech1` | `tech1@phonghub.local` |
 | `TENANT` | `tenant1` | `tenant1@phonghub.local` |
 
-Local bật `LocalDemoAuthenticationAdapter` và cho phép chuyển actor demo. Có
-thể chọn role trực tiếp ở dropdown trên giao diện; endpoint tương ứng là
-`/switch-user?userId=<demo-user-id>`. Đây là cơ chế demo local, không gọi
-Supabase Auth và không được dùng để đánh giá security của production.
+Các fixture này chỉ là row trong PostgreSQL local, không tự tạo tài khoản
+Supabase. Profile `docker` không bật actor switcher. Muốn dùng fixture với xác
+thực giả lập cho demo cá nhân, phải chủ động chọn profile `local-demo`:
+
+```powershell
+$env:PHONGHUB_SPRING_PROFILES_ACTIVE = "docker,local-demo"
+docker compose up --build
+```
+
+`local-demo` cho phép đổi actor và dùng mock password; chỉ dùng trên máy cá
+nhân. Khi chạy bằng Maven, app chỉ bind vào loopback; khi chạy bằng Compose,
+app/DB/Redis chỉ publish trên loopback. Không bật profile này trên staging hoặc
+môi trường nhiều người dùng.
 
 Compose lưu database trong volume `phonghub_pgdata`, nên `docker compose down`
 không xóa dữ liệu. Lệnh sau xóa cả volume và toàn bộ dữ liệu local, chỉ dùng
@@ -188,8 +242,15 @@ staging hoặc production.
 - PostgreSQL và Redis (session store) chạy trong Docker.
 - Flyway chạy `db/migration` và fixture tại `db/seed/docker`.
 - Dữ liệu fixture được lưu trong volume Docker.
-- Local demo actor switching vẫn được bật để kiểm thử các role nhanh; đây là
-  cơ chế xác thực local, không dùng cho production.
+- Xác thực dùng Supabase; UI dùng session và API dùng Bearer JWT như production.
+- Không bật actor switching hoặc local mock identity mặc định.
+
+### `local-demo`
+
+- Chỉ dùng cùng profile `docker` để chạy fixture và giả lập nhanh nhiều role
+  trên máy cá nhân.
+- Cho phép mock login và đổi actor; không phải cơ chế xác thực an toàn, không
+  dùng trên staging hoặc môi trường nhiều người dùng.
 
 ### `test`
 
@@ -339,6 +400,8 @@ Hệ thống trò chuyện được thiết kế theo chuẩn Hexagonal Architec
 
 Runbook Render/Supabase/Cloudflare và quy trình tạo Admin đầu tiên: [docs/production-deployment.md](docs/production-deployment.md).
 
+Sao lưu CSDL hằng ngày và khôi phục: [docs/backup-restore.md](docs/backup-restore.md).
+
 Kích hoạt profile:
 
 ```bash
@@ -372,6 +435,28 @@ SEPAY_BANK_ACCOUNT_NAME
 `SEPAY_MERCHANT_ID`, `SEPAY_SECRET_KEY` và `SEPAY_PUBLIC_BASE_URL`.
 `SEPAY_SECRET_KEY` dùng cho checkout/IPN Sandbox; `SEPAY_WEBHOOK_API_KEY` dùng
 cho webhook chuyển khoản thật.
+
+### Quên mật khẩu qua email (#330)
+
+Người dùng tự đặt lại mật khẩu tại `/forgot-password`: app gọi Supabase
+`POST /auth/v1/recover`, Supabase gửi email chứa liên kết về `/reset-password`.
+Trang này đọc token của phiên khôi phục, máy chủ kiểm token bằng bộ giải mã JWT
+của API (chỉ nhận phiên được cấp qua email, không nhận phiên đăng nhập bằng
+mật khẩu), đặt mật khẩu mới qua Supabase Admin và thu hồi phiên. Mỗi liên kết
+chỉ dùng được một lần; tài khoản bị khóa không đặt lại được.
+
+Cấu hình cần làm một lần:
+
+1. Đặt `PHONGHUB_PUBLIC_BASE_URL` là địa chỉ công khai của app, ví dụ
+   `https://phonghub.onrender.com` (không có `/` cuối).
+2. Supabase Dashboard → Authentication → URL Configuration: đặt **Site URL**
+   là địa chỉ đó và thêm `<địa chỉ>/reset-password` vào **Redirect URLs**.
+3. SMTP mặc định của Supabase chỉ gửi vài email mỗi giờ; dùng thật nên cấu hình
+   SMTP riêng ở Authentication → Emails.
+
+Tài khoản không có email, hoặc khi không gửi được email, vẫn tạo thông báo để
+Quản trị viên cấp lại mật khẩu tạm như trước. Profile `test` và `local-demo`
+không có Supabase nên chỉ dùng cách báo Quản trị viên.
 
 Không đặt giá trị thật trong `application-*.yml`, `.env` đã commit hoặc bundle
 frontend. Dùng secret/environment management của môi trường deploy.

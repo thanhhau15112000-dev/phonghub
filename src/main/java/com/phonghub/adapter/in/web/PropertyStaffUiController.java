@@ -49,7 +49,8 @@ public class PropertyStaffUiController {
     @PostMapping
     public String assign(
         @PathVariable UUID propertyId,
-        @RequestParam String usernameOrEmail,
+        @RequestParam(required = false) UUID userId,
+        @RequestParam(required = false) String usernameOrEmail,
         @RequestParam(defaultValue = "false") boolean canCollectPayment,
         @RequestParam(defaultValue = "false") boolean canManageContracts,
         @RequestParam(defaultValue = "false") boolean canViewDocuments,
@@ -57,8 +58,9 @@ public class PropertyStaffUiController {
         RedirectAttributes redirectAttributes
     ) {
         try {
+            // Chọn từ danh sách thả xuống thì có userId; gõ tay thì chỉ có usernameOrEmail như trước (#249).
             staffUseCase.assign(new PropertyStaffUseCase.AssignCommand(
-                propertyId, usernameOrEmail, canCollectPayment, canManageContracts, canViewDocuments,
+                propertyId, userId, usernameOrEmail, canCollectPayment, canManageContracts, canViewDocuments,
                 canManageRoomsAndAssets));
             redirectAttributes.addFlashAttribute("successMessage", "Đã phân công nhân sự vào nhà trọ.");
         } catch (DomainException | IllegalArgumentException ex) {

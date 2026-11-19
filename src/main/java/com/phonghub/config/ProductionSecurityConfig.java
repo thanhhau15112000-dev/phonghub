@@ -4,6 +4,7 @@ import com.phonghub.adapter.in.security.PasswordChangeGate;
 import com.phonghub.adapter.in.security.SupabaseJwtAuthenticationConverter;
 import com.phonghub.adapter.in.security.UserActiveValidationFilter;
 import com.phonghub.application.port.out.UserRepositoryPort;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -29,7 +30,7 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 
 @Configuration
-@Profile("prod")
+@Profile({"prod", "docker & !local-demo"})
 @EnableWebSecurity
 @EnableConfigurationProperties(SupabaseProperties.class)
 public class ProductionSecurityConfig {
@@ -73,6 +74,10 @@ public class ProductionSecurityConfig {
                     .jwtAuthenticationConverter(jwtAuthenticationConverter())
                 )
             )
+            // Phiên đăng nhập của giao diện cũng dùng được cho API, nên phải kiểm lại tài khoản như chuỗi giao diện (#305).
+            // Đăng ký trước PasswordChangeGate (cùng vị trí sau BearerTokenAuthenticationFilter) để tài khoản bị khóa nhận
+            // 401 trước khi bị yêu cầu đổi mật khẩu.
+            .addFilterAfter(new UserActiveValidationFilter(userRepository, true), BearerTokenAuthenticationFilter.class)
             .addFilterAfter(new PasswordChangeGate(), BearerTokenAuthenticationFilter.class)
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
@@ -88,20 +93,20 @@ public class ProductionSecurityConfig {
             .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/health", "/login", "/session/logout", "/forgot-password").permitAll()
+                .requestMatchers("/health", "/login", "/session/logout", "/forgot-password", "/reset-password").permitAll()
                 .requestMatchers("/static/**", "/css/**", "/js/**", "/favicon.ico").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(new UserActiveValidationFilter(userRepository), AuthorizationFilter.class)
             .addFilterBefore(new PasswordChangeGate(), AuthorizationFilter.class)
             .exceptionHandling(exceptions -> exceptions
-                .authenticationEntryPoint((request, response, exception) -> {
+                .authenticationEntryPoint((request, response, authException) -> {
                     if ("true".equalsIgnoreCase(request.getHeader("HX-Request"))) {
-                        response.setHeader("HX-Redirect", request.getContextPath() + "/login");
-                        response.setStatus(HttpStatus.UNAUTHORIZED.value());
-                    } else {
-                        new LoginUrlAuthenticationEntryPoint("/login").commence(request, response, exception);
+                        response.setHeader("HX-Redirect", "/login");
+                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        return;
                     }
+                    new LoginUrlAuthenticationEntryPoint("/login").commence(request, response, authException);
                 })
             )
             .securityContext(securityContext -> securityContext

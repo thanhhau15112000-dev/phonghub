@@ -1,0 +1,36 @@
+{
+  "policy": {
+    "description": "Chính sách tự động dọn dẹp log sau 14 ngày của PhongHub",
+    "default_state": "hot",
+    "states": [
+      {
+        "name": "hot",
+        "actions": [],
+        "transitions": [
+          {
+            "state_name": "delete",
+            "conditions": {
+              "min_index_age": "14d"
+            }
+          }
+        ]
+      },
+      {
+        "name": "delete",
+        "actions": [
+          {
+            "delete": {}
+          }
+        ],
+        "transitions": []
+      }
+    ],
+    "ism_template": [
+      {
+        "index_patterns": ["phonghub-logs-*"],
+        "priority": 100
+      }
+    ]
+  }
+}
+

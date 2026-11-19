@@ -203,7 +203,7 @@ class OwnerFlowAndAdminPasswordResetIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Kết thúc sớm…")))
             .andExpect(content().string(containsString("name=\"reason\"")))
-            .andExpect(content().string(containsString("Mở biên bản check-out")));
+            .andExpect(content().string(containsString("Mở biên bản trả phòng")));
 
         // Owner 1 sees status change form and "+ Tạo hợp đồng" button on their room
         mockMvc.perform(get("/rooms/" + DataSeeder.ROOM_104_ID)
@@ -257,7 +257,7 @@ class OwnerFlowAndAdminPasswordResetIntegrationTest {
         mockMvc.perform(get("/contracts/" + createdContract.getId())
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Lập biên bản check-in")));
+            .andExpect(content().string(containsString("Lập biên bản nhận phòng")));
 
         // 3. Start check-in as Owner 1; the contract remains DRAFT.
         mockMvc.perform(post("/contracts/" + createdContract.getId() + "/activate")

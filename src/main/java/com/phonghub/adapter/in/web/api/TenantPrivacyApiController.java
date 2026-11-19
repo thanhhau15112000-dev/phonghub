@@ -66,7 +66,12 @@ public class TenantPrivacyApiController {
         return Map.of("outcome", useCase.requestErasure().name());
     }
 
-    public record ConfirmPurgeRequest(@NotBlank(message = "Cần nhập mật khẩu để xác nhận") String password) {}
+    public record ConfirmPurgeRequest(@NotBlank(message = "Cần nhập mật khẩu để xác nhận") String password) {
+        @Override
+        public String toString() {
+            return "ConfirmPurgeRequest[password=***]";
+        }
+    }
 
     public record LegalHoldRequest(@NotBlank(message = "Cần nêu lý do giữ pháp lý") String reason) {}
 }

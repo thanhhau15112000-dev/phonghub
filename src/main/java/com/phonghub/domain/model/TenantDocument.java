@@ -6,6 +6,7 @@ import java.util.UUID;
 /**
  * Hồ sơ giấy tờ của một người thuê. Ảnh được lưu ở kho riêng tư dưới dạng đã mã hóa
  * (front/backImageKey là khóa tệp, không phải link công khai); số GPLX luôn ở dạng mã hóa.
+ * {@code propertyId} là nhà trọ nơi giấy tờ được tải lên; null khi người thuê tự tải ở Hồ sơ cá nhân (#244).
  */
 public record TenantDocument(
     UUID id,
@@ -27,8 +28,8 @@ public record TenantDocument(
     UUID updatedBy
 ) {
     public TenantDocument {
-        if (id == null || tenantId == null || propertyId == null || type == null) {
-            throw new IllegalArgumentException("Document id, tenant, property and type are required");
+        if (id == null || tenantId == null || type == null) {
+            throw new IllegalArgumentException("Document id, tenant and type are required");
         }
         if (frontImageKey == null || frontImageKey.isBlank() || frontContentType == null) {
             throw new IllegalArgumentException("Cần ảnh mặt trước giấy tờ.");

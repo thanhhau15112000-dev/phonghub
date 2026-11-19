@@ -145,7 +145,7 @@ class AuthLoginIdentityAndNotificationTest {
                 .with(csrf())
                 .param("identifier", "tenant1"))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Nếu thông tin bạn nhập khớp với một tài khoản trong hệ thống")));
+            .andExpect(content().string(containsString("Đã gửi yêu cầu tới Quản trị viên")));
 
         assertEquals(1, notificationUseCase.countUnreadAdminNotifications());
         List<Notification> list = notificationRepository.findAll();

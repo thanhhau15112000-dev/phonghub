@@ -123,7 +123,7 @@ class RoomArchiveIntegrationTest extends SeededWebTest {
             .andExpect(jsonPath("$.detail", containsString("đã ngừng sử dụng")));
         mockMvc.perform(put("/api/rooms/" + FREE).header("X-User-Id", OWNER_1)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"roomNumber\":\"P104\",\"floor\":1,\"basePrice\":4100000,\"maxOccupants\":3}"))
+                .content("{\"roomNumber\":\"P104\",\"floor\":1,\"basePrice\":4100000,\"maxOccupants\":3,\"version\":0}"))
             .andExpect(status().isConflict());
         mockMvc.perform(post(rooms).header("X-User-Id", OWNER_1).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"roomNumber\":\"P104\",\"floor\":1,\"basePrice\":3000000,\"maxOccupants\":2,"

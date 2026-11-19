@@ -33,6 +33,8 @@ public class InMemoryRoomRepository implements RoomRepositoryPort {
             r.getUpdatedAt()
         );
         copy.restoreArchivedAt(r.getArchivedAt());
+        // Giữ version để kiểm tra xung đột khi sửa phòng chạy được cả với kho in-memory (#314)
+        copy.restoreVersion(r.getVersion());
         return copy;
     }
 

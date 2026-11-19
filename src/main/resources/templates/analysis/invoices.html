@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Phân tích hóa đơn')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+
+<main class="container">
+    <div th:replace="~{fragments/layout :: alerts}"></div>
+
+    <div class="page-title-row">
+        <div>
+            <h1>Phân tích hóa đơn</h1>
+            <p style="color: var(--text-secondary); font-size: 13px;">
+                Các điểm bất thường về điện, nước, hóa đơn và giao dịch của kỳ được chọn. Mọi nhận định do hệ thống tính
+                theo quy tắc, không dùng AI.
+            </p>
+        </div>
+    </div>
+
+    <div class="card">
+        <form th:action="@{/analysis/invoices}" method="get" id="anomalyFilter"
+              style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 16px;">
+            <div class="form-group" style="min-width: 200px; margin: 0;">
+                <label class="form-label" for="propertyId">Nhà trọ</label>
+                <select id="propertyId" name="propertyId" class="form-control">
+                    <option value="">Tất cả nhà trọ của tôi</option>
+                    <option th:each="p : ${properties}" th:value="${p.id()}" th:text="${p.name()}"
+                            th:selected="${p.id().toString() == filterPropertyId}">Nhà trọ</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="month">Tháng</label>
+                <input id="month" type="month" name="month" class="form-control" th:value="${filterMonth}">
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">Xem</button>
+        </form>
+
+        <p id="anomalySummary" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;"
+           th:text="${#lists.size(report.anomalies())} + ' điểm bất thường trong tháng ' + ${filterMonth}
+               + ' (cao: ' + ${report.count(T(com.phonghub.application.port.in.InvoiceAnomalyUseCase.Severity).HIGH)}
+               + ', trung bình: ' + ${report.count(T(com.phonghub.application.port.in.InvoiceAnomalyUseCase.Severity).MEDIUM)}
+               + ', thấp: ' + ${report.count(T(com.phonghub.application.port.in.InvoiceAnomalyUseCase.Severity).LOW)} + ').'">
+            0 điểm bất thường.
+        </p>
+
+        <div th:if="${#lists.isEmpty(report.anomalies())}" class="empty-state" id="anomalyEmpty">
+            <p>Không phát hiện điểm bất thường nào trong kỳ này.</p>
+        </div>
+
+        <table th:if="${!#lists.isEmpty(report.anomalies())}" class="data-table" id="anomalyTable">
+            <thead>
+                <tr>
+                    <th>Mức độ</th>
+                    <th>Loại</th>
+                    <th>Phát hiện</th>
+                    <th>Số liệu đối chiếu</th>
+                    <th>Việc nên làm</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="a : ${report.anomalies()}">
+                    <td th:text="${severityLabels[a.severity().name()]}">Cao</td>
+                    <td th:text="${a.type().label()}">Loại</td>
+                    <td th:text="${a.message()}">Nội dung</td>
+                    <td>
+                        <div th:each="e : ${a.evidence()}" style="font-size: 12px; overflow-wrap: anywhere;">
+                            <span th:text="${e.key} + ': '">Khóa</span><strong th:text="${e.value}">Giá trị</strong>
+                        </div>
+                    </td>
+                    <td th:text="${a.action()}">Việc cần làm</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 16px;"
+           th:text="'Quy tắc: điện/nước tăng quá ' + ${spikePercent} + '% so với trung bình ' + ${baselinePeriods}
+               + ' kỳ trước; chỉ số không đổi hoặc lùi; thiếu chỉ số; hai hóa đơn tiền thuê cùng phòng một kỳ; giao dịch cần xem xét quá '
+               + ${T(com.phonghub.application.port.in.InvoiceAnomalyUseCase).STALE_REVIEW_DAYS} + ' ngày.'">Quy tắc</p>
+    </div>
+</main>
+</body>
+</html>

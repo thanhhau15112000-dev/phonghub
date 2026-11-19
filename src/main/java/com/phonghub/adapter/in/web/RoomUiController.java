@@ -92,6 +92,10 @@ public class RoomUiController {
             model.addAttribute("room", room);
             model.addAttribute("property", property);
             model.addAttribute("activeContract", activeContract.orElse(null));
+            model.addAttribute("canViewContracts", authorizationService.canViewContracts(currentUser));
+            model.addAttribute("canViewRoomPrice", authorizationService.canViewPropertyFinance(currentUser, property.id()));
+            model.addAttribute("canViewContractMoney", activeContract
+                .map(contract -> authorizationService.canViewContractMoney(currentUser, contract)).orElse(false));
             model.addAttribute("tickets", tickets);
             model.addAttribute("manualStatuses", room.manualTargets(activeContract.isPresent()));
             model.addAttribute("canManageRoomsAndAssets",
@@ -156,7 +160,7 @@ public class RoomUiController {
         @RequestParam String roomNumber,
         @RequestParam(defaultValue = "0") int floor,
         @RequestParam(required = false) BigDecimal areaSqm,
-        @RequestParam BigDecimal basePrice,
+        @RequestParam(required = false) BigDecimal basePrice,
         @RequestParam int maxOccupants,
         @RequestParam(required = false) Long version,
         RedirectAttributes redirectAttributes
@@ -195,6 +199,8 @@ public class RoomUiController {
         model.addAttribute("assets", assets);
         model.addAttribute("assetHistory", history);
         model.addAttribute("canManageAssets", canManage);
+        // Giá trị ước tính tài sản là tiền của chủ trọ: kỹ thuật viên, nhân viên không có quyền tiền/phòng không thấy (#346).
+        model.addAttribute("showAssetMoney", canManage || authorizationService.canViewPropertyFinance(user, property.id()));
         // Các phòng khác cùng nhà trọ để áp dụng thêm khi thêm nhiều tài sản một lần.
         model.addAttribute("batchOtherRooms", canManage
             ? roomUseCase.listRoomsForProperty(property.id()).stream().filter(r -> !r.getId().equals(roomId)).toList()

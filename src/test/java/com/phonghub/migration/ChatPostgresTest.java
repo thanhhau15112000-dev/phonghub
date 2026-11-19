@@ -2,10 +2,12 @@ package com.phonghub.migration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.phonghub.adapter.out.persistence.postgres.PostgresChatMessageRepository;
 import com.phonghub.adapter.out.persistence.postgres.PostgresChatRoomRepository;
+import com.phonghub.domain.model.ChatAttachment;
 import com.phonghub.domain.model.ChatMessage;
 import com.phonghub.domain.model.ChatRoom;
 import com.phonghub.domain.model.ChatRoomMember;
@@ -142,5 +144,57 @@ class ChatPostgresTest {
         assertEquals(List.of(ChatRoom.GLOBAL_ROOM_ID), rooms.findRoomsByUserId(TENANT).stream().map(ChatRoom::id).toList());
         assertEquals(T0.plusSeconds(400), rooms.findById(directId).orElseThrow().members().stream()
             .filter(m -> m.userId().equals(TENANT)).findFirst().orElseThrow().leftAt());
+    }
+
+    @Test
+    @DisplayName("#251: a message and its attachments are written in one statement and read back in order")
+    void chatAttachments() {
+        PGSimpleDataSource ds = new PGSimpleDataSource();
+        ds.setUrl(POSTGRES.getJdbcUrl());
+        ds.setUser(POSTGRES.getUsername());
+        ds.setPassword(POSTGRES.getPassword());
+        Flyway.configure().dataSource(ds).locations("classpath:db/migration", "classpath:db/seed/docker")
+            .load().migrate();
+        NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(ds);
+        PostgresChatMessageRepository messages = new PostgresChatMessageRepository(jdbc);
+        // Phòng riêng không thành viên để không đụng dữ liệu của test kia (cùng container)
+        UUID room = UUID.randomUUID();
+        new PostgresChatRoomRepository(jdbc).save(new ChatRoom(room, ChatRoomType.DIRECT, "Ảnh", T0, List.of()));
+        Instant at = T0.plusSeconds(3600);
+
+        ChatAttachment video = new ChatAttachment(UUID.randomUUID(), 1, "chat/" + room + "/" + UUID.randomUUID() + ".mp4",
+            "video/mp4", ChatAttachment.VIDEO, 4000);
+        ChatAttachment image = new ChatAttachment(UUID.randomUUID(), 0, "chat/" + room + "/" + UUID.randomUUID() + ".jpg",
+            "image/jpeg", ChatAttachment.IMAGE, 1200);
+        ChatMessage sent = messages.save(new ChatMessage(UUID.randomUUID(), room, STAFF, "Nhân viên Q7", "", null, null,
+            at, null, List.of(video, image)));
+        ChatMessage plain = messages.save(new ChatMessage(UUID.randomUUID(), room, STAFF, "Nhân viên Q7", "chữ",
+            at.plusSeconds(1), null));
+
+        ChatMessage loaded = messages.findById(sent.id()).orElseThrow();
+        assertEquals("", loaded.content());
+        assertEquals(List.of(image, video), loaded.attachments());
+        assertTrue(messages.findById(plain.id()).orElseThrow().attachments().isEmpty());
+        List<ChatMessage> page = messages.findByRoomId(room, null, 10);
+        assertEquals(List.of(sent.id(), plain.id()), page.stream().map(ChatMessage::id).toList());
+        assertEquals(2, page.get(0).attachments().size());
+        assertTrue(messages.findById(UUID.randomUUID()).isEmpty());
+
+        // Ghi tệp lỗi (trùng khóa) thì tin cũng không được ghi
+        UUID failedId = UUID.randomUUID();
+        ChatAttachment duplicate = new ChatAttachment(UUID.randomUUID(), 0, image.objectKey(), "image/jpeg",
+            ChatAttachment.IMAGE, 10);
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class, () -> messages.save(new ChatMessage(
+            failedId, room, STAFF, "Nhân viên Q7", "x", null, null, at.plusSeconds(2), null, List.of(duplicate))));
+        assertTrue(messages.findById(failedId).isEmpty());
+
+        // Loại tệp ngoài IMAGE/VIDEO bị CHECK chặn; xóa tin thì xóa luôn dòng tệp
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class, () -> jdbc.update("""
+            INSERT INTO chat_message_attachments (id, message_id, position, object_key, content_type, media_type, size_bytes)
+            VALUES (:id, :message, 5, 'chat/x/y.gif', 'image/gif', 'GIF', 10)
+            """, Map.of("id", UUID.randomUUID(), "message", sent.id())));
+        jdbc.update("DELETE FROM chat_messages WHERE id = :id", Map.of("id", sent.id()));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM chat_message_attachments WHERE message_id = :id",
+            Map.of("id", sent.id()), Integer.class));
     }
 }

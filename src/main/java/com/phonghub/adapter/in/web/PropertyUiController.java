@@ -193,6 +193,11 @@ public class PropertyUiController {
         try {
             Property property = propertyUseCase.getProperty(id);
 
+            boolean canViewRoomPrice = authorizationService.canViewPropertyFinance(currentUser, id);
+            if (!canViewRoomPrice) {
+                // Không có quyền tài chính: không lọc theo giá, vì lọc khoảng giá sẽ đoán ra giá thuê (#326)
+                minPrice = maxPrice = null;
+            }
             RoomPage roomPage;
             try {
                 roomPage = roomUseCase.searchRooms(new RoomSearchCriteria(
@@ -214,6 +219,7 @@ public class PropertyUiController {
             model.addAttribute("currentUser", currentUser);
             model.addAttribute("property", property);
             model.addAttribute("canManageRoomsAndAssets", authorizationService.canManageRoomsAndAssets(currentUser, id));
+            model.addAttribute("canViewRoomPrice", canViewRoomPrice);
             model.addAttribute("rooms", roomPage.items());
             model.addAttribute("roomPage", roomPage);
             Map<UUID, Long> roomOccupantCounts = new java.util.HashMap<>();

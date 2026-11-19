@@ -7,7 +7,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 @Component
-@Profile("prod")
+@Profile({"prod", "docker & !local-demo"})
 public class ProductionConfigValidator {
 
     private final Environment environment;
