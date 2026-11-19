@@ -92,6 +92,8 @@ public class ProductionSecurityConfig {
         http
             .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+            // AuthUiController chooses its own post-login destination, so a redirect to login needs no saved request.
+            .requestCache(cache -> cache.disable())
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/health", "/login", "/session/logout", "/forgot-password", "/reset-password").permitAll()
                 .requestMatchers("/static/**", "/css/**", "/js/**", "/favicon.ico").permitAll()

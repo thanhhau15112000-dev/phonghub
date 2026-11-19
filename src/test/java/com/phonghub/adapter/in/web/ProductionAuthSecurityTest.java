@@ -1,6 +1,7 @@
 package com.phonghub.adapter.in.web;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
@@ -148,10 +149,12 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
-    void browserUiRedirectsUnauthenticatedRequestsToLogin() throws Exception {
-        mockMvc.perform(get("/"))
+    void browserUiRedirectsUnauthenticatedRequestsToLoginWithoutCreatingSession() throws Exception {
+        mockMvc.perform(get("/dashboard"))
             .andExpect(status().is3xxRedirection())
-            .andExpect(redirectedUrl("/login"));
+            .andExpect(redirectedUrl("/login"))
+            .andExpect(result -> assertNull(result.getRequest().getSession(false)))
+            .andExpect(header().doesNotExist("Set-Cookie"));
     }
 
     @Test
@@ -159,7 +162,9 @@ class ProductionAuthSecurityTest {
         mockMvc.perform(get("/dashboard")
                 .header("HX-Request", "true"))
             .andExpect(status().isUnauthorized())
-            .andExpect(header().string("HX-Redirect", "/login"));
+            .andExpect(header().string("HX-Redirect", "/login"))
+            .andExpect(result -> assertNull(result.getRequest().getSession(false)))
+            .andExpect(header().doesNotExist("Set-Cookie"));
     }
 
     @Test
