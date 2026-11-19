@@ -91,7 +91,8 @@ class PhongHubUiIntegrationTest {
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.ADMIN_ID.toString()))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("Bảng điều khiển quản lý nhà trọ")))
-            .andExpect(content().string(containsString("Nhà trọ bạn quản lý")))
+            .andExpect(content().string(containsString("id=\"adminOverview\"")))
+            .andExpect(content().string(not(containsString("Nhà trọ bạn quản lý"))))
             .andExpect(content().string(containsString("PhongHub")))
             .andExpect(content().string(containsString("Trạng thái duyệt")))
             .andExpect(content().string(not(containsString("PhongHub Ops"))))
@@ -100,6 +101,11 @@ class PhongHubUiIntegrationTest {
             .andExpect(content().string(not(containsString("action=\"/switch-user\""))))
             .andExpect(content().string(not(containsString("Người dùng hiện tại"))))
             .andExpect(content().string(not(containsString("style=\"font-weight: 500;\""))));
+
+        mockMvc.perform(get("/dashboard")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Nhà trọ bạn quản lý")));
     }
 
     @Test
@@ -307,7 +313,8 @@ class PhongHubUiIntegrationTest {
                 .param("name", "Nhà trọ Không Mô Tả")
                 .param("address", longAddress)
                 .param("description", "  ")
-                .param("totalRooms", "3"))
+                .param("totalRooms", "3")
+                .param("ownerId", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().is3xxRedirection());
         assertNull(propertyRepository.findAll().stream()
             .filter(p -> p.name().equals("Nhà trọ Không Mô Tả")).findFirst().orElseThrow().description(),

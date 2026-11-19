@@ -7,6 +7,7 @@ import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.domain.exception.DomainException;
 import com.phonghub.domain.model.Notification;
 import com.phonghub.domain.model.UserRole;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Controller;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.util.UriUtils;
 
 @Controller
 @RequestMapping("/admin/notifications")
@@ -50,10 +52,6 @@ public class AdminNotificationUiController {
 
         List<Notification> allNotifications = notificationUseCase.listAdminNotifications();
 
-        long totalCount = allNotifications.size();
-        long unresolvedCount = allNotifications.stream().filter(n -> !n.isResolved()).count();
-        long resolvedCount = allNotifications.stream().filter(Notification::isResolved).count();
-
         String keyword = q != null ? q.trim().toLowerCase() : "";
         List<Notification> matched = allNotifications;
         if (!keyword.isEmpty()) {
@@ -61,6 +59,10 @@ public class AdminNotificationUiController {
                 .filter(n -> matchesKeyword(n, keyword))
                 .toList();
         }
+
+        long totalCount = matched.size();
+        long unresolvedCount = matched.stream().filter(n -> !n.isResolved()).count();
+        long resolvedCount = matched.stream().filter(Notification::isResolved).count();
 
         String filter = status != null ? status.trim().toUpperCase() : "ALL";
         List<Notification> filtered = switch (filter) {
@@ -88,7 +90,8 @@ public class AdminNotificationUiController {
                 hasParam = true;
             }
             if (!keyword.isEmpty()) {
-                redirectUrl.append(hasParam ? "&" : "?").append("q=").append(keyword);
+                redirectUrl.append(hasParam ? "&" : "?")
+                    .append("q=").append(UriUtils.encodeQueryParam(keyword, StandardCharsets.UTF_8));
                 hasParam = true;
             }
             if (validPage > 1) {

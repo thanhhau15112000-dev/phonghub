@@ -219,11 +219,22 @@
 
             const bellBtn = document.getElementById('notifBellBtn');
             const notifDropdown = document.getElementById('notifDropdown');
+            const accountMenuButton = document.getElementById('accountMenuButton');
+            const accountMenu = document.getElementById('accountMenu');
+
+            const setAccountMenuOpen = function (open) {
+                if (!accountMenu || !accountMenuButton) return;
+                accountMenu.hidden = !open;
+                accountMenuButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+            };
 
             if (bellBtn && notifDropdown) {
                 bellBtn.addEventListener('click', function (e) {
                     e.stopPropagation();
                     const isHidden = notifDropdown.style.display === 'none' || notifDropdown.style.display === '';
+                    if (isHidden) {
+                        setAccountMenuOpen(false);
+                    }
                     notifDropdown.style.display = isHidden ? 'block' : 'none';
                 });
 
@@ -234,17 +245,13 @@
                 });
             }
 
-            const accountMenuButton = document.getElementById('accountMenuButton');
-            const accountMenu = document.getElementById('accountMenu');
-
             if (accountMenuButton && accountMenu) {
-                const setAccountMenuOpen = function (open) {
-                    accountMenu.hidden = !open;
-                    accountMenuButton.setAttribute('aria-expanded', open ? 'true' : 'false');
-                };
-
                 accountMenuButton.addEventListener('click', function () {
-                    setAccountMenuOpen(accountMenu.hidden);
+                    const willOpen = accountMenu.hidden;
+                    if (willOpen && notifDropdown) {
+                        notifDropdown.style.display = 'none';
+                    }
+                    setAccountMenuOpen(willOpen);
                 });
 
                 document.addEventListener('click', function (e) {

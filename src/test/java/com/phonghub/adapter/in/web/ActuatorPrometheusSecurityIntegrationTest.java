@@ -2,8 +2,10 @@ package com.phonghub.adapter.in.web;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import org.springframework.boot.test.context.SpringBootTest;
@@ -81,6 +83,27 @@ class ActuatorPrometheusSecurityIntegrationTest {
         assertThat(meterRegistry.find("phonghub.sepay.ipn").counter().count()).isGreaterThanOrEqualTo(1.0);
         assertThat(meterRegistry.find("phonghub.scheduled.job.executions").counter().count()).isGreaterThanOrEqualTo(1.0);
         assertThat(meterRegistry.find("phonghub.chat.sse.active_connections").gauge()).isNotNull();
+    }
+
+    @Nested
+    @SpringBootTest
+    @AutoConfigureMockMvc
+    @ActiveProfiles("test")
+    @TestPropertySource(properties = "phonghub.management.metrics-token=")
+    class BlankMetricsTokenFailClosedTest {
+
+        @Autowired
+        private MockMvc blankTokenMockMvc;
+
+        @Test
+        @DisplayName("Khi chưa cấu hình metrics-token thì /actuator/prometheus từ chối cả token mẫu (fail-closed)")
+        void rejectsDefaultTokenWhenBlank() throws Exception {
+            blankTokenMockMvc.perform(get("/actuator/prometheus")
+                    .header("Authorization", "Bearer phonghub-metrics-secret-token"))
+                .andExpect(status().isUnauthorized());
+            blankTokenMockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isUnauthorized());
+        }
     }
 }
 

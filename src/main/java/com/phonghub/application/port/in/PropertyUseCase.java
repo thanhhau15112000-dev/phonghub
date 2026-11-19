@@ -45,8 +45,13 @@ public interface PropertyUseCase {
         String name,
         String address,
         String description,
-        int totalRooms
+        int totalRooms,
+        UUID ownerId
     ) {
+        public CreatePropertyCommand(String name, String address, String description, int totalRooms) {
+            this(name, address, description, totalRooms, null);
+        }
+
         public CreatePropertyCommand {
             Property.validateInfo(name, address, totalRooms);
         }
