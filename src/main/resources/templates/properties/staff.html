@@ -35,10 +35,10 @@
                        placeholder="Tên đăng nhập hoặc email của nhân viên / kỹ thuật viên">
             </div>
             <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
-                <label style="font-size: 13px;"><input type="checkbox" name="canManageContracts" value="true"> Quản lý hợp đồng</label>
-                <label style="font-size: 13px;"><input type="checkbox" name="canCollectPayment" value="true"> Thu tiền</label>
-                <label style="font-size: 13px;"><input type="checkbox" name="canViewDocuments" value="true"> Xem giấy tờ người thuê</label>
-                <label style="font-size: 13px;"><input type="checkbox" name="canManageRoomsAndAssets" value="true"> Quản lý phòng và tài sản</label>
+                <label style="font-size: 13px;"><input type="checkbox" class="staff-perm" name="canManageContracts" value="true"> Quản lý hợp đồng</label>
+                <label style="font-size: 13px;"><input type="checkbox" class="staff-perm" name="canCollectPayment" value="true"> Thu tiền</label>
+                <label style="font-size: 13px;"><input type="checkbox" class="staff-perm" name="canViewDocuments" value="true"> Xem giấy tờ người thuê</label>
+                <label style="font-size: 13px;"><input type="checkbox" class="staff-perm" name="canManageRoomsAndAssets" value="true"> Quản lý phòng và tài sản</label>
                 <button type="submit" class="btn btn-primary">Phân công</button>
             </div>
         </form>
@@ -92,8 +92,19 @@
 <footer th:replace="~{fragments/layout :: footer}"></footer>
 <script th:replace="~{fragments/user-picker :: script}"></script>
 <script>
+    // Chọn kỹ thuật viên thì 4 quyền bị làm mờ, bỏ tích và không tích được (máy chủ cũng ép tắt).
+    function lockPermissionsFor(person) {
+        var technician = !!person && person.role === 'TECHNICIAN';
+        document.querySelectorAll('#assignStaffForm .staff-perm').forEach(function (box) {
+            if (technician) box.checked = false;
+            box.disabled = technician;
+            box.parentElement.style.opacity = technician ? '0.45' : '';
+            box.parentElement.title = technician ? 'Kỹ thuật viên chỉ xử lý phiếu bảo trì được giao' : '';
+        });
+    }
     wireUserPicker(document.querySelector('#assignStaffForm .user-picker'), {
-        typed: document.getElementById('usernameOrEmail')
+        typed: document.getElementById('usernameOrEmail'),
+        onChange: lockPermissionsFor
     });
 </script>
 </body>
