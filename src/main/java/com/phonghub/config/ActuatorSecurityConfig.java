@@ -5,6 +5,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -28,7 +30,7 @@ public class ActuatorSecurityConfig {
     private final String metricsToken;
 
     public ActuatorSecurityConfig(
-        @Value("${phonghub.management.metrics-token:phonghub-metrics-secret-token}") String metricsToken
+        @Value("${phonghub.management.metrics-token:}") String metricsToken
     ) {
         this.metricsToken = metricsToken;
     }
@@ -69,7 +71,10 @@ public class ActuatorSecurityConfig {
             FilterChain filterChain
         ) throws ServletException, IOException {
             String token = extractToken(request);
-            if (!expectedToken.isEmpty() && expectedToken.equals(token)) {
+            if (!expectedToken.isEmpty() && token != null && MessageDigest.isEqual(
+                expectedToken.getBytes(StandardCharsets.UTF_8),
+                token.getBytes(StandardCharsets.UTF_8)
+            )) {
                 var auth = new UsernamePasswordAuthenticationToken(
                     "metrics-scraper",
                     token,
