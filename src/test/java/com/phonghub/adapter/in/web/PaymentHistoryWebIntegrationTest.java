@@ -151,10 +151,17 @@ class PaymentHistoryWebIntegrationTest extends SeededWebTest {
     }
 
     @Test
-    @DisplayName("Tham số lọc sai trả 400")
+    @DisplayName("Tham số lọc sai trả 400; URL tenantId hoặc page sai kiểu trên UI chuyển hướng kèm errorMessage")
     void badFilter() throws Exception {
         mockMvc.perform(get(MINE).header("X-User-Id", TENANT_1).param("status", "NOPE")).andExpect(status().isBadRequest());
         mockMvc.perform(get(MINE).header("X-User-Id", TENANT_1).param("from", "2026-09-02").param("to", "2026-09-01"))
             .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/tenants/not-a-uuid/payments").header("X-User-Id", OWNER_1))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(flash().attributeExists("errorMessage"));
+        mockMvc.perform(get("/tenants/" + DataSeeder.TENANT_RECORD_ID + "/payments").param("page", "abc")
+                .header("X-User-Id", OWNER_1))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(flash().attributeExists("errorMessage"));
     }
 }

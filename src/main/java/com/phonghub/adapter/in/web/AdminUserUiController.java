@@ -10,6 +10,7 @@ import com.phonghub.domain.exception.DuplicateIdentityCardException;
 import com.phonghub.domain.exception.DuplicateUsernameException;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
+import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.util.UriUtils;
 
 @Controller
 @RequestMapping("/admin/users")
@@ -108,12 +110,13 @@ public class AdminUserUiController {
             int validPage = Math.max(1, Math.min(page, totalPages));
             StringBuilder redirectUrl = new StringBuilder("redirect:/admin/users");
             boolean hasParam = false;
-            if (role != null && !role.isBlank() && !role.equalsIgnoreCase("ALL")) {
-                redirectUrl.append("?role=").append(role);
+            if (roleToFilter != null) {
+                redirectUrl.append("?role=").append(roleToFilter.name());
                 hasParam = true;
             }
             if (!keyword.isEmpty()) {
-                redirectUrl.append(hasParam ? "&" : "?").append("q=").append(keyword);
+                redirectUrl.append(hasParam ? "&" : "?")
+                    .append("q=").append(UriUtils.encodeQueryParam(keyword, StandardCharsets.UTF_8));
                 hasParam = true;
             }
             if (validPage > 1) {
@@ -168,7 +171,7 @@ public class AdminUserUiController {
         RedirectAttributes redirectAttributes
     ) {
         if (!isAdmin(currentUserPort.getCurrentUser())) {
-            redirectAttributes.addFlashAttribute("tableErrorMessage", "Chỉ quản trị viên mới có thể bổ sung hồ sơ người thuê.");
+            redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên mới có thể bổ sung hồ sơ người thuê.");
             return "redirect:/";
         }
         Map<String, String> fieldErrors = new java.util.LinkedHashMap<>();
@@ -195,7 +198,9 @@ public class AdminUserUiController {
         model.addAttribute("profileForm", Map.of("phone", phone, "identityCardNumber", identityCardNumber));
         model.addAttribute("profileFieldErrors", fieldErrors);
         if (generalError != null) {
-            model.addAttribute("tableErrorMessage", generalError);
+            model.addAttribute("profileErrorMessage", generalError);
+        } else if (!fieldErrors.isEmpty()) {
+            model.addAttribute("profileErrorMessage", "Vui lòng kiểm tra lại SĐT và CCCD được đánh dấu.");
         }
         return listUsers(null, 1, 5, null, model, redirectAttributes);
     }

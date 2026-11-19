@@ -162,10 +162,16 @@ class ManualPaymentIntegrationTest extends SeededWebTest {
         Invoice invoice = rentInvoice();
         claim(invoice, TENANT_1, "500000", "CASH").andExpect(status().isCreated());
 
-        mockMvc.perform(get("/invoices/" + invoice.getId() + "/pay").header("X-User-Id", TENANT_1))
+        String payHtml = mockMvc.perform(get("/invoices/" + invoice.getId() + "/pay").header("X-User-Id", TENANT_1))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("id=\"claim-card\"")))
-            .andExpect(content().string(containsString("Chờ xác nhận")));
+            .andExpect(content().string(containsString("Chờ xác nhận")))
+            .andReturn().getResponse().getContentAsString();
+        int qrIdx = payHtml.indexOf("pay-transfer-layout");
+        int itemsIdx = payHtml.indexOf("Chi tiết hóa đơn");
+        int aiIdx = payHtml.indexOf("Hỏi về hóa đơn");
+        org.junit.jupiter.api.Assertions.assertTrue(qrIdx > 0 && itemsIdx > qrIdx && aiIdx > itemsIdx,
+            "QR payment section must render above invoice items and AI assistant");
         mockMvc.perform(get("/invoices/" + invoice.getId() + "/pay").header("X-User-Id", OWNER_1))
             .andExpect(status().isOk())
             .andExpect(content().string(containsString("id=\"record-card\"")));

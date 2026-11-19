@@ -528,7 +528,25 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         if (currentUser == null) {
             return 0;
         }
-        List<ChatRoomSummary> rooms = getRoomsForUser(currentUser);
-        return rooms.stream().mapToInt(ChatRoomSummary::unreadCount).sum();
+        // Chỉ đếm tin chưa đọc: không dựng tóm tắt phòng (tin mới nhất, tên người đối diện) như getRoomsForUser,
+        // vì số này được gọi ở mỗi lần mở trang và bởi widget chat.
+        List<ChatRoom> userRooms = new ArrayList<>(chatRoomRepositoryPort.findRoomsByUserId(currentUser.id()));
+        if (userRooms.stream().noneMatch(ChatRoom::isGlobal)) {
+            chatRoomRepositoryPort.findById(ChatRoom.GLOBAL_ROOM_ID).ifPresent(userRooms::add);
+        }
+        boolean scopedGlobal = userRooms.stream().anyMatch(ChatRoom::isGlobal)
+            && contactScope.reachableUserIds(currentUser) != null;
+        int total = 0;
+        for (ChatRoom room : userRooms) {
+            Instant lastRead = chatRoomRepositoryPort.getLastRead(room.id(), currentUser.id());
+            if (room.isGlobal() && scopedGlobal) {
+                total += (int) visibleMessages(currentUser, room, null, UNREAD_SCAN_LIMIT).stream()
+                    .filter(m -> !m.senderId().equals(currentUser.id()))
+                    .filter(m -> lastRead == null || m.createdAt().isAfter(lastRead)).count();
+            } else {
+                total += chatMessageRepositoryPort.countUnreadMessages(room.id(), currentUser.id(), lastRead);
+            }
+        }
+        return total;
     }
 }

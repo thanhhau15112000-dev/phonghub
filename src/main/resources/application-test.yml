@@ -1,4 +1,6 @@
 phonghub:
+  management:
+    metrics-token: ${PHONGHUB_METRICS_TOKEN:phonghub-metrics-secret-token}
   rate-limit:
     enabled: false
   demo:

@@ -9,6 +9,7 @@ import com.phonghub.domain.model.Notification;
 import com.phonghub.domain.model.UserRole;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -109,19 +110,10 @@ public class GlobalUiAdvice {
     public List<Notification> adminNotifications(HttpServletRequest request) {
         CurrentUser user = currentUser(request);
         if (user != null && user.role() == UserRole.ADMIN && notificationUseCase.isPresent()) {
-            return notificationUseCase.get().listAdminNotifications();
+            return notificationUseCase.get().listAdminNotifications().stream()
+                .sorted(Comparator.comparing(Notification::isResolved))
+                .toList();
         }
         return Collections.emptyList();
-    }
-
-    @ModelAttribute("unreadChatCount")
-    public int unreadChatCount(HttpServletRequest request) {
-        CurrentUser user = currentUser(request);
-        if (user != null && chatMessageUseCase.isPresent()) {
-            try {
-                return chatMessageUseCase.get().getTotalUnreadCount(user);
-            } catch (Exception ignored) {}
-        }
-        return 0;
     }
 }
