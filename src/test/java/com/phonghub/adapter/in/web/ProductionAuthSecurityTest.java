@@ -163,6 +163,11 @@ class ProductionAuthSecurityTest {
     }
 
     @Test
+    void htmxAssetIsPublic() throws Exception {
+        mockMvc.perform(get("/js/vendor/htmx.min.js")).andExpect(status().isOk());
+    }
+
+    @Test
     void browserLoginCreatesAnHttpSession() throws Exception {
         UUID userId = UUID.randomUUID();
         when(authUseCase.login("admin", "secret123")).thenReturn(new AuthTokenResponse(
@@ -1477,6 +1482,17 @@ class ProductionAuthSecurityTest {
             .andExpect(redirectedUrl("/login"));
 
         assertTrue(session.isInvalid(), "Session must be invalidated immediately when user is deleted");
+    }
+
+    @Test
+    void deletedUserHtmxSessionIsInvalidatedAndRedirected() throws Exception {
+        MockHttpSession session = loginAsAdmin();
+        when(userRepository.findById(any())).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/admin/users").session(session).header("HX-Request", "true"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().string("HX-Redirect", "/login"));
+        assertTrue(session.isInvalid());
     }
 
     @Test
