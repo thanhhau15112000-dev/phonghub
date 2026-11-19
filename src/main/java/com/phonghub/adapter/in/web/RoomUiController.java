@@ -166,12 +166,16 @@ public class RoomUiController {
         RedirectAttributes redirectAttributes
     ) {
         try {
+            CurrentUser currentUser = currentUserPort.getCurrentUser();
+            // Quản trị viên không xem hoặc tự ý ghi đè giá thuê phòng trên UI (#163, #326).
+            BigDecimal effectiveBasePrice = currentUser != null && currentUser.role() == UserRole.ADMIN
+                ? null : basePrice;
             Room room = roomUseCase.updateRoom(new RoomUseCase.UpdateRoomCommand(
                 id,
                 roomNumber,
                 floor,
                 areaSqm,
-                basePrice,
+                effectiveBasePrice,
                 maxOccupants,
                 version
             ));

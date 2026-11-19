@@ -548,7 +548,7 @@
                 </div>
             </div>
 
-            <div class="form-group" style="margin-bottom: 16px;">
+            <div th:if="${currentUser.role().name() != 'ADMIN'}" class="form-group" style="margin-bottom: 16px;">
                 <label class="form-label" for="editBasePrice">Giá thuê cơ bản (VNĐ / tháng) <span th:if="${canViewRoomPrice}" style="color: var(--danger-color, #dc2626);">*</span></label>
                 <input th:if="${canViewRoomPrice}" type="number" step="1000" min="0" id="editBasePrice" name="basePrice" th:value="${room.getBasePrice()}" class="form-control" required placeholder="VD: 3500000">
                 <input th:unless="${canViewRoomPrice}" type="number" step="1000" min="0" id="editBasePrice" name="basePrice" class="form-control" placeholder="Để trống để giữ giá hiện tại">

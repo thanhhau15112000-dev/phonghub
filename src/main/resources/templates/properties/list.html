@@ -35,6 +35,17 @@
                     <input type="number" name="totalRooms" class="form-control" value="10" min="0">
                 </div>
             </div>
+            <div th:if="${currentUser.role().name() == 'ADMIN'}" class="form-group" style="max-width: 420px;">
+                <label class="form-label" for="ownerId">Chủ trọ sở hữu *</label>
+                <select id="ownerId" name="ownerId" class="form-control" required>
+                    <option value="" disabled selected>Chọn chủ trọ...</option>
+                    <option th:each="owner : ${owners}" th:value="${owner.id()}"
+                            th:text="${owner.fullName() + (owner.username() != null ? ' (' + owner.username() + ')' : '')}">Chủ trọ</option>
+                </select>
+                <small th:if="${#lists.isEmpty(owners)}" style="color: #b91c1c; display: block; margin-top: 4px;">
+                    Chưa có tài khoản Chủ trọ đang hoạt động. Vui lòng tạo tài khoản Chủ trọ trước.
+                </small>
+            </div>
             <div class="form-group">
                 <label class="form-label">Địa chỉ *</label>
                 <input type="text" name="address" class="form-control" placeholder="Ví dụ: 123 Nguyễn Thị Thập, Quận 7" required>

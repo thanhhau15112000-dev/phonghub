@@ -180,10 +180,12 @@ public class PhongHubConfiguration {
         PhongHubCaches caches,
         ContractRepositoryPort contractRepo,
         InvoiceRepositoryPort invoiceRepo,
-        RoomRepositoryPort roomRepo
+        RoomRepositoryPort roomRepo,
+        UserRepositoryPort userRepo
     ) {
         return new CachingPropertyUseCase(
-            new PropertyService(propertyRepo, currentUserPort, authorizationService, auditPort, contractRepo, invoiceRepo, roomRepo),
+            new PropertyService(propertyRepo, currentUserPort, authorizationService, auditPort,
+                contractRepo, invoiceRepo, roomRepo, userRepo),
             caches, currentUserPort);
     }
 

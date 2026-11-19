@@ -5,7 +5,9 @@ import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.LateFeePolicyRepositoryPort;
+import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.LateFeePolicy;
+import com.phonghub.domain.model.UserRole;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -33,14 +35,14 @@ public class LateFeePolicyService implements LateFeePolicyUseCase {
     @Override
     public LateFeePolicy getPolicy(UUID propertyId) {
         CurrentUser user = currentUserPort.getCurrentUser();
-        authorizationService.assertOwnerOrAdmin(user, propertyId);
+        assertOwnerManageLateFee(user, propertyId);
         return policyRepository.findByPropertyId(propertyId).orElseGet(() -> LateFeePolicy.disabled(propertyId));
     }
 
     @Override
     public LateFeePolicy updatePolicy(UpdateCommand command) {
         CurrentUser user = currentUserPort.getCurrentUser();
-        authorizationService.assertOwnerOrAdmin(user, command.propertyId());
+        assertOwnerManageLateFee(user, command.propertyId());
 
         LateFeePolicy before = policyRepository.findByPropertyId(command.propertyId())
             .orElseGet(() -> LateFeePolicy.disabled(command.propertyId()));
@@ -52,6 +54,13 @@ public class LateFeePolicyService implements LateFeePolicyUseCase {
         auditPort.recordEvent(AuditPort.AuditEvent.of("LATE_FEE_POLICY_UPDATED", user.id(), "PROPERTY",
             command.propertyId().toString(), Map.of("before", describe(before), "after", describe(saved))));
         return saved;
+    }
+
+    private void assertOwnerManageLateFee(CurrentUser user, UUID propertyId) {
+        if (user != null && user.role() == UserRole.ADMIN) {
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.ADMIN_FINANCE_DENIED);
+        }
+        authorizationService.assertOwnerOrAdmin(user, propertyId);
     }
 
     private static Map<String, Object> describe(LateFeePolicy policy) {

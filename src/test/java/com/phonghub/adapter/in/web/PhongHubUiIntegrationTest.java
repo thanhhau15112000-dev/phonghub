@@ -313,7 +313,8 @@ class PhongHubUiIntegrationTest {
                 .param("name", "Nhà trọ Không Mô Tả")
                 .param("address", longAddress)
                 .param("description", "  ")
-                .param("totalRooms", "3"))
+                .param("totalRooms", "3")
+                .param("ownerId", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().is3xxRedirection());
         assertNull(propertyRepository.findAll().stream()
             .filter(p -> p.name().equals("Nhà trọ Không Mô Tả")).findFirst().orElseThrow().description(),

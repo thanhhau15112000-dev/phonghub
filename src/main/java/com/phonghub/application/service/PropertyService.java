@@ -15,6 +15,7 @@ import java.util.UUID;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.InvoiceRepositoryPort;
+import com.phonghub.application.port.out.UserRepositoryPort;
 import com.phonghub.domain.exception.ConflictException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
@@ -22,6 +23,7 @@ import com.phonghub.domain.model.Invoice;
 import java.util.Comparator;
 import com.phonghub.domain.exception.InvalidPropertyStatusException;
 import com.phonghub.domain.model.PropertyApprovalStatus;
+import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.util.Map;
 
@@ -34,6 +36,7 @@ public class PropertyService implements PropertyUseCase {
     private final ContractRepositoryPort contractRepository;
     private final InvoiceRepositoryPort invoiceRepository;
     private final RoomRepositoryPort roomRepository;
+    private final UserRepositoryPort userRepository;
 
     public PropertyService(
         PropertyRepositoryPort propertyRepository,
@@ -49,7 +52,7 @@ public class PropertyService implements PropertyUseCase {
         AuthorizationService authorizationService,
         AuditPort auditPort
     ) {
-        this(propertyRepository, currentUserPort, authorizationService, auditPort, null, null, null);
+        this(propertyRepository, currentUserPort, authorizationService, auditPort, null, null, null, null);
     }
 
     public PropertyService(
@@ -61,6 +64,20 @@ public class PropertyService implements PropertyUseCase {
         InvoiceRepositoryPort invoiceRepository,
         RoomRepositoryPort roomRepository
     ) {
+        this(propertyRepository, currentUserPort, authorizationService, auditPort,
+            contractRepository, invoiceRepository, roomRepository, null);
+    }
+
+    public PropertyService(
+        PropertyRepositoryPort propertyRepository,
+        CurrentUserPort currentUserPort,
+        AuthorizationService authorizationService,
+        AuditPort auditPort,
+        ContractRepositoryPort contractRepository,
+        InvoiceRepositoryPort invoiceRepository,
+        RoomRepositoryPort roomRepository,
+        UserRepositoryPort userRepository
+    ) {
         this.propertyRepository = propertyRepository;
         this.currentUserPort = currentUserPort;
         this.authorizationService = authorizationService;
@@ -68,6 +85,7 @@ public class PropertyService implements PropertyUseCase {
         this.contractRepository = contractRepository;
         this.invoiceRepository = invoiceRepository;
         this.roomRepository = roomRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -75,7 +93,12 @@ public class PropertyService implements PropertyUseCase {
         CurrentUser currentUser = currentUserPort.getCurrentUser();
         authorizationService.assertCanCreateProperty(currentUser);
 
-        UUID ownerId = currentUser.role() == UserRole.OWNER ? currentUser.id() : null;
+        UUID ownerId;
+        if (currentUser.role() == UserRole.OWNER) {
+            ownerId = currentUser.id();
+        } else {
+            ownerId = resolveRequestedOwner(command.ownerId());
+        }
         PropertyApprovalStatus approvalStatus = currentUser.role() == UserRole.OWNER
             ? PropertyApprovalStatus.PENDING
             : PropertyApprovalStatus.VERIFIED;
@@ -94,6 +117,19 @@ public class PropertyService implements PropertyUseCase {
         );
 
         return propertyRepository.save(property);
+    }
+
+    private UUID resolveRequestedOwner(UUID requestedOwnerId) {
+        if (requestedOwnerId == null || userRepository == null) {
+            return requestedOwnerId;
+        }
+        User owner = userRepository.findById(requestedOwnerId)
+            .filter(u -> u.role() == UserRole.OWNER)
+            .orElseThrow(() -> new IllegalArgumentException("Chủ trọ được chọn không hợp lệ."));
+        if (owner.status() != User.UserStatus.ACTIVE) {
+            throw new IllegalArgumentException("Tài khoản chủ trọ được chọn hiện không hoạt động.");
+        }
+        return owner.id();
     }
 
     @Override

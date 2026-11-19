@@ -205,7 +205,10 @@
             </div>
         </div>
 
-        <h3 style="margin: 16px 0 8px;">Nhà trọ chờ duyệt</h3>
+        <div class="flex-between" style="margin: 16px 0 8px;">
+            <h3 style="margin: 0;">Nhà trọ chờ duyệt</h3>
+            <a th:href="@{/properties(status='PENDING')}" class="btn btn-sm btn-secondary">Xem &amp; duyệt nhanh</a>
+        </div>
         <div th:if="${#lists.isEmpty(pendingProperties)}" class="empty-state">
             <p>Không có nhà trọ nào chờ duyệt.</p>
         </div>
@@ -215,6 +218,7 @@
                     <th>Nhà trọ</th>
                     <th>Chủ nhà</th>
                     <th>Gửi lúc</th>
+                    <th class="col-actions">Thao tác</th>
                 </tr>
             </thead>
             <tbody>
@@ -225,6 +229,11 @@
                     </td>
                     <td th:text="${p.ownerName() != null ? p.ownerName() : '—'}">Chủ nhà</td>
                     <td th:text="${p.createdAt() != null ? #temporals.format(p.createdAt(), 'dd/MM/yyyy HH:mm') : '—'}">01/10/2026</td>
+                    <td class="col-actions">
+                        <div class="table-actions">
+                            <a th:href="@{'/properties/' + ${p.id()}}" class="btn btn-sm btn-secondary">Chi tiết</a>
+                        </div>
+                    </td>
                 </tr>
             </tbody>
         </table>
@@ -311,7 +320,7 @@
     <div class="card" th:unless="${currentUser != null and currentUser.role().name() == 'TENANT'}">
         <div class="flex-between" style="margin-bottom: 12px;">
             <h2>Nhà trọ trong phạm vi</h2>
-            <a th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" th:href="@{/properties}" class="btn btn-primary btn-sm">+ Thêm nhà trọ</a>
+            <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'OWNER')}" th:href="@{/properties}" class="btn btn-primary btn-sm">+ Thêm nhà trọ</a>
         </div>
 
         <div th:if="${#lists.isEmpty(properties)}" class="empty-state">

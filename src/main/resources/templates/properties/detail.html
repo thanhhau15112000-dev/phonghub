@@ -46,7 +46,7 @@
                th:href="@{'/properties/' + ${property.id()} + '/tenants'}" class="btn btn-sm btn-secondary">Người thuê</a>
             <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
                th:href="@{'/properties/' + ${property.id()} + '/staff'}" class="btn btn-sm btn-secondary">Nhân sự</a>
-            <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or (currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()))}"
+            <a th:if="${currentUser != null and currentUser.role().name() == 'OWNER' and property.ownerId() == currentUser.id()}"
                th:href="@{'/properties/' + ${property.id()} + '/late-fee'}" class="btn btn-sm btn-secondary">Phạt trả trễ</a>
             <a th:href="@{/properties}" class="btn btn-sm">&larr; Quay lại danh sách nhà trọ</a>
         </div>
@@ -108,8 +108,8 @@
         </p>
     </div>
 
-    <!-- Tạo phòng kèm hiện trạng ban đầu -->
-    <div th:if="${currentUser != null and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED' and canManageRoomsAndAssets}" class="card">
+    <!-- Tạo phòng kèm hiện trạng ban đầu (chủ trọ hoặc nhân viên có quyền; quản trị viên không trực tiếp tạo phòng) -->
+    <div th:if="${currentUser != null and currentUser.role().name() != 'ADMIN' and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED' and canManageRoomsAndAssets}" class="card">
         <h2>Thêm phòng kèm biên bản hiện trạng</h2>
         <form th:action="@{'/properties/' + ${property.id()} + '/rooms'}" method="post" enctype="multipart/form-data">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -175,7 +175,7 @@
         </form>
     </div>
 
-    <div th:if="${currentUser != null and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED' and canManageRoomsAndAssets}" class="card">
+    <div th:if="${currentUser != null and currentUser.role().name() != 'ADMIN' and !property.isArchived() and property.approvalStatus() != null and property.approvalStatus().name() == 'VERIFIED' and canManageRoomsAndAssets}" class="card">
         <h2>Tạo nhiều phòng</h2>
         <form th:action="@{'/properties/' + ${property.id()} + '/rooms/batch'}" method="post" id="bulkRoomForm">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">

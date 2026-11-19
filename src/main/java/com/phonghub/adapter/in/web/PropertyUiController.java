@@ -5,6 +5,7 @@ import com.phonghub.application.port.in.PropertyUseCase;
 import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.in.RoomSetupUseCase;
 import com.phonghub.application.port.in.TenantUseCase;
+import com.phonghub.application.port.in.UserUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
@@ -20,9 +21,11 @@ import com.phonghub.domain.model.RoomPage;
 import com.phonghub.domain.model.RoomSearchCriteria;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.Tenant;
+import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -50,6 +53,7 @@ public class PropertyUiController {
     private final ContractRepositoryPort contractRepository;
     private final TenantRepositoryPort tenantRepository;
     private final TenantUseCase tenantUseCase;
+    private final UserUseCase userUseCase;
 
     public PropertyUiController(
         PropertyUseCase propertyUseCase,
@@ -60,7 +64,8 @@ public class PropertyUiController {
         AuthorizationService authorizationService,
         ContractRepositoryPort contractRepository,
         TenantRepositoryPort tenantRepository,
-        TenantUseCase tenantUseCase
+        TenantUseCase tenantUseCase,
+        UserUseCase userUseCase
     ) {
         this.propertyUseCase = propertyUseCase;
         this.roomUseCase = roomUseCase;
@@ -71,6 +76,7 @@ public class PropertyUiController {
         this.contractRepository = contractRepository;
         this.tenantRepository = tenantRepository;
         this.tenantUseCase = tenantUseCase;
+        this.userUseCase = userUseCase;
     }
 
     @GetMapping
@@ -101,6 +107,13 @@ public class PropertyUiController {
         model.addAttribute("selectedStatus", finalFilter != null ? finalFilter.name() : "ALL");
         model.addAttribute("totalCount", allProperties.size());
         model.addAttribute("archivedProperties", propertyUseCase.listArchivedProperties());
+        if (currentUser != null && currentUser.role() == UserRole.ADMIN) {
+            List<User> owners = userUseCase.listUsers().stream()
+                .filter(u -> u.role() == UserRole.OWNER && u.status() == User.UserStatus.ACTIVE)
+                .sorted(Comparator.comparing(User::fullName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+                .toList();
+            model.addAttribute("owners", owners);
+        }
         return "properties/list";
     }
 
@@ -160,11 +173,16 @@ public class PropertyUiController {
         @RequestParam String address,
         @RequestParam(required = false) String description,
         @RequestParam(defaultValue = "0") int totalRooms,
+        @RequestParam(required = false) UUID ownerId,
         RedirectAttributes redirectAttributes
     ) {
         try {
+            CurrentUser currentUser = currentUserPort.getCurrentUser();
+            if (currentUser != null && currentUser.role() == UserRole.ADMIN && ownerId == null) {
+                throw new IllegalArgumentException("Vui lòng chọn chủ trọ sở hữu cho nhà trọ.");
+            }
             Property property = propertyUseCase.createProperty(new PropertyUseCase.CreatePropertyCommand(
-                name, address, description, totalRooms
+                name, address, description, totalRooms, ownerId
             ));
             if (property.approvalStatus() == PropertyApprovalStatus.PENDING) {
                 redirectAttributes.addFlashAttribute("successMessage", "Đã gửi thông tin nhà trọ '" + property.name() + "' để chờ Quản trị viên duyệt.");

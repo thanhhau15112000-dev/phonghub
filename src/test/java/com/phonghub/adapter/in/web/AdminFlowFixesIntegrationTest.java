@@ -2,11 +2,13 @@ package com.phonghub.adapter.in.web;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -17,7 +19,10 @@ import com.phonghub.adapter.out.persistence.inmemory.DataSeeder;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryContractRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryInvoiceRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryMaintenanceTicketRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryMeterSubmissionRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryNotificationRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryPropertyRepository;
+import com.phonghub.adapter.out.persistence.inmemory.InMemoryRoomRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryTenantRepository;
 import com.phonghub.adapter.out.persistence.inmemory.InMemoryUserRepository;
 import com.phonghub.domain.model.Invoice;
@@ -28,7 +33,12 @@ import com.phonghub.domain.model.MaintenanceCause;
 import com.phonghub.domain.model.MaintenancePriority;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
+import com.phonghub.domain.model.MeterSubmission;
+import com.phonghub.domain.model.MeterType;
 import com.phonghub.domain.model.Notification;
+import com.phonghub.domain.model.Property;
+import com.phonghub.domain.model.PropertyApprovalStatus;
+import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
@@ -57,10 +67,14 @@ class AdminFlowFixesIntegrationTest extends SeededWebTest {
     @Autowired private InMemoryMaintenanceTicketRepository ticketRepository;
     @Autowired private InMemoryInvoiceRepository invoiceRepository;
     @Autowired private InMemoryNotificationRepository notificationRepository;
+    @Autowired private InMemoryPropertyRepository propertyRepository;
+    @Autowired private InMemoryRoomRepository roomRepository;
+    @Autowired private InMemoryMeterSubmissionRepository meterSubmissionRepository;
 
     @AfterEach
     void clearNotifications() {
         notificationRepository.clear();
+        meterSubmissionRepository.clear();
     }
 
     @Test
@@ -241,5 +255,101 @@ class AdminFlowFixesIntegrationTest extends SeededWebTest {
             .andExpect(model().attribute("totalCount", 1L))
             .andExpect(model().attribute("unresolvedCount", 1L))
             .andExpect(model().attribute("resolvedCount", 0L));
+    }
+
+    @Test
+    @DisplayName("Admin property creation via UI requires selecting an owner and links ownerId; Owner sees + Thêm nhà trọ on dashboard")
+    void adminCreatePropertyRequiresOwnerOnUi() throws Exception {
+        String listHtml = mockMvc.perform(get("/properties").header("X-User-Id", ADMIN))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        assertTrue(listHtml.contains("id=\"ownerId\""));
+        assertTrue(listHtml.contains(OWNER_1));
+
+        mockMvc.perform(post("/properties")
+                .header("X-User-Id", ADMIN)
+                .param("name", "Nhà trọ Thiếu Chủ")
+                .param("address", "123 Lê Lợi")
+                .param("totalRooms", "5"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/properties"))
+            .andExpect(flash().attribute("errorMessage", "Vui lòng chọn chủ trọ sở hữu cho nhà trọ."));
+
+        mockMvc.perform(post("/properties")
+                .header("X-User-Id", ADMIN)
+                .param("name", "Nhà trọ Có Chủ")
+                .param("address", "456 Hai Bà Trưng")
+                .param("totalRooms", "8")
+                .param("ownerId", OWNER_1))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(flash().attributeExists("successMessage"));
+
+        Property created = propertyRepository.findAll().stream()
+            .filter(p -> p.name().equals("Nhà trọ Có Chủ"))
+            .findFirst().orElseThrow();
+        assertEquals(LocalDemoAuthenticationAdapter.OWNER_1_ID, created.ownerId());
+        assertEquals(PropertyApprovalStatus.VERIFIED, created.approvalStatus());
+
+        String ownerDashboard = mockMvc.perform(get("/dashboard").header("X-User-Id", OWNER_1))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        assertTrue(ownerDashboard.contains("+ Thêm nhà trọ"));
+    }
+
+    @Test
+    @DisplayName("Admin scope standardization: no late-fee, room-creation, blind basePrice edit, or meter approval controls")
+    void adminScopeStandardizationOnPropertyAndRoom() throws Exception {
+        String adminPropHtml = mockMvc.perform(get("/properties/" + DataSeeder.PROP_1_ID).header("X-User-Id", ADMIN))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        assertFalse(adminPropHtml.contains("/late-fee"));
+        assertFalse(adminPropHtml.contains("Thêm phòng kèm biên bản hiện trạng"));
+        assertFalse(adminPropHtml.contains("Tạo nhiều phòng"));
+        assertTrue(adminPropHtml.contains("/staff"));
+
+        String ownerPropHtml = mockMvc.perform(get("/properties/" + DataSeeder.PROP_1_ID).header("X-User-Id", OWNER_1))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        assertTrue(ownerPropHtml.contains("/late-fee"));
+        assertTrue(ownerPropHtml.contains("Thêm phòng kèm biên bản hiện trạng"));
+
+        mockMvc.perform(get("/properties/" + DataSeeder.PROP_1_ID + "/late-fee").header("X-User-Id", ADMIN))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(flash().attributeExists("errorMessage"));
+
+        // Room edit modal hides basePrice for ADMIN and server ignores basePrice submitted by ADMIN on UI endpoint
+        String adminRoomHtml = mockMvc.perform(get("/rooms/" + DataSeeder.ROOM_104_ID).header("X-User-Id", ADMIN))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        assertTrue(adminRoomHtml.contains("id=\"editRoomModal\""));
+        assertFalse(adminRoomHtml.contains("id=\"editBasePrice\""));
+
+        Room before = roomRepository.findById(DataSeeder.ROOM_104_ID).orElseThrow();
+        mockMvc.perform(post("/rooms/" + DataSeeder.ROOM_104_ID + "/edit")
+                .header("X-User-Id", ADMIN)
+                .param("roomNumber", "P104")
+                .param("floor", "1")
+                .param("areaSqm", "28")
+                .param("basePrice", "1000")
+                .param("maxOccupants", "2")
+                .param("version", Long.toString(before.getVersion())))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(flash().attributeExists("successMessage"));
+        Room after = roomRepository.findById(DataSeeder.ROOM_104_ID).orElseThrow();
+        assertEquals(0, before.getBasePrice().compareTo(after.getBasePrice()));
+
+        // Meter submissions: ADMIN can view, does not see Duyệt / Từ chối forms
+        meterSubmissionRepository.save(new MeterSubmission(
+            UUID.randomUUID(), DataSeeder.ROOM_101_ID, MeterType.ELECTRIC, new BigDecimal("1234"),
+            "meter-photo-key", "image/png", new BigDecimal("1234"), new BigDecimal("0.99"), "tesseract",
+            MeterSubmission.MatchStatus.MATCH, MeterSubmission.Status.PENDING, LocalDemoAuthenticationAdapter.TENANT_1_ID,
+            Instant.now(), null, null, null, null, null));
+        String adminMeterHtml = mockMvc.perform(get("/rooms/" + DataSeeder.ROOM_101_ID + "/meter-submissions")
+                .header("X-User-Id", ADMIN))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        assertTrue(adminMeterHtml.contains("Chờ duyệt"));
+        assertFalse(adminMeterHtml.contains("/accept"));
+        assertFalse(adminMeterHtml.contains("/reject"));
     }
 }
