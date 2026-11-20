@@ -266,8 +266,10 @@ public class InMemoryPersistenceConfig {
     }
 
     @Bean
-    public com.phonghub.adapter.out.persistence.inmemory.InMemoryChatMessageRepository chatMessageRepository() {
-        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryChatMessageRepository();
+    public com.phonghub.adapter.out.persistence.inmemory.InMemoryChatMessageRepository chatMessageRepository(
+        com.phonghub.adapter.out.persistence.inmemory.InMemoryChatRoomRepository chatRoomRepository
+    ) {
+        return new com.phonghub.adapter.out.persistence.inmemory.InMemoryChatMessageRepository(chatRoomRepository);
     }
 
     @Bean

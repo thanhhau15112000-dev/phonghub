@@ -17,6 +17,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.DisplayName;
@@ -129,6 +130,18 @@ class ChatPostgresTest {
 
         rooms.updateLastRead(directId, TENANT, m3.createdAt());
         assertEquals(m3.createdAt(), rooms.getLastRead(directId, TENANT));
+
+        // batch queries (#356): latest messages, unread by room ids, và countTotalUnread (kèm global scope #345)
+        Map<UUID, ChatMessage> latestBatch = messages.findLatestMessagesByRoomIds(List.of(directId, ChatRoom.GLOBAL_ROOM_ID));
+        assertEquals(1, latestBatch.size());
+        assertEquals(mediaOnly, latestBatch.get(directId).id());
+        Map<UUID, Integer> unreadBatch = messages.countUnreadByRoomIds(STAFF, List.of(directId, ChatRoom.GLOBAL_ROOM_ID));
+        assertEquals(2, unreadBatch.getOrDefault(directId, 0));
+        assertEquals(2, messages.countTotalUnread(STAFF, null));
+        messages.save(new ChatMessage(UUID.randomUUID(), ChatRoom.GLOBAL_ROOM_ID, ADMIN, "Admin", "Thông báo global",
+            T0.plusSeconds(250), null));
+        assertEquals(3, messages.countTotalUnread(STAFF, Set.of(ADMIN, TENANT)));
+        assertEquals(2, messages.countTotalUnread(STAFF, Set.of(TENANT))); // không tính tin ADMIN nếu ngoài scope
 
         // kênh chung: người chưa có dòng thành viên vẫn ghi được mốc đã đọc
         rooms.updateLastRead(ChatRoom.GLOBAL_ROOM_ID, ADMIN, T0.plusSeconds(300));

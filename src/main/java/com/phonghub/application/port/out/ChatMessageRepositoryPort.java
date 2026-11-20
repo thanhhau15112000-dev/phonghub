@@ -3,7 +3,9 @@ package com.phonghub.application.port.out;
 import com.phonghub.domain.model.ChatMessage;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 public interface ChatMessageRepositoryPort {
@@ -13,4 +15,7 @@ public interface ChatMessageRepositoryPort {
     List<ChatMessage> findByRoomId(UUID roomId, Instant before, int limit);
     Optional<ChatMessage> findLatestMessageByRoomId(UUID roomId);
     int countUnreadMessages(UUID roomId, UUID userId, Instant since);
+    int countTotalUnread(UUID userId, Set<UUID> visibleGlobalSenderIds);
+    Map<UUID, ChatMessage> findLatestMessagesByRoomIds(List<UUID> roomIds);
+    Map<UUID, Integer> countUnreadByRoomIds(UUID userId, List<UUID> roomIds);
 }

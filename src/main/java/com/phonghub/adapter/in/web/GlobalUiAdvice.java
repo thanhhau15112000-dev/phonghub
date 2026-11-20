@@ -27,7 +27,6 @@ public class GlobalUiAdvice {
     private final Optional<DemoActorPort> demoActorPort;
     private final Optional<NotificationUseCase> notificationUseCase;
     private final Optional<NotificationInboxUseCase> notificationInbox;
-    private final Optional<com.phonghub.application.port.in.ChatMessageUseCase> chatMessageUseCase;
     private final long chatMaxImageBytes;
     private final long chatMaxVideoBytes;
 
@@ -37,14 +36,12 @@ public class GlobalUiAdvice {
         @Value("${phonghub.chat.max-video-bytes:10485760}") long chatMaxVideoBytes,
         Optional<DemoActorPort> demoActorPort,
         Optional<NotificationUseCase> notificationUseCase,
-        Optional<NotificationInboxUseCase> notificationInbox,
-        Optional<com.phonghub.application.port.in.ChatMessageUseCase> chatMessageUseCase
+        Optional<NotificationInboxUseCase> notificationInbox
     ) {
         this.demoEnabled = demoEnabled;
         this.demoActorPort = demoActorPort;
         this.notificationUseCase = notificationUseCase;
         this.notificationInbox = notificationInbox;
-        this.chatMessageUseCase = chatMessageUseCase;
         this.chatMaxImageBytes = chatMaxImageBytes;
         this.chatMaxVideoBytes = Math.min(chatMaxVideoBytes, chatMaxImageBytes);
     }

@@ -299,10 +299,12 @@
         const CHAT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
         const CHAT_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
         const CHAT_MAX_ATTACHMENTS = 5;
+        const GLOBAL_ROOM_ID = '00000000-0000-0000-0000-000000000001';
         let activeRecipientName = '';
         let activeRecipientAvatar = '';
         let activeRoomType = 'DIRECT';
         let cachedContacts = [];
+        let contactsLoaded = false;
         let cachedRooms = [];
 
         // Danh sách các phòng chat đang được thu nhỏ (Chat Heads)
@@ -798,7 +800,8 @@
             `;
 
             const targetRoom = cachedRooms.find(r => String(r.id).toLowerCase() === String(msg.chatRoomId).toLowerCase());
-            const isGlobal = targetRoom && targetRoom.type === 'GLOBAL';
+            const isGlobal = (targetRoom && targetRoom.type === 'GLOBAL')
+                || String(msg.chatRoomId).toLowerCase() === GLOBAL_ROOM_ID;
             const avatarInitial = isGlobal ? '🌐' : (msg.senderName ? msg.senderName.trim().charAt(msg.senderName.trim().lastIndexOf(' ') + 1) || msg.senderName.charAt(0) : 'U');
             const avatarColor = isGlobal ? 'linear-gradient(135deg, #0084ff, #4f46e5)' : getAvatarColor(msg.senderName);
             const senderDisplayName = isGlobal ? `${msg.senderName} (Kênh chung)` : (msg.senderName || 'Tin nhắn mới');
@@ -864,17 +867,29 @@
             return `${day}/${month}`;
         }
 
-        // Tải và hiển thị danh sách người dùng trong popup
+        function isContactsModalOpen() {
+            const modal = document.getElementById('phonghubNewMessageModal');
+            return modal && modal.style.display === 'flex';
+        }
+
+        // Tải và hiển thị danh sách người dùng trong popup (cache contacts sau lần mở đầu tiên)
         async function loadAndRenderContacts() {
             const container = document.getElementById('phonghubContactsList');
             try {
-                const [contactsRes, roomsRes] = await Promise.all([
-                    fetch('/api/chat/contacts'),
-                    fetch('/api/chat/rooms')
-                ]);
-
-                if (contactsRes.ok) cachedContacts = await contactsRes.json();
-                if (roomsRes.ok) cachedRooms = await roomsRes.json();
+                if (!contactsLoaded) {
+                    const [contactsRes, roomsRes] = await Promise.all([
+                        fetch('/api/chat/contacts'),
+                        fetch('/api/chat/rooms')
+                    ]);
+                    if (contactsRes.ok) {
+                        cachedContacts = await contactsRes.json();
+                        contactsLoaded = true;
+                    }
+                    if (roomsRes.ok) cachedRooms = await roomsRes.json();
+                } else {
+                    const roomsRes = await fetch('/api/chat/rooms');
+                    if (roomsRes.ok) cachedRooms = await roomsRes.json();
+                }
 
                 const filterInput = document.getElementById('phonghubContactFilterInput');
                 const keyword = filterInput ? filterInput.value.toLowerCase().trim() : '';
@@ -1209,10 +1224,9 @@
                         updateSeenStatusUI(peerLastReadHeader);
                     }
                     scrollMessagesToBottom();
-                    fetch(`/api/chat/rooms/${roomId}/read`, { method: 'POST' }).then(() => {
-                        refreshUnreadBadge();
-                        loadAndRenderContacts();
-                    });
+                    // GET /messages đã tự đánh dấu đã đọc trên server nên chỉ cần đồng bộ lại badge & danh sách nếu đang mở
+                    refreshUnreadBadge();
+                    if (isContactsModalOpen()) loadAndRenderContacts();
                 }
             } catch (err) {
                 console.error('Lỗi khi tải tin nhắn phòng chat:', err);
@@ -1433,6 +1447,7 @@
         }
 
         function updateGlobalBadgeCount() {
+            if (!cachedRooms || cachedRooms.length === 0) return;
             const total = cachedRooms.reduce((sum, r) => sum + (r.unreadCount || 0), 0);
             const badge = document.getElementById('phonghubGlobalUnreadBadge');
             if (badge) {
@@ -1488,7 +1503,7 @@
         // Lấy những gì đã lỡ trong lúc mất kết nối: số tin chưa đọc, danh sách phòng, tin của phòng đang mở
         async function resyncAfterReconnect() {
             refreshUnreadBadge();
-            loadAndRenderContacts();
+            if (isContactsModalOpen()) loadAndRenderContacts();
             const roomId = activeFloatingRoomId;
             if (!roomId) return;
             try {
@@ -1532,11 +1547,13 @@
                         appendDockedMessageUI(msg);
                         fetch(`/api/chat/rooms/${activeFloatingRoomId}/read`, { method: 'POST' }).then(() => {
                             refreshUnreadBadge();
-                            loadAndRenderContacts();
+                            if (isContactsModalOpen()) loadAndRenderContacts();
                         });
                     } else {
                         refreshUnreadBadge();
-                        await loadAndRenderContacts();
+                        if (isContactsModalOpen()) {
+                            await loadAndRenderContacts();
+                        }
                         if (!isFromMe) {
                             playMessageNotificationSound();
                             showIncomingMessageToast(msg);
