@@ -81,10 +81,10 @@ public class FaqSearchAdapter implements FaqSearchPort {
         try {
             queryVector = queryEmbedding(query);
         } catch (AiUnavailableException ex) {
-            return List.of();
+            return lexicalFallback(query, candidates, limit);
         }
         if (queryVector.length != dimensions || !isFinite(queryVector)) {
-            return List.of();
+            return lexicalFallback(query, candidates, limit);
         }
 
         return candidates.stream()
@@ -95,6 +95,48 @@ public class FaqSearchAdapter implements FaqSearchPort {
             .map(scored -> new FaqMatch(scored.faq().id(), scored.faq().category(), scored.faq().title(),
                 scored.faq().question(), scored.faq().answer(), scored.faq().source(), scored.score()))
             .toList();
+    }
+
+    private static List<FaqMatch> lexicalFallback(String query, List<IndexedFaq> candidates, int limit) {
+        Set<String> tokens = tokenizeVietnamese(query);
+        if (tokens.isEmpty()) {
+            return List.of();
+        }
+        return candidates.stream()
+            .map(entry -> new ScoredFaq(entry, lexicalScore(tokens, entry)))
+            .filter(scored -> scored.score() >= 0.25)
+            .sorted(Comparator.comparingDouble(ScoredFaq::score).reversed().thenComparing(scored -> scored.faq().id()))
+            .limit(limit)
+            .map(scored -> new FaqMatch(scored.faq().id(), scored.faq().category(), scored.faq().title(),
+                scored.faq().question(), scored.faq().answer(), scored.faq().source(), scored.score()))
+            .toList();
+    }
+
+    private static double lexicalScore(Set<String> queryTokens, IndexedFaq entry) {
+        Set<String> docTokens = tokenizeVietnamese(entry.title() + " " + entry.question());
+        if (docTokens.isEmpty()) {
+            return 0;
+        }
+        long hits = queryTokens.stream().filter(docTokens::contains).count();
+        if (hits == 0) {
+            return 0;
+        }
+        return (double) hits / Math.max(1, queryTokens.size());
+    }
+
+    private static Set<String> tokenizeVietnamese(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return Set.of();
+        }
+        String normalized = java.text.Normalizer.normalize(raw, java.text.Normalizer.Form.NFD)
+            .replaceAll("\\p{M}", "")
+            .replace('đ', 'd')
+            .replace('Đ', 'D')
+            .toLowerCase(Locale.ROOT)
+            .replaceAll("[^a-z0-9\\s]", " ");
+        return java.util.Arrays.stream(normalized.split("\\s+"))
+            .filter(t -> t.length() >= 2)
+            .collect(Collectors.toSet());
     }
 
     private double[] queryEmbedding(String query) {

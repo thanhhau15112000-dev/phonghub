@@ -171,4 +171,28 @@ public class PostgresRoomRepository implements RoomRepositoryPort {
         Integer count = jdbcTemplate.queryForObject(sql, Map.of("id", id), Integer.class);
         return count != null && count > 0;
     }
+
+    @Override
+    public Optional<RoomStatusCounts> findStatusCountsByPropertyIds(Collection<UUID> propertyIds) {
+        if (propertyIds == null || propertyIds.isEmpty()) {
+            return Optional.of(new RoomStatusCounts(0, 0, 0, 0));
+        }
+        String sql = """
+            SELECT
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE status = 'AVAILABLE') AS available,
+                COUNT(*) FILTER (WHERE status = 'OCCUPIED') AS occupied,
+                COUNT(*) FILTER (WHERE status = 'MAINTENANCE') AS maintenance
+            FROM rooms
+            WHERE property_id IN (:propertyIds) AND archived_at IS NULL
+            """;
+        RoomStatusCounts counts = jdbcTemplate.queryForObject(sql, Map.of("propertyIds", propertyIds), (rs, rowNum) ->
+            new RoomStatusCounts(
+                rs.getLong("total"),
+                rs.getLong("available"),
+                rs.getLong("occupied"),
+                rs.getLong("maintenance")
+            ));
+        return Optional.ofNullable(counts);
+    }
 }

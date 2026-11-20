@@ -23,4 +23,10 @@ public interface RoomRepositoryPort {
     Optional<Room> findByPropertyIdAndRoomNumber(UUID propertyId, String roomNumber);
     List<Room> findAllById(Collection<UUID> ids);
     boolean existsById(UUID id);
+
+    default Optional<RoomStatusCounts> findStatusCountsByPropertyIds(Collection<UUID> propertyIds) {
+        return Optional.empty();
+    }
+
+    record RoomStatusCounts(long total, long available, long occupied, long maintenance) {}
 }

@@ -13,6 +13,12 @@ public interface AiAssistantUseCase {
     AiWidgetContext getWidgetContext();
     AiResponse askAssistant(String contextType, UUID targetId, String question);
 
+    default AiResponse askAssistant(String contextType, UUID targetId, String question, List<ChatMessageInput> history) {
+        return askAssistant(contextType, targetId, question);
+    }
+
+    record ChatMessageInput(String role, String content) {}
+
     record ContextOption(String contextType, UUID targetId, String label) {}
 
     record QuickPrompt(String label, String question, String contextType, UUID targetId) {}

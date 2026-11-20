@@ -10,10 +10,13 @@ public class AiAssistantProperties {
     private String model = "gemini-3.8-flash";
     private String embeddingModel = "gemini-faq-embedding";
     private int embeddingDimensions = 768;
-    private int timeoutSeconds = 20;
-    private int maxOutputTokens = 600;
-    /** Gửi kèm reasoning_effort cho mô hình; để trống thì không gửi (OpenAI gpt-4o-mini không nhận tham số này, #322). */
+    private int timeoutSeconds = 25;
+    private int maxOutputTokens = 1200;
+    /** Gửi kèm reasoning_effort cho mô hình; để trống thì không gửi (OpenAI gpt-4o-mini / Groq không nhận tham số này, #322). */
     private String reasoningEffort = "low";
+    private String fallbackBaseUrl = "";
+    private String fallbackApiKey = "";
+    private String fallbackModel = "";
     private int comparisonPeriods = 3;
     private int faqMaxResults = 3;
     private double faqMinimumSimilarity = 0.65;
@@ -36,6 +39,12 @@ public class AiAssistantProperties {
     public void setMaxOutputTokens(int maxOutputTokens) { this.maxOutputTokens = maxOutputTokens; }
     public String getReasoningEffort() { return reasoningEffort; }
     public void setReasoningEffort(String reasoningEffort) { this.reasoningEffort = reasoningEffort; }
+    public String getFallbackBaseUrl() { return fallbackBaseUrl; }
+    public void setFallbackBaseUrl(String fallbackBaseUrl) { this.fallbackBaseUrl = fallbackBaseUrl; }
+    public String getFallbackApiKey() { return fallbackApiKey; }
+    public void setFallbackApiKey(String fallbackApiKey) { this.fallbackApiKey = fallbackApiKey; }
+    public String getFallbackModel() { return fallbackModel; }
+    public void setFallbackModel(String fallbackModel) { this.fallbackModel = fallbackModel; }
     public int getComparisonPeriods() { return comparisonPeriods; }
     public void setComparisonPeriods(int comparisonPeriods) { this.comparisonPeriods = comparisonPeriods; }
     public int getFaqMaxResults() { return faqMaxResults; }

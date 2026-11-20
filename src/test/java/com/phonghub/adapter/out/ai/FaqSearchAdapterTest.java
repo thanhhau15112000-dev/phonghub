@@ -84,6 +84,21 @@ class FaqSearchAdapterTest {
         verify(embeddingPort, times(0)).embed(anyString());
     }
 
+    @Test
+    void fallsBackToLexicalMatchWhenEmbeddingProviderIsUnavailable() {
+        AiEmbeddingPort embeddingPort = mock(AiEmbeddingPort.class);
+        when(embeddingPort.embed(anyString())).thenThrow(new com.phonghub.application.exception.AiUnavailableException());
+        FaqSearchAdapter adapter = new FaqSearchAdapter(List.of(
+            faq("invoice-1", "invoice", "Thanh toán hóa đơn điện nước", new double[] {1, 0}),
+            faq("general-1", "general", "Đổi mật khẩu tài khoản", new double[] {0, 1})
+        ), embeddingPort, 2, 0.65, 10);
+
+        List<FaqMatch> result = adapter.search("thanh toán hóa đơn", Set.of("invoice", "general"), 2);
+
+        assertEquals(1, result.size());
+        assertEquals("invoice-1", result.getFirst().id());
+    }
+
     private static FaqSearchAdapter.IndexedFaq faq(String id, String category, String title, double[] vector) {
         return new FaqSearchAdapter.IndexedFaq(id, category, title, "Question", "Answer", "Source", vector);
     }

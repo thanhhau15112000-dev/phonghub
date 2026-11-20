@@ -1,4 +1,5 @@
-<div th:fragment="floatingAiWidget" th:if="${currentUser != null}" id="phonghubFloatingAiContainer">
+<div th:fragment="floatingAiWidget" th:if="${currentUser != null}" id="phonghubFloatingAiContainer"
+     th:data-user-id="${currentUser.id()}">
     <style>
         #phonghubAiToggleBtn:hover {
             background-color: #f8fafc !important;
@@ -22,14 +23,17 @@
             opacity: 0.45;
             cursor: wait;
         }
-        #phonghubAiMessagesPane::-webkit-scrollbar {
+        #phonghubAiMessagesPane::-webkit-scrollbar,
+        #phonghubAiHistoryList::-webkit-scrollbar {
             width: 6px;
         }
-        #phonghubAiMessagesPane::-webkit-scrollbar-thumb {
+        #phonghubAiMessagesPane::-webkit-scrollbar-thumb,
+        #phonghubAiHistoryList::-webkit-scrollbar-thumb {
             background: #cbd5e1;
             border-radius: 6px;
         }
-        #phonghubAiMessagesPane::-webkit-scrollbar-track {
+        #phonghubAiMessagesPane::-webkit-scrollbar-track,
+        #phonghubAiHistoryList::-webkit-scrollbar-track {
             background: transparent;
         }
         .phonghub-ai-chip {
@@ -48,6 +52,56 @@
             background-color: #e2e8f0;
             border-color: #94a3b8;
         }
+        .phonghub-ai-history-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            padding: 7px 9px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: background-color 0.15s ease, border-color 0.15s ease;
+        }
+        .phonghub-ai-history-item:hover {
+            background-color: #f1f5f9;
+        }
+        .phonghub-ai-history-item.active {
+            background-color: #eff6ff;
+            border-color: #bfdbfe;
+        }
+        .phonghub-ai-history-del {
+            display: none;
+            background: none;
+            border: none;
+            color: #64748b;
+            font-size: 13px;
+            line-height: 1;
+            padding: 2px 4px;
+            border-radius: 4px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .phonghub-ai-history-item:hover .phonghub-ai-history-del {
+            display: inline-flex;
+        }
+        .phonghub-ai-history-del:hover {
+            background-color: #fee2e2;
+            color: #dc2626;
+        }
+        @media (max-width: 620px) {
+            #phonghubAiModal {
+                width: 348px !important;
+            }
+            #phonghubAiSidebar {
+                position: absolute !important;
+                top: 0;
+                bottom: 0;
+                left: 0;
+                z-index: 5;
+                box-shadow: 4px 0 16px rgba(15, 23, 42, 0.14);
+            }
+        }
         @media (max-width: 480px) {
             #phonghubAiModal {
                 left: 8px !important;
@@ -58,7 +112,7 @@
         }
     </style>
 
-    <!-- Nút tròn Trợ lý AI phía trên nút Soạn tin nhắn: Theme trắng viền xám đồng nhất PhongHub -->
+    <!-- Nút tròn Trợ lý AI phía trên nút Soạn tin nhắn -->
     <button type="button" id="phonghubAiToggleBtn" aria-label="Trợ lý AI" title="Trợ lý AI"
             style="position: fixed; bottom: 78px; right: 20px; width: 48px; height: 48px; border-radius: 50%; background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.14); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 99999; transition: background-color 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: block;" aria-hidden="true">
@@ -67,60 +121,96 @@
         </svg>
     </button>
 
-    <!-- Khung chat AI docked sát mép dưới: Style & tổ chức đồng nhất với phonghubDockedMessengerBox -->
+    <!-- Khung chat AI docked sát mép dưới: hỗ trợ sidebar lịch sử đóng/mở bên trái -->
     <div id="phonghubAiModal" role="dialog" aria-labelledby="phonghubAiModalTitle"
-         style="display: none; position: fixed; bottom: 0; right: 86px; width: 348px; height: 465px; background-color: #ffffff; color: #0f172a; border-radius: 12px 12px 0 0; box-shadow: 0 12px 36px rgba(15, 23, 42, 0.16), 0 2px 10px rgba(15, 23, 42, 0.08); border: 1px solid #cbd5e1; border-bottom: none; z-index: 100001; flex-direction: column; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; transition: right 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;">
+         style="display: none; position: fixed; bottom: 0; right: 86px; width: 348px; height: 465px; background-color: #ffffff; color: #0f172a; border-radius: 12px 12px 0 0; box-shadow: 0 12px 36px rgba(15, 23, 42, 0.16), 0 2px 10px rgba(15, 23, 42, 0.08); border: 1px solid #cbd5e1; border-bottom: none; z-index: 100001; flex-direction: column; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; transition: width 0.2s ease, right 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;">
         <!-- Header -->
-        <div style="padding: 10px 14px; background-color: #ffffff; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; user-select: none;">
-            <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
-                <div style="width: 36px; height: 36px; border-radius: 50%; background: #e2e8f0; color: #0f172a; display: flex; align-items: center; justify-content: center; border: 1.5px solid #cbd5e1; flex-shrink: 0;">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <div style="padding: 10px 12px; background-color: #ffffff; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; user-select: none;">
+            <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                <button type="button" id="phonghubAiSidebarToggleBtn" class="phonghub-icon-btn" aria-label="Lịch sử trò chuyện" title="Lịch sử trò chuyện">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="16" rx="2"/>
+                        <line x1="9" y1="4" x2="9" y2="20"/>
+                    </svg>
+                </button>
+                <div style="width: 34px; height: 34px; border-radius: 50%; background: #e2e8f0; color: #0f172a; display: flex; align-items: center; justify-content: center; border: 1.5px solid #cbd5e1; flex-shrink: 0;">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"/>
                         <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/>
                     </svg>
                 </div>
                 <div style="min-width: 0; display: flex; flex-direction: column;">
-                    <span id="phonghubAiModalTitle" style="font-weight: 700; font-size: 14px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; letter-spacing: -0.1px;">Trợ lý AI</span>
+                    <span id="phonghubAiModalTitle" style="font-weight: 700; font-size: 14px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.1px;">Trợ lý AI</span>
                     <span id="phonghubAiRoleBadge" style="font-size: 11px; color: #64748b; line-height: 1.2;"></span>
                 </div>
             </div>
-            <div style="display: flex; align-items: center; gap: 4px;">
+            <div style="display: flex; align-items: center; gap: 2px;">
+                <button type="button" id="phonghubAiNewChatBtn" class="phonghub-icon-btn" aria-label="Cuộc trò chuyện mới" title="Cuộc trò chuyện mới">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                </button>
                 <button type="button" id="phonghubAiCloseBtn" class="phonghub-icon-btn" aria-label="Đóng" title="Đóng" style="font-size: 17px; font-weight: 700; line-height: 1;">✕</button>
             </div>
         </div>
 
-        <!-- Chọn ngữ cảnh (chỉ hiện khi có từ 2 ngữ cảnh trở lên hoặc mở từ 1 hóa đơn) -->
-        <div id="phonghubAiContextRow" style="display: none; padding: 8px 14px; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;">
-            <select id="phonghubAiContextSelect" aria-label="Ngữ cảnh"
-                    style="width: 100%; background-color: #f1f5f9; color: #0f172a; border-radius: 20px; border: 1px solid #e2e8f0; padding: 6px 12px; font-size: 12.5px; outline: none; cursor: pointer;"></select>
-        </div>
+        <!-- Body: Sidebar đóng/mở bên trái + Luồng chat bên phải -->
+        <div style="flex: 1; display: flex; min-height: 0; position: relative; overflow: hidden;">
+            <!-- Sidebar lịch sử cuộc trò chuyện -->
+            <aside id="phonghubAiSidebar" aria-label="Lịch sử cuộc trò chuyện"
+                   style="display: none; width: 190px; background-color: #ffffff; border-right: 1px solid #e2e8f0; flex-direction: column; flex-shrink: 0; min-height: 0;">
+                <div style="padding: 8px; border-bottom: 1px solid #f1f5f9;">
+                    <button type="button" id="phonghubAiSidebarNewBtn"
+                            style="width: 100%; padding: 6px 10px; border-radius: 16px; border: 1px solid #cbd5e1; background-color: #f8fafc; color: #0f172a; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                        + Đoạn chat mới
+                    </button>
+                </div>
+                <div id="phonghubAiHistoryList" style="flex: 1; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 3px;"></div>
+            </aside>
 
-        <!-- Khung tin nhắn nền #f8fafc giống phonghubDockedMessagesPane -->
-        <div id="phonghubAiMessagesPane" aria-live="polite"
-             style="flex: 1; padding: 12px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background-color: #f8fafc;"></div>
+            <!-- Cột chat chính -->
+            <div style="flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;">
+                <!-- Chọn ngữ cảnh -->
+                <div id="phonghubAiContextRow" style="display: none; padding: 8px 14px; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;">
+                    <select id="phonghubAiContextSelect" aria-label="Ngữ cảnh"
+                            style="width: 100%; background-color: #f1f5f9; color: #0f172a; border-radius: 20px; border: 1px solid #e2e8f0; padding: 6px 12px; font-size: 12.5px; outline: none; cursor: pointer;"></select>
+                </div>
 
-        <!-- Thanh gợi ý + ô nhập pill + nút gửi mũi bay xanh #0084ff -->
-        <div id="phonghubAiFooter" style="padding: 8px 10px; background-color: #ffffff; border-top: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 6px;">
-            <div id="phonghubAiQuickPrompts" style="display: none; flex-wrap: wrap; gap: 6px;"></div>
-            <form id="phonghubAiAskForm" style="width: 100%; display: flex; align-items: center; margin: 0; gap: 6px;">
-                <input type="text" id="phonghubAiQuestionInput" maxlength="1200" required
-                       placeholder="Aa" autocomplete="off"
-                       style="flex: 1; background-color: #f1f5f9; color: #0f172a; border-radius: 20px; border: 1px solid #cbd5e1; padding: 7px 12px; font-size: 13.5px; outline: none; transition: border-color 0.15s ease;">
-                <button type="submit" id="phonghubAiSubmitBtn" title="Gửi" aria-label="Gửi"
-                        style="background: none; border: none; color: #0084ff; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: transform 0.15s ease; flex-shrink: 0;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                    </svg>
-                </button>
-            </form>
+                <!-- Khung tin nhắn -->
+                <div id="phonghubAiMessagesPane" aria-live="polite"
+                     style="flex: 1; padding: 12px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background-color: #f8fafc;"></div>
+
+                <!-- Thanh gợi ý + ô nhập -->
+                <div id="phonghubAiFooter" style="padding: 8px 10px; background-color: #ffffff; border-top: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 6px;">
+                    <div id="phonghubAiQuickPrompts" style="display: none; flex-wrap: wrap; gap: 6px;"></div>
+                    <form id="phonghubAiAskForm" style="width: 100%; display: flex; align-items: center; margin: 0; gap: 6px;">
+                        <input type="text" id="phonghubAiQuestionInput" maxlength="1200" required
+                               placeholder="Aa" autocomplete="off"
+                               style="flex: 1; background-color: #f1f5f9; color: #0f172a; border-radius: 20px; border: 1px solid #cbd5e1; padding: 7px 12px; font-size: 13.5px; outline: none; transition: border-color 0.15s ease;">
+                        <button type="submit" id="phonghubAiSubmitBtn" title="Gửi" aria-label="Gửi"
+                                style="background: none; border: none; color: #0084ff; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: transform 0.15s ease; flex-shrink: 0;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
     (function() {
+        const container = document.getElementById('phonghubFloatingAiContainer');
         const toggleBtn = document.getElementById('phonghubAiToggleBtn');
         const modal = document.getElementById('phonghubAiModal');
         const closeBtn = document.getElementById('phonghubAiCloseBtn');
+        const sidebarToggleBtn = document.getElementById('phonghubAiSidebarToggleBtn');
+        const newChatBtn = document.getElementById('phonghubAiNewChatBtn');
+        const sidebarNewBtn = document.getElementById('phonghubAiSidebarNewBtn');
+        const sidebar = document.getElementById('phonghubAiSidebar');
+        const historyList = document.getElementById('phonghubAiHistoryList');
         const roleBadge = document.getElementById('phonghubAiRoleBadge');
         const contextRow = document.getElementById('phonghubAiContextRow');
         const contextSelect = document.getElementById('phonghubAiContextSelect');
@@ -129,11 +219,50 @@
         const askForm = document.getElementById('phonghubAiAskForm');
         const questionInput = document.getElementById('phonghubAiQuestionInput');
         const submitBtn = document.getElementById('phonghubAiSubmitBtn');
-        if (!toggleBtn || !modal) return;
+        if (!toggleBtn || !modal || !container) return;
+
+        const userId = container.dataset.userId || 'anon';
+        const STORAGE_KEY = 'phonghub_ai_threads_v1:' + userId;
+        const ACTIVE_KEY = 'phonghub_ai_active_v1:' + userId;
+        const MAX_THREADS = 25;
 
         let widgetContext = null;
         let contextLoading = false;
         let customContextOption = null;
+        let sidebarOpen = false;
+        let threads = loadThreads();
+        let activeThreadId = loadActiveId();
+
+        function loadThreads() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                const parsed = raw ? JSON.parse(raw) : [];
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function loadActiveId() {
+            try {
+                return localStorage.getItem(ACTIVE_KEY) || null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function persistState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(threads.slice(0, MAX_THREADS)));
+                if (activeThreadId) {
+                    localStorage.setItem(ACTIVE_KEY, activeThreadId);
+                } else {
+                    localStorage.removeItem(ACTIVE_KEY);
+                }
+            } catch (e) {
+                // Bỏ qua nếu trình duyệt chặn storage
+            }
+        }
 
         function csrfHeaders() {
             const headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
@@ -145,13 +274,20 @@
             return headers;
         }
 
-        function nowHHMM() {
-            const d = new Date();
+        function formatHHMM(ts) {
+            const d = ts ? new Date(ts) : new Date();
             return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
         }
 
         function scrollToBottom() {
             messagesPane.scrollTop = messagesPane.scrollHeight;
+        }
+
+        function setSidebarOpen(open) {
+            sidebarOpen = !!open;
+            sidebar.style.display = sidebarOpen ? 'flex' : 'none';
+            modal.style.width = sidebarOpen ? '538px' : '348px';
+            if (sidebarOpen) renderHistoryList();
         }
 
         function createAiMiniAvatar() {
@@ -173,7 +309,7 @@
             return av;
         }
 
-        function appendBubble(isMe, text) {
+        function appendBubble(isMe, text, ts, isError) {
             const wrapper = document.createElement('div');
             wrapper.style.display = 'flex';
             wrapper.style.flexDirection = 'column';
@@ -202,6 +338,10 @@
                 bubble.style.backgroundColor = '#0084ff';
                 bubble.style.color = '#ffffff';
                 bubble.style.boxShadow = '0 1px 3px rgba(0, 132, 255, 0.2)';
+            } else if (isError) {
+                bubble.style.borderRadius = '18px 18px 18px 4px';
+                bubble.style.backgroundColor = '#fee2e2';
+                bubble.style.color = '#991b1b';
             } else {
                 bubble.style.borderRadius = '18px 18px 18px 4px';
                 bubble.style.backgroundColor = '#e2e8f0';
@@ -216,12 +356,120 @@
             timeSpan.style.color = '#94a3b8';
             timeSpan.style.marginTop = '2px';
             timeSpan.style.padding = isMe ? '0 4px 0 0' : '0 0 0 34px';
-            timeSpan.textContent = nowHHMM();
+            timeSpan.textContent = formatHHMM(ts);
             wrapper.appendChild(timeSpan);
 
             messagesPane.appendChild(wrapper);
             scrollToBottom();
             return bubble;
+        }
+
+        function getActiveThread() {
+            if (!activeThreadId) return null;
+            return threads.find(t => t.id === activeThreadId) || null;
+        }
+
+        function ensureActiveThread(initialTitle, customCtx) {
+            let thread = getActiveThread();
+            if (!thread) {
+                thread = {
+                    id: 't_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                    title: initialTitle || 'Cuộc trò chuyện mới',
+                    updatedAt: Date.now(),
+                    customContext: customCtx || null,
+                    messages: []
+                };
+                threads.unshift(thread);
+                activeThreadId = thread.id;
+                persistState();
+            }
+            return thread;
+        }
+
+        function startNewThread(customCtx) {
+            customContextOption = customCtx || null;
+            const thread = {
+                id: 't_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                title: (customCtx && customCtx.label) ? customCtx.label : 'Cuộc trò chuyện mới',
+                updatedAt: Date.now(),
+                customContext: customCtx || null,
+                messages: []
+            };
+            threads.unshift(thread);
+            if (threads.length > MAX_THREADS) threads = threads.slice(0, MAX_THREADS);
+            activeThreadId = thread.id;
+            persistState();
+            renderContextOptions();
+            renderMessagesFromThread(thread);
+            renderHistoryList();
+            return thread;
+        }
+
+        function renderMessagesFromThread(thread) {
+            messagesPane.replaceChildren();
+            if (!thread || !Array.isArray(thread.messages)) return;
+            thread.messages.forEach(m => {
+                appendBubble(m.role === 'user', m.content, m.ts, !!m.error);
+            });
+        }
+
+        function renderHistoryList() {
+            historyList.replaceChildren();
+            if (!threads.length) {
+                const empty = document.createElement('div');
+                empty.style.cssText = 'padding: 16px 8px; text-align: center; font-size: 12px; color: #94a3b8;';
+                empty.textContent = 'Chưa có lịch sử';
+                historyList.appendChild(empty);
+                return;
+            }
+            threads.forEach(t => {
+                const item = document.createElement('div');
+                item.className = 'phonghub-ai-history-item' + (t.id === activeThreadId ? ' active' : '');
+                const left = document.createElement('div');
+                left.style.cssText = 'min-width: 0; flex: 1;';
+                const title = document.createElement('div');
+                title.style.cssText = 'font-size: 12.5px; font-weight: 600; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+                title.textContent = t.title || 'Cuộc trò chuyện';
+                const meta = document.createElement('div');
+                meta.style.cssText = 'font-size: 10.5px; color: #64748b; margin-top: 1px;';
+                meta.textContent = formatHHMM(t.updatedAt) + ' · ' + ((t.messages && t.messages.length) ? Math.ceil(t.messages.length / 2) + ' lượt' : 'Mới');
+                left.append(title, meta);
+
+                const del = document.createElement('button');
+                del.type = 'button';
+                del.className = 'phonghub-ai-history-del';
+                del.title = 'Xóa';
+                del.textContent = '×';
+                del.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    threads = threads.filter(x => x.id !== t.id);
+                    if (activeThreadId === t.id) {
+                        activeThreadId = threads[0] ? threads[0].id : null;
+                        const next = getActiveThread();
+                        customContextOption = next ? next.customContext || null : null;
+                        renderContextOptions();
+                        renderMessagesFromThread(next);
+                    }
+                    persistState();
+                    renderHistoryList();
+                });
+
+                item.addEventListener('click', () => {
+                    activeThreadId = t.id;
+                    customContextOption = t.customContext || null;
+                    persistState();
+                    renderContextOptions();
+                    if (customContextOption) {
+                        contextSelect.value = contextValue(customContextOption.contextType, customContextOption.targetId);
+                    }
+                    renderMessagesFromThread(t);
+                    renderHistoryList();
+                    if (window.innerWidth <= 620) setSidebarOpen(false);
+                });
+
+                item.append(left, del);
+                historyList.appendChild(item);
+            });
         }
 
         function contextValue(type, id) {
@@ -269,6 +517,7 @@
                 chip.className = 'phonghub-ai-chip';
                 chip.textContent = p.label;
                 chip.addEventListener('click', () => {
+                    if (submitBtn.disabled) return;
                     if (contextRow.style.display !== 'none') {
                         const val = contextValue(p.contextType, p.targetId);
                         if (Array.from(contextSelect.options).some(o => o.value === val)) {
@@ -279,7 +528,7 @@
                         contextType: p.contextType || 'AUTO',
                         targetId: p.targetId || null,
                         question: p.question
-                    }, p.question);
+                    }, p.question, true);
                 });
                 quickPromptsBox.appendChild(chip);
             });
@@ -304,25 +553,53 @@
             }
         }
 
-        async function sendAiRequest(url, payload, displayUserQuestion) {
+        async function sendAiRequest(url, payload, displayUserQuestion, includeHistory) {
+            const thread = ensureActiveThread(displayUserQuestion, customContextOption);
+            const historyPayload = includeHistory
+                ? thread.messages.filter(m => !m.error).slice(-6).map(m => ({ role: m.role, content: m.content }))
+                : [];
+
             if (displayUserQuestion) {
-                appendBubble(true, displayUserQuestion);
+                if (thread.messages.length === 0 && !thread.customContext) {
+                    thread.title = displayUserQuestion;
+                }
+                const tsUser = Date.now();
+                thread.messages.push({ role: 'user', content: displayUserQuestion, ts: tsUser });
+                thread.updatedAt = tsUser;
+                threads = [thread].concat(threads.filter(t => t.id !== thread.id));
+                persistState();
+                appendBubble(true, displayUserQuestion, tsUser, false);
+                if (sidebarOpen) renderHistoryList();
             }
+
             submitBtn.disabled = true;
-            const aiBubble = appendBubble(false, '...');
+            const tsAi = Date.now();
+            const aiBubble = appendBubble(false, '...', tsAi, false);
             try {
+                const bodyToSend = payload ? Object.assign({}, payload) : null;
+                if (bodyToSend && historyPayload.length) {
+                    bodyToSend.history = historyPayload;
+                }
                 const options = { method: 'POST', headers: csrfHeaders() };
-                if (payload) options.body = JSON.stringify(payload);
+                if (bodyToSend) options.body = JSON.stringify(bodyToSend);
                 const res = await fetch(url, options);
                 const body = await res.json().catch(() => ({}));
                 if (!res.ok) {
                     throw new Error(body.detail || 'Không thể trả lời lúc này.');
                 }
-                aiBubble.textContent = body.answer || 'Chưa có câu trả lời.';
+                const ansText = body.answer || 'Chưa có câu trả lời.';
+                aiBubble.textContent = ansText;
+                thread.messages.push({ role: 'assistant', content: ansText, ts: Date.now() });
+                thread.updatedAt = Date.now();
+                persistState();
+                if (sidebarOpen) renderHistoryList();
             } catch (err) {
+                const errText = err.message || 'Không thể trả lời lúc này.';
                 aiBubble.style.backgroundColor = '#fee2e2';
                 aiBubble.style.color = '#991b1b';
-                aiBubble.textContent = err.message || 'Không thể trả lời lúc này.';
+                aiBubble.textContent = errText;
+                thread.messages.push({ role: 'assistant', content: errText, ts: Date.now(), error: true });
+                persistState();
             } finally {
                 submitBtn.disabled = false;
                 scrollToBottom();
@@ -335,6 +612,13 @@
             if (chatModal) chatModal.style.display = 'none';
             if (dockedChat) dockedChat.style.display = 'none';
             modal.style.display = 'flex';
+            const current = getActiveThread() || threads[0] || null;
+            if (current) {
+                activeThreadId = current.id;
+                if (current.customContext) customContextOption = current.customContext;
+                renderMessagesFromThread(current);
+            }
+            if (sidebarOpen) renderHistoryList();
             ensureContextLoaded();
         }
 
@@ -360,6 +644,19 @@
             modal.style.display = 'none';
         });
 
+        sidebarToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setSidebarOpen(!sidebarOpen);
+        });
+
+        function handleNewChat(e) {
+            e.stopPropagation();
+            startNewThread(null);
+            setTimeout(() => questionInput.focus(), 50);
+        }
+        newChatBtn.addEventListener('click', handleNewChat);
+        sidebarNewBtn.addEventListener('click', handleNewChat);
+
         askForm.addEventListener('submit', (e) => {
             e.preventDefault();
             if (submitBtn.disabled) return;
@@ -375,26 +672,28 @@
                 contextType: selected.contextType,
                 targetId: selected.targetId,
                 question: q
-            }, q);
+            }, q, true);
         });
 
         window.openPhongHubAiWidget = async function(opts) {
             const o = opts || {};
+            let ctxOpt = null;
             if (o.contextType && o.targetId) {
-                customContextOption = {
+                ctxOpt = {
                     contextType: o.contextType,
                     targetId: o.targetId,
                     label: o.label || 'Hóa đơn đã chọn'
                 };
             }
+            startNewThread(ctxOpt);
             openModal();
             await ensureContextLoaded();
             renderContextOptions();
-            if (customContextOption) {
-                contextSelect.value = contextValue(customContextOption.contextType, customContextOption.targetId);
+            if (ctxOpt) {
+                contextSelect.value = contextValue(ctxOpt.contextType, ctxOpt.targetId);
             }
             if (o.autoAnalyze && o.contextType === 'INVOICE' && o.targetId) {
-                sendAiRequest('/api/v1/ai/invoices/' + o.targetId + '/analysis', null, 'Phân tích ' + (o.label || 'hóa đơn'));
+                sendAiRequest('/api/v1/ai/invoices/' + o.targetId + '/analysis', null, 'Phân tích ' + (o.label || 'hóa đơn'), false);
             } else {
                 setTimeout(() => questionInput.focus(), 50);
             }

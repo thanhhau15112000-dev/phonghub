@@ -26,8 +26,8 @@ spring:
   data:
     redis:
       url: ${REDIS_URL}
-      timeout: 2s
-      connect-timeout: 2s
+      timeout: 3s
+      connect-timeout: 5s
 
 server:
   forward-headers-strategy: framework
