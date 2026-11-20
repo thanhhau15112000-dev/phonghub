@@ -297,6 +297,29 @@ public class PostgresInvoiceRepository implements InvoiceRepositoryPort {
     }
 
     @Override
+    public Optional<List<RoomDebtRow>> findPayableDebtTotalsByContractIds(java.util.Collection<UUID> contractIds) {
+        if (contractIds == null || contractIds.isEmpty()) {
+            return Optional.of(List.of());
+        }
+        String sql = """
+            SELECT room_id, invoice_type, SUM(total_amount - paid_amount) AS remaining
+            FROM invoices
+            WHERE contract_id IN (:contractIds)
+              AND status IN ('ISSUED', 'PARTIALLY_PAID', 'OVERDUE')
+              AND consolidated_into_invoice_id IS NULL
+              AND total_amount > paid_amount
+            GROUP BY room_id, invoice_type
+            """;
+        List<RoomDebtRow> rows = jdbcTemplate.query(sql, Map.of("contractIds", contractIds), (rs, rowNum) ->
+            new RoomDebtRow(
+                UUID.fromString(rs.getString("room_id")),
+                InvoiceType.valueOf(rs.getString("invoice_type")),
+                rs.getBigDecimal("remaining")
+            ));
+        return Optional.of(rows);
+    }
+
+    @Override
     public boolean existsByPaymentCode(String paymentCode) {
         Integer count = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM invoices WHERE payment_code = :code", Map.of("code", paymentCode), Integer.class

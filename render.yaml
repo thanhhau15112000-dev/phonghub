@@ -70,3 +70,9 @@ services:
         sync: false
       - key: PHONGHUB_AI_REASONING_EFFORT
         sync: false
+      - key: PHONGHUB_AI_FALLBACK_BASE_URL
+        sync: false
+      - key: PHONGHUB_AI_FALLBACK_API_KEY
+        sync: false
+      - key: PHONGHUB_AI_FALLBACK_MODEL
+        sync: false

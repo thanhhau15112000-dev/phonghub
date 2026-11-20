@@ -36,7 +36,13 @@ public class LiteLlmEmbeddingAdapter implements AiEmbeddingPort {
     @Override
     public double[] embed(String text) {
         if (!properties.isEnabled() || properties.getApiKey() == null || properties.getApiKey().isBlank()
+            || properties.getEmbeddingModel() == null || properties.getEmbeddingModel().isBlank()
             || text == null || text.isBlank()) {
+            throw new AiUnavailableException();
+        }
+        String lowerUrl = properties.getBaseUrl() == null ? "" : properties.getBaseUrl().toLowerCase(java.util.Locale.ROOT);
+        if (lowerUrl.contains("groq.com")) {
+            // Groq không cung cấp endpoint OpenAI /embeddings cho gemini-embedding; nhường cho lexical FAQ fallback
             throw new AiUnavailableException();
         }
         try {
