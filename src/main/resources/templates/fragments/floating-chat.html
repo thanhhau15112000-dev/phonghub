@@ -304,8 +304,11 @@
         let activeRecipientAvatar = '';
         let activeRoomType = 'DIRECT';
         let cachedContacts = [];
-        let contactsLoaded = false;
         let cachedRooms = [];
+
+        function sameId(a, b) {
+            return Boolean(a && b) && String(a).toLowerCase() === String(b).toLowerCase();
+        }
 
         // Danh sách các phòng chat đang được thu nhỏ (Chat Heads)
         let minimizedChatList = [];
@@ -466,16 +469,22 @@
                         updateSendIcon();
                         return;
                     }
-                    if (!content) {
+                    const hasTypedContent = content.length > 0;
+                    if (!hasTypedContent) {
                         content = '👍';
                     }
                     dockedInput.value = '';
                     updateSendIcon();
-                    await postMessage(content);
+                    const sent = await postMessage(content);
+                    if (!sent && hasTypedContent && !dockedInput.value) {
+                        dockedInput.value = content;
+                        updateSendIcon();
+                    }
                 });
             }
 
             async function postMessage(content) {
+                showAttachStatus('');
                 try {
                     const res = await fetch(`/api/chat/rooms/${activeFloatingRoomId}/messages`, {
                         method: 'POST',
@@ -485,9 +494,15 @@
                     if (res.ok) {
                         const saved = await res.json();
                         appendDockedMessageUI(saved);
+                        return true;
                     }
+                    const payload = await res.json().catch(() => ({}));
+                    showAttachStatus(payload.detail || 'Không gửi được tin nhắn, vui lòng thử lại.', 'error');
+                    return false;
                 } catch (err) {
                     console.error('Lỗi khi gửi tin nhắn:', err);
+                    showAttachStatus('Mất kết nối khi gửi tin nhắn, vui lòng thử lại.', 'error');
+                    return false;
                 }
             }
 
@@ -678,7 +693,7 @@
             dockedBox.style.display = 'none';
             updateWindowsLayout();
 
-            const exists = minimizedChatList.some(c => c.roomId === activeFloatingRoomId);
+            const exists = minimizedChatList.some(c => sameId(c.roomId, activeFloatingRoomId));
             if (!exists) {
                 minimizedChatList.push({
                     roomId: activeFloatingRoomId,
@@ -730,7 +745,7 @@
         }
 
         function removeChatHead(roomId) {
-            minimizedChatList = minimizedChatList.filter(c => c.roomId !== roomId);
+            minimizedChatList = minimizedChatList.filter(c => !sameId(c.roomId, roomId));
             renderChatHeads();
         }
 
@@ -872,24 +887,20 @@
             return modal && modal.style.display === 'flex';
         }
 
-        // Tải và hiển thị danh sách người dùng trong popup (cache contacts sau lần mở đầu tiên)
+        // Tải và hiển thị danh sách người dùng + phòng chat khi người dùng mở/xem danh bạ
         async function loadAndRenderContacts() {
             const container = document.getElementById('phonghubContactsList');
             try {
-                if (!contactsLoaded) {
-                    const [contactsRes, roomsRes] = await Promise.all([
-                        fetch('/api/chat/contacts'),
-                        fetch('/api/chat/rooms')
-                    ]);
-                    if (contactsRes.ok) {
-                        cachedContacts = await contactsRes.json();
-                        contactsLoaded = true;
-                    }
-                    if (roomsRes.ok) cachedRooms = await roomsRes.json();
-                } else {
-                    const roomsRes = await fetch('/api/chat/rooms');
-                    if (roomsRes.ok) cachedRooms = await roomsRes.json();
+                const [contactsRes, roomsRes] = await Promise.all([
+                    fetch('/api/chat/contacts'),
+                    fetch('/api/chat/rooms')
+                ]);
+                if (!contactsRes.ok && !roomsRes.ok) {
+                    if (container) container.innerHTML = '<div style="padding: 24px; text-align: center; color: #ef4444; font-size: 13px;">Không thể tải danh sách tài khoản.</div>';
+                    return;
                 }
+                if (contactsRes.ok) cachedContacts = await contactsRes.json();
+                if (roomsRes.ok) cachedRooms = await roomsRes.json();
 
                 const filterInput = document.getElementById('phonghubContactFilterInput');
                 const keyword = filterInput ? filterInput.value.toLowerCase().trim() : '';
@@ -912,10 +923,23 @@
                 case 'TECHNICIAN':
                     return { label: 'Kỹ thuật viên', bg: '#fef3c7', color: '#b45309' };
                 case 'TENANT':
-                    return { label: 'Người dùng', bg: '#f1f5f9', color: '#475569' };
+                    return { label: 'Người thuê', bg: '#f1f5f9', color: '#475569' };
                 default:
                     return { label: 'Người dùng', bg: '#f1f5f9', color: '#475569' };
             }
+        }
+
+        function showContactsError(message) {
+            const container = document.getElementById('phonghubContactsList');
+            if (!container) return;
+            let banner = document.getElementById('phonghubContactsError');
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.id = 'phonghubContactsError';
+                banner.style.cssText = 'margin: 6px 10px 8px; padding: 8px 10px; border-radius: 8px; background: #fef2f2; color: #b91c1c; font-size: 12.5px;';
+                container.prepend(banner);
+            }
+            banner.textContent = message;
         }
 
         function filterAndRenderContacts(keyword) {
@@ -925,7 +949,7 @@
 
             const globalRoom = cachedRooms.find(r => r.type === 'GLOBAL');
             const globalUnread = globalRoom ? (globalRoom.unreadCount || 0) : 0;
-            let globalSubtitle = 'Kênh thông báo & trao đổi toàn hệ thống';
+            let globalSubtitle = 'Kênh thông báo của ban quản lý nhà trọ';
             let globalTime = '';
             if (globalUnread > 0 && globalRoom && globalRoom.lastMessageContent) {
                 const senderPrefix = globalRoom.lastMessageSenderName ? globalRoom.lastMessageSenderName + ': ' : '';
@@ -936,7 +960,7 @@
             }
 
             // 1. Mục Kênh Chat Chung (Pinned Channel)
-            if (!keyword || 'kênh chung ban quản lý meta ai'.includes(keyword)) {
+            if (!keyword || 'kênh chung ban quản lý'.includes(keyword)) {
                 const globalItem = createChannelItemElement({
                     title: 'Kênh Chung Ban Quản Lý',
                     subtitle: globalSubtitle,
@@ -987,9 +1011,22 @@
                 container.appendChild(divider);
             }
 
-            // 2. Danh sách các tài khoản người dùng kết hợp phòng chat
-            const contactListWithRooms = cachedContacts.map(c => {
-                const room = cachedRooms.find(r => r.type === 'DIRECT' && r.peerUserId === c.userId);
+            // 2. Danh sách các tài khoản người dùng kết hợp phòng chat (kể cả phòng cũ ngoài danh bạ hiện tại)
+            const mergedContacts = [...cachedContacts];
+            cachedRooms.forEach(r => {
+                if (r.type === 'DIRECT' && r.peerUserId
+                    && !mergedContacts.some(c => sameId(c.userId, r.peerUserId))) {
+                    mergedContacts.push({
+                        userId: r.peerUserId,
+                        fullName: r.peerDisplayName || r.name || 'Người dùng',
+                        email: '',
+                        role: r.peerRole || ''
+                    });
+                }
+            });
+
+            const contactListWithRooms = mergedContacts.map(c => {
+                const room = cachedRooms.find(r => r.type === 'DIRECT' && sameId(r.peerUserId, c.userId));
                 return {
                     ...c,
                     roomId: room ? room.id : null,
@@ -1062,38 +1099,55 @@
                         <div style="width: 40px; height: 40px; border-radius: 50%; background-color: ${avatarColor}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); flex-shrink: 0;">${initial}</div>
                     `,
                     onClick: async () => {
-                        document.getElementById('phonghubNewMessageModal').style.display = 'none';
-                        updateWindowsLayout();
-
-                        // XÓA CHẤM ĐỎ NGAY KHI BẤM XEM
-                        c.unreadCount = 0;
-                        if (c.roomId) {
-                            const room = cachedRooms.find(r => String(r.id).toLowerCase() === String(c.roomId).toLowerCase());
-                            if (room) room.unreadCount = 0;
-                        }
-                        updateGlobalBadgeCount();
-                        const filterInput = document.getElementById('phonghubContactFilterInput');
-                        filterAndRenderContacts(filterInput ? filterInput.value.toLowerCase().trim() : '');
-
-                        if (c.roomId) {
-                            removeChatHead(c.roomId);
-                            openDockedChat(c.roomId, c.fullName, initial, 'DIRECT');
-                        } else {
+                        let roomId = c.roomId;
+                        if (!roomId) {
                             try {
                                 const res = await fetch('/api/chat/rooms/direct', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ targetUserId: c.userId })
                                 });
-                                if (res.ok) {
-                                    const room = await res.json();
-                                    removeChatHead(room.id);
-                                    openDockedChat(room.id, c.fullName, initial, 'DIRECT');
+                                if (!res.ok) {
+                                    const payload = await res.json().catch(() => ({}));
+                                    showContactsError(payload.detail || 'Không mở được cuộc trò chuyện, vui lòng thử lại.');
+                                    return;
+                                }
+                                const room = await res.json();
+                                roomId = room.id;
+                                if (!cachedRooms.some(r => sameId(r.id, roomId))) {
+                                    cachedRooms.push({
+                                        id: roomId,
+                                        type: 'DIRECT',
+                                        name: c.fullName,
+                                        lastMessageContent: '',
+                                        lastMessageSenderName: '',
+                                        lastMessageAt: room.createdAt || new Date().toISOString(),
+                                        unreadCount: 0,
+                                        peerUserId: c.userId,
+                                        peerDisplayName: c.fullName,
+                                        peerRole: c.role
+                                    });
                                 }
                             } catch (err) {
                                 console.error('Lỗi khi mở cuộc trò chuyện trực tiếp:', err);
+                                showContactsError('Mất kết nối khi mở cuộc trò chuyện, vui lòng thử lại.');
+                                return;
                             }
                         }
+
+                        document.getElementById('phonghubNewMessageModal').style.display = 'none';
+                        updateWindowsLayout();
+
+                        // XÓA CHẤM ĐỎ NGAY KHI BẤM XEM
+                        c.unreadCount = 0;
+                        const room = cachedRooms.find(r => sameId(r.id, roomId));
+                        if (room) room.unreadCount = 0;
+                        updateGlobalBadgeCount();
+                        const filterInput = document.getElementById('phonghubContactFilterInput');
+                        filterAndRenderContacts(filterInput ? filterInput.value.toLowerCase().trim() : '');
+
+                        removeChatHead(roomId);
+                        openDockedChat(roomId, c.fullName, initial, 'DIRECT');
                     }
                 });
                 container.appendChild(item);
@@ -1154,14 +1208,14 @@
 
         // Mở khung chat docked Messenger (Theme Màu trắng viền xám)
         window.openDockedChat = async function(roomId, recipientName, recipientAvatar, roomType) {
-            if (String(activeFloatingRoomId) !== String(roomId)) clearPendingAttachments();
+            if (!sameId(activeFloatingRoomId, roomId)) clearPendingAttachments();
             activeFloatingRoomId = roomId;
             activeRecipientName = recipientName;
             activeRecipientAvatar = recipientAvatar;
             activeRoomType = roomType || 'DIRECT';
 
             // XÓA CHẤM ĐỎ NGAY KHI MỞ CHAT
-            const targetRoomCache = cachedRooms.find(r => String(r.id).toLowerCase() === String(roomId).toLowerCase());
+            const targetRoomCache = cachedRooms.find(r => sameId(r.id, roomId));
             if (targetRoomCache) {
                 targetRoomCache.unreadCount = 0;
             }
@@ -1177,7 +1231,7 @@
             const statusElem = document.getElementById('phonghubDockedStatus');
             if (statusElem) {
                 if (roomType === 'GLOBAL') {
-                    statusElem.textContent = 'Kênh thông báo & trao đổi toàn hệ thống';
+                    statusElem.textContent = 'Kênh thông báo của ban quản lý nhà trọ';
                     statusElem.style.display = 'block';
                 } else {
                     statusElem.textContent = '';
@@ -1192,6 +1246,7 @@
             if (sendForm) sendForm.style.display = readOnly ? 'none' : 'flex';
             if (readOnlyNote) readOnlyNote.style.display = readOnly ? 'block' : 'none';
             if (readOnly) clearPendingAttachments();
+            else showAttachStatus('');
 
             const avatarElem = document.getElementById('phonghubDockedAvatar');
             if (roomType === 'GLOBAL') {
@@ -1207,29 +1262,35 @@
             const messagesPane = document.getElementById('phonghubDockedMessagesPane');
             messagesPane.innerHTML = '<div style="margin: auto; color: #64748b; font-size: 12.5px;">Đang tải tin nhắn...</div>';
 
+            const showLoadFailure = () => {
+                messagesPane.innerHTML = '<div style="margin: auto; color: #b91c1c; font-size: 12.5px; text-align: center;">Không tải được tin nhắn, vui lòng đóng và thử lại.</div>';
+            };
             try {
                 const res = await fetch(`/api/chat/rooms/${roomId}/messages`);
-                if (res.ok) {
-                    const peerLastReadHeader = res.headers.get('X-Peer-Last-Read-At');
-                    const messages = await res.json();
-                    messagesPane.innerHTML = '';
-                    if (messages.length === 0) {
-                        messagesPane.innerHTML = readOnly
-                            ? '<div class="phonghub-chat-empty" style="margin: auto; color: #64748b; font-size: 12.5px; text-align: center;">Chưa có thông báo nào.</div>'
-                            : '<div class="phonghub-chat-empty" style="margin: auto; color: #64748b; font-size: 12.5px; text-align: center;">Chưa có tin nhắn nào.<br>Hãy gửi lời chào đầu tiên! 👋</div>';
-                    } else {
-                        messages.forEach(m => appendDockedMessageUI(m));
-                    }
-                    if (peerLastReadHeader) {
-                        updateSeenStatusUI(peerLastReadHeader);
-                    }
-                    scrollMessagesToBottom();
-                    // GET /messages đã tự đánh dấu đã đọc trên server nên chỉ cần đồng bộ lại badge & danh sách nếu đang mở
-                    refreshUnreadBadge();
-                    if (isContactsModalOpen()) loadAndRenderContacts();
+                if (!res.ok) {
+                    showLoadFailure();
+                    return;
                 }
+                const peerLastReadHeader = res.headers.get('X-Peer-Last-Read-At');
+                const messages = await res.json();
+                messagesPane.innerHTML = '';
+                if (messages.length === 0) {
+                    messagesPane.innerHTML = readOnly
+                        ? '<div class="phonghub-chat-empty" style="margin: auto; color: #64748b; font-size: 12.5px; text-align: center;">Chưa có thông báo nào.</div>'
+                        : '<div class="phonghub-chat-empty" style="margin: auto; color: #64748b; font-size: 12.5px; text-align: center;">Chưa có tin nhắn nào.<br>Hãy gửi lời chào đầu tiên! 👋</div>';
+                } else {
+                    messages.forEach(m => appendDockedMessageUI(m));
+                }
+                if (peerLastReadHeader) {
+                    updateSeenStatusUI(peerLastReadHeader);
+                }
+                scrollMessagesToBottom();
+                // GET /messages đã tự đánh dấu đã đọc trên server nên chỉ cần đồng bộ lại badge & danh sách nếu đang mở
+                refreshUnreadBadge();
+                if (isContactsModalOpen()) loadAndRenderContacts();
             } catch (err) {
                 console.error('Lỗi khi tải tin nhắn phòng chat:', err);
+                showLoadFailure();
             }
         };
 
@@ -1239,7 +1300,7 @@
             const emptyNotice = pane.querySelector('.phonghub-chat-empty');
             if (emptyNotice) emptyNotice.remove();
 
-            const isMe = msg.senderId === currentUserId;
+            const isMe = sameId(msg.senderId, currentUserId);
             const msgWrapper = document.createElement('div');
             msgWrapper.id = `docked-msg-${msg.id}`;
             msgWrapper.setAttribute('data-created-at', msg.createdAt);

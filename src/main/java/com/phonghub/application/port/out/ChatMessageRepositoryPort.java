@@ -17,5 +17,9 @@ public interface ChatMessageRepositoryPort {
     int countUnreadMessages(UUID roomId, UUID userId, Instant since);
     int countTotalUnread(UUID userId, Set<UUID> visibleGlobalSenderIds);
     Map<UUID, ChatMessage> findLatestMessagesByRoomIds(List<UUID> roomIds);
-    Map<UUID, Integer> countUnreadByRoomIds(UUID userId, List<UUID> roomIds);
+    Map<UUID, Integer> countUnreadByRoomIds(UUID userId, List<UUID> roomIds, Set<UUID> visibleGlobalSenderIds);
+
+    default Map<UUID, Integer> countUnreadByRoomIds(UUID userId, List<UUID> roomIds) {
+        return countUnreadByRoomIds(userId, roomIds, null);
+    }
 }

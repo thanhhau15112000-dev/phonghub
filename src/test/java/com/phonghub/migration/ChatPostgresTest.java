@@ -142,6 +142,12 @@ class ChatPostgresTest {
             T0.plusSeconds(250), null));
         assertEquals(3, messages.countTotalUnread(STAFF, Set.of(ADMIN, TENANT)));
         assertEquals(2, messages.countTotalUnread(STAFF, Set.of(TENANT))); // không tính tin ADMIN nếu ngoài scope
+        Map<UUID, Integer> scopedBatch = messages.countUnreadByRoomIds(
+            STAFF, List.of(directId, ChatRoom.GLOBAL_ROOM_ID), Set.of(ADMIN, TENANT));
+        assertEquals(1, scopedBatch.getOrDefault(ChatRoom.GLOBAL_ROOM_ID, 0));
+        assertEquals(0, messages.countUnreadByRoomIds(
+            STAFF, List.of(directId, ChatRoom.GLOBAL_ROOM_ID), Set.of(TENANT))
+            .getOrDefault(ChatRoom.GLOBAL_ROOM_ID, 0));
 
         // kênh chung: người chưa có dòng thành viên vẫn ghi được mốc đã đọc
         rooms.updateLastRead(ChatRoom.GLOBAL_ROOM_ID, ADMIN, T0.plusSeconds(300));

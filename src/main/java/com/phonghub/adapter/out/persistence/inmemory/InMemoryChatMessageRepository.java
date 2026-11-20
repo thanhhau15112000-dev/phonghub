@@ -44,6 +44,7 @@ public class InMemoryChatMessageRepository implements ChatMessageRepositoryPort 
     @Override
     public List<ChatMessage> findByRoomId(UUID roomId, Instant before, int limit) {
         return messages.stream()
+            .filter(m -> m.deletedAt() == null)
             .filter(m -> m.chatRoomId().equals(roomId))
             .filter(m -> before == null || m.createdAt().isBefore(before))
             .sorted(Comparator.comparing(ChatMessage::createdAt).reversed())
@@ -55,15 +56,23 @@ public class InMemoryChatMessageRepository implements ChatMessageRepositoryPort 
     @Override
     public Optional<ChatMessage> findLatestMessageByRoomId(UUID roomId) {
         return messages.stream()
+            .filter(m -> m.deletedAt() == null)
             .filter(m -> m.chatRoomId().equals(roomId))
             .max(Comparator.comparing(ChatMessage::createdAt));
     }
 
     @Override
     public int countUnreadMessages(UUID roomId, UUID userId, Instant since) {
+        return countUnreadForRoom(roomId, userId, since, null);
+    }
+
+    private int countUnreadForRoom(UUID roomId, UUID userId, Instant since, Set<UUID> visibleGlobalSenderIds) {
+        boolean scopeGlobal = ChatRoom.GLOBAL_ROOM_ID.equals(roomId) && visibleGlobalSenderIds != null;
         return (int) messages.stream()
+            .filter(m -> m.deletedAt() == null)
             .filter(m -> m.chatRoomId().equals(roomId))
             .filter(m -> !m.senderId().equals(userId))
+            .filter(m -> !scopeGlobal || visibleGlobalSenderIds.contains(m.senderId()))
             .filter(m -> since == null || m.createdAt().isAfter(since))
             .count();
     }
@@ -72,6 +81,7 @@ public class InMemoryChatMessageRepository implements ChatMessageRepositoryPort 
     public int countTotalUnread(UUID userId, Set<UUID> visibleGlobalSenderIds) {
         if (chatRoomRepo == null) {
             return (int) messages.stream()
+                .filter(m -> m.deletedAt() == null)
                 .filter(m -> !m.senderId().equals(userId))
                 .filter(m -> !m.chatRoomId().equals(ChatRoom.GLOBAL_ROOM_ID)
                     || visibleGlobalSenderIds == null
@@ -82,16 +92,7 @@ public class InMemoryChatMessageRepository implements ChatMessageRepositoryPort 
         int total = 0;
         for (var room : rooms) {
             Instant since = chatRoomRepo.getLastRead(room.id(), userId);
-            if (room.isGlobal() && visibleGlobalSenderIds != null) {
-                total += (int) messages.stream()
-                    .filter(m -> m.chatRoomId().equals(room.id()))
-                    .filter(m -> !m.senderId().equals(userId))
-                    .filter(m -> visibleGlobalSenderIds.contains(m.senderId()))
-                    .filter(m -> since == null || m.createdAt().isAfter(since))
-                    .count();
-            } else {
-                total += countUnreadMessages(room.id(), userId, since);
-            }
+            total += countUnreadForRoom(room.id(), userId, since, room.isGlobal() ? visibleGlobalSenderIds : null);
         }
         return total;
     }
@@ -103,6 +104,7 @@ public class InMemoryChatMessageRepository implements ChatMessageRepositoryPort 
         }
         Set<UUID> set = new HashSet<>(roomIds);
         return messages.stream()
+            .filter(m -> m.deletedAt() == null)
             .filter(m -> set.contains(m.chatRoomId()))
             .collect(Collectors.groupingBy(
                 ChatMessage::chatRoomId,
@@ -114,14 +116,14 @@ public class InMemoryChatMessageRepository implements ChatMessageRepositoryPort 
     }
 
     @Override
-    public Map<UUID, Integer> countUnreadByRoomIds(UUID userId, List<UUID> roomIds) {
+    public Map<UUID, Integer> countUnreadByRoomIds(UUID userId, List<UUID> roomIds, Set<UUID> visibleGlobalSenderIds) {
         if (roomIds == null || roomIds.isEmpty()) {
             return Collections.emptyMap();
         }
         Map<UUID, Integer> result = new LinkedHashMap<>();
         for (UUID roomId : roomIds) {
             Instant since = chatRoomRepo != null ? chatRoomRepo.getLastRead(roomId, userId) : null;
-            int count = countUnreadMessages(roomId, userId, since);
+            int count = countUnreadForRoom(roomId, userId, since, visibleGlobalSenderIds);
             if (count > 0) {
                 result.put(roomId, count);
             }

@@ -137,7 +137,7 @@ public class PostgresChatMessageRepository implements ChatMessageRepositoryPort 
             sql = """
                 SELECT id, chat_room_id, sender_id, sender_name, content, media_url, media_type, created_at, deleted_at
                 FROM chat_messages
-                WHERE chat_room_id = :roomId AND created_at < :before
+                WHERE chat_room_id = :roomId AND created_at < :before AND deleted_at IS NULL
                 ORDER BY created_at DESC
                 LIMIT :limit
                 """;
@@ -146,7 +146,7 @@ public class PostgresChatMessageRepository implements ChatMessageRepositoryPort 
             sql = """
                 SELECT id, chat_room_id, sender_id, sender_name, content, media_url, media_type, created_at, deleted_at
                 FROM chat_messages
-                WHERE chat_room_id = :roomId
+                WHERE chat_room_id = :roomId AND deleted_at IS NULL
                 ORDER BY created_at DESC
                 LIMIT :limit
                 """;
@@ -163,7 +163,7 @@ public class PostgresChatMessageRepository implements ChatMessageRepositoryPort 
         String sql = """
             SELECT id, chat_room_id, sender_id, sender_name, content, media_url, media_type, created_at, deleted_at
             FROM chat_messages
-            WHERE chat_room_id = :roomId
+            WHERE chat_room_id = :roomId AND deleted_at IS NULL
             ORDER BY created_at DESC
             LIMIT 1
             """;
@@ -181,13 +181,13 @@ public class PostgresChatMessageRepository implements ChatMessageRepositoryPort 
         if (since != null) {
             sql = """
                 SELECT COUNT(*) FROM chat_messages
-                WHERE chat_room_id = :roomId AND sender_id <> :userId AND created_at > :since
+                WHERE chat_room_id = :roomId AND sender_id <> :userId AND created_at > :since AND deleted_at IS NULL
                 """;
             params.addValue("since", Timestamp.from(since));
         } else {
             sql = """
                 SELECT COUNT(*) FROM chat_messages
-                WHERE chat_room_id = :roomId AND sender_id <> :userId
+                WHERE chat_room_id = :roomId AND sender_id <> :userId AND deleted_at IS NULL
                 """;
         }
 
@@ -195,18 +195,22 @@ public class PostgresChatMessageRepository implements ChatMessageRepositoryPort 
         return count != null ? count : 0;
     }
 
+    private static String roomScopeClause(MapSqlParameterSource params, Set<UUID> visibleGlobalSenderIds) {
+        String directClause = "(r.type = 'DIRECT' AND crm.id IS NOT NULL)";
+        if (visibleGlobalSenderIds == null) {
+            return "(r.type = 'GLOBAL' OR " + directClause + ")";
+        }
+        if (visibleGlobalSenderIds.isEmpty()) {
+            return directClause;
+        }
+        params.addValue("globalSenders", visibleGlobalSenderIds);
+        return "((r.type = 'GLOBAL' AND m.sender_id IN (:globalSenders)) OR " + directClause + ")";
+    }
+
     @Override
     public int countTotalUnread(UUID userId, Set<UUID> visibleGlobalSenderIds) {
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("userId", userId);
-        String roomScopeClause;
-        if (visibleGlobalSenderIds == null) {
-            roomScopeClause = "(r.type = 'GLOBAL' OR (r.type = 'DIRECT' AND crm.id IS NOT NULL))";
-        } else if (visibleGlobalSenderIds.isEmpty()) {
-            roomScopeClause = "(r.type = 'DIRECT' AND crm.id IS NOT NULL)";
-        } else {
-            roomScopeClause = "((r.type = 'GLOBAL' AND m.sender_id IN (:globalSenders)) OR (r.type = 'DIRECT' AND crm.id IS NOT NULL))";
-            params.addValue("globalSenders", visibleGlobalSenderIds);
-        }
+        String roomScopeClause = roomScopeClause(params, visibleGlobalSenderIds);
 
         String sql = """
             SELECT COUNT(*)
@@ -248,23 +252,26 @@ public class PostgresChatMessageRepository implements ChatMessageRepositoryPort 
     }
 
     @Override
-    public Map<UUID, Integer> countUnreadByRoomIds(UUID userId, List<UUID> roomIds) {
+    public Map<UUID, Integer> countUnreadByRoomIds(UUID userId, List<UUID> roomIds, Set<UUID> visibleGlobalSenderIds) {
         if (roomIds == null || roomIds.isEmpty()) {
             return Collections.emptyMap();
         }
-        String sql = """
-            SELECT m.chat_room_id, COUNT(*) as cnt
-            FROM chat_messages m
-            LEFT JOIN chat_room_members crm ON crm.chat_room_id = m.chat_room_id AND crm.user_id = :userId AND crm.left_at IS NULL
-            WHERE m.chat_room_id IN (:roomIds)
-              AND m.sender_id <> :userId
-              AND (crm.last_read_at IS NULL OR m.created_at > crm.last_read_at)
-              AND m.deleted_at IS NULL
-            GROUP BY m.chat_room_id
-            """;
         MapSqlParameterSource params = new MapSqlParameterSource()
             .addValue("userId", userId)
             .addValue("roomIds", roomIds);
+        String roomScopeClause = roomScopeClause(params, visibleGlobalSenderIds);
+        String sql = """
+            SELECT m.chat_room_id, COUNT(*) as cnt
+            FROM chat_messages m
+            JOIN chat_rooms r ON r.id = m.chat_room_id
+            LEFT JOIN chat_room_members crm ON crm.chat_room_id = m.chat_room_id AND crm.user_id = :userId AND crm.left_at IS NULL
+            WHERE m.chat_room_id IN (:roomIds)
+              AND m.sender_id <> :userId
+              AND %s
+              AND (crm.last_read_at IS NULL OR m.created_at > crm.last_read_at)
+              AND m.deleted_at IS NULL
+            GROUP BY m.chat_room_id
+            """.formatted(roomScopeClause);
         Map<UUID, Integer> map = new LinkedHashMap<>();
         jdbcTemplate.query(sql, params, (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
             map.put(UUID.fromString(rs.getString("chat_room_id")), rs.getInt("cnt"));

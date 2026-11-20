@@ -145,4 +145,34 @@ class ChatContactScopeUnitTest {
         assertEquals(1, globalSummary.unreadCount());
         assertEquals("tin đồng nghiệp global", globalSummary.lastMessageContent());
     }
+
+    @Test
+    @DisplayName("danh bạ loại bỏ tài khoản INACTIVE và SUSPENDED dù nằm trong tập ID phạm vi")
+    void contactsExcludeNonActiveAccounts() {
+        UUID inactiveId = UUID.randomUUID();
+        UUID suspendedId = UUID.randomUUID();
+        users.save(new User(inactiveId, "inactive", "inactive@x", "Ngừng hoạt động",
+            "0900000002", UserRole.STAFF, User.UserStatus.INACTIVE, false, Instant.now()));
+        users.save(new User(suspendedId, "suspended", "suspended@x", "Bị khóa",
+            "0900000003", UserRole.TENANT, User.UserStatus.SUSPENDED, false, Instant.now()));
+        reachable = Set.of(colleagueId, inactiveId, suspendedId);
+
+        assertEquals(List.of(colleagueId), chat.getAvailableContacts(viewer).stream().map(c -> c.userId()).toList());
+    }
+
+    @Test
+    @DisplayName("số tin chưa đọc kênh chung trên header và danh sách phòng khớp nhau ngay cả khi vượt quá 100 tin")
+    void unreadCountConsistentAcrossHeaderAndRoomsOverScanLimit() {
+        CurrentUser colleague = new CurrentUser(colleagueId, colleagueId + "@x", "Đồng nghiệp", UserRole.STAFF);
+        CurrentUser stranger = new CurrentUser(strangerId, strangerId + "@x", "Người lạ", UserRole.STAFF);
+        for (int i = 0; i < 105; i++) {
+            chat.sendMessage(colleague, ChatRoom.GLOBAL_ROOM_ID, "tin " + i);
+        }
+        chat.sendMessage(stranger, ChatRoom.GLOBAL_ROOM_ID, "tin người lạ");
+
+        assertEquals(105, chat.getTotalUnreadCount(viewer));
+        var globalSummary = chat.getRoomsForUser(viewer).stream()
+            .filter(r -> r.id().equals(ChatRoom.GLOBAL_ROOM_ID)).findFirst().orElseThrow();
+        assertEquals(105, globalSummary.unreadCount());
+    }
 }

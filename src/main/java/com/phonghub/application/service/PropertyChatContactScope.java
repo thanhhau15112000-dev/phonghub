@@ -13,7 +13,8 @@ import com.phonghub.domain.model.StaffPropertyAssignment;
 import com.phonghub.domain.model.Tenant;
 import com.phonghub.domain.model.User;
 import com.phonghub.domain.model.UserRole;
-import java.util.HashMap;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,8 @@ import java.util.stream.Collectors;
  * dùng được cho cả việc gửi lẫn nhận. Quản trị viên liên hệ được mọi người và mọi người liên hệ được quản trị viên.
  */
 public class PropertyChatContactScope implements ChatContactScope {
+
+    private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final UserRepositoryPort users;
     private final PropertyRepositoryPort properties;
@@ -52,14 +55,16 @@ public class PropertyChatContactScope implements ChatContactScope {
     @Override
     public Set<UUID> reachableUserIds(CurrentUser viewer) {
         List<User> all = users.findAll();
-        Map<UUID, User> byId = all.stream().collect(Collectors.toMap(User::id, Function.identity(), (a, b) -> a));
+        Map<UUID, User> activeById = all.stream()
+            .filter(u -> u.status() == User.UserStatus.ACTIVE)
+            .collect(Collectors.toMap(User::id, Function.identity(), (a, b) -> a));
         if (viewer.role() == UserRole.ADMIN) {
-            Set<UUID> everyone = new HashSet<>(byId.keySet());
+            Set<UUID> everyone = new HashSet<>(activeById.keySet());
             everyone.remove(viewer.id());
             return everyone;
         }
         Set<UUID> reachable = new HashSet<>();
-        all.stream().filter(u -> u.role() == UserRole.ADMIN).forEach(u -> reachable.add(u.id()));
+        activeById.values().stream().filter(u -> u.role() == UserRole.ADMIN).forEach(u -> reachable.add(u.id()));
         Set<UUID> tenantIds = new HashSet<>();
         for (UUID propertyId : propertyIdsOf(viewer)) {
             properties.findById(propertyId).map(Property::ownerId).ifPresent(reachable::add);
@@ -76,7 +81,7 @@ public class PropertyChatContactScope implements ChatContactScope {
             }
         }
         reachable.remove(viewer.id());
-        reachable.retainAll(byId.keySet());
+        reachable.retainAll(activeById.keySet());
         return reachable;
     }
 
@@ -105,6 +110,7 @@ public class PropertyChatContactScope implements ChatContactScope {
     }
 
     private void collectResidentTenantIds(UUID propertyId, Set<UUID> tenantIds) {
+        LocalDate today = LocalDate.now(VIETNAM_ZONE);
         for (Contract contract : contracts.findByPropertyId(propertyId)) {
             if (!contract.isResiding()) {
                 continue;
@@ -113,7 +119,8 @@ public class PropertyChatContactScope implements ChatContactScope {
                 tenantIds.add(contract.getPrimaryTenantId());
             }
             for (ContractOccupant occupant : contract.getOccupants()) {
-                if (occupant.tenantId() != null) {
+                if (occupant.tenantId() != null
+                    && (occupant.checkOutDate() == null || occupant.checkOutDate().isAfter(today))) {
                     tenantIds.add(occupant.tenantId());
                 }
             }
