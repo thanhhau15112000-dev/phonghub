@@ -135,8 +135,11 @@ public class PostgresChatRoomRepository implements ChatRoomRepositoryPort {
             return java.util.Collections.emptyList();
         }
 
-        List<UUID> roomIds = rows.stream().map(RoomRow::id).toList();
-        Map<UUID, List<ChatRoomMember>> membersByRoom = loadMembersBatch(roomIds);
+        List<UUID> directRoomIds = rows.stream()
+            .filter(r -> r.type() == ChatRoomType.DIRECT)
+            .map(RoomRow::id)
+            .toList();
+        Map<UUID, List<ChatRoomMember>> membersByRoom = loadMembersBatch(directRoomIds);
 
         return rows.stream().map(r -> new ChatRoom(
             r.id(), r.type(), r.name(), r.createdAt(),

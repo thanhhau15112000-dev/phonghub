@@ -139,28 +139,25 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         }
 
         Set<UUID> reachable = contactScope.reachableUserIds(currentUser);
-        List<UUID> batchRoomIds = reachable == null
-            ? userRooms.stream().map(ChatRoom::id).toList()
+        List<UUID> allRoomIds = userRooms.stream().map(ChatRoom::id).toList();
+        List<UUID> latestRoomIds = reachable == null
+            ? allRoomIds
             : userRooms.stream().filter(ChatRoom::isDirect).map(ChatRoom::id).toList();
-        Map<UUID, ChatMessage> latestMessages = chatMessageRepositoryPort.findLatestMessagesByRoomIds(batchRoomIds);
-        Map<UUID, Integer> unreadCounts = chatMessageRepositoryPort.countUnreadByRoomIds(currentUser.id(), batchRoomIds);
+        Map<UUID, ChatMessage> latestMessages = chatMessageRepositoryPort.findLatestMessagesByRoomIds(latestRoomIds);
+        Map<UUID, Integer> unreadCounts = chatMessageRepositoryPort.countUnreadByRoomIds(
+            currentUser.id(), allRoomIds, reachable);
 
         List<ChatRoomSummary> summaries = new ArrayList<>();
         for (ChatRoom room : userRooms) {
             ChatMessage latestMsg;
-            int unreadCount;
             if (room.isGlobal() && reachable != null) {
-                // Kênh chung chỉ hiện tin của người cùng nhà trọ: xem trước và số chưa đọc cũng theo phạm vi đó (#345).
-                Instant lastRead = chatRoomRepositoryPort.getLastRead(room.id(), currentUser.id());
+                // Kênh chung chỉ hiện tin của người cùng nhà trọ: xem trước theo phạm vi đó (#345).
                 List<ChatMessage> visible = visibleMessages(currentUser, room, null, UNREAD_SCAN_LIMIT, reachable);
                 latestMsg = visible.isEmpty() ? null : visible.get(visible.size() - 1);
-                unreadCount = (int) visible.stream()
-                    .filter(m -> !m.senderId().equals(currentUser.id()))
-                    .filter(m -> lastRead == null || m.createdAt().isAfter(lastRead)).count();
             } else {
                 latestMsg = latestMessages.get(room.id());
-                unreadCount = unreadCounts.getOrDefault(room.id(), 0);
             }
+            int unreadCount = unreadCounts.getOrDefault(room.id(), 0);
 
             String lastMsgText = "";
             String lastMsgSender = "";
@@ -274,6 +271,7 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         assertAuthenticated(currentUser);
         Set<UUID> reachable = contactScope.reachableUserIds(currentUser);
         return userRepositoryPort.findAll().stream()
+            .filter(u -> u.status() == User.UserStatus.ACTIVE)
             .filter(u -> !u.id().equals(currentUser.id()))
             .filter(u -> reachable == null || reachable.contains(u.id()))
             .sorted(Comparator.comparing(User::fullName))
