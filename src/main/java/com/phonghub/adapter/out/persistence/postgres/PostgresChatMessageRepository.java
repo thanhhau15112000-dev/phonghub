@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.jdbc.core.RowMapper;
@@ -192,5 +193,82 @@ public class PostgresChatMessageRepository implements ChatMessageRepositoryPort 
 
         Integer count = jdbcTemplate.queryForObject(sql, params, Integer.class);
         return count != null ? count : 0;
+    }
+
+    @Override
+    public int countTotalUnread(UUID userId, Set<UUID> visibleGlobalSenderIds) {
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("userId", userId);
+        String roomScopeClause;
+        if (visibleGlobalSenderIds == null) {
+            roomScopeClause = "(r.type = 'GLOBAL' OR (r.type = 'DIRECT' AND crm.id IS NOT NULL))";
+        } else if (visibleGlobalSenderIds.isEmpty()) {
+            roomScopeClause = "(r.type = 'DIRECT' AND crm.id IS NOT NULL)";
+        } else {
+            roomScopeClause = "((r.type = 'GLOBAL' AND m.sender_id IN (:globalSenders)) OR (r.type = 'DIRECT' AND crm.id IS NOT NULL))";
+            params.addValue("globalSenders", visibleGlobalSenderIds);
+        }
+
+        String sql = """
+            SELECT COUNT(*)
+            FROM chat_messages m
+            JOIN chat_rooms r ON r.id = m.chat_room_id
+            LEFT JOIN chat_room_members crm ON crm.chat_room_id = r.id AND crm.user_id = :userId AND crm.left_at IS NULL
+            WHERE m.sender_id <> :userId
+              AND %s
+              AND (crm.last_read_at IS NULL OR m.created_at > crm.last_read_at)
+              AND m.deleted_at IS NULL
+            """.formatted(roomScopeClause);
+
+        Integer count = jdbcTemplate.queryForObject(sql, params, Integer.class);
+        return count != null ? count : 0;
+    }
+
+    @Override
+    public Map<UUID, ChatMessage> findLatestMessagesByRoomIds(List<UUID> roomIds) {
+        if (roomIds == null || roomIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        String sql = """
+            SELECT id, chat_room_id, sender_id, sender_name, content, media_url, media_type, created_at, deleted_at
+            FROM (
+                SELECT id, chat_room_id, sender_id, sender_name, content, media_url, media_type, created_at, deleted_at,
+                       ROW_NUMBER() OVER (PARTITION BY chat_room_id ORDER BY created_at DESC, id DESC) as rn
+                FROM chat_messages
+                WHERE chat_room_id IN (:roomIds) AND deleted_at IS NULL
+            ) ranked
+            WHERE rn = 1
+            """;
+        List<Row> rows = jdbcTemplate.query(sql, Map.of("roomIds", roomIds), rowMapper);
+        List<ChatMessage> list = withAttachments(rows);
+        Map<UUID, ChatMessage> map = new LinkedHashMap<>();
+        for (ChatMessage msg : list) {
+            map.put(msg.chatRoomId(), msg);
+        }
+        return map;
+    }
+
+    @Override
+    public Map<UUID, Integer> countUnreadByRoomIds(UUID userId, List<UUID> roomIds) {
+        if (roomIds == null || roomIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        String sql = """
+            SELECT m.chat_room_id, COUNT(*) as cnt
+            FROM chat_messages m
+            LEFT JOIN chat_room_members crm ON crm.chat_room_id = m.chat_room_id AND crm.user_id = :userId AND crm.left_at IS NULL
+            WHERE m.chat_room_id IN (:roomIds)
+              AND m.sender_id <> :userId
+              AND (crm.last_read_at IS NULL OR m.created_at > crm.last_read_at)
+              AND m.deleted_at IS NULL
+            GROUP BY m.chat_room_id
+            """;
+        MapSqlParameterSource params = new MapSqlParameterSource()
+            .addValue("userId", userId)
+            .addValue("roomIds", roomIds);
+        Map<UUID, Integer> map = new LinkedHashMap<>();
+        jdbcTemplate.query(sql, params, (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+            map.put(UUID.fromString(rs.getString("chat_room_id")), rs.getInt("cnt"));
+        });
+        return map;
     }
 }

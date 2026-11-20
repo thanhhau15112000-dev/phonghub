@@ -93,6 +93,27 @@ public class PostgresChatRoomRepository implements ChatRoomRepositoryPort {
         return rooms.stream().findFirst();
     }
 
+    private record RoomRow(UUID id, ChatRoomType type, String name, Instant createdAt) {}
+
+    private Map<UUID, List<ChatRoomMember>> loadMembersBatch(List<UUID> roomIds) {
+        if (roomIds.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        String sql = """
+            SELECT id, chat_room_id, user_id, display_name, role, joined_at, left_at, last_read_at
+            FROM chat_room_members
+            WHERE chat_room_id IN (:roomIds)
+            """;
+        Map<UUID, List<ChatRoomMember>> result = new java.util.LinkedHashMap<>();
+        jdbcTemplate.query(sql, Map.of("roomIds", roomIds), (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+            ChatRoomMember m = memberRowMapper.mapRow(rs, 0);
+            if (m != null) {
+                result.computeIfAbsent(m.chatRoomId(), k -> new ArrayList<>()).add(m);
+            }
+        });
+        return result;
+    }
+
     @Override
     public List<ChatRoom> findRoomsByUserId(UUID userId) {
         String sql = """
@@ -103,13 +124,24 @@ public class PostgresChatRoomRepository implements ChatRoomRepositoryPort {
             ORDER BY r.created_at DESC
             """;
 
-        return jdbcTemplate.query(sql, Map.of("userId", userId), (rs, rowNum) -> {
-            UUID roomId = UUID.fromString(rs.getString("id"));
-            ChatRoomType type = ChatRoomType.valueOf(rs.getString("type"));
-            String name = rs.getString("name");
-            Instant createdAt = toInstant(rs.getTimestamp("created_at"));
-            return new ChatRoom(roomId, type, name, createdAt, loadMembers(roomId));
-        });
+        List<RoomRow> rows = jdbcTemplate.query(sql, Map.of("userId", userId), (rs, rowNum) -> new RoomRow(
+            UUID.fromString(rs.getString("id")),
+            ChatRoomType.valueOf(rs.getString("type")),
+            rs.getString("name"),
+            toInstant(rs.getTimestamp("created_at"))
+        ));
+
+        if (rows.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+
+        List<UUID> roomIds = rows.stream().map(RoomRow::id).toList();
+        Map<UUID, List<ChatRoomMember>> membersByRoom = loadMembersBatch(roomIds);
+
+        return rows.stream().map(r -> new ChatRoom(
+            r.id(), r.type(), r.name(), r.createdAt(),
+            membersByRoom.getOrDefault(r.id(), java.util.Collections.emptyList())
+        )).toList();
     }
 
     @Override

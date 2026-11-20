@@ -65,7 +65,7 @@ class ChatServiceUnitTest {
     @BeforeEach
     void setUp() {
         chatRoomRepo = new InMemoryChatRoomRepository();
-        chatMessageRepo = new InMemoryChatMessageRepository();
+        chatMessageRepo = new InMemoryChatMessageRepository(chatRoomRepo);
         userRepo = new InMemoryUserRepository();
         recorder = new RecordingPublisher();
 
@@ -266,6 +266,91 @@ class ChatServiceUnitTest {
         assertEquals(List.of(room.id()), recorder.receiptRooms.stream().map(ChatRoom::id).toList());
         assertThrows(UnauthorizedChatAccessException.class, () -> chatService.markAsRead(userC, room.id()));
         assertEquals(1, recorder.receiptRooms.size(), "người ngoài phòng không tạo sự kiện đã xem");
+    }
+
+    @Test
+    @DisplayName("#356: Batch loading phòng chat và đếm unread chính xác trên nhiều phòng")
+    void batchLoadingRoomsAndUnreadCountMultipleRooms() {
+        ChatRoom roomAB = chatService.getOrCreateDirectRoom(userA, userB.id());
+        ChatRoom roomCB = chatService.getOrCreateDirectRoom(userC, userB.id());
+
+        chatService.sendMessage(userA, roomAB.id(), "A gửi B 1");
+        ChatMessage lastAB = chatService.sendMessage(userA, roomAB.id(), "A gửi B 2");
+
+        chatService.sendMessage(userC, roomCB.id(), "C gửi B 1");
+        chatService.sendMessage(userC, roomCB.id(), "C gửi B 2");
+        ChatMessage lastCB = chatService.sendMessage(userC, roomCB.id(), "C gửi B 3");
+
+        ChatMessage lastGlobal = chatService.sendMessage(userA, ChatRoom.GLOBAL_ROOM_ID, "Global thông báo");
+
+        assertEquals(6, chatService.getTotalUnreadCount(userB));
+
+        var rooms = chatService.getRoomsForUser(userB);
+        assertEquals(3, rooms.size());
+
+        var globalSummary = rooms.stream().filter(r -> r.id().equals(ChatRoom.GLOBAL_ROOM_ID)).findFirst().orElseThrow();
+        assertEquals(1, globalSummary.unreadCount());
+        assertEquals("Global thông báo", globalSummary.lastMessageContent());
+        assertEquals(lastGlobal.createdAt(), globalSummary.lastMessageAt());
+
+        var abSummary = rooms.stream().filter(r -> r.id().equals(roomAB.id())).findFirst().orElseThrow();
+        assertEquals(2, abSummary.unreadCount());
+        assertEquals("A gửi B 2", abSummary.lastMessageContent());
+        assertEquals(lastAB.createdAt(), abSummary.lastMessageAt());
+
+        var cbSummary = rooms.stream().filter(r -> r.id().equals(roomCB.id())).findFirst().orElseThrow();
+        assertEquals(3, cbSummary.unreadCount());
+        assertEquals("C gửi B 3", cbSummary.lastMessageContent());
+        assertEquals(lastCB.createdAt(), cbSummary.lastMessageAt());
+
+        chatService.markAsRead(userB, roomAB.id());
+        assertEquals(4, chatService.getTotalUnreadCount(userB));
+
+        var updatedRooms = chatService.getRoomsForUser(userB);
+        var updatedABSummary = updatedRooms.stream().filter(r -> r.id().equals(roomAB.id())).findFirst().orElseThrow();
+        assertEquals(0, updatedABSummary.unreadCount());
+    }
+
+    @Test
+    @DisplayName("#356: Batch loading phòng chat an toàn khi phòng chưa có tin nhắn nào")
+    void batchLoadingWithEmptyRooms() {
+        chatService.getOrCreateDirectRoom(userA, userB.id());
+
+        var rooms = chatService.getRoomsForUser(userB);
+        assertEquals(2, rooms.size());
+
+        for (var r : rooms) {
+            assertEquals(0, r.unreadCount());
+            assertEquals("", r.lastMessageContent());
+            assertNotNull(r.lastMessageAt());
+        }
+        assertEquals(0, chatService.getTotalUnreadCount(userB));
+    }
+
+    @Test
+    @DisplayName("#356: getMessagesPage trả về danh sách tin, peerLastReadAt và đánh dấu đã đọc trong 1 lần gọi")
+    void getMessagesPageReturnsPeerLastReadAndMarksRead() {
+        ChatRoom roomAB = chatService.getOrCreateDirectRoom(userA, userB.id());
+        chatService.sendMessage(userA, roomAB.id(), "Chào B");
+        chatService.markAsRead(userB, roomAB.id());
+
+        // A đọc: thấy được peerLastReadAt của B
+        var pageForA = chatService.getMessagesPage(userA, roomAB.id(), null, 30);
+        assertEquals(1, pageForA.messages().size());
+        assertNotNull(pageForA.peerLastReadAt());
+
+        // B gửi tin mới -> A chưa đọc -> unread của A là 1
+        chatService.sendMessage(userB, roomAB.id(), "Chào lại A");
+        assertEquals(1, chatService.getTotalUnreadCount(userA));
+
+        // A mở getMessagesPage -> tự động đánh dấu đã đọc
+        var page2ForA = chatService.getMessagesPage(userA, roomAB.id(), null, 30);
+        assertEquals(2, page2ForA.messages().size());
+        assertEquals(0, chatService.getTotalUnreadCount(userA));
+
+        // Kênh chung không có peerLastReadAt
+        var globalPage = chatService.getMessagesPage(userA, ChatRoom.GLOBAL_ROOM_ID, null, 30);
+        assertNull(globalPage.peerLastReadAt());
     }
 
     /** Ghi lại sự kiện realtime ChatService phát ra. */

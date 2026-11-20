@@ -62,6 +62,7 @@ import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
 @RestControllerAdvice(basePackages = "com.phonghub.adapter.in.web.api")
 public class RestExceptionHandler {
@@ -350,7 +351,7 @@ public class RestExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpected(Exception ex, HttpServletRequest request) throws Exception {
-        if (ex instanceof ErrorResponse || ex instanceof TypeMismatchException
+        if (ex instanceof AsyncRequestNotUsableException || ex instanceof ErrorResponse || ex instanceof TypeMismatchException
             || ex instanceof HttpMessageNotReadableException || ex instanceof HttpMessageNotWritableException) {
             throw ex;
         }
