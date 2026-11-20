@@ -27,7 +27,10 @@ final class AiEndpointSupport {
 
     static RestClient buildRestClient(int timeoutSeconds) {
         Duration timeout = Duration.ofSeconds(Math.max(1, timeoutSeconds));
-        HttpClient httpClient = HttpClient.newBuilder().connectTimeout(timeout).build();
+        HttpClient httpClient = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(timeout)
+            .build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(timeout);
         return RestClient.builder().requestFactory(requestFactory).build();

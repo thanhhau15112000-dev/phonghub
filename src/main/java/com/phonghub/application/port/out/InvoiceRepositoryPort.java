@@ -39,6 +39,12 @@ public interface InvoiceRepositoryPort {
     /** Hóa đơn phí sửa chữa quá hạn, chưa gộp vào hóa đơn tháng. */
     List<UUID> findOverdueMaintenanceInvoiceIds(java.time.LocalDate today);
 
+    default Optional<List<RoomDebtRow>> findPayableDebtTotalsByContractIds(java.util.Collection<UUID> contractIds) {
+        return Optional.empty();
+    }
+
+    record RoomDebtRow(UUID roomId, com.phonghub.domain.model.InvoiceType type, java.math.BigDecimal remaining) {}
+
     default String newUniquePaymentCode() {
         for (int i = 0; i < 10; i++) {
             String code = com.phonghub.domain.model.PaymentCode.generate();

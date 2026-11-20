@@ -112,6 +112,43 @@ class LiteLlmChatCompletionAdapterTest {
         assertTrue(logs.list.get(0).getFormattedMessage().contains("rỗng"));
     }
 
+    @Test
+    void fallsBackToSecondaryProviderWhenPrimaryFailsAndIncludesHistory() throws IOException {
+        AiAssistantProperties properties = startServer(429, "{\"error\":{\"message\":\"rate limited\"}}");
+        HttpServer fallbackServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicReference<String> fallbackBody = new AtomicReference<>();
+        fallbackServer.createContext("/v1/chat/completions", exchange -> {
+            fallbackBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] bytes = OK_BODY.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        fallbackServer.start();
+        try {
+            properties.setFallbackBaseUrl("http://127.0.0.1:" + fallbackServer.getAddress().getPort() + "/v1");
+            properties.setFallbackApiKey("gsk_test_key");
+            properties.setFallbackModel("llama-3.3-70b-versatile");
+
+            String answer = new LiteLlmChatCompletionAdapter(properties).complete(
+                "system",
+                java.util.List.of(
+                    new com.phonghub.application.port.out.AiCompletionPort.ChatTurn("user", "alo"),
+                    new com.phonghub.application.port.out.AiCompletionPort.ChatTurn("assistant", "chào bạn")
+                ),
+                "hiện có mấy phòng trống?"
+            );
+
+            assertEquals("Hóa đơn 3.500.000đ.", answer);
+            assertTrue(fallbackBody.get().contains("\"model\":\"llama-3.3-70b-versatile\""));
+            assertTrue(fallbackBody.get().contains("chào bạn"));
+            assertFalse(fallbackBody.get().contains("reasoning_effort"));
+        } finally {
+            fallbackServer.stop(0);
+        }
+    }
+
     private AiAssistantProperties startServer(int status, String body) throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/v1/chat/completions", exchange -> {

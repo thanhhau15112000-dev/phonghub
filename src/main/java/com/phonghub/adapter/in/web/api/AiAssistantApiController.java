@@ -28,7 +28,8 @@ public class AiAssistantApiController {
         return assistant.askAssistant(
             request == null ? null : request.contextType(),
             request == null ? null : request.targetId(),
-            request == null ? null : request.question()
+            request == null ? null : request.question(),
+            request == null ? null : request.history()
         );
     }
 
@@ -61,5 +62,10 @@ public class AiAssistantApiController {
 
     public record QuestionRequest(String question) {}
     public record OperationsQuestionRequest(UUID propertyId, String question) {}
-    public record GeneralQuestionRequest(String contextType, UUID targetId, String question) {}
+    public record GeneralQuestionRequest(
+        String contextType,
+        UUID targetId,
+        String question,
+        java.util.List<AiAssistantUseCase.ChatMessageInput> history
+    ) {}
 }

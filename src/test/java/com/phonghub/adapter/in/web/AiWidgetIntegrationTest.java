@@ -47,7 +47,10 @@ class AiWidgetIntegrationTest extends SeededWebTest {
 
             mockMvc.perform(get("/dashboard").header("X-User-Id", pair[0]))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("id=\"phonghubAiToggleBtn\"")));
+                .andExpect(content().string(containsString("id=\"phonghubAiToggleBtn\"")))
+                .andExpect(content().string(containsString("id=\"phonghubAiSidebarToggleBtn\"")))
+                .andExpect(content().string(containsString("id=\"phonghubAiSidebar\"")))
+                .andExpect(content().string(containsString("<link rel=\"icon\" href=\"data:,\">")));
         }
     }
 
