@@ -20,7 +20,8 @@ public class LiteLlmEmbeddingAdapter implements AiEmbeddingPort {
     private final RestClient restClient;
 
     public LiteLlmEmbeddingAdapter(AiAssistantProperties properties) {
-        this(properties, RestClient.builder());
+        this.properties = properties;
+        this.restClient = AiEndpointSupport.buildRestClient(properties.getTimeoutSeconds());
     }
 
     LiteLlmEmbeddingAdapter(AiAssistantProperties properties, RestClient.Builder builder) {
@@ -40,7 +41,7 @@ public class LiteLlmEmbeddingAdapter implements AiEmbeddingPort {
         }
         try {
             JsonNode response = restClient.post()
-                .uri(normalizedBaseUrl() + "/v1/embeddings")
+                .uri(AiEndpointSupport.resolveEndpoint(properties.getBaseUrl(), "embeddings"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .header("Authorization", "Bearer " + properties.getApiKey())
@@ -76,13 +77,5 @@ public class LiteLlmEmbeddingAdapter implements AiEmbeddingPort {
                 AiCallFailure.describe(ex));
             throw new AiUnavailableException();
         }
-    }
-
-    private String normalizedBaseUrl() {
-        String baseUrl = properties.getBaseUrl();
-        if (baseUrl == null || baseUrl.isBlank()) {
-            throw new AiUnavailableException();
-        }
-        return baseUrl.replaceAll("/+$", "");
     }
 }

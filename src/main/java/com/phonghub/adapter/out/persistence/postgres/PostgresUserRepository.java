@@ -138,6 +138,15 @@ public class PostgresUserRepository implements UserRepositoryPort {
     }
 
     @Override
+    public Map<UUID, UserRole> findAllIdRoles() {
+        Map<UUID, UserRole> roles = new java.util.LinkedHashMap<>();
+        jdbcTemplate.query("SELECT id, role FROM users", (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+            roles.put(UUID.fromString(rs.getString("id")), UserRole.valueOf(rs.getString("role")));
+        });
+        return roles;
+    }
+
+    @Override
     public void deleteById(UUID id) {
         String sql = "DELETE FROM users WHERE id = :id";
         jdbcTemplate.update(sql, Map.of("id", id));

@@ -91,6 +91,15 @@ public class PostgresNotificationRepository implements NotificationRepositoryPor
     }
 
     @Override
+    public List<Notification> findRecentForAdmins(int limit) {
+        return jdbcTemplate.query(
+            SELECT + " WHERE " + FOR_ADMINS + " ORDER BY n.resolved ASC, n.created_at DESC LIMIT :limit",
+            Map.of("limit", Math.max(1, limit)),
+            this::map
+        );
+    }
+
+    @Override
     public long countUnresolvedForAdmins() {
         Long count = jdbcTemplate.queryForObject(
             "SELECT count(*) FROM notifications n WHERE " + FOR_ADMINS + " AND NOT n.resolved", Map.of(), Long.class);
@@ -110,6 +119,15 @@ public class PostgresNotificationRepository implements NotificationRepositoryPor
         Long count = jdbcTemplate.queryForObject("SELECT count(*) FROM notifications n WHERE " + INBOX
             + (unreadOnly ? " AND n.read_at IS NULL" : ""), Map.of("userId", userId), Long.class);
         return count == null ? 0 : count;
+    }
+
+    @Override
+    public InboxCounts countInboxCounts(UUID userId, boolean unreadOnly) {
+        String sql = unreadOnly
+            ? "SELECT count(*) AS total, count(*) AS unread FROM notifications n WHERE " + INBOX + " AND n.read_at IS NULL"
+            : "SELECT count(*) AS total, count(*) FILTER (WHERE n.read_at IS NULL) AS unread FROM notifications n WHERE " + INBOX;
+        return jdbcTemplate.queryForObject(sql, Map.of("userId", userId), (rs, rowNum) ->
+            new InboxCounts(rs.getLong("total"), rs.getLong("unread")));
     }
 
     @Override

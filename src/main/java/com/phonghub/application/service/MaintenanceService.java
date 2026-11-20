@@ -852,8 +852,9 @@ public class MaintenanceService implements MaintenanceUseCase {
         authorizationService.assertCanAccessProperty(currentUser, propertyId);
         List<MaintenanceTicket> tickets = maintenanceTicketRepository.findByPropertyId(propertyId);
         if (currentUser.role() == UserRole.TENANT) {
+            AuthorizationService.TenantTicketScope scope = authorizationService.tenantTicketScope(currentUser);
             return tickets.stream()
-                .filter(t -> authorizationService.canTenantViewTicket(currentUser, t.getRoomId(), t.getRequestedByTenantId()))
+                .filter(t -> scope.allows(t.getRoomId(), t.getRequestedByTenantId()))
                 .toList();
         }
         return tickets.stream().filter(t -> visibleTo(currentUser, t)).toList();
@@ -881,8 +882,9 @@ public class MaintenanceService implements MaintenanceUseCase {
 
         authorizationService.assertCanAccessProperty(currentUser, room.getPropertyId());
         if (currentUser.role() == UserRole.TENANT) {
+            AuthorizationService.TenantTicketScope scope = authorizationService.tenantTicketScope(currentUser);
             return maintenanceTicketRepository.findByRoomId(roomId).stream()
-                .filter(t -> authorizationService.canTenantViewTicket(currentUser, t.getRoomId(), t.getRequestedByTenantId()))
+                .filter(t -> scope.allows(t.getRoomId(), t.getRequestedByTenantId()))
                 .toList();
         }
         return maintenanceTicketRepository.findByRoomId(roomId).stream().filter(t -> visibleTo(currentUser, t)).toList();

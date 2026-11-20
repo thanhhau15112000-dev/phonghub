@@ -47,6 +47,13 @@ public class NotificationService implements NotificationUseCase {
     }
 
     @Override
+    public List<Notification> listRecentAdminNotifications(int limit) {
+        CurrentUser caller = currentUserPort.getCurrentUser();
+        authorizationService.assertAdmin(caller);
+        return notificationRepository.findRecentForAdmins(limit);
+    }
+
+    @Override
     public long countUnreadAdminNotifications() {
         return notificationRepository.countUnresolvedForAdmins();
     }
