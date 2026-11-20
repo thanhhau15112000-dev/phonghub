@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,24 +37,38 @@ public class PostgresContractRepository implements ContractRepositoryPort {
         return date != null ? date.toLocalDate() : null;
     }
 
-    private List<ContractOccupant> loadOccupants(UUID contractId) {
-        String sql = "SELECT * FROM contract_occupants WHERE contract_id = :contractId ORDER BY is_primary DESC, check_in_date ASC";
-        return jdbcTemplate.query(sql, Map.of("contractId", contractId), (rs, rowNum) -> new ContractOccupant(
-            UUID.fromString(rs.getString("id")),
-            UUID.fromString(rs.getString("contract_id")),
-            UUID.fromString(rs.getString("tenant_id")),
-            rs.getBoolean("is_primary"),
-            toLocalDate(rs.getDate("check_in_date")),
-            toLocalDate(rs.getDate("check_out_date"))
-        ));
+    private record ContractRow(
+        UUID id,
+        UUID propertyId,
+        UUID roomId,
+        UUID primaryTenantId,
+        java.math.BigDecimal depositAmount,
+        java.math.BigDecimal rentAmount,
+        LocalDate startDate,
+        LocalDate endDate,
+        int paymentDay,
+        ContractStatus status,
+        Instant activatedAt,
+        java.math.BigDecimal depositAppliedAmount,
+        java.math.BigDecimal settlementCreditAmount,
+        Instant createdAt,
+        Instant updatedAt,
+        long version
+    ) {
+        Contract toContract(List<ContractOccupant> occupants) {
+            Contract contract = new Contract(
+                id, propertyId, roomId, primaryTenantId, depositAmount, rentAmount,
+                startDate, endDate, paymentDay, status, occupants, activatedAt,
+                depositAppliedAmount, settlementCreditAmount, createdAt, updatedAt
+            );
+            contract.restoreVersion(version);
+            return contract;
+        }
     }
 
-    private Contract mapContract(ResultSet rs) throws SQLException {
-        UUID id = UUID.fromString(rs.getString("id"));
-        List<ContractOccupant> occupants = loadOccupants(id);
-
-        Contract contract = new Contract(
-            id,
+    private ContractRow mapContractRow(ResultSet rs, int rowNum) throws SQLException {
+        return new ContractRow(
+            UUID.fromString(rs.getString("id")),
             UUID.fromString(rs.getString("property_id")),
             UUID.fromString(rs.getString("room_id")),
             UUID.fromString(rs.getString("primary_tenant_id")),
@@ -63,15 +78,44 @@ public class PostgresContractRepository implements ContractRepositoryPort {
             toLocalDate(rs.getDate("end_date")),
             rs.getInt("payment_day"),
             ContractStatus.valueOf(rs.getString("status")),
-            occupants,
             rs.getTimestamp("activated_at") != null ? rs.getTimestamp("activated_at").toInstant() : null,
             rs.getBigDecimal("deposit_applied_amount"),
             rs.getBigDecimal("settlement_credit_amount"),
             toInstant(rs.getTimestamp("created_at")),
-            toInstant(rs.getTimestamp("updated_at"))
+            toInstant(rs.getTimestamp("updated_at")),
+            rs.getLong("version")
         );
-        contract.restoreVersion(rs.getLong("version"));
-        return contract;
+    }
+
+    private Map<UUID, List<ContractOccupant>> loadOccupantsBatch(List<UUID> contractIds) {
+        if (contractIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        String sql = "SELECT * FROM contract_occupants WHERE contract_id IN (:contractIds) ORDER BY is_primary DESC, check_in_date ASC";
+        Map<UUID, List<ContractOccupant>> result = new LinkedHashMap<>();
+        jdbcTemplate.query(sql, Map.of("contractIds", contractIds), (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+            ContractOccupant occ = new ContractOccupant(
+                UUID.fromString(rs.getString("id")),
+                UUID.fromString(rs.getString("contract_id")),
+                UUID.fromString(rs.getString("tenant_id")),
+                rs.getBoolean("is_primary"),
+                toLocalDate(rs.getDate("check_in_date")),
+                toLocalDate(rs.getDate("check_out_date"))
+            );
+            result.computeIfAbsent(occ.contractId(), ignored -> new ArrayList<>()).add(occ);
+        });
+        return result;
+    }
+
+    private List<Contract> hydrate(List<ContractRow> rows) {
+        if (rows.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<UUID> ids = rows.stream().map(ContractRow::id).toList();
+        Map<UUID, List<ContractOccupant>> occupantsByContract = loadOccupantsBatch(ids);
+        return rows.stream()
+            .map(row -> row.toContract(occupantsByContract.getOrDefault(row.id(), Collections.emptyList())))
+            .toList();
     }
 
     @Override
@@ -146,27 +190,27 @@ public class PostgresContractRepository implements ContractRepositoryPort {
     @Override
     public Optional<Contract> findById(UUID id) {
         String sql = "SELECT * FROM contracts WHERE id = :id";
-        List<Contract> list = jdbcTemplate.query(sql, Map.of("id", id), (rs, rn) -> mapContract(rs));
+        List<Contract> list = hydrate(jdbcTemplate.query(sql, Map.of("id", id), this::mapContractRow));
         return list.isEmpty() ? Optional.empty() : Optional.of(list.getFirst());
     }
 
     @Override
     public Optional<Contract> findByIdForUpdate(UUID id) {
         String sql = "SELECT * FROM contracts WHERE id = :id FOR UPDATE";
-        List<Contract> list = jdbcTemplate.query(sql, Map.of("id", id), (rs, rn) -> mapContract(rs));
+        List<Contract> list = hydrate(jdbcTemplate.query(sql, Map.of("id", id), this::mapContractRow));
         return list.stream().findFirst();
     }
 
     @Override
     public List<Contract> findByPropertyId(UUID propertyId) {
         String sql = "SELECT * FROM contracts WHERE property_id = :propertyId ORDER BY created_at DESC";
-        return jdbcTemplate.query(sql, Map.of("propertyId", propertyId), (rs, rn) -> mapContract(rs));
+        return hydrate(jdbcTemplate.query(sql, Map.of("propertyId", propertyId), this::mapContractRow));
     }
 
     @Override
     public List<Contract> findByRoomId(UUID roomId) {
         String sql = "SELECT * FROM contracts WHERE room_id = :roomId ORDER BY created_at DESC";
-        return jdbcTemplate.query(sql, Map.of("roomId", roomId), (rs, rn) -> mapContract(rs));
+        return hydrate(jdbcTemplate.query(sql, Map.of("roomId", roomId), this::mapContractRow));
     }
 
     @Override
@@ -175,14 +219,14 @@ public class PostgresContractRepository implements ContractRepositoryPort {
             SELECT * FROM contracts WHERE room_id = :roomId AND status IN ('ACTIVE', 'EXPIRED')
             ORDER BY (status = 'ACTIVE') DESC, updated_at DESC LIMIT 1
             """;
-        List<Contract> list = jdbcTemplate.query(sql, Map.of("roomId", roomId), (rs, rn) -> mapContract(rs));
+        List<Contract> list = hydrate(jdbcTemplate.query(sql, Map.of("roomId", roomId), this::mapContractRow));
         return list.isEmpty() ? Optional.empty() : Optional.of(list.getFirst());
     }
 
     @Override
     public List<Contract> findByPrimaryTenantId(UUID tenantId) {
         String sql = "SELECT * FROM contracts WHERE primary_tenant_id = :tenantId ORDER BY created_at DESC";
-        return jdbcTemplate.query(sql, Map.of("tenantId", tenantId), (rs, rn) -> mapContract(rs));
+        return hydrate(jdbcTemplate.query(sql, Map.of("tenantId", tenantId), this::mapContractRow));
     }
 
     @Override
@@ -194,12 +238,12 @@ public class PostgresContractRepository implements ContractRepositoryPort {
               AND (co.check_out_date IS NULL OR co.check_out_date > CURRENT_DATE)
             ORDER BY c.created_at DESC
             """;
-        return jdbcTemplate.query(sql, Map.of("tenantId", tenantId), (rs, rn) -> mapContract(rs));
+        return hydrate(jdbcTemplate.query(sql, Map.of("tenantId", tenantId), this::mapContractRow));
     }
 
     @Override
     public List<Contract> findAll() {
         String sql = "SELECT * FROM contracts ORDER BY created_at DESC";
-        return jdbcTemplate.query(sql, (rs, rn) -> mapContract(rs));
+        return hydrate(jdbcTemplate.query(sql, this::mapContractRow));
     }
 }

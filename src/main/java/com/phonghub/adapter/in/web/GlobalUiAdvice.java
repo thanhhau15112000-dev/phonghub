@@ -9,7 +9,6 @@ import com.phonghub.domain.model.Notification;
 import com.phonghub.domain.model.UserRole;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -52,6 +51,10 @@ public class GlobalUiAdvice {
         return Map.of("imageBytes", chatMaxImageBytes, "videoBytes", chatMaxVideoBytes);
     }
 
+    private static boolean isApiRequest(HttpServletRequest request) {
+        return request.getRequestURI().startsWith(request.getContextPath() + "/api/");
+    }
+
     /**
      * Chuông thông báo cá nhân trên header cho mọi vai trò trừ quản trị viên (quản trị viên giữ chuông việc hệ thống):
      * 5 thông báo mới nhất và số chưa đọc (#86). Bỏ qua request API vì không render header.
@@ -59,8 +62,7 @@ public class GlobalUiAdvice {
     @ModelAttribute("myNotifications")
     public NotificationInboxUseCase.InboxPage myNotifications(HttpServletRequest request) {
         CurrentUser user = currentUser(request);
-        if (user == null || user.role() == UserRole.ADMIN || notificationInbox.isEmpty()
-            || request.getRequestURI().startsWith(request.getContextPath() + "/api/")) {
+        if (user == null || user.role() == UserRole.ADMIN || notificationInbox.isEmpty() || isApiRequest(request)) {
             return null;
         }
         return notificationInbox.get().inbox(false, 1, 5);
@@ -97,7 +99,7 @@ public class GlobalUiAdvice {
     @ModelAttribute("unreadNotificationCount")
     public long unreadNotificationCount(HttpServletRequest request) {
         CurrentUser user = currentUser(request);
-        if (user != null && user.role() == UserRole.ADMIN && notificationUseCase.isPresent()) {
+        if (user != null && user.role() == UserRole.ADMIN && notificationUseCase.isPresent() && !isApiRequest(request)) {
             return notificationUseCase.get().countUnreadAdminNotifications();
         }
         return 0L;
@@ -106,10 +108,8 @@ public class GlobalUiAdvice {
     @ModelAttribute("adminNotifications")
     public List<Notification> adminNotifications(HttpServletRequest request) {
         CurrentUser user = currentUser(request);
-        if (user != null && user.role() == UserRole.ADMIN && notificationUseCase.isPresent()) {
-            return notificationUseCase.get().listAdminNotifications().stream()
-                .sorted(Comparator.comparing(Notification::isResolved))
-                .toList();
+        if (user != null && user.role() == UserRole.ADMIN && notificationUseCase.isPresent() && !isApiRequest(request)) {
+            return notificationUseCase.get().listRecentAdminNotifications(5);
         }
         return Collections.emptyList();
     }

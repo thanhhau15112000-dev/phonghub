@@ -1,0 +1,418 @@
+<div th:fragment="floatingAiWidget" th:if="${currentUser != null}" id="phonghubFloatingAiContainer">
+    <style>
+        #phonghubAiToggleBtn:hover {
+            background-color: #f8fafc !important;
+            border-color: #94a3b8 !important;
+            transform: scale(1.06);
+            box-shadow: 0 6px 20px rgba(15, 23, 42, 0.18) !important;
+        }
+        #phonghubAiToggleBtn:active {
+            transform: scale(0.96);
+        }
+        #phonghubAiQuestionInput::placeholder {
+            color: #94a3b8;
+        }
+        #phonghubAiQuestionInput:focus {
+            border-color: #94a3b8 !important;
+        }
+        #phonghubAiSubmitBtn:hover:not(:disabled) {
+            transform: scale(1.15);
+        }
+        #phonghubAiSubmitBtn:disabled {
+            opacity: 0.45;
+            cursor: wait;
+        }
+        #phonghubAiMessagesPane::-webkit-scrollbar {
+            width: 6px;
+        }
+        #phonghubAiMessagesPane::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 6px;
+        }
+        #phonghubAiMessagesPane::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .phonghub-ai-chip {
+            background-color: #f1f5f9;
+            color: #0f172a;
+            border: 1px solid #cbd5e1;
+            border-radius: 16px;
+            padding: 4px 10px;
+            font-size: 11.5px;
+            font-weight: 500;
+            cursor: pointer;
+            text-align: left;
+            transition: background-color 0.15s ease, border-color 0.15s ease;
+        }
+        .phonghub-ai-chip:hover {
+            background-color: #e2e8f0;
+            border-color: #94a3b8;
+        }
+        @media (max-width: 480px) {
+            #phonghubAiModal {
+                left: 8px !important;
+                right: 8px !important;
+                width: auto !important;
+                max-height: calc(100vh - 16px);
+            }
+        }
+    </style>
+
+    <!-- Nút tròn Trợ lý AI phía trên nút Soạn tin nhắn: Theme trắng viền xám đồng nhất PhongHub -->
+    <button type="button" id="phonghubAiToggleBtn" aria-label="Trợ lý AI" title="Trợ lý AI"
+            style="position: fixed; bottom: 78px; right: 20px; width: 48px; height: 48px; border-radius: 50%; background-color: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.14); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 99999; transition: background-color 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: block;" aria-hidden="true">
+            <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"/>
+            <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/>
+        </svg>
+    </button>
+
+    <!-- Khung chat AI docked sát mép dưới: Style & tổ chức đồng nhất với phonghubDockedMessengerBox -->
+    <div id="phonghubAiModal" role="dialog" aria-labelledby="phonghubAiModalTitle"
+         style="display: none; position: fixed; bottom: 0; right: 86px; width: 348px; height: 465px; background-color: #ffffff; color: #0f172a; border-radius: 12px 12px 0 0; box-shadow: 0 12px 36px rgba(15, 23, 42, 0.16), 0 2px 10px rgba(15, 23, 42, 0.08); border: 1px solid #cbd5e1; border-bottom: none; z-index: 100001; flex-direction: column; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; transition: right 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;">
+        <!-- Header -->
+        <div style="padding: 10px 14px; background-color: #ffffff; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; user-select: none;">
+            <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                <div style="width: 36px; height: 36px; border-radius: 50%; background: #e2e8f0; color: #0f172a; display: flex; align-items: center; justify-content: center; border: 1.5px solid #cbd5e1; flex-shrink: 0;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"/>
+                        <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/>
+                    </svg>
+                </div>
+                <div style="min-width: 0; display: flex; flex-direction: column;">
+                    <span id="phonghubAiModalTitle" style="font-weight: 700; font-size: 14px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; letter-spacing: -0.1px;">Trợ lý AI</span>
+                    <span id="phonghubAiRoleBadge" style="font-size: 11px; color: #64748b; line-height: 1.2;"></span>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px;">
+                <button type="button" id="phonghubAiCloseBtn" class="phonghub-icon-btn" aria-label="Đóng" title="Đóng" style="font-size: 17px; font-weight: 700; line-height: 1;">✕</button>
+            </div>
+        </div>
+
+        <!-- Chọn ngữ cảnh (chỉ hiện khi có từ 2 ngữ cảnh trở lên hoặc mở từ 1 hóa đơn) -->
+        <div id="phonghubAiContextRow" style="display: none; padding: 8px 14px; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;">
+            <select id="phonghubAiContextSelect" aria-label="Ngữ cảnh"
+                    style="width: 100%; background-color: #f1f5f9; color: #0f172a; border-radius: 20px; border: 1px solid #e2e8f0; padding: 6px 12px; font-size: 12.5px; outline: none; cursor: pointer;"></select>
+        </div>
+
+        <!-- Khung tin nhắn nền #f8fafc giống phonghubDockedMessagesPane -->
+        <div id="phonghubAiMessagesPane" aria-live="polite"
+             style="flex: 1; padding: 12px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background-color: #f8fafc;"></div>
+
+        <!-- Thanh gợi ý + ô nhập pill + nút gửi mũi bay xanh #0084ff -->
+        <div id="phonghubAiFooter" style="padding: 8px 10px; background-color: #ffffff; border-top: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 6px;">
+            <div id="phonghubAiQuickPrompts" style="display: none; flex-wrap: wrap; gap: 6px;"></div>
+            <form id="phonghubAiAskForm" style="width: 100%; display: flex; align-items: center; margin: 0; gap: 6px;">
+                <input type="text" id="phonghubAiQuestionInput" maxlength="1200" required
+                       placeholder="Aa" autocomplete="off"
+                       style="flex: 1; background-color: #f1f5f9; color: #0f172a; border-radius: 20px; border: 1px solid #cbd5e1; padding: 7px 12px; font-size: 13.5px; outline: none; transition: border-color 0.15s ease;">
+                <button type="submit" id="phonghubAiSubmitBtn" title="Gửi" aria-label="Gửi"
+                        style="background: none; border: none; color: #0084ff; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: transform 0.15s ease; flex-shrink: 0;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                    </svg>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const toggleBtn = document.getElementById('phonghubAiToggleBtn');
+        const modal = document.getElementById('phonghubAiModal');
+        const closeBtn = document.getElementById('phonghubAiCloseBtn');
+        const roleBadge = document.getElementById('phonghubAiRoleBadge');
+        const contextRow = document.getElementById('phonghubAiContextRow');
+        const contextSelect = document.getElementById('phonghubAiContextSelect');
+        const messagesPane = document.getElementById('phonghubAiMessagesPane');
+        const quickPromptsBox = document.getElementById('phonghubAiQuickPrompts');
+        const askForm = document.getElementById('phonghubAiAskForm');
+        const questionInput = document.getElementById('phonghubAiQuestionInput');
+        const submitBtn = document.getElementById('phonghubAiSubmitBtn');
+        if (!toggleBtn || !modal) return;
+
+        let widgetContext = null;
+        let contextLoading = false;
+        let customContextOption = null;
+
+        function csrfHeaders() {
+            const headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+            const tokenMeta = document.querySelector('meta[name="_csrf"]');
+            const headerMeta = document.querySelector('meta[name="_csrf_header"]');
+            if (tokenMeta && headerMeta) {
+                headers[headerMeta.content] = tokenMeta.content;
+            }
+            return headers;
+        }
+
+        function nowHHMM() {
+            const d = new Date();
+            return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+        }
+
+        function scrollToBottom() {
+            messagesPane.scrollTop = messagesPane.scrollHeight;
+        }
+
+        function createAiMiniAvatar() {
+            const av = document.createElement('div');
+            av.style.cssText = 'width: 26px; height: 26px; border-radius: 50%; background-color: #e2e8f0; color: #0f172a; border: 1px solid #cbd5e1; display: flex; align-items: center; justify-content: center; flex-shrink: 0;';
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('width', '14');
+            svg.setAttribute('height', '14');
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('fill', 'none');
+            svg.setAttribute('stroke', '#0f172a');
+            svg.setAttribute('stroke-width', '2');
+            svg.setAttribute('stroke-linecap', 'round');
+            svg.setAttribute('stroke-linejoin', 'round');
+            const p1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            p1.setAttribute('d', 'M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z');
+            svg.appendChild(p1);
+            av.appendChild(svg);
+            return av;
+        }
+
+        function appendBubble(isMe, text) {
+            const wrapper = document.createElement('div');
+            wrapper.style.display = 'flex';
+            wrapper.style.flexDirection = 'column';
+            wrapper.style.alignItems = isMe ? 'flex-end' : 'flex-start';
+            wrapper.style.marginBottom = '4px';
+
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            row.style.alignItems = 'flex-end';
+            row.style.gap = '8px';
+            row.style.maxWidth = '85%';
+
+            if (!isMe) {
+                row.appendChild(createAiMiniAvatar());
+            }
+
+            const bubble = document.createElement('div');
+            bubble.style.padding = '8px 12px';
+            bubble.style.fontSize = '13.5px';
+            bubble.style.lineHeight = '1.4';
+            bubble.style.wordBreak = 'break-word';
+            bubble.style.whiteSpace = 'pre-wrap';
+
+            if (isMe) {
+                bubble.style.borderRadius = '18px 18px 4px 18px';
+                bubble.style.backgroundColor = '#0084ff';
+                bubble.style.color = '#ffffff';
+                bubble.style.boxShadow = '0 1px 3px rgba(0, 132, 255, 0.2)';
+            } else {
+                bubble.style.borderRadius = '18px 18px 18px 4px';
+                bubble.style.backgroundColor = '#e2e8f0';
+                bubble.style.color = '#0f172a';
+            }
+            bubble.textContent = text;
+            row.appendChild(bubble);
+            wrapper.appendChild(row);
+
+            const timeSpan = document.createElement('span');
+            timeSpan.style.fontSize = '9.5px';
+            timeSpan.style.color = '#94a3b8';
+            timeSpan.style.marginTop = '2px';
+            timeSpan.style.padding = isMe ? '0 4px 0 0' : '0 0 0 34px';
+            timeSpan.textContent = nowHHMM();
+            wrapper.appendChild(timeSpan);
+
+            messagesPane.appendChild(wrapper);
+            scrollToBottom();
+            return bubble;
+        }
+
+        function contextValue(type, id) {
+            return (type || 'AUTO') + '::' + (id || '');
+        }
+
+        function parseContextValue(val) {
+            const parts = String(val || 'AUTO::').split('::');
+            return { contextType: parts[0] || 'AUTO', targetId: parts[1] || null };
+        }
+
+        function renderContextOptions() {
+            const options = [];
+            if (widgetContext && Array.isArray(widgetContext.contexts)) {
+                widgetContext.contexts.forEach(opt => options.push(opt));
+            }
+            if (customContextOption) {
+                const exists = options.some(o => o.contextType === customContextOption.contextType && String(o.targetId || '') === String(customContextOption.targetId || ''));
+                if (!exists) options.unshift(customContextOption);
+            }
+            contextSelect.replaceChildren();
+            if (options.length > 1 || customContextOption) {
+                options.forEach(opt => {
+                    const el = document.createElement('option');
+                    el.value = contextValue(opt.contextType, opt.targetId);
+                    el.textContent = opt.label;
+                    contextSelect.appendChild(el);
+                });
+                contextRow.style.display = 'block';
+            } else {
+                contextRow.style.display = 'none';
+            }
+        }
+
+        function renderQuickPrompts() {
+            quickPromptsBox.replaceChildren();
+            const prompts = widgetContext && Array.isArray(widgetContext.quickPrompts) ? widgetContext.quickPrompts : [];
+            if (!prompts.length) {
+                quickPromptsBox.style.display = 'none';
+                return;
+            }
+            prompts.forEach(p => {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'phonghub-ai-chip';
+                chip.textContent = p.label;
+                chip.addEventListener('click', () => {
+                    if (contextRow.style.display !== 'none') {
+                        const val = contextValue(p.contextType, p.targetId);
+                        if (Array.from(contextSelect.options).some(o => o.value === val)) {
+                            contextSelect.value = val;
+                        }
+                    }
+                    sendAiRequest('/api/v1/ai/ask', {
+                        contextType: p.contextType || 'AUTO',
+                        targetId: p.targetId || null,
+                        question: p.question
+                    }, p.question);
+                });
+                quickPromptsBox.appendChild(chip);
+            });
+            quickPromptsBox.style.display = 'flex';
+        }
+
+        async function ensureContextLoaded() {
+            if (widgetContext || contextLoading) return;
+            contextLoading = true;
+            try {
+                const res = await fetch('/api/v1/ai/widget-context', { headers: { 'Accept': 'application/json' } });
+                if (res.ok) {
+                    widgetContext = await res.json();
+                    roleBadge.textContent = widgetContext.roleLabel || widgetContext.role || '';
+                    renderContextOptions();
+                    renderQuickPrompts();
+                }
+            } catch (err) {
+                // Giữ giao diện gọn khi lỗi mạng
+            } finally {
+                contextLoading = false;
+            }
+        }
+
+        async function sendAiRequest(url, payload, displayUserQuestion) {
+            if (displayUserQuestion) {
+                appendBubble(true, displayUserQuestion);
+            }
+            submitBtn.disabled = true;
+            const aiBubble = appendBubble(false, '...');
+            try {
+                const options = { method: 'POST', headers: csrfHeaders() };
+                if (payload) options.body = JSON.stringify(payload);
+                const res = await fetch(url, options);
+                const body = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    throw new Error(body.detail || 'Không thể trả lời lúc này.');
+                }
+                aiBubble.textContent = body.answer || 'Chưa có câu trả lời.';
+            } catch (err) {
+                aiBubble.style.backgroundColor = '#fee2e2';
+                aiBubble.style.color = '#991b1b';
+                aiBubble.textContent = err.message || 'Không thể trả lời lúc này.';
+            } finally {
+                submitBtn.disabled = false;
+                scrollToBottom();
+            }
+        }
+
+        function openModal() {
+            const chatModal = document.getElementById('phonghubNewMessageModal');
+            const dockedChat = document.getElementById('phonghubDockedMessengerBox');
+            if (chatModal) chatModal.style.display = 'none';
+            if (dockedChat) dockedChat.style.display = 'none';
+            modal.style.display = 'flex';
+            ensureContextLoaded();
+        }
+
+        const chatToggleBtn = document.getElementById('phonghubMessengerToggleBtn');
+        if (chatToggleBtn) {
+            chatToggleBtn.addEventListener('click', () => {
+                modal.style.display = 'none';
+            });
+        }
+
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (modal.style.display === 'flex') {
+                modal.style.display = 'none';
+            } else {
+                openModal();
+                setTimeout(() => questionInput.focus(), 50);
+            }
+        });
+
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            modal.style.display = 'none';
+        });
+
+        askForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (submitBtn.disabled) return;
+            const q = questionInput.value.trim();
+            if (!q) return;
+            questionInput.value = '';
+            const selected = contextRow.style.display !== 'none'
+                ? parseContextValue(contextSelect.value)
+                : (widgetContext && widgetContext.contexts && widgetContext.contexts[0]
+                    ? { contextType: widgetContext.contexts[0].contextType, targetId: widgetContext.contexts[0].targetId }
+                    : { contextType: 'AUTO', targetId: null });
+            sendAiRequest('/api/v1/ai/ask', {
+                contextType: selected.contextType,
+                targetId: selected.targetId,
+                question: q
+            }, q);
+        });
+
+        window.openPhongHubAiWidget = async function(opts) {
+            const o = opts || {};
+            if (o.contextType && o.targetId) {
+                customContextOption = {
+                    contextType: o.contextType,
+                    targetId: o.targetId,
+                    label: o.label || 'Hóa đơn đã chọn'
+                };
+            }
+            openModal();
+            await ensureContextLoaded();
+            renderContextOptions();
+            if (customContextOption) {
+                contextSelect.value = contextValue(customContextOption.contextType, customContextOption.targetId);
+            }
+            if (o.autoAnalyze && o.contextType === 'INVOICE' && o.targetId) {
+                sendAiRequest('/api/v1/ai/invoices/' + o.targetId + '/analysis', null, 'Phân tích ' + (o.label || 'hóa đơn'));
+            } else {
+                setTimeout(() => questionInput.focus(), 50);
+            }
+        };
+
+        document.addEventListener('click', (event) => {
+            const trigger = event.target.closest('[data-open-ai-invoice]');
+            if (!trigger) return;
+            event.preventDefault();
+            const invoiceId = trigger.getAttribute('data-ai-invoice-id');
+            if (!invoiceId) return;
+            window.openPhongHubAiWidget({
+                contextType: 'INVOICE',
+                targetId: invoiceId,
+                label: trigger.getAttribute('data-ai-invoice-label') || 'Hóa đơn đã chọn',
+                autoAnalyze: trigger.getAttribute('data-ai-auto-analyze') === 'true'
+            });
+        });
+    })();
+    </script>
+</div>

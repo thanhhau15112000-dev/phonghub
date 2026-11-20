@@ -228,24 +228,44 @@ public class AuthorizationService {
         throw new UnauthorizedPropertyAccessException(MSG_ROLE_DENIED);
     }
 
+    /** Phạm vi phiếu bảo trì của một người thuê đã nạp sẵn để lọc danh sách theo O(1). */
+    public record TenantTicketScope(UUID tenantId, Set<UUID> residingRoomIds) {
+        public static final TenantTicketScope EMPTY = new TenantTicketScope(null, Set.of());
+
+        public boolean allows(UUID roomId, UUID requestedByTenantId) {
+            if (tenantId == null) {
+                return false;
+            }
+            return tenantId.equals(requestedByTenantId) || (roomId != null && residingRoomIds.contains(roomId));
+        }
+    }
+
+    /** Nạp phạm vi phòng đang ở của người thuê một lần thay vì truy vấn lặp cho từng phiếu bảo trì. */
+    public TenantTicketScope tenantTicketScope(CurrentUser user) {
+        if (user == null || user.id() == null) {
+            return TenantTicketScope.EMPTY;
+        }
+        Optional<Tenant> tenantOpt = tenantRepositoryPort.findByUserId(user.id());
+        if (tenantOpt.isEmpty()) {
+            return TenantTicketScope.EMPTY;
+        }
+        UUID tenantId = tenantOpt.get().id();
+        Set<UUID> roomIds = java.util.stream.Stream.concat(
+                contractRepositoryPort.findByPrimaryTenantId(tenantId).stream(),
+                contractRepositoryPort.findByOccupantTenantId(tenantId).stream()
+            )
+            .filter(Contract::isResiding)
+            .map(Contract::getRoomId)
+            .collect(Collectors.toSet());
+        return new TenantTicketScope(tenantId, roomIds);
+    }
+
     /**
      * Người thuê chỉ xem được phiếu bảo trì của phòng mình đang ở (hợp đồng ACTIVE, người thuê chính
      * hoặc người ở cùng) hoặc phiếu do chính họ tạo.
      */
     public boolean canTenantViewTicket(CurrentUser user, UUID roomId, UUID requestedByTenantId) {
-        Optional<Tenant> tenantOpt = tenantRepositoryPort.findByUserId(user.id());
-        if (tenantOpt.isEmpty()) {
-            return false;
-        }
-        UUID tenantId = tenantOpt.get().id();
-        if (tenantId.equals(requestedByTenantId)) {
-            return true;
-        }
-        return java.util.stream.Stream.concat(
-                contractRepositoryPort.findByPrimaryTenantId(tenantId).stream(),
-                contractRepositoryPort.findByOccupantTenantId(tenantId).stream()
-            )
-            .anyMatch(c -> c.isResiding() && c.getRoomId().equals(roomId));
+        return tenantTicketScope(user).allows(roomId, requestedByTenantId);
     }
 
     /**

@@ -8,6 +8,12 @@ import java.util.UUID;
 public interface NotificationUseCase {
     Notification requestPasswordReset(User user);
     List<Notification> listAdminNotifications();
+    default List<Notification> listRecentAdminNotifications(int limit) {
+        return listAdminNotifications().stream()
+            .sorted(java.util.Comparator.comparing(Notification::isResolved))
+            .limit(Math.max(1, limit))
+            .toList();
+    }
     long countUnreadAdminNotifications();
     void markAsResolved(UUID notificationId);
     void deleteNotification(UUID notificationId);

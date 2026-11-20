@@ -28,6 +28,7 @@ import com.phonghub.domain.model.InvoiceType;
 import com.phonghub.domain.model.MaintenanceStatus;
 import com.phonghub.domain.model.MaintenanceTicket;
 import com.phonghub.domain.model.Property;
+import com.phonghub.domain.model.PropertyApprovalStatus;
 import com.phonghub.domain.model.Room;
 import com.phonghub.domain.model.RoomStatus;
 import com.phonghub.domain.model.UserRole;
@@ -105,6 +106,9 @@ public class AiAssistantService implements AiAssistantUseCase {
     private static final Set<String> INVOICE_FAQ_CATEGORIES = Set.of("invoice", "general");
     private static final Set<String> CONTRACT_FAQ_CATEGORIES = Set.of("contract", "general");
     private static final Set<String> OPERATIONS_FAQ_CATEGORIES = Set.of("operations", "maintenance", "general");
+    private static final Set<String> TENANT_FAQ_CATEGORIES = Set.of("invoice", "contract", "general");
+    private static final Set<String> TECHNICIAN_FAQ_CATEGORIES = Set.of("maintenance", "general");
+    private static final Set<String> ADMIN_FAQ_CATEGORIES = Set.of("general");
     private static final List<MaintenanceStatus> OPEN_MAINTENANCE_STATUSES = List.of(
         MaintenanceStatus.REPORTED, MaintenanceStatus.PENDING_OWNER_APPROVAL,
         MaintenanceStatus.PENDING_TENANT_APPROVAL, MaintenanceStatus.ASSIGNED,
@@ -251,9 +255,23 @@ public class AiAssistantService implements AiAssistantUseCase {
         authorizationService.assertCanViewPropertyFinance(user, propertyId);
         Property property = propertyRepository.findById(propertyId)
             .orElseThrow(() -> new UnauthorizedPropertyAccessException(AuthorizationService.MSG_PROPERTY_UNAVAILABLE));
-        List<FaqMatch> faq = searchFaq(cleanQuestion, OPERATIONS_FAQ_CATEGORIES);
+        return answerForProperty(property, cleanQuestion, true);
+    }
 
+    private AiResponse answerForProperty(Property property, String cleanQuestion, boolean includeFinance) {
+        List<FaqMatch> faq = searchFaq(cleanQuestion, OPERATIONS_FAQ_CATEGORIES);
         LocalDate today = LocalDate.now(clock);
+        Map<String, Object> facts = buildPropertyFacts(property, cleanQuestion, today, includeFinance);
+        addFaqContext(facts, faq);
+        String answer = complete(cleanQuestion, facts);
+        String sourcePrefix = includeFinance
+            ? "Tổng hợp phòng, hợp đồng, phiếu bảo trì và hóa đơn của "
+            : "Tổng hợp phòng, hợp đồng (ẩn tiền) và phiếu bảo trì của ";
+        return new AiResponse(answer, withFaqSources(List.of(new Source(sourcePrefix + property.name() + " tại ngày " + today)), faq));
+    }
+
+    private Map<String, Object> buildPropertyFacts(Property property, String cleanQuestion, LocalDate today, boolean includeFinance) {
+        UUID propertyId = property.id();
         LocalDate expiryThrough = today.plusDays(EXPIRING_SOON_DAYS);
         List<Room> rooms = roomRepository.findByPropertyId(propertyId);
         Map<UUID, String> roomNumbers = rooms.stream().collect(Collectors.toMap(Room::getId, Room::getRoomNumber));
@@ -267,35 +285,12 @@ public class AiAssistantService implements AiAssistantUseCase {
             .filter(ticket -> OPEN_MAINTENANCE_STATUSES.contains(ticket.getStatus()))
             .toList();
 
-        BigDecimal rentDebt = BigDecimal.ZERO;
-        BigDecimal repairDebt = BigDecimal.ZERO;
-        BigDecimal otherDebt = BigDecimal.ZERO;
-        Map<UUID, BigDecimal> debtByRoom = new LinkedHashMap<>();
-        for (Contract contract : contracts) {
-            for (Invoice invoice : invoiceRepository.findByContractId(contract.getId())) {
-                if (!invoice.isPayable() || invoice.getStatus() == InvoiceStatus.DRAFT || invoice.getStatus() == InvoiceStatus.VOIDED) {
-                    continue;
-                }
-                BigDecimal remaining = invoice.remainingAmount();
-                if (remaining.signum() <= 0) {
-                    continue;
-                }
-                switch (invoice.getType()) {
-                    case RENT -> rentDebt = rentDebt.add(remaining);
-                    case MAINTENANCE -> repairDebt = repairDebt.add(remaining);
-                    default -> otherDebt = otherDebt.add(remaining);
-                }
-                debtByRoom.merge(contract.getRoomId(), remaining, BigDecimal::add);
-            }
-        }
-
         boolean includeExpiringRows = requestsDetailsFor(cleanQuestion, "hop dong", "het han", "sap het han");
         boolean includeMaintenanceRows = requestsDetailsFor(cleanQuestion, "phieu", "bao tri", "sua chua");
-        boolean includeDebtRows = requestsDetailsFor(cleanQuestion, "no", "chua thanh toan", "con phai tra");
         List<Map<String, Object>> expiringRows = includeExpiringRows ? expiring.stream().limit(MAX_DETAIL_ROWS).map(contract -> Map.<String, Object>of(
             "room", roomNumbers.getOrDefault(contract.getRoomId(), "Không rõ"),
             "endDate", contract.getEndDate().toString(),
-            "daysRemaining", java.time.temporal.ChronoUnit.DAYS.between(today, contract.getEndDate())
+            "daysRemaining", ChronoUnit.DAYS.between(today, contract.getEndDate())
         )).toList() : List.of();
         List<Map<String, Object>> openTicketRows = includeMaintenanceRows ? openTickets.stream()
             .sorted(Comparator.comparing(MaintenanceTicket::getCreatedAt))
@@ -305,14 +300,10 @@ public class AiAssistantService implements AiAssistantUseCase {
                 "status", ticket.getStatus().name(),
                 "priority", ticket.getPriority().name()
             )).toList() : List.of();
-        List<Map<String, String>> debtRows = includeDebtRows ? debtByRoom.entrySet().stream()
-            .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
-            .limit(MAX_DETAIL_ROWS)
-            .map(entry -> Map.of("room", roomNumbers.getOrDefault(entry.getKey(), "Không rõ"), "remainingAmount", money(entry.getValue())))
-            .toList() : List.of();
 
         Map<String, Object> facts = new LinkedHashMap<>();
         facts.put("asOf", today.toString());
+        facts.put("propertyName", property.name());
         facts.put("scope", "Chỉ dữ liệu nhà trọ được chọn; chỉ đọc.");
         facts.put("vacancy", Map.of(
             "availableRooms", rooms.stream().filter(room -> room.getStatus() == RoomStatus.AVAILABLE).count(),
@@ -323,19 +314,374 @@ public class AiAssistantService implements AiAssistantUseCase {
             "itemsOmitted", Math.max(0, expiring.size() - expiringRows.size())));
         facts.put("openMaintenance", Map.of("count", openTickets.size(), "detailsIncluded", includeMaintenanceRows, "items", openTicketRows,
             "itemsOmitted", Math.max(0, openTickets.size() - openTicketRows.size())));
-        facts.put("unpaidInvoices", Map.of(
-            "rentRemaining", money(rentDebt),
-            "repairRemainingSeparate", money(repairDebt),
-            "otherRemaining", money(otherDebt),
-            "totalRemaining", money(rentDebt.add(repairDebt).add(otherDebt)),
-            "roomDetailsIncluded", includeDebtRows,
-            "byRoom", debtRows,
-            "roomsOmitted", Math.max(0, debtByRoom.size() - debtRows.size())
-        ));
+
+        if (includeFinance) {
+            BigDecimal rentDebt = BigDecimal.ZERO;
+            BigDecimal repairDebt = BigDecimal.ZERO;
+            BigDecimal otherDebt = BigDecimal.ZERO;
+            Map<UUID, BigDecimal> debtByRoom = new LinkedHashMap<>();
+            for (Contract contract : contracts) {
+                for (Invoice invoice : invoiceRepository.findByContractId(contract.getId())) {
+                    if (!invoice.isPayable() || invoice.getStatus() == InvoiceStatus.DRAFT || invoice.getStatus() == InvoiceStatus.VOIDED) {
+                        continue;
+                    }
+                    BigDecimal remaining = invoice.remainingAmount();
+                    if (remaining.signum() <= 0) {
+                        continue;
+                    }
+                    switch (invoice.getType()) {
+                        case RENT -> rentDebt = rentDebt.add(remaining);
+                        case MAINTENANCE -> repairDebt = repairDebt.add(remaining);
+                        default -> otherDebt = otherDebt.add(remaining);
+                    }
+                    debtByRoom.merge(contract.getRoomId(), remaining, BigDecimal::add);
+                }
+            }
+            boolean includeDebtRows = requestsDetailsFor(cleanQuestion, "no", "chua thanh toan", "con phai tra");
+            List<Map<String, String>> debtRows = includeDebtRows ? debtByRoom.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .limit(MAX_DETAIL_ROWS)
+                .map(entry -> Map.of("room", roomNumbers.getOrDefault(entry.getKey(), "Không rõ"), "remainingAmount", money(entry.getValue())))
+                .toList() : List.of();
+            facts.put("unpaidInvoices", Map.of(
+                "rentRemaining", money(rentDebt),
+                "repairRemainingSeparate", money(repairDebt),
+                "otherRemaining", money(otherDebt),
+                "totalRemaining", money(rentDebt.add(repairDebt).add(otherDebt)),
+                "roomDetailsIncluded", includeDebtRows,
+                "byRoom", debtRows,
+                "roomsOmitted", Math.max(0, debtByRoom.size() - debtRows.size())
+            ));
+        } else {
+            facts.put("moneyHidden", "Người hỏi không có quyền xem số liệu tiền, doanh thu hay công nợ của nhà trọ này.");
+        }
+        return facts;
+    }
+
+    @Override
+    public AiWidgetContext getWidgetContext() {
+        CurrentUser user = requireAuthenticated();
+        List<ContextOption> contexts = new ArrayList<>();
+        List<QuickPrompt> quickPrompts = new ArrayList<>();
+        String roleLabel;
+        String scopeNote;
+
+        switch (user.role()) {
+            case TENANT -> {
+                roleLabel = "Người thuê";
+                scopeNote = "Chỉ xem phòng, hợp đồng, hóa đơn của chính bạn và hướng dẫn PhongHub.";
+                contexts.add(new ContextOption("AUTO", null, "Tổng quan phòng & hợp đồng của tôi"));
+                Contract contract = contractUseCase.getActiveContractForTenant(user.id()).orElse(null);
+                Invoice targetInvoice = contract == null ? null : selectTenantFocusInvoice(contract.getId());
+                if (targetInvoice != null) {
+                    String invLabel = String.format("Hóa đơn %02d/%d (%s)", targetInvoice.getMonth(), targetInvoice.getYear(),
+                        targetInvoice.getType() == InvoiceType.MAINTENANCE ? "Phí sửa chữa" : "Tiền thuê");
+                    contexts.add(new ContextOption("INVOICE", targetInvoice.getId(), invLabel));
+                    quickPrompts.add(new QuickPrompt("Giải thích hóa đơn kỳ này",
+                        "Hãy giải thích chi tiết các khoản trên hóa đơn này và so sánh với các kỳ trước.", "INVOICE", targetInvoice.getId()));
+                    quickPrompts.add(new QuickPrompt("Cách tiết kiệm điện nước",
+                        "Dựa vào hóa đơn kỳ này, mức dùng điện nước thế nào và nên tiết kiệm ra sao?", "INVOICE", targetInvoice.getId()));
+                }
+                if (contract != null) {
+                    contexts.add(new ContextOption("CONTRACT", contract.getId(), "Hợp đồng đang thuê"));
+                    quickPrompts.add(new QuickPrompt("Thời hạn hợp đồng",
+                        "Hợp đồng của tôi còn bao lâu nữa thì hết hạn và ngày đóng tiền là ngày mấy?", "CONTRACT", contract.getId()));
+                }
+                quickPrompts.add(new QuickPrompt("Cách thanh toán hóa đơn",
+                    "Làm thế nào để thanh toán hóa đơn trên PhongHub?", "AUTO", null));
+            }
+            case OWNER, STAFF -> {
+                boolean isOwner = user.role() == UserRole.OWNER;
+                roleLabel = isOwner ? "Chủ trọ" : "Nhân viên";
+                List<Property> accessible = propertyRepository.findAllById(authorizationService.getAccessiblePropertyIds(user))
+                    .stream().filter(p -> p.archivedAt() == null).toList();
+                boolean hasAnyFinance = isOwner || accessible.stream().anyMatch(p -> canViewPropertyFinance(user, p.id()));
+                scopeNote = hasAnyFinance
+                    ? "Hỏi về phòng trống, hợp đồng sắp hết hạn, bảo trì và công nợ các nhà trọ được giao."
+                    : "Hỏi về phòng trống, hợp đồng sắp hết hạn và bảo trì (ẩn số tiền do chưa được cấp quyền tài chính).";
+                contexts.add(new ContextOption("AUTO", null, "Tất cả nhà trọ trong phạm vi"));
+                for (Property p : accessible) {
+                    contexts.add(new ContextOption("PROPERTY", p.id(), p.name()));
+                }
+                UUID defaultPropId = accessible.size() == 1 ? accessible.get(0).id() : null;
+                String defaultCtx = defaultPropId != null ? "PROPERTY" : "AUTO";
+                quickPrompts.add(new QuickPrompt("Phòng trống hiện tại",
+                    "Hiện tại có bao nhiêu phòng trống và bao nhiêu phòng đang thuê?", defaultCtx, defaultPropId));
+                quickPrompts.add(new QuickPrompt("Hợp đồng sắp hết hạn",
+                    "Có hợp đồng nào sắp hết hạn trong 30 ngày tới không?", defaultCtx, defaultPropId));
+                if (hasAnyFinance) {
+                    quickPrompts.add(new QuickPrompt("Tổng hợp công nợ",
+                        "Tổng số tiền hóa đơn chưa thanh toán hiện tại là bao nhiêu?", defaultCtx, defaultPropId));
+                }
+                quickPrompts.add(new QuickPrompt("Phiếu bảo trì đang mở",
+                    "Hiện có bao nhiêu phiếu bảo trì đang chờ xử lý?", defaultCtx, defaultPropId));
+            }
+            case TECHNICIAN -> {
+                roleLabel = "Kỹ thuật viên";
+                scopeNote = "Chỉ xem phiếu bảo trì được giao cho bạn và hướng dẫn sửa chữa (ẩn số tiền và hợp đồng).";
+                contexts.add(new ContextOption("AUTO", null, "Phiếu bảo trì của tôi"));
+                quickPrompts.add(new QuickPrompt("Phiếu được giao cho tôi",
+                    "Tôi đang có bao nhiêu phiếu bảo trì cần xử lý và mức độ ưu tiên ra sao?", "AUTO", null));
+                quickPrompts.add(new QuickPrompt("Quy trình báo giá & nghiệm thu",
+                    "Quy trình gửi báo giá sửa chữa và hoàn thành phiếu bảo trì trên PhongHub như thế nào?", "AUTO", null));
+            }
+            case ADMIN -> {
+                roleLabel = "Quản trị viên";
+                scopeNote = "Chỉ xem tổng quan vận hành nền tảng phi tài chính và hướng dẫn quản trị (ẩn doanh thu, công nợ, hóa đơn).";
+                contexts.add(new ContextOption("AUTO", null, "Tổng quan nền tảng"));
+                quickPrompts.add(new QuickPrompt("Tổng quan nhà trọ & phòng",
+                    "Toàn hệ thống hiện có bao nhiêu nhà trọ, phòng trống và tỷ lệ lấp đầy là bao nhiêu?", "AUTO", null));
+                quickPrompts.add(new QuickPrompt("Nhà trọ chờ duyệt",
+                    "Hiện có bao nhiêu nhà trọ đang chờ duyệt?", "AUTO", null));
+                quickPrompts.add(new QuickPrompt("Quy trình duyệt nhà trọ",
+                    "Quy trình duyệt nhà trọ và xử lý yêu cầu đặt lại mật khẩu cho người dùng như thế nào?", "AUTO", null));
+            }
+            default -> {
+                roleLabel = user.role().name();
+                scopeNote = "Hỏi đáp hướng dẫn sử dụng PhongHub.";
+                contexts.add(new ContextOption("AUTO", null, "Hướng dẫn chung"));
+            }
+        }
+        return new AiWidgetContext(user.role().name(), roleLabel, scopeNote, contexts, quickPrompts);
+    }
+
+    @Override
+    public AiResponse askAssistant(String contextType, UUID targetId, String question) {
+        CurrentUser user = requireAuthenticated();
+        String cleanQuestion = validateQuestion(question);
+        String type = (contextType == null || contextType.isBlank())
+            ? "AUTO"
+            : contextType.strip().toUpperCase(java.util.Locale.ROOT);
+
+        return switch (type) {
+            case "INVOICE" -> {
+                if (targetId == null) {
+                    throw new IllegalArgumentException("Hãy chọn hóa đơn cần hỏi.");
+                }
+                yield askAboutInvoice(targetId, cleanQuestion);
+            }
+            case "CONTRACT" -> {
+                if (targetId == null) {
+                    throw new IllegalArgumentException("Hãy chọn hợp đồng cần hỏi.");
+                }
+                yield askAboutContract(targetId, cleanQuestion);
+            }
+            case "PROPERTY" -> {
+                if (targetId == null) {
+                    throw new IllegalArgumentException("Hãy chọn nhà trọ.");
+                }
+                if (user.role() != UserRole.OWNER && user.role() != UserRole.STAFF) {
+                    throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_ROLE_DENIED);
+                }
+                authorizationService.assertCanAccessProperty(user, targetId);
+                Property property = propertyRepository.findById(targetId)
+                    .orElseThrow(() -> new UnauthorizedPropertyAccessException(AuthorizationService.MSG_PROPERTY_UNAVAILABLE));
+                yield answerForProperty(property, cleanQuestion, canViewPropertyFinance(user, targetId));
+            }
+            case "AUTO" -> switch (user.role()) {
+                case TENANT -> askTenantAuto(user, cleanQuestion);
+                case OWNER, STAFF -> askOwnerOrStaffAuto(user, cleanQuestion);
+                case TECHNICIAN -> askTechnicianAuto(user, cleanQuestion);
+                case ADMIN -> askAdminAuto(cleanQuestion);
+            };
+            default -> throw new IllegalArgumentException("Ngữ cảnh trợ lý AI không hợp lệ: " + type);
+        };
+    }
+
+    private CurrentUser requireAuthenticated() {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        if (user == null) {
+            throw new UnauthorizedPropertyAccessException(AuthorizationService.MSG_LOGIN_REQUIRED);
+        }
+        return user;
+    }
+
+    private Invoice selectTenantFocusInvoice(UUID contractId) {
+        List<Invoice> all = invoiceRepository.findByContractId(contractId);
+        return all.stream()
+            .filter(Invoice::isPayable)
+            .min(Comparator.comparing(Invoice::getYear).thenComparing(Invoice::getMonth))
+            .orElseGet(() -> all.stream()
+                .filter(i -> i.getStatus() != InvoiceStatus.DRAFT && i.getStatus() != InvoiceStatus.VOIDED)
+                .max(Comparator.comparing(Invoice::getYear).thenComparing(Invoice::getMonth).thenComparing(Invoice::getCreatedAt))
+                .orElse(null));
+    }
+
+    private AiResponse askTenantAuto(CurrentUser user, String cleanQuestion) {
+        List<FaqMatch> faq = searchFaq(cleanQuestion, TENANT_FAQ_CATEGORIES);
+        LocalDate today = LocalDate.now(clock);
+        Contract contract = contractUseCase.getActiveContractForTenant(user.id()).orElse(null);
+
+        Map<String, Object> facts = new LinkedHashMap<>();
+        facts.put("viewerRole", UserRole.TENANT.name());
+        facts.put("asOf", today.toString());
+        List<Source> sources = new ArrayList<>();
+
+        if (contract == null) {
+            facts.put("contractStatus", "Người thuê hiện chưa có hợp đồng đang hoạt động.");
+            sources.add(new Source("Thông tin tài khoản người thuê"));
+        } else {
+            Map<String, Object> contractFacts = new LinkedHashMap<>();
+            contractFacts.put("status", contract.getStatus().name());
+            contractFacts.put("startDate", contract.getStartDate().toString());
+            contractFacts.put("endDate", contract.getEndDate().toString());
+            contractFacts.put("rentAmount", money(contract.getRentAmount()));
+            contractFacts.put("depositAmount", money(contract.getDepositAmount()));
+            contractFacts.put("paymentDay", contract.getPaymentDay());
+            facts.put("activeContract", contractFacts);
+            facts.put("timeline", contractTimeline(contract, today));
+            sources.add(new Source("Hợp đồng đang thuê của bạn"));
+
+            List<Invoice> allInvoices = invoiceRepository.findByContractId(contract.getId());
+            List<Invoice> payable = allInvoices.stream()
+                .filter(Invoice::isPayable)
+                .sorted(Comparator.comparing(Invoice::getYear).thenComparing(Invoice::getMonth))
+                .toList();
+            facts.put("payableInvoiceCount", payable.size());
+            facts.put("totalPayableRemaining", money(payable.stream().map(Invoice::remainingAmount).reduce(BigDecimal.ZERO, BigDecimal::add)));
+
+            Invoice focusInvoice = selectTenantFocusInvoice(contract.getId());
+            if (focusInvoice != null) {
+                List<Invoice> previous = priorInvoices(focusInvoice);
+                facts.putAll(invoiceContext(focusInvoice, previous));
+                sources.addAll(invoiceSources(focusInvoice, previous));
+            }
+
+            long openTickets = ticketRepository.findByRoomId(contract.getRoomId()).stream()
+                .filter(t -> OPEN_MAINTENANCE_STATUSES.contains(t.getStatus()))
+                .count();
+            facts.put("openRoomMaintenanceTickets", openTickets);
+        }
+
         addFaqContext(facts, faq);
-        String answer = complete(cleanQuestion, facts);
-        return new AiResponse(answer, withFaqSources(List.of(new Source("Tổng hợp phòng, hợp đồng, phiếu bảo trì và hóa đơn của "
-            + property.name() + " tại ngày " + today)), faq));
+        return new AiResponse(complete(cleanQuestion, facts), withFaqSources(sources, faq));
+    }
+
+    private AiResponse askOwnerOrStaffAuto(CurrentUser user, String cleanQuestion) {
+        List<Property> accessible = propertyRepository.findAllById(authorizationService.getAccessiblePropertyIds(user))
+            .stream().filter(p -> p.archivedAt() == null).toList();
+        if (accessible.size() == 1) {
+            Property only = accessible.get(0);
+            return answerForProperty(only, cleanQuestion, canViewPropertyFinance(user, only.id()));
+        }
+
+        List<FaqMatch> faq = searchFaq(cleanQuestion, OPERATIONS_FAQ_CATEGORIES);
+        LocalDate today = LocalDate.now(clock);
+        Map<String, Object> facts = new LinkedHashMap<>();
+        facts.put("viewerRole", user.role().name());
+        facts.put("asOf", today.toString());
+        facts.put("scope", "Tổng hợp các nhà trọ trong phạm vi tài khoản; chỉ đọc.");
+
+        List<Map<String, Object>> propertySummaries = new ArrayList<>();
+        boolean anyFinanceHidden = false;
+        for (Property property : accessible) {
+            boolean includeFinance = canViewPropertyFinance(user, property.id());
+            if (!includeFinance) {
+                anyFinanceHidden = true;
+            }
+            propertySummaries.add(buildPropertyFacts(property, cleanQuestion, today, includeFinance));
+        }
+        facts.put("propertyCount", accessible.size());
+        facts.put("properties", propertySummaries);
+        if (anyFinanceHidden) {
+            facts.put("moneyHidden", "Một số nhà trọ bạn không có quyền xem số liệu tiền hoặc công nợ.");
+        }
+        addFaqContext(facts, faq);
+        return new AiResponse(complete(cleanQuestion, facts), withFaqSources(
+            List.of(new Source("Tổng hợp các nhà trọ trong phạm vi tại ngày " + today)), faq));
+    }
+
+    private AiResponse askTechnicianAuto(CurrentUser user, String cleanQuestion) {
+        List<FaqMatch> faq = searchFaq(cleanQuestion, TECHNICIAN_FAQ_CATEGORIES);
+        LocalDate today = LocalDate.now(clock);
+        Set<UUID> accessiblePropertyIds = authorizationService.getAccessiblePropertyIds(user);
+        List<MaintenanceTicket> assigned = ticketRepository.findByAssignedTechnicianId(user.id()).stream()
+            .filter(t -> accessiblePropertyIds.contains(t.getPropertyId()))
+            .toList();
+        List<MaintenanceTicket> openTickets = assigned.stream()
+            .filter(t -> OPEN_MAINTENANCE_STATUSES.contains(t.getStatus()))
+            .sorted(Comparator.comparing(MaintenanceTicket::getCreatedAt))
+            .toList();
+
+        Set<UUID> roomIds = openTickets.stream().map(MaintenanceTicket::getRoomId).collect(Collectors.toSet());
+        Map<UUID, String> roomNumbers = roomIds.isEmpty() ? Map.of()
+            : roomRepository.findAllById(roomIds).stream().collect(Collectors.toMap(Room::getId, Room::getRoomNumber));
+
+        List<Map<String, Object>> ticketRows = openTickets.stream().limit(MAX_DETAIL_ROWS).map(t -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("room", roomNumbers.getOrDefault(t.getRoomId(), "Không rõ"));
+            row.put("status", t.getStatus().name());
+            row.put("priority", t.getPriority().name());
+            if (t.getDueAt() != null) {
+                row.put("dueAt", t.getDueAt().toString());
+            }
+            return row;
+        }).toList();
+
+        Map<String, Object> facts = new LinkedHashMap<>();
+        facts.put("viewerRole", UserRole.TECHNICIAN.name());
+        facts.put("asOf", today.toString());
+        facts.put("totalAssignedTickets", assigned.size());
+        facts.put("openAssignedTicketsCount", openTickets.size());
+        facts.put("openAssignedTickets", ticketRows);
+        facts.put("moneyHidden", "Kỹ thuật viên không có quyền xem số tiền, hóa đơn, hợp đồng hay chỉ số điện nước.");
+        addFaqContext(facts, faq);
+        return new AiResponse(complete(cleanQuestion, facts), withFaqSources(
+            List.of(new Source("Danh sách phiếu bảo trì được giao cho bạn tại ngày " + today)), faq));
+    }
+
+    private AiResponse askAdminAuto(String cleanQuestion) {
+        List<FaqMatch> faq = searchFaq(cleanQuestion, ADMIN_FAQ_CATEGORIES);
+        LocalDate today = LocalDate.now(clock);
+        List<Property> activeProperties = propertyRepository.findAll().stream()
+            .filter(p -> p.archivedAt() == null)
+            .toList();
+
+        long pendingCount = activeProperties.stream()
+            .filter(p -> p.approvalStatus() == PropertyApprovalStatus.PENDING).count();
+        long verifiedCount = activeProperties.stream()
+            .filter(p -> p.approvalStatus() == PropertyApprovalStatus.VERIFIED).count();
+        long rejectedCount = activeProperties.stream()
+            .filter(p -> p.approvalStatus() == PropertyApprovalStatus.REJECTED).count();
+
+        long totalRooms = 0;
+        long availableRooms = 0;
+        long occupiedRooms = 0;
+        long maintenanceRooms = 0;
+        for (Property p : activeProperties) {
+            for (Room room : roomRepository.findByPropertyId(p.id())) {
+                totalRooms++;
+                switch (room.getStatus()) {
+                    case AVAILABLE -> availableRooms++;
+                    case OCCUPIED -> occupiedRooms++;
+                    case MAINTENANCE -> maintenanceRooms++;
+                    default -> { }
+                }
+            }
+        }
+        String occupancyRate = totalRooms == 0 ? "0%"
+            : BigDecimal.valueOf(occupiedRooms * 100.0 / totalRooms).setScale(1, RoundingMode.HALF_UP) + "%";
+
+        Map<String, Object> facts = new LinkedHashMap<>();
+        facts.put("viewerRole", UserRole.ADMIN.name());
+        facts.put("asOf", today.toString());
+        facts.put("platformProperties", Map.of(
+            "activeTotal", activeProperties.size(),
+            "pendingApproval", pendingCount,
+            "verified", verifiedCount,
+            "rejected", rejectedCount
+        ));
+        facts.put("platformRooms", Map.of(
+            "total", totalRooms,
+            "available", availableRooms,
+            "occupied", occupiedRooms,
+            "maintenance", maintenanceRooms,
+            "occupancyRate", occupancyRate
+        ));
+        facts.put("moneyHidden", "Quản trị viên nền tảng không xem số liệu tiền, doanh thu, hóa đơn, công nợ hay hợp đồng thuê.");
+        addFaqContext(facts, faq);
+        return new AiResponse(complete(cleanQuestion, facts), withFaqSources(
+            List.of(new Source("Tổng quan vận hành phi tài chính toàn hệ thống tại ngày " + today)), faq));
     }
 
     @Override
