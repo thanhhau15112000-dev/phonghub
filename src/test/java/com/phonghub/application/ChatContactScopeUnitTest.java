@@ -64,7 +64,7 @@ class ChatContactScopeUnitTest {
             }
         };
         ChatContactScope scope = v -> reachable;
-        chat = new ChatService(rooms, new InMemoryChatMessageRepository(), users, publisher, null, 1, 1,
+        chat = new ChatService(rooms, new InMemoryChatMessageRepository(rooms), users, publisher, null, 1, 1,
             Clock.fixed(Instant.parse("2026-10-14T05:00:00Z"), ZoneOffset.UTC), scope);
     }
 
@@ -124,5 +124,25 @@ class ChatContactScopeUnitTest {
             .map(ChatMessage::content).toList();
 
         assertEquals(List.of("từ đồng nghiệp", "của tôi"), seen);
+    }
+
+    @Test
+    @DisplayName("#345+#356: số tin chưa đọc kênh chung và tóm tắt phòng chỉ tính tin từ người cùng nhà trọ")
+    void unreadCountRespectsGlobalPropertyScope() {
+        CurrentUser colleague = new CurrentUser(colleagueId, colleagueId + "@x", "Đồng nghiệp", UserRole.STAFF);
+        CurrentUser stranger = new CurrentUser(strangerId, strangerId + "@x", "Người lạ", UserRole.STAFF);
+        ChatRoom directWithColleague = chat.getOrCreateDirectRoom(viewer, colleagueId);
+
+        chat.sendMessage(colleague, ChatRoom.GLOBAL_ROOM_ID, "tin đồng nghiệp global");
+        chat.sendMessage(stranger, ChatRoom.GLOBAL_ROOM_ID, "tin người lạ global");
+        chat.sendMessage(colleague, directWithColleague.id(), "tin direct");
+
+        // Chỉ tính 1 tin global của colleague + 1 tin direct = 2 (không tính tin stranger)
+        assertEquals(2, chat.getTotalUnreadCount(viewer));
+
+        var summaries = chat.getRoomsForUser(viewer);
+        var globalSummary = summaries.stream().filter(r -> r.id().equals(ChatRoom.GLOBAL_ROOM_ID)).findFirst().orElseThrow();
+        assertEquals(1, globalSummary.unreadCount());
+        assertEquals("tin đồng nghiệp global", globalSummary.lastMessageContent());
     }
 }

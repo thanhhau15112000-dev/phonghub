@@ -106,13 +106,13 @@ public class ChatApiController {
         @RequestParam(defaultValue = "30") int limit
     ) {
         CurrentUser user = requireUser();
-        List<ChatMessage> messages = chatMessageUseCase.getMessages(user, roomId, before, limit);
-        Instant peerLastRead = chatRoomUseCase.getPeerLastReadAt(user, roomId);
+        ChatMessageUseCase.ChatMessagesPage page = chatMessageUseCase.getMessagesPage(user, roomId, before, limit);
+        Instant peerLastRead = page.peerLastReadAt();
         var responseBuilder = ResponseEntity.ok();
         if (peerLastRead != null) {
             responseBuilder.header("X-Peer-Last-Read-At", peerLastRead.toString());
         }
-        return responseBuilder.body(messages.stream().map(ChatMessageResponse::from).toList());
+        return responseBuilder.body(page.messages().stream().map(ChatMessageResponse::from).toList());
     }
 
     @GetMapping("/rooms/{roomId}/seen")

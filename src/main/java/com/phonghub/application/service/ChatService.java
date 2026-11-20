@@ -30,6 +30,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -137,36 +138,48 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
             userRooms.add(0, globalRoom);
         }
 
+        Set<UUID> reachable = contactScope.reachableUserIds(currentUser);
+        List<UUID> batchRoomIds = reachable == null
+            ? userRooms.stream().map(ChatRoom::id).toList()
+            : userRooms.stream().filter(ChatRoom::isDirect).map(ChatRoom::id).toList();
+        Map<UUID, ChatMessage> latestMessages = chatMessageRepositoryPort.findLatestMessagesByRoomIds(batchRoomIds);
+        Map<UUID, Integer> unreadCounts = chatMessageRepositoryPort.countUnreadByRoomIds(currentUser.id(), batchRoomIds);
+
         List<ChatRoomSummary> summaries = new ArrayList<>();
         for (ChatRoom room : userRooms) {
-            Instant lastRead = chatRoomRepositoryPort.getLastRead(room.id(), currentUser.id());
-            Optional<ChatMessage> latestMsgOpt;
+            ChatMessage latestMsg;
             int unreadCount;
-            if (room.isGlobal() && contactScope.reachableUserIds(currentUser) != null) {
+            if (room.isGlobal() && reachable != null) {
                 // Kênh chung chỉ hiện tin của người cùng nhà trọ: xem trước và số chưa đọc cũng theo phạm vi đó (#345).
-                List<ChatMessage> visible = visibleMessages(currentUser, room, null, UNREAD_SCAN_LIMIT);
-                latestMsgOpt = visible.isEmpty() ? Optional.empty() : Optional.of(visible.get(visible.size() - 1));
+                Instant lastRead = chatRoomRepositoryPort.getLastRead(room.id(), currentUser.id());
+                List<ChatMessage> visible = visibleMessages(currentUser, room, null, UNREAD_SCAN_LIMIT, reachable);
+                latestMsg = visible.isEmpty() ? null : visible.get(visible.size() - 1);
                 unreadCount = (int) visible.stream()
                     .filter(m -> !m.senderId().equals(currentUser.id()))
                     .filter(m -> lastRead == null || m.createdAt().isAfter(lastRead)).count();
             } else {
-                latestMsgOpt = chatMessageRepositoryPort.findLatestMessageByRoomId(room.id());
-                unreadCount = chatMessageRepositoryPort.countUnreadMessages(room.id(), currentUser.id(), lastRead);
+                latestMsg = latestMessages.get(room.id());
+                unreadCount = unreadCounts.getOrDefault(room.id(), 0);
             }
 
-            String lastMsgText = latestMsgOpt.map(m -> {
-                if (m.hasAttachments()) {
-                    String mediaLabel = m.attachments().stream().anyMatch(ChatAttachment::isVideo) ? "[Video]" : "[Hình ảnh]";
-                    return m.content() != null && !m.content().isBlank() ? mediaLabel + " " + m.content() : mediaLabel;
+            String lastMsgText = "";
+            String lastMsgSender = "";
+            Instant lastMsgTime = room.createdAt();
+            if (latestMsg != null) {
+                lastMsgSender = latestMsg.senderName();
+                lastMsgTime = latestMsg.createdAt();
+                if (latestMsg.hasAttachments()) {
+                    String mediaLabel = latestMsg.attachments().stream().anyMatch(ChatAttachment::isVideo) ? "[Video]" : "[Hình ảnh]";
+                    lastMsgText = latestMsg.content() != null && !latestMsg.content().isBlank()
+                        ? mediaLabel + " " + latestMsg.content() : mediaLabel;
+                } else if (latestMsg.hasMedia()) {
+                    String mediaLabel = latestMsg.isImage() ? "[Hình ảnh]" : "[Video]";
+                    lastMsgText = (latestMsg.content() != null && !latestMsg.content().isBlank())
+                        ? mediaLabel + " " + latestMsg.content() : mediaLabel;
+                } else {
+                    lastMsgText = latestMsg.content() != null ? latestMsg.content() : "";
                 }
-                if (m.hasMedia()) {
-                    String mediaLabel = m.isImage() ? "[Hình ảnh]" : "[Video]";
-                    return (m.content() != null && !m.content().isBlank()) ? mediaLabel + " " + m.content() : mediaLabel;
-                }
-                return m.content() != null ? m.content() : "";
-            }).orElse("");
-            String lastMsgSender = latestMsgOpt.map(ChatMessage::senderName).orElse("");
-            Instant lastMsgTime = latestMsgOpt.map(ChatMessage::createdAt).orElse(room.createdAt());
+            }
 
             UUID peerId = null;
             String peerName = null;
@@ -431,7 +444,17 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
      */
     private List<ChatMessage> visibleMessages(CurrentUser viewer, ChatRoom room, Instant before, int limit) {
         Set<UUID> reachable = room.isGlobal() ? contactScope.reachableUserIds(viewer) : null;
-        if (reachable == null) {
+        return visibleMessages(viewer, room, before, limit, reachable);
+    }
+
+    private List<ChatMessage> visibleMessages(
+        CurrentUser viewer,
+        ChatRoom room,
+        Instant before,
+        int limit,
+        Set<UUID> reachable
+    ) {
+        if (!room.isGlobal() || reachable == null) {
             return chatMessageRepositoryPort.findByRoomId(room.id(), before, limit);
         }
         List<ChatMessage> result = new ArrayList<>();
@@ -481,8 +504,13 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
 
     @Override
     public List<ChatMessage> getMessages(CurrentUser currentUser, UUID roomId, Instant before, int limit) {
+        return getMessagesPage(currentUser, roomId, before, limit).messages();
+    }
+
+    @Override
+    public ChatMessagesPage getMessagesPage(CurrentUser currentUser, UUID roomId, Instant before, int limit) {
         assertAuthenticated(currentUser);
-        // Kiểm tra quyền truy cập phòng
+        // Kiểm tra quyền truy cập phòng một lần duy nhất cho cả danh sách tin lẫn peerLastReadAt
         ChatRoom room = getRoomById(currentUser, roomId);
 
         int queryLimit = (limit <= 0 || limit > 100) ? 30 : limit;
@@ -491,7 +519,10 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         // Khi người dùng tải tin nhắn của phòng, tự động đánh dấu đã đọc
         markRoomAsRead(currentUser, room);
 
-        return messages;
+        Instant peerLastRead = room.isDirect()
+            ? room.getPeerMember(currentUser.id()).map(ChatRoomMember::lastReadAt).orElse(null)
+            : null;
+        return new ChatMessagesPage(messages, peerLastRead);
     }
 
     @Override
@@ -528,25 +559,7 @@ public class ChatService implements ChatRoomUseCase, ChatMessageUseCase {
         if (currentUser == null) {
             return 0;
         }
-        // Chỉ đếm tin chưa đọc: không dựng tóm tắt phòng (tin mới nhất, tên người đối diện) như getRoomsForUser,
-        // vì số này được gọi ở mỗi lần mở trang và bởi widget chat.
-        List<ChatRoom> userRooms = new ArrayList<>(chatRoomRepositoryPort.findRoomsByUserId(currentUser.id()));
-        if (userRooms.stream().noneMatch(ChatRoom::isGlobal)) {
-            chatRoomRepositoryPort.findById(ChatRoom.GLOBAL_ROOM_ID).ifPresent(userRooms::add);
-        }
-        boolean scopedGlobal = userRooms.stream().anyMatch(ChatRoom::isGlobal)
-            && contactScope.reachableUserIds(currentUser) != null;
-        int total = 0;
-        for (ChatRoom room : userRooms) {
-            Instant lastRead = chatRoomRepositoryPort.getLastRead(room.id(), currentUser.id());
-            if (room.isGlobal() && scopedGlobal) {
-                total += (int) visibleMessages(currentUser, room, null, UNREAD_SCAN_LIMIT).stream()
-                    .filter(m -> !m.senderId().equals(currentUser.id()))
-                    .filter(m -> lastRead == null || m.createdAt().isAfter(lastRead)).count();
-            } else {
-                total += chatMessageRepositoryPort.countUnreadMessages(room.id(), currentUser.id(), lastRead);
-            }
-        }
-        return total;
+        Set<UUID> reachable = contactScope.reachableUserIds(currentUser);
+        return chatMessageRepositoryPort.countTotalUnread(currentUser.id(), reachable);
     }
 }

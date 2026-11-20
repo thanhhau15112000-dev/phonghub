@@ -26,8 +26,13 @@ public interface ChatMessageUseCase {
     String legacyMediaUrl(CurrentUser currentUser, UUID roomId, UUID messageId);
 
     List<ChatMessage> getMessages(CurrentUser currentUser, UUID roomId, Instant before, int limit);
+    default ChatMessagesPage getMessagesPage(CurrentUser currentUser, UUID roomId, Instant before, int limit) {
+        return new ChatMessagesPage(getMessages(currentUser, roomId, before, limit), null);
+    }
     void markAsRead(CurrentUser currentUser, UUID roomId);
     int getTotalUnreadCount(CurrentUser currentUser);
+
+    record ChatMessagesPage(List<ChatMessage> messages, Instant peerLastReadAt) {}
 
     record MediaUpload(String contentType, byte[] content) {}
 

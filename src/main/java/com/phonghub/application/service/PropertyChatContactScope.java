@@ -60,12 +60,20 @@ public class PropertyChatContactScope implements ChatContactScope {
         }
         Set<UUID> reachable = new HashSet<>();
         all.stream().filter(u -> u.role() == UserRole.ADMIN).forEach(u -> reachable.add(u.id()));
+        Set<UUID> tenantIds = new HashSet<>();
         for (UUID propertyId : propertyIdsOf(viewer)) {
             properties.findById(propertyId).map(Property::ownerId).ifPresent(reachable::add);
             for (StaffPropertyAssignment assignment : assignments.findByPropertyId(propertyId)) {
                 reachable.add(assignment.staffUserId());
             }
-            addResidents(propertyId, reachable);
+            collectResidentTenantIds(propertyId, tenantIds);
+        }
+        if (!tenantIds.isEmpty()) {
+            for (Tenant tenant : tenants.findAllByIds(tenantIds)) {
+                if (tenant.userId() != null) {
+                    reachable.add(tenant.userId());
+                }
+            }
         }
         reachable.remove(viewer.id());
         reachable.retainAll(byId.keySet());
@@ -96,22 +104,19 @@ public class PropertyChatContactScope implements ChatContactScope {
         return ids;
     }
 
-    private void addResidents(UUID propertyId, Set<UUID> reachable) {
+    private void collectResidentTenantIds(UUID propertyId, Set<UUID> tenantIds) {
         for (Contract contract : contracts.findByPropertyId(propertyId)) {
             if (!contract.isResiding()) {
                 continue;
             }
-            addTenantAccount(contract.getPrimaryTenantId(), reachable);
+            if (contract.getPrimaryTenantId() != null) {
+                tenantIds.add(contract.getPrimaryTenantId());
+            }
             for (ContractOccupant occupant : contract.getOccupants()) {
-                addTenantAccount(occupant.tenantId(), reachable);
+                if (occupant.tenantId() != null) {
+                    tenantIds.add(occupant.tenantId());
+                }
             }
         }
-    }
-
-    private void addTenantAccount(UUID tenantId, Set<UUID> reachable) {
-        if (tenantId == null) {
-            return;
-        }
-        tenants.findById(tenantId).map(Tenant::userId).ifPresent(reachable::add);
     }
 }
