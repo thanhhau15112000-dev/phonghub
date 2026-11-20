@@ -56,3 +56,17 @@ services:
         sync: false
       - key: SEPAY_PUBLIC_BASE_URL
         sync: false
+      - key: PHONGHUB_AI_ENABLED
+        sync: false
+      - key: PHONGHUB_AI_BASE_URL
+        sync: false
+      - key: PHONGHUB_AI_API_KEY
+        sync: false
+      - key: PHONGHUB_AI_MODEL
+        sync: false
+      - key: PHONGHUB_AI_EMBEDDING_MODEL
+        sync: false
+      - key: PHONGHUB_AI_EMBEDDING_DIMENSIONS
+        sync: false
+      - key: PHONGHUB_AI_REASONING_EFFORT
+        sync: false

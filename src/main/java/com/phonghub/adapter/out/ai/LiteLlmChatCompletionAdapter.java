@@ -4,14 +4,12 @@ import tools.jackson.databind.JsonNode;
 import com.phonghub.application.exception.AiUnavailableException;
 import com.phonghub.application.port.out.AiCompletionPort;
 import com.phonghub.config.AiAssistantProperties;
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -23,11 +21,7 @@ public class LiteLlmChatCompletionAdapter implements AiCompletionPort {
 
     public LiteLlmChatCompletionAdapter(AiAssistantProperties properties) {
         this.properties = properties;
-        int timeoutMillis = Math.toIntExact(Duration.ofSeconds(Math.max(1, properties.getTimeoutSeconds())).toMillis());
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(timeoutMillis);
-        requestFactory.setReadTimeout(timeoutMillis);
-        this.restClient = RestClient.builder().requestFactory(requestFactory).build();
+        this.restClient = AiEndpointSupport.buildRestClient(properties.getTimeoutSeconds());
     }
 
     @Override
@@ -52,7 +46,7 @@ public class LiteLlmChatCompletionAdapter implements AiCompletionPort {
         JsonNode response;
         try {
             response = restClient.post()
-                .uri(normalizedBaseUrl() + "/v1/chat/completions")
+                .uri(AiEndpointSupport.resolveEndpoint(properties.getBaseUrl(), "chat/completions"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .header("Authorization", "Bearer " + properties.getApiKey())
@@ -71,13 +65,5 @@ public class LiteLlmChatCompletionAdapter implements AiCompletionPort {
             throw new AiUnavailableException();
         }
         return answer.trim();
-    }
-
-    private String normalizedBaseUrl() {
-        String baseUrl = properties.getBaseUrl();
-        if (baseUrl == null || baseUrl.isBlank()) {
-            throw new AiUnavailableException();
-        }
-        return baseUrl.replaceAll("/+$", "");
     }
 }

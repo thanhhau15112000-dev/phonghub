@@ -27,12 +27,16 @@ public class NotificationInboxService implements NotificationInboxUseCase {
     public InboxPage inbox(boolean unreadOnly, int page, int size) {
         CurrentUser user = requireUser();
         int pageSize = Math.clamp(size, 1, MAX_PAGE_SIZE);
-        long total = notificationRepository.countByRecipient(user.id(), unreadOnly);
-        long unread = unreadOnly ? total : notificationRepository.countByRecipient(user.id(), true);
+        NotificationRepositoryPort.InboxCounts counts = notificationRepository.countInboxCounts(user.id(), unreadOnly);
+        long total = counts != null ? counts.total() : notificationRepository.countByRecipient(user.id(), unreadOnly);
+        long unread = counts != null
+            ? counts.unread()
+            : (unreadOnly ? total : notificationRepository.countByRecipient(user.id(), true));
         int lastPage = (int) Math.max(1, (total + pageSize - 1) / pageSize);
         int currentPage = Math.clamp(page, 1, lastPage);
-        List<Notification> items = notificationRepository.findByRecipient(user.id(), unreadOnly,
-            (currentPage - 1) * pageSize, pageSize);
+        List<Notification> items = total == 0
+            ? List.of()
+            : notificationRepository.findByRecipient(user.id(), unreadOnly, (currentPage - 1) * pageSize, pageSize);
         return new InboxPage(items, total, unread, currentPage, pageSize);
     }
 

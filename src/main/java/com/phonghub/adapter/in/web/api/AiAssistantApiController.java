@@ -2,6 +2,7 @@ package com.phonghub.adapter.in.web.api;
 
 import com.phonghub.application.port.in.AiAssistantUseCase;
 import java.util.UUID;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -15,6 +16,20 @@ public class AiAssistantApiController {
 
     public AiAssistantApiController(AiAssistantUseCase assistant) {
         this.assistant = assistant;
+    }
+
+    @GetMapping("/widget-context")
+    public AiAssistantUseCase.AiWidgetContext widgetContext() {
+        return assistant.getWidgetContext();
+    }
+
+    @PostMapping("/ask")
+    public AiAssistantUseCase.AiResponse askGeneral(@RequestBody(required = false) GeneralQuestionRequest request) {
+        return assistant.askAssistant(
+            request == null ? null : request.contextType(),
+            request == null ? null : request.targetId(),
+            request == null ? null : request.question()
+        );
     }
 
     @PostMapping("/invoices/{id}/analysis")
@@ -46,4 +61,5 @@ public class AiAssistantApiController {
 
     public record QuestionRequest(String question) {}
     public record OperationsQuestionRequest(UUID propertyId, String question) {}
+    public record GeneralQuestionRequest(String contextType, UUID targetId, String question) {}
 }

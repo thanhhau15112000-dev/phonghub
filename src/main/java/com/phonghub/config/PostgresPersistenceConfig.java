@@ -237,9 +237,10 @@ public class PostgresPersistenceConfig {
     @Bean
     public UserRepositoryPort userRepository(
         NamedParameterJdbcTemplate jdbcTemplate,
-        TenantDataProtectionPort tenantDataProtection
+        TenantDataProtectionPort tenantDataProtection,
+        @Value("${phonghub.cache.enabled:true}") boolean cacheEnabled
     ) {
-        return new PostgresUserRepository(jdbcTemplate, tenantDataProtection);
+        return new CachingUserRepositoryPort(new PostgresUserRepository(jdbcTemplate, tenantDataProtection), cacheEnabled);
     }
 
     @Bean
@@ -351,7 +352,12 @@ public class PostgresPersistenceConfig {
     @Bean
     @Profile({"prod", "docker & !local-demo"})
     public RestClient restClient() {
-        return RestClient.create();
+        var httpClient = java.net.http.HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(10))
+            .build();
+        var requestFactory = new org.springframework.http.client.JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(java.time.Duration.ofSeconds(15));
+        return RestClient.builder().requestFactory(requestFactory).build();
     }
 
     @Bean

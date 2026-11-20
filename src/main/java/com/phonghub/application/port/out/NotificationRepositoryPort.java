@@ -22,6 +22,21 @@ public interface NotificationRepositoryPort {
 
     long countByRecipient(UUID userId, boolean unreadOnly);
 
+    default InboxCounts countInboxCounts(UUID userId, boolean unreadOnly) {
+        long total = countByRecipient(userId, unreadOnly);
+        long unread = unreadOnly ? total : countByRecipient(userId, true);
+        return new InboxCounts(total, unread);
+    }
+
+    default List<Notification> findRecentForAdmins(int limit) {
+        return findForAdmins().stream()
+            .sorted(java.util.Comparator.comparing(Notification::isResolved))
+            .limit(Math.max(1, limit))
+            .toList();
+    }
+
     /** Đánh dấu đã đọc mọi thông báo cá nhân chưa đọc của người nhận; trả về số thông báo được cập nhật. */
     int markAllRead(UUID userId, Instant at);
+
+    record InboxCounts(long total, long unread) {}
 }

@@ -51,15 +51,18 @@ public class PropertyChatContactScope implements ChatContactScope {
 
     @Override
     public Set<UUID> reachableUserIds(CurrentUser viewer) {
-        List<User> all = users.findAll();
-        Map<UUID, User> byId = all.stream().collect(Collectors.toMap(User::id, Function.identity(), (a, b) -> a));
+        Map<UUID, UserRole> rolesById = users.findAllIdRoles();
         if (viewer.role() == UserRole.ADMIN) {
-            Set<UUID> everyone = new HashSet<>(byId.keySet());
+            Set<UUID> everyone = new HashSet<>(rolesById.keySet());
             everyone.remove(viewer.id());
             return everyone;
         }
         Set<UUID> reachable = new HashSet<>();
-        all.stream().filter(u -> u.role() == UserRole.ADMIN).forEach(u -> reachable.add(u.id()));
+        rolesById.forEach((id, role) -> {
+            if (role == UserRole.ADMIN) {
+                reachable.add(id);
+            }
+        });
         Set<UUID> tenantIds = new HashSet<>();
         for (UUID propertyId : propertyIdsOf(viewer)) {
             properties.findById(propertyId).map(Property::ownerId).ifPresent(reachable::add);
@@ -76,7 +79,7 @@ public class PropertyChatContactScope implements ChatContactScope {
             }
         }
         reachable.remove(viewer.id());
-        reachable.retainAll(byId.keySet());
+        reachable.retainAll(rolesById.keySet());
         return reachable;
     }
 
