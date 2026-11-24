@@ -636,4 +636,71 @@ class AuthServiceUnitTest {
             assertTrue(tempPass.chars().anyMatch(ch -> "!@#$%^&*".indexOf(ch) >= 0), "Must have special char");
         }
     }
+
+    // #364: admin đặt sẵn mật khẩu khi tạo tài khoản
+    private void stubCreateStaff(UUID identityId) {
+        when(currentUserPort.getCurrentUser()).thenReturn(
+            new CurrentUser(UUID.randomUUID(), "admin@phonghub.local", "Admin", UserRole.ADMIN));
+        when(userRepository.findByEmail("staff9@phonghub.local")).thenReturn(Optional.empty());
+        when(userRepository.findByUsername("staff9")).thenReturn(Optional.empty());
+        when(userRepository.findAll()).thenReturn(List.of());
+        when(identityProviderPort.adminCreateUser(eq("staff9@phonghub.local"), any())).thenReturn(identityId);
+        when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
+    }
+
+    @Test
+    void adminCreateUserWithOwnPasswordUsesItAndShowsNoTemporaryPassword() {
+        UUID identityId = UUID.randomUUID();
+        stubCreateStaff(identityId);
+
+        AuthUseCase.AdminCreateUserResult result = authService.adminCreateUser(new AuthUseCase.CreateUserCommand(
+            "staff9", "staff9@phonghub.local", "Staff Nine", null, UserRole.STAFF, null, "MatKhau@2026", false));
+
+        verify(identityProviderPort).adminCreateUser("staff9@phonghub.local", "MatKhau@2026");
+        assertNull(result.temporaryPassword());
+        assertFalse(result.mustChangePassword());
+    }
+
+    @Test
+    void adminCreateUserWithOwnPasswordCanStillForceChange() {
+        stubCreateStaff(UUID.randomUUID());
+
+        AuthUseCase.AdminCreateUserResult result = authService.adminCreateUser(new AuthUseCase.CreateUserCommand(
+            "staff9", "staff9@phonghub.local", "Staff Nine", null, UserRole.STAFF, null, "MatKhau@2026", true));
+
+        assertNull(result.temporaryPassword());
+        assertTrue(result.mustChangePassword());
+    }
+
+    @Test
+    void adminCreateUserWithoutPasswordStillGeneratesTemporaryOneAndForcesChange() {
+        stubCreateStaff(UUID.randomUUID());
+
+        AuthUseCase.AdminCreateUserResult result = authService.adminCreateUser(new AuthUseCase.CreateUserCommand(
+            "staff9", "staff9@phonghub.local", "Staff Nine", null, UserRole.STAFF, null, "", false));
+
+        assertNotNull(result.temporaryPassword());
+        assertEquals(16, result.temporaryPassword().length());
+        assertTrue(result.mustChangePassword());
+        verify(identityProviderPort).adminCreateUser("staff9@phonghub.local", result.temporaryPassword());
+    }
+
+    @Test
+    void adminCreateUserRejectsShortPasswordBeforeCreatingExternalIdentity() {
+        stubCreateStaff(UUID.randomUUID());
+        AuthUseCase.CreateUserCommand command = new AuthUseCase.CreateUserCommand(
+            "staff9", "staff9@phonghub.local", "Staff Nine", null, UserRole.STAFF, null, "1234567", false);
+
+        assertEquals("Mật khẩu phải có ít nhất 8 ký tự.", authService.validateCreateUser(command).get("password"));
+        assertThrows(IllegalArgumentException.class, () -> authService.adminCreateUser(command));
+        verify(identityProviderPort, never()).adminCreateUser(any(), any());
+    }
+
+    @Test
+    void createUserCommandNeverPrintsThePassword() {
+        AuthUseCase.CreateUserCommand command = new AuthUseCase.CreateUserCommand(
+            "staff9", "staff9@phonghub.local", "Staff Nine", null, UserRole.STAFF, null, "MatKhau@2026", false);
+
+        assertFalse(command.toString().contains("MatKhau@2026"));
+    }
 }

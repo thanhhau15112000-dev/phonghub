@@ -11,34 +11,93 @@
         <div>
             <h1>Chỉ số điện nước — phòng <span th:text="${room.getRoomNumber()}">P101</span></h1>
             <p style="color: var(--text-secondary); font-size: 13px;">
-                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Người thuê chụp ảnh đồng hồ và nhập số đã đọc;
-                hệ thống đối chiếu số với ảnh, chủ trọ duyệt rồi mới thành chỉ số chính thức.
+                Nhà trọ <strong th:text="${property.name()}">Nhà trọ</strong>. Người thuê gửi ảnh đồng hồ và số mới;
+                chủ trọ hoặc nhân viên duyệt (hoặc tự ghi) thì mới thành chỉ số chính thức để tính tiền.
             </p>
         </div>
         <div><a th:href="@{'/rooms/' + ${room.getId()}}" class="btn">&larr; Quay lại phòng</a></div>
     </div>
 
+    <!-- Mốc kỳ trước (#366): hệ thống tự lấy, người dùng chỉ cần nhập số mới -->
+    <div class="card" id="previousReadings" style="margin-bottom: 20px;">
+        <h2>Chỉ số kỳ trước</h2>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">
+            Đây là mốc đầu kỳ, hệ thống tự lấy từ lần chốt chỉ số gần nhất hoặc từ biên bản nhận phòng. Chỉ cần nhập số mới trên đồng hồ;
+            tiêu thụ = số mới − chỉ số kỳ trước.
+        </p>
+        <div class="grid-cols-4" style="margin-bottom: 0;">
+            <div class="metric-card" th:each="type : ${meterTypes}" th:with="prev=${previousReadings[type.name()]}">
+                <div class="metric-label" th:text="${type.name() == 'ELECTRIC' ? 'Điện (kWh)' : 'Nước (m³)'}">Điện (kWh)</div>
+                <div class="metric-value" th:attr="data-previous-type=${type.name()},data-previous-value=${prev != null ? prev.value().stripTrailingZeros().toPlainString() : ''}"
+                     th:text="${prev != null ? prev.value().stripTrailingZeros().toPlainString() : 'Chưa có'}">0</div>
+                <div style="font-size: 12px; color: var(--text-secondary);"
+                     th:text="${prev == null ? 'Chưa có mốc: lần ghi đầu cần nhập chỉ số gốc' : (prev.fromCheckIn() ? 'Lấy từ biên bản nhận phòng' : 'Chốt kỳ ' + prev.period())}">Chốt kỳ 2026-10</div>
+            </div>
+        </div>
+    </div>
+
     <div class="card" th:if="${isTenant}" style="margin-bottom: 20px;">
         <h2>Gửi chỉ số mới</h2>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">Chọn ảnh đồng hồ, hệ thống sẽ thử đọc số và điền sẵn; kiểm tra lại số rồi bấm Gửi.</p>
         <form th:action="@{'/rooms/' + ${room.getId()} + '/meter-submissions'}" method="post" enctype="multipart/form-data"
+              class="meter-form" th:attr="data-ocr-url=@{'/rooms/' + ${room.getId()} + '/meter-submissions/ocr'}"
               style="display: flex; gap: 12px; flex-wrap: wrap; align-items: end;">
             <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <div class="form-group">
                 <label class="form-label" for="meterType">Đồng hồ</label>
-                <select id="meterType" name="meterType" class="form-control" required>
+                <select id="meterType" name="meterType" class="form-control meter-type" required>
                     <option value="ELECTRIC">Điện</option>
                     <option value="WATER">Nước</option>
                 </select>
             </div>
             <div class="form-group">
-                <label class="form-label" for="declaredValue">Số trên đồng hồ</label>
-                <input type="number" step="0.01" min="0" id="declaredValue" name="declaredValue" class="form-control" required>
+                <label class="form-label" for="file">Ảnh đồng hồ</label>
+                <input type="file" id="file" name="file" class="form-control meter-photo" accept="image/jpeg,image/png,image/webp" required>
             </div>
             <div class="form-group">
-                <label class="form-label" for="file">Ảnh đồng hồ</label>
-                <input type="file" id="file" name="file" class="form-control" accept="image/jpeg,image/png,image/webp" required>
+                <label class="form-label" for="declaredValue">Số trên đồng hồ</label>
+                <input type="number" step="0.01" min="0" id="declaredValue" name="declaredValue" class="form-control meter-value" required>
             </div>
             <button type="submit" class="btn btn-primary">Gửi</button>
+            <div class="meter-hint" style="flex-basis: 100%; font-size: 12px; color: var(--text-secondary);" aria-live="polite"></div>
+        </form>
+    </div>
+
+    <!-- Chủ trọ/nhân viên ghi chỉ số trực tiếp (#366) -->
+    <div class="card" th:if="${canRecordReading}" id="recordReading" style="margin-bottom: 20px;">
+        <h2>Ghi chỉ số</h2>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">
+            Nhập số mới trên đồng hồ (có thể chọn ảnh để hệ thống đọc số). Mỗi đồng hồ ghi một lần mỗi tháng, theo ngày ghi.
+        </p>
+        <form th:action="@{'/rooms/' + ${room.getId()} + '/meter-submissions/readings'}" method="post" enctype="multipart/form-data"
+              class="meter-form" th:attr="data-ocr-url=@{'/rooms/' + ${room.getId()} + '/meter-submissions/ocr'}"
+              style="display: flex; gap: 12px; flex-wrap: wrap; align-items: end;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group">
+                <label class="form-label" for="recordMeterType">Đồng hồ</label>
+                <select id="recordMeterType" name="meterType" class="form-control meter-type" required>
+                    <option value="ELECTRIC">Điện</option>
+                    <option value="WATER">Nước</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="recordFile">Ảnh đồng hồ (không bắt buộc)</label>
+                <input type="file" id="recordFile" name="file" class="form-control meter-photo" accept="image/jpeg,image/png,image/webp">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="recordCurrentValue">Số mới *</label>
+                <input type="number" step="0.01" min="0" id="recordCurrentValue" name="currentValue" class="form-control meter-value" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="recordReadingDate">Ngày ghi</label>
+                <input type="date" id="recordReadingDate" name="readingDate" class="form-control" th:value="${today}" th:max="${today}">
+            </div>
+            <div class="form-group meter-baseline" hidden>
+                <label class="form-label" for="recordBaselineValue">Chỉ số gốc *</label>
+                <input type="number" step="0.01" min="0" id="recordBaselineValue" name="baselineValue" class="form-control" disabled>
+            </div>
+            <button type="submit" class="btn btn-primary">Ghi chỉ số</button>
+            <div class="meter-hint" style="flex-basis: 100%; font-size: 12px; color: var(--text-secondary);" aria-live="polite"></div>
         </form>
     </div>
 
@@ -84,6 +143,125 @@
             </tbody>
         </table>
     </div>
+    <!-- Chỉ số chính thức đã chốt, dùng để tính tiền điện nước (#366) -->
+    <div class="card" id="officialReadings" style="margin-top: 20px;">
+        <h2>Chỉ số đã chốt</h2>
+        <p th:if="${#lists.isEmpty(readings)}" style="color: var(--text-secondary);">Chưa có chỉ số nào được chốt.</p>
+        <table th:if="${!#lists.isEmpty(readings)}" class="data-table" data-collapse-rows="6">
+            <thead><tr><th>Kỳ</th><th>Đồng hồ</th><th class="col-number">Kỳ trước</th><th class="col-number">Kỳ này</th><th class="col-number">Tiêu thụ</th><th>Ngày ghi</th></tr></thead>
+            <tbody>
+                <tr th:each="r : ${readings}">
+                    <td th:text="${r.period()}">2026-11</td>
+                    <td th:text="${r.meterType().name() == 'ELECTRIC'} ? 'Điện' : 'Nước'">Điện</td>
+                    <td class="col-number" th:text="${r.previousValue().stripTrailingZeros().toPlainString()}">0</td>
+                    <td class="col-number" th:text="${r.currentValue().stripTrailingZeros().toPlainString()}">0</td>
+                    <td class="col-number" th:text="${r.consumption().stripTrailingZeros().toPlainString() + (r.meterType().name() == 'ELECTRIC' ? ' kWh' : ' m³')}">0</td>
+                    <td th:text="${uiText.date(r.readingDate())}">01/11/2026</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // #366: đọc số từ ảnh để tự điền, tính thử tiêu thụ so với chỉ số kỳ trước, chỉ hỏi chỉ số gốc khi chưa có mốc
+        (function () {
+            var previous = {};
+            document.querySelectorAll('[data-previous-type]').forEach(function (el) {
+                var value = el.getAttribute('data-previous-value');
+                // Chưa có mốc thì Thymeleaf bỏ hẳn thuộc tính (getAttribute trả null), không phải chuỗi rỗng
+                var number = value === null || value === '' ? NaN : parseFloat(value);
+                previous[el.getAttribute('data-previous-type')] = isNaN(number) ? null : number;
+            });
+            var csrfToken = document.querySelector('meta[name="_csrf"]');
+            var csrfHeader = document.querySelector('meta[name="_csrf_header"]');
+
+            document.querySelectorAll('form.meter-form').forEach(function (form) {
+                var type = form.querySelector('.meter-type');
+                var photo = form.querySelector('.meter-photo');
+                var value = form.querySelector('.meter-value');
+                var hint = form.querySelector('.meter-hint');
+                var baseline = form.querySelector('.meter-baseline');
+                var ocrMessage = '';
+                var requestSeq = 0;      // chỉ nhận kết quả của lần chọn ảnh mới nhất
+                var autoFilled = false;  // ô số đang là số máy đọc từ ảnh (người dùng chưa sửa)
+
+                function clearAutoFilled() {
+                    if (autoFilled) {
+                        value.value = '';
+                        autoFilled = false;
+                    }
+                }
+
+                function unit() { return type.value === 'ELECTRIC' ? 'kWh' : 'm³'; }
+                function render() {
+                    var prev = previous[type.value];
+                    var parts = [];
+                    if (ocrMessage) parts.push(ocrMessage);
+                    if (prev === null || prev === undefined) {
+                        parts.push('Đồng hồ này chưa có chỉ số kỳ trước.');
+                    } else if (value.value !== '') {
+                        var used = parseFloat(value.value) - prev;
+                        parts.push(used < 0
+                            ? 'Số mới nhỏ hơn chỉ số kỳ trước (' + prev + '). Kiểm tra lại số, nếu đã thay đồng hồ thì báo chủ trọ.'
+                            : 'Tiêu thụ: ' + (Math.round(used * 100) / 100) + ' ' + unit() + ' (kỳ trước ' + prev + ').');
+                    } else {
+                        parts.push('Chỉ số kỳ trước: ' + prev + ' ' + unit() + '.');
+                    }
+                    hint.textContent = parts.join(' ');
+                    if (baseline) {
+                        var needBaseline = prev === null || prev === undefined;
+                        baseline.hidden = !needBaseline;
+                        var input = baseline.querySelector('input');
+                        input.disabled = !needBaseline;
+                        input.required = needBaseline;
+                    }
+                }
+
+                // Đọc số từ ảnh đang chọn; chỉ tự điền khi ô số còn trống hoặc đang là số máy đọc trước đó
+                function runOcr() {
+                    if (!photo.files || photo.files.length === 0) {
+                        render();
+                        return;
+                    }
+                    var seq = ++requestSeq;
+                    clearAutoFilled();
+                    var data = new FormData();
+                    data.append('meterType', type.value);
+                    data.append('file', photo.files[0]);
+                    var headers = {};
+                    if (csrfToken && csrfHeader) headers[csrfHeader.content] = csrfToken.content;
+                    ocrMessage = 'Đang đọc số từ ảnh...';
+                    render();
+                    fetch(form.getAttribute('data-ocr-url'), { method: 'POST', body: data, headers: headers, credentials: 'same-origin' })
+                        .then(function (response) { return response.json().catch(function () { return {}; }); })
+                        .then(function (result) {
+                            if (seq !== requestSeq) return;
+                            ocrMessage = (result && result.message) || 'Không đọc được ảnh, hãy tự nhập số.';
+                            if (result && result.value) {
+                                if (value.value === '') {
+                                    value.value = result.value;
+                                    autoFilled = true;
+                                } else if (parseFloat(value.value) !== parseFloat(result.value)) {
+                                    ocrMessage = 'Ảnh đọc được ' + result.value + ', khác số bạn đã nhập; hãy kiểm tra lại.';
+                                }
+                            }
+                            render();
+                        })
+                        .catch(function () {
+                            if (seq !== requestSeq) return;
+                            ocrMessage = 'Không đọc được ảnh, hãy tự nhập số.';
+                            render();
+                        });
+                }
+
+                photo.addEventListener('change', runOcr);
+                // Đổi loại đồng hồ thì số đọc theo loại cũ không còn đúng: đọc lại ảnh theo loại mới; số người dùng tự gõ giữ nguyên
+                type.addEventListener('change', function () { requestSeq++; ocrMessage = ''; clearAutoFilled(); runOcr(); });
+                value.addEventListener('input', function () { autoFilled = false; render(); });
+                render();
+            });
+        })();
+    </script>
 </main>
 
 <footer th:replace="~{fragments/layout :: footer}"></footer>

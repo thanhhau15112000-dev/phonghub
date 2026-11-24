@@ -267,11 +267,18 @@
         <div th:if="${#lists.isEmpty(billingCycles)}" class="empty-state" style="padding: 12px;">
             Chưa có chu kỳ trong thời hạn hợp đồng.
         </div>
-        <table th:unless="${#lists.isEmpty(billingCycles)}" class="data-table" style="font-size: 13px;">
+        <!-- Mặc định chỉ hiện kỳ trước, kỳ hiện tại và kỳ sau (chưa bắt đầu/đã hết hạn thì quanh kỳ đầu/cuối); nút bên dưới mở hết (#363) -->
+        <table th:unless="${#lists.isEmpty(billingCycles)}" class="data-table" id="billingCycleTable" style="font-size: 13px;"
+               data-collapse-window="1"
+               th:attr="data-collapse-more=${'Xem tất cả ' + #lists.size(billingCycles) + ' kỳ'}">
             <thead><tr><th>Kỳ</th><th>Thời gian</th></tr></thead>
             <tbody>
-                <tr th:each="cycle : ${billingCycles}">
-                    <td th:text="${cycle.number()}">1</td>
+                <tr th:each="cycle : ${billingCycles}"
+                    th:classappend="${(cycle.number() == focusCycleNumber ? 'collapse-focus' : '') + (cycle.number() == currentCycleNumber ? ' is-current' : '')}">
+                    <td>
+                        <span th:text="${cycle.number()}">1</span>
+                        <span th:if="${cycle.number() == currentCycleNumber}" class="badge-current">Kỳ hiện tại</span>
+                    </td>
                     <td th:text="${uiText.date(cycle.startDate()) + ' – ' + uiText.date(cycle.endDate())}">25/10/2026 – 24/11/2026</td>
                 </tr>
             </tbody>

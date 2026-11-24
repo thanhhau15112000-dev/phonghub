@@ -65,4 +65,37 @@ class AdminUserCreateFieldErrorsIntegrationTest extends SeededWebTest {
             .andExpect(status().isOk())
             .andExpect(model().attribute("createFieldErrors", allOf(hasKey("phone"), hasKey("identityCardNumber"))));
     }
+
+    @Test
+    @DisplayName("#364: hai ô mật khẩu không khớp hoặc mật khẩu ngắn thì báo ở đúng ô, không trả mật khẩu về form")
+    void passwordFieldErrors() throws Exception {
+        String html = mockMvc.perform(post("/admin/users").header("X-User-Id", ADMIN)
+                .param("username", "nhan.vien.moi").param("email", "nvmoi@example.com")
+                .param("fullName", "Nhân viên mới").param("role", "STAFF")
+                .param("password", "MatKhau@2026").param("confirmPassword", "MatKhau@2027"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("createFieldErrors", allOf(hasKey("confirmPassword"), not(hasKey("password")))))
+            .andReturn().getResponse().getContentAsString();
+        assertTrue(!html.contains("MatKhau@2026"), "mật khẩu không được điền lại vào trang");
+
+        mockMvc.perform(post("/admin/users").header("X-User-Id", ADMIN)
+                .param("username", "nhan.vien.moi").param("email", "nvmoi@example.com")
+                .param("fullName", "Nhân viên mới").param("role", "STAFF")
+                .param("password", "1234567").param("confirmPassword", "1234567"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("createFieldErrors", hasKey("password")));
+    }
+
+    @Test
+    @DisplayName("#364: admin đặt mật khẩu thì tạo xong không hiện mật khẩu tạm và theo lựa chọn bắt đổi mật khẩu")
+    void createWithOwnPassword() throws Exception {
+        var created = (com.phonghub.application.port.in.AuthUseCase.AdminCreateUserResult) mockMvc.perform(post("/admin/users").header("X-User-Id", ADMIN)
+                .param("username", "nhan.vien.364").param("email", "nv364@example.com")
+                .param("fullName", "Nhân viên 364").param("role", "STAFF")
+                .param("password", "MatKhau@2026").param("confirmPassword", "MatKhau@2026"))
+            .andExpect(status().is3xxRedirection())
+            .andReturn().getFlashMap().get("createdUser");
+        assertTrue(created.temporaryPassword() == null, "không sinh mật khẩu tạm");
+        assertTrue(!created.mustChangePassword(), "bỏ tích thì không bắt đổi mật khẩu");
+    }
 }

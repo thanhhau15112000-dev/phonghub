@@ -20,6 +20,7 @@ import com.phonghub.domain.exception.PropertyNotFoundException;
 import com.phonghub.domain.exception.RoomNotFoundException;
 import com.phonghub.domain.exception.UnauthorizedPropertyAccessException;
 import com.phonghub.domain.model.Contract;
+import com.phonghub.domain.model.ContractStatus;
 import com.phonghub.domain.model.Invoice;
 import com.phonghub.domain.model.Property;
 import com.phonghub.domain.model.PropertyApprovalStatus;
@@ -281,6 +282,11 @@ public class ContractUiController {
             model.addAttribute("contract", contract);
             model.addAttribute("checkIn", checkIn);
             model.addAttribute("billingCycles", contract.billingCycles());
+            LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+            // Bảng thu gọn quanh kỳ đang diễn ra; nhãn "Kỳ hiện tại" chỉ có khi hợp đồng còn hiệu lực và hôm nay nằm trong kỳ
+            model.addAttribute("focusCycleNumber", BillingCycleDisplay.focusNumber(contract.billingCycles(), today));
+            model.addAttribute("currentCycleNumber", contract.getStatus() == ContractStatus.ACTIVE
+                ? BillingCycleDisplay.runningNumber(contract.billingCycles(), today) : 0);
             model.addAttribute("checkOut", checkOut);
             model.addAttribute("canManageContracts", authorizationService.canManageContracts(currentUser, contract.getPropertyId()));
             model.addAttribute("canViewMoney", authorizationService.canViewContractMoney(currentUser, contract));

@@ -102,10 +102,31 @@ class PhongHubUiIntegrationTest {
             .andExpect(content().string(not(containsString("Người dùng hiện tại"))))
             .andExpect(content().string(not(containsString("style=\"font-weight: 500;\""))));
 
+        // #365: chủ trọ chỉ còn số liệu nhìn là hiểu; nhân viên vẫn giữ 4 ô cũ
         mockMvc.perform(get("/dashboard")
                 .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
             .andExpect(status().isOk())
-            .andExpect(content().string(containsString("Nhà trọ bạn quản lý")));
+            .andExpect(content().string(containsString("id=\"ownerRoomStats\"")))
+            .andExpect(content().string(containsString("Phòng trống")))
+            .andExpect(content().string(containsString("Phiếu báo hỏng chưa xong")))
+            .andExpect(content().string(not(containsString("Thời gian xử lý trung bình"))))
+            .andExpect(content().string(not(containsString("Lợi nhuận ước tính"))))
+            .andExpect(content().string(not(containsString("Nhà trọ bạn quản lý"))));
+        // Bảng theo nhà trọ thu gọn còn 5 dòng nên nhà đang có người thuê phải đứng đầu, không xếp theo tên
+        String ownerHtml = mockMvc.perform(get("/dashboard")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.OWNER_1_ID.toString()))
+            .andReturn().getResponse().getContentAsString();
+        String opsTable = ownerHtml.substring(ownerHtml.indexOf("id=\"opsPropertyTable\""));
+        opsTable = opsTable.substring(0, opsTable.indexOf("</table>"));
+        assertTrue(opsTable.contains("data-collapse-rows=\"5\""), "bảng theo nhà trọ được thu gọn");
+        int firstRow = opsTable.indexOf("<tbody>");
+        assertTrue(opsTable.indexOf("Nhà trọ Xanh - Quận 7", firstRow) < opsTable.indexOf("Khu trọ Tân Bình", firstRow),
+            "nhà đang có phòng thuê đứng trước nhà chưa có ai thuê");
+        mockMvc.perform(get("/dashboard")
+                .header("X-User-Id", LocalDemoAuthenticationAdapter.STAFF_1_ID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Nhà trọ bạn quản lý")))
+            .andExpect(content().string(not(containsString("id=\"ownerRoomStats\""))));
     }
 
     @Test
@@ -336,7 +357,9 @@ class PhongHubUiIntegrationTest {
         assertTrue(cells(html, "col-status").stream().noneMatch(cell -> cell.contains("btn-reason-pill")),
             "cột Trạng thái chỉ còn badge");
         assertTrue(html.contains("<td class=\"col-wrap\">" + longAddress + "</td>"), "địa chỉ dài được phép xuống dòng");
-        assertTrue(html.contains("<td class=\"col-wrap\">—</td>"), "mô tả trống hiện dấu gạch ngang");
+        // #362: bảng giống trang Điều khiển, mô tả (nếu có) hiện nhỏ dưới tên thay vì một cột riêng
+        assertTrue(!html.contains(">Mô tả</th>"), "không còn cột Mô tả");
+        assertTrue(!html.contains("<td class=\"col-wrap\">—</td>"), "mô tả trống thì không hiện gì");
     }
 
     private static List<String> cells(String html, String cssClass) {

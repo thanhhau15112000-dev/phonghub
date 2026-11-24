@@ -6,6 +6,7 @@ import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.in.RoomSetupUseCase;
 import com.phonghub.application.port.in.TenantUseCase;
 import com.phonghub.application.port.in.UserUseCase;
+import com.phonghub.application.port.in.UtilityUseCase;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
@@ -54,6 +55,7 @@ public class PropertyUiController {
     private final TenantRepositoryPort tenantRepository;
     private final TenantUseCase tenantUseCase;
     private final UserUseCase userUseCase;
+    private final UtilityUseCase utilityUseCase;
 
     public PropertyUiController(
         PropertyUseCase propertyUseCase,
@@ -65,7 +67,8 @@ public class PropertyUiController {
         ContractRepositoryPort contractRepository,
         TenantRepositoryPort tenantRepository,
         TenantUseCase tenantUseCase,
-        UserUseCase userUseCase
+        UserUseCase userUseCase,
+        UtilityUseCase utilityUseCase
     ) {
         this.propertyUseCase = propertyUseCase;
         this.roomUseCase = roomUseCase;
@@ -77,6 +80,7 @@ public class PropertyUiController {
         this.tenantRepository = tenantRepository;
         this.tenantUseCase = tenantUseCase;
         this.userUseCase = userUseCase;
+        this.utilityUseCase = utilityUseCase;
     }
 
     @GetMapping
@@ -97,9 +101,9 @@ public class PropertyUiController {
         }
 
         final PropertyApprovalStatus finalFilter = filterStatus;
-        List<Property> filteredProperties = finalFilter == null
+        List<Property> filteredProperties = PropertyDisplayOrder.sort(finalFilter == null
             ? allProperties
-            : allProperties.stream().filter(p -> p.approvalStatus() == finalFilter).toList();
+            : allProperties.stream().filter(p -> p.approvalStatus() == finalFilter).toList());
 
         model.addAttribute("currentUser", currentUser);
         model.addAttribute("properties", filteredProperties);
@@ -237,6 +241,7 @@ public class PropertyUiController {
             model.addAttribute("currentUser", currentUser);
             model.addAttribute("property", property);
             model.addAttribute("canManageRoomsAndAssets", authorizationService.canManageRoomsAndAssets(currentUser, id));
+            addServiceRateAttributes(model, currentUser, id);
             model.addAttribute("canViewRoomPrice", canViewRoomPrice);
             model.addAttribute("rooms", roomPage.items());
             model.addAttribute("roomPage", roomPage);
@@ -509,5 +514,33 @@ public class PropertyUiController {
             throw new IllegalArgumentException("Mỗi lần tạo từ 1 đến 50 phòng.");
         }
         return List.copyOf(result);
+    }
+
+    /**
+     * Đơn giá điện nước và dịch vụ (#366): chủ trọ của nhà trọ và quản trị viên sửa được, nhân viên chỉ xem; kỹ thuật
+     * viên (#346) và người thuê không thấy khung này.
+     */
+    private void addServiceRateAttributes(Model model, CurrentUser currentUser, UUID propertyId) {
+        if (currentUser == null || currentUser.role() == UserRole.TENANT || currentUser.role() == UserRole.TECHNICIAN) {
+            return;
+        }
+        try {
+            // Điện, nước lên trước rồi tới các dịch vụ theo người, cố định theo phòng; cùng cách tính thì theo tên
+            model.addAttribute("serviceRates", utilityUseCase.listRates(propertyId).stream()
+                .sorted(java.util.Comparator.comparing((com.phonghub.domain.model.ServiceRate rate) -> rate.chargeType())
+                    .thenComparing(rate -> rate.serviceName(), String.CASE_INSENSITIVE_ORDER))
+                .toList());
+        } catch (DomainException ex) {
+            return;
+        }
+        boolean canEdit;
+        try {
+            authorizationService.assertOwnerOrAdmin(currentUser, propertyId);
+            canEdit = true;
+        } catch (DomainException ex) {
+            canEdit = false;
+        }
+        model.addAttribute("canEditRates", canEdit);
+        model.addAttribute("chargeTypes", com.phonghub.domain.model.ChargeType.values());
     }
 }

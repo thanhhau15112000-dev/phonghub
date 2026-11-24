@@ -15,8 +15,9 @@
         </div>
     </div>
 
-    <!-- Chỉ số tổng quan (người thuê chỉ có một phòng và quản trị viên đã có Toàn hệ thống nên không cần) -->
-    <div class="grid-cols-4" th:if="${currentUser.role().name() != 'TENANT' and currentUser.role().name() != 'ADMIN'}">
+    <!-- Chỉ số tổng quan cho nhân viên và kỹ thuật viên (chủ trọ dùng khối Tổng quan bên dưới, #365; người thuê chỉ có
+         một phòng và quản trị viên đã có Toàn hệ thống nên không cần) -->
+    <div class="grid-cols-4" th:if="${opsSummary == null and currentUser.role().name() != 'TENANT' and currentUser.role().name() != 'ADMIN'}">
         <div class="metric-card">
             <div class="metric-label">Nhà trọ bạn quản lý</div>
             <div class="metric-value" th:text="${propertiesCount}">0</div>
@@ -35,12 +36,12 @@
         </div>
     </div>
 
-    <!-- Dashboard vận hành (#75): chỉ chủ nhà trọ; quản trị viên không xem số liệu tiền (#163) -->
+    <!-- Chủ trọ (#75, gọn lại ở #365): chỉ giữ số liệu nhìn là hiểu; quản trị viên không xem số liệu tiền (#163) -->
     <div th:if="${opsSummary != null}" id="operations">
         <div class="card">
             <div class="flex-between" style="margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
                 <div>
-                    <h2>Vận hành</h2>
+                    <h2>Tổng quan</h2>
                     <p style="color: var(--text-secondary); font-size: 12px; margin-top: 2px;"
                        th:text="(${opsSummary.from() == opsSummary.to()} ? 'Tháng ' + ${opsSummary.from()} : 'Kỳ ' + ${opsSummary.from()} + ' → ' + ${opsSummary.to()}) + ' · ' + ${opsSummary.propertyCount()} + ' nhà trọ'">Kỳ 2025-11 → 2026-10</p>
                 </div>
@@ -68,18 +69,39 @@
                 </form>
             </div>
 
-            <div class="grid-cols-4">
+            <!-- Tình trạng phòng hiện tại -->
+            <div class="grid-cols-4" id="ownerRoomStats">
                 <div class="metric-card">
-                    <div class="metric-label">Tỷ lệ phòng đang được thuê</div>
-                    <div class="metric-value" th:text="${opsSummary.occupancy().occupancyRate() != null ? opsSummary.occupancy().occupancyRate() + '%' : '—'}">0%</div>
-                    <div style="font-size: 12px; color: var(--text-secondary);"
-                         th:text="${opsSummary.occupancy().occupied()} + '/' + ${opsSummary.occupancy().totalRooms()} + ' phòng đang ở'">0/0 phòng</div>
+                    <div class="metric-label">Tổng số phòng</div>
+                    <div class="metric-value" th:text="${opsSummary.occupancy().totalRooms()}">0</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);" th:text="${opsSummary.propertyCount()} + ' nhà trọ'">0 nhà trọ</div>
                 </div>
+                <div class="metric-card">
+                    <div class="metric-label">Đang thuê</div>
+                    <div class="metric-value" th:text="${opsSummary.occupancy().occupied()}">0</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);"
+                         th:text="${opsSummary.occupancy().occupancyRate() != null ? opsSummary.occupancy().occupancyRate() + '% số phòng' : '—'}">0% số phòng</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Phòng trống</div>
+                    <div class="metric-value" th:text="${opsSummary.occupancy().available()}">0</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);"
+                         th:text="${opsSummary.occupancy().reserved()} + ' phòng đang giữ chỗ'">0 phòng đang giữ chỗ</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Đang bảo trì</div>
+                    <div class="metric-value" th:text="${opsSummary.occupancy().maintenance()}">0</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">phòng tạm không cho thuê</div>
+                </div>
+            </div>
+
+            <!-- Tiền và việc cần xử lý trong kỳ đang xem -->
+            <div class="grid-cols-4" id="ownerOpsStats" style="margin-bottom: 0;">
                 <div class="metric-card">
                     <div class="metric-label">Đã thu / phát sinh</div>
                     <div class="metric-value" th:text="${#numbers.formatDecimal(opsSummary.revenue().collected(), 0, 'POINT', 0, 'COMMA')} + ' đ'">0 đ</div>
                     <div style="font-size: 12px; color: var(--text-secondary);"
-                         th:text="'/ ' + ${#numbers.formatDecimal(opsSummary.revenue().billed(), 0, 'POINT', 0, 'COMMA')} + ' đ · thu ' + ${opsSummary.revenue().collectionRate() != null ? opsSummary.revenue().collectionRate() + '%' : '—'}">/ 0 đ</div>
+                         th:text="'/ ' + ${#numbers.formatDecimal(opsSummary.revenue().billed(), 0, 'POINT', 0, 'COMMA')} + ' đ' + ${opsSummary.revenue().collectionRate() != null ? ' · thu ' + opsSummary.revenue().collectionRate() + '%' : ''}">/ 0 đ</div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Công nợ</div>
@@ -88,22 +110,10 @@
                          th:text="${opsSummary.revenue().overdueInvoices()} + ' hóa đơn quá hạn · ' + ${#numbers.formatDecimal(opsSummary.revenue().overdueAmount(), 0, 'POINT', 0, 'COMMA')} + ' đ'">0 hóa đơn quá hạn</div>
                 </div>
                 <div class="metric-card">
-                    <div class="metric-label">Lợi nhuận ước tính</div>
-                    <div class="metric-value" th:text="${#numbers.formatDecimal(opsSummary.estimatedProfit(), 0, 'POINT', 0, 'COMMA')} + ' đ'">0 đ</div>
-                    <div style="font-size: 12px; color: var(--text-secondary);"
-                         th:text="'Chi phí sửa chữa ' + ${#numbers.formatDecimal(opsSummary.repairCost(), 0, 'POINT', 0, 'COMMA')} + ' đ'">Chi phí sửa chữa 0 đ</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Phòng đang bảo trì</div>
-                    <div class="metric-value" th:text="${opsSummary.maintenance().roomsUnderMaintenance()}">0</div>
-                    <div style="font-size: 12px; color: var(--text-secondary);"
-                         th:text="${opsSummary.maintenance().openTickets()} + ' phiếu chưa xong · ' + ${opsSummary.maintenance().overdueTickets()} + ' trễ hạn xử lý'">0 phiếu chưa xong</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Thời gian xử lý trung bình</div>
-                    <div class="metric-value" th:text="${opsSummary.maintenance().avgResolutionHours() != null ? opsSummary.maintenance().avgResolutionHours() + ' giờ' : '—'}">—</div>
-                    <div style="font-size: 12px; color: var(--text-secondary);"
-                         th:text="${opsSummary.maintenance().completedTickets()} + ' phiếu hoàn thành trong kỳ'">0 phiếu hoàn thành</div>
+                    <div class="metric-label">Phiếu báo hỏng chưa xong</div>
+                    <div class="metric-value" th:text="${opsSummary.maintenance().openTickets()}">0</div>
+                    <div style="font-size: 12px;" th:style="${opsSummary.maintenance().overdueTickets() > 0 ? 'color: #b91c1c;' : 'color: var(--text-secondary);'}"
+                         th:text="${opsSummary.maintenance().overdueTickets()} + ' phiếu trễ hạn xử lý'">0 phiếu trễ hạn xử lý</div>
                 </div>
             </div>
         </div>
@@ -117,8 +127,6 @@
                         <th style="min-width: 200px;">Phát sinh</th>
                         <th class="col-number">Đã thu</th>
                         <th class="col-number">Công nợ</th>
-                        <th class="col-number">Chi phí sửa chữa</th>
-                        <th class="col-number">Lợi nhuận ước tính</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -135,8 +143,6 @@
                         </td>
                         <td class="col-number" th:text="${#numbers.formatDecimal(r.collected(), 0, 'POINT', 0, 'COMMA')}">0</td>
                         <td class="col-number" th:text="${#numbers.formatDecimal(r.outstanding(), 0, 'POINT', 0, 'COMMA')}">0</td>
-                        <td class="col-number" th:text="${#numbers.formatDecimal(r.repairCost(), 0, 'POINT', 0, 'COMMA')}">0</td>
-                        <td class="col-number" th:text="${#numbers.formatDecimal(r.estimatedProfit(), 0, 'POINT', 0, 'COMMA')}">0</td>
                     </tr>
                 </tbody>
             </table>
@@ -145,29 +151,27 @@
         <div class="card">
             <h2 style="margin-bottom: 12px;">Theo nhà trọ</h2>
             <div th:if="${#lists.isEmpty(opsProperties)}" class="empty-state">
-                <p>Chưa có nhà trọ nào trong phạm vi.</p>
+                <p>Chưa có nhà trọ nào.</p>
             </div>
-            <table th:if="${!#lists.isEmpty(opsProperties)}" class="data-table" id="opsPropertyTable">
+            <table th:if="${!#lists.isEmpty(opsProperties)}" class="data-table" id="opsPropertyTable" data-collapse-rows="5">
                 <thead>
                     <tr>
                         <th>Nhà trọ</th>
-                        <th class="col-number">Đang được thuê</th>
-                        <th class="col-number">Phát sinh</th>
+                        <th class="col-number">Đang thuê</th>
+                        <th class="col-number">Phòng trống</th>
                         <th class="col-number">Đã thu</th>
                         <th class="col-number">Công nợ</th>
                         <th class="col-number">Quá hạn</th>
-                        <th class="col-number">Lợi nhuận ước tính</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr th:each="p : ${opsProperties}">
+                    <tr th:each="p : ${opsPropertyRows}">
                         <td><a th:href="@{'/properties/' + ${p.propertyId()}}" th:text="${p.name()}" style="font-weight: 600; color: var(--accent);">Nhà trọ</a></td>
-                        <td class="col-number" th:text="${p.occupancy().occupancyRate() != null ? p.occupancy().occupancyRate() + '%' : '—'}">0%</td>
-                        <td class="col-number" th:text="${#numbers.formatDecimal(p.revenue().billed(), 0, 'POINT', 0, 'COMMA')}">0</td>
+                        <td class="col-number" th:text="${p.occupancy().occupied()} + '/' + ${p.occupancy().totalRooms()}">0/0</td>
+                        <td class="col-number" th:text="${p.occupancy().available()}">0</td>
                         <td class="col-number" th:text="${#numbers.formatDecimal(p.revenue().collected(), 0, 'POINT', 0, 'COMMA')}">0</td>
                         <td class="col-number" th:text="${#numbers.formatDecimal(p.revenue().outstanding(), 0, 'POINT', 0, 'COMMA')}">0</td>
                         <td class="col-number" th:text="${p.revenue().overdueInvoices()}">0</td>
-                        <td class="col-number" th:text="${#numbers.formatDecimal(p.estimatedProfit(), 0, 'POINT', 0, 'COMMA')}">0</td>
                     </tr>
                 </tbody>
             </table>
@@ -322,7 +326,7 @@
     <!-- Bảng nhà trọ (không dành cho người thuê) -->
     <div class="card" th:unless="${currentUser != null and currentUser.role().name() == 'TENANT'}">
         <div class="flex-between" style="margin-bottom: 12px;">
-            <h2>Nhà trọ trong phạm vi</h2>
+            <h2>Danh sách nhà trọ</h2>
             <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'OWNER')}" th:href="@{/properties}" class="btn btn-primary btn-sm">+ Thêm nhà trọ</a>
         </div>
 
@@ -330,12 +334,12 @@
             <p>Tài khoản hiện tại chưa được cấp quyền truy cập nhà trọ nào.</p>
         </div>
 
-        <table th:if="${!#lists.isEmpty(properties)}" class="data-table">
+        <table th:if="${!#lists.isEmpty(properties)}" class="data-table" id="propertyListTable" data-collapse-rows="5">
             <thead>
                 <tr>
                     <th style="min-width: 170px;">Tên nhà trọ</th>
                     <th style="min-width: 200px;">Địa chỉ</th>
-                    <th class="col-number">Tổng số phòng</th>
+                    <th class="col-number">Số phòng</th>
                     <th class="col-status">Trạng thái duyệt</th>
                     <th class="col-actions">Thao tác</th>
                 </tr>
