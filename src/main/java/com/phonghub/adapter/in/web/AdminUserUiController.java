@@ -213,6 +213,9 @@ public class AdminUserUiController {
         @RequestParam(required = false) String phone,
         @RequestParam(required = false) UserRole role,
         @RequestParam(required = false) String identityCardNumber,
+        @RequestParam(required = false) String password,
+        @RequestParam(required = false) String confirmPassword,
+        @RequestParam(defaultValue = "false") boolean mustChangePassword,
         Model model,
         RedirectAttributes redirectAttributes
     ) {
@@ -220,11 +223,16 @@ public class AdminUserUiController {
             redirectAttributes.addFlashAttribute("errorMessage", "Chỉ quản trị viên mới có thể tạo tài khoản.");
             return "redirect:/";
         }
-        AuthUseCase.CreateUserCommand command =
-            new AuthUseCase.CreateUserCommand(username, email, fullName, phone, role, identityCardNumber);
+        // Admin đặt sẵn mật khẩu thì không phải gửi lại mật khẩu tạm (#364); để trống thì vẫn sinh mật khẩu tạm
+        String initialPassword = password == null || password.isEmpty() ? null : password;
+        AuthUseCase.CreateUserCommand command = new AuthUseCase.CreateUserCommand(username, email, fullName, phone,
+            role, identityCardNumber, initialPassword, mustChangePassword);
 
         // Kiểm tra hết các trường trong một lần để báo lỗi theo từng trường và giữ nguyên dữ liệu đã nhập (#247)
         Map<String, String> fieldErrors = new java.util.LinkedHashMap<>(authUseCase.validateCreateUser(command));
+        if (initialPassword != null && !initialPassword.equals(confirmPassword)) {
+            fieldErrors.put("confirmPassword", "Hai ô mật khẩu không khớp.");
+        }
         if (role != null && !CREATABLE_ROLES.contains(role)) {
             fieldErrors.put("role", "Vai trò được chọn không được phép tạo từ giao diện này.");
         }
@@ -254,6 +262,8 @@ public class AdminUserUiController {
         form.put("phone", phone == null ? "" : phone);
         form.put("role", role == null ? "" : role.name());
         form.put("identityCardNumber", identityCardNumber == null ? "" : identityCardNumber);
+        // Không trả mật khẩu về form; chỉ giữ lựa chọn bắt đổi mật khẩu
+        form.put("mustChangePassword", String.valueOf(mustChangePassword));
         model.addAttribute("createForm", form);
         model.addAttribute("createFieldErrors", fieldErrors);
         if (generalError != null) {
