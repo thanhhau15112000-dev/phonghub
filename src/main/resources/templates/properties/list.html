@@ -60,7 +60,7 @@
 
     <!-- Bảng nhà trọ -->
     <div class="card">
-        <h2 th:text="${currentUser != null and currentUser.role().name() == 'OWNER' ? 'Danh sách nhà trọ của tôi' : 'Nhà trọ được phép truy cập'}">Nhà trọ được phép truy cập</h2>
+        <h2>Danh sách nhà trọ</h2>
 
         <!-- Thanh bộ lọc trạng thái duyệt cho Quản trị viên -->
         <div th:if="${currentUser != null and currentUser.role().name() == 'ADMIN'}" class="filter-tabs" style="margin-bottom: 16px;">
@@ -95,12 +95,11 @@
             <p th:if="${currentUser == null or currentUser.role().name() != 'OWNER'}">Không tìm thấy nhà trọ trong phạm vi hiện tại.</p>
         </div>
 
-        <table th:if="${!#lists.isEmpty(properties)}" class="data-table">
+        <table th:if="${!#lists.isEmpty(properties)}" class="data-table" id="propertyListTable" data-collapse-rows="5">
             <thead>
                 <tr>
                     <th style="min-width: 170px;">Tên nhà trọ</th>
                     <th style="min-width: 200px;">Địa chỉ</th>
-                    <th style="min-width: 160px;">Mô tả</th>
                     <th class="col-number">Số phòng</th>
                     <th class="col-status">Trạng thái duyệt</th>
                     <th class="col-actions">Thao tác</th>
@@ -110,9 +109,9 @@
                 <tr th:each="p : ${properties}">
                     <td class="col-wrap">
                         <a th:href="@{'/properties/' + ${p.id()}}" th:text="${p.name()}" style="font-weight: 600; color: var(--accent);">Tên nhà trọ</a>
+                        <div th:if="${!#strings.isEmpty(p.description())}" th:text="${p.description()}" style="font-size: 12px; color: var(--text-secondary);">Mô tả</div>
                     </td>
                     <td class="col-wrap" th:text="${p.address()}">Địa chỉ</td>
-                    <td class="col-wrap" th:text="${!#strings.isEmpty(p.description()) ? p.description() : '—'}">Mô tả</td>
                     <td class="col-number" th:text="${p.totalRooms()}">0</td>
                     <td class="col-status">
                         <span class="badge"

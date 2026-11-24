@@ -322,7 +322,7 @@
     <!-- Bảng nhà trọ (không dành cho người thuê) -->
     <div class="card" th:unless="${currentUser != null and currentUser.role().name() == 'TENANT'}">
         <div class="flex-between" style="margin-bottom: 12px;">
-            <h2>Nhà trọ trong phạm vi</h2>
+            <h2>Danh sách nhà trọ</h2>
             <a th:if="${currentUser != null and (currentUser.role().name() == 'ADMIN' or currentUser.role().name() == 'OWNER')}" th:href="@{/properties}" class="btn btn-primary btn-sm">+ Thêm nhà trọ</a>
         </div>
 
@@ -330,12 +330,12 @@
             <p>Tài khoản hiện tại chưa được cấp quyền truy cập nhà trọ nào.</p>
         </div>
 
-        <table th:if="${!#lists.isEmpty(properties)}" class="data-table">
+        <table th:if="${!#lists.isEmpty(properties)}" class="data-table" id="propertyListTable" data-collapse-rows="5">
             <thead>
                 <tr>
                     <th style="min-width: 170px;">Tên nhà trọ</th>
                     <th style="min-width: 200px;">Địa chỉ</th>
-                    <th class="col-number">Tổng số phòng</th>
+                    <th class="col-number">Số phòng</th>
                     <th class="col-status">Trạng thái duyệt</th>
                     <th class="col-actions">Thao tác</th>
                 </tr>

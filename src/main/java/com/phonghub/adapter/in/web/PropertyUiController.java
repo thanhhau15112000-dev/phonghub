@@ -97,9 +97,9 @@ public class PropertyUiController {
         }
 
         final PropertyApprovalStatus finalFilter = filterStatus;
-        List<Property> filteredProperties = finalFilter == null
+        List<Property> filteredProperties = PropertyDisplayOrder.sort(finalFilter == null
             ? allProperties
-            : allProperties.stream().filter(p -> p.approvalStatus() == finalFilter).toList();
+            : allProperties.stream().filter(p -> p.approvalStatus() == finalFilter).toList());
 
         model.addAttribute("currentUser", currentUser);
         model.addAttribute("properties", filteredProperties);

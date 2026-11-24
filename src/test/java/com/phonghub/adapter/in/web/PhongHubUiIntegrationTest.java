@@ -336,7 +336,9 @@ class PhongHubUiIntegrationTest {
         assertTrue(cells(html, "col-status").stream().noneMatch(cell -> cell.contains("btn-reason-pill")),
             "cột Trạng thái chỉ còn badge");
         assertTrue(html.contains("<td class=\"col-wrap\">" + longAddress + "</td>"), "địa chỉ dài được phép xuống dòng");
-        assertTrue(html.contains("<td class=\"col-wrap\">—</td>"), "mô tả trống hiện dấu gạch ngang");
+        // #362: bảng giống trang Điều khiển, mô tả (nếu có) hiện nhỏ dưới tên thay vì một cột riêng
+        assertTrue(!html.contains(">Mô tả</th>"), "không còn cột Mô tả");
+        assertTrue(!html.contains("<td class=\"col-wrap\">—</td>"), "mô tả trống thì không hiện gì");
     }
 
     private static List<String> cells(String html, String cssClass) {

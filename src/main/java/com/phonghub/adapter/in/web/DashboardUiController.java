@@ -79,7 +79,7 @@ public class DashboardUiController {
         } else if (currentUser.role() == UserRole.ADMIN) {
             addAdminAttributes(model);
         }
-        List<Property> properties = propertyUseCase.listAccessibleProperties();
+        List<Property> properties = PropertyDisplayOrder.sort(propertyUseCase.listAccessibleProperties());
 
         List<Room> allRooms = new ArrayList<>();
         List<Contract> allContracts = new ArrayList<>();
