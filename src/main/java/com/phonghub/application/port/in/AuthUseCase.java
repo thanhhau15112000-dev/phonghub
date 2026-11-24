@@ -28,16 +28,38 @@ public interface AuthUseCase {
     void adminAttachTenantProfile(UUID targetUserId, String identityCardNumber, String phone);
     void adminDeleteUser(UUID targetUserId);
 
+    /**
+     * {@code initialPassword} trống thì hệ thống sinh mật khẩu tạm và luôn bắt đổi ở lần đăng nhập đầu; có giá trị thì
+     * dùng mật khẩu admin đặt, {@code mustChangePassword} quyết định có bắt đổi hay không (#364).
+     */
     record CreateUserCommand(
         String username,
         String email,
         String fullName,
         String phone,
         UserRole role,
-        String identityCardNumber
+        String identityCardNumber,
+        String initialPassword,
+        boolean mustChangePassword
     ) {
+        public CreateUserCommand(String username, String email, String fullName, String phone, UserRole role,
+                                 String identityCardNumber) {
+            this(username, email, fullName, phone, role, identityCardNumber, null, true);
+        }
+
         public CreateUserCommand(String username, String email, String fullName, String phone, UserRole role) {
             this(username, email, fullName, phone, role, null);
+        }
+
+        public boolean hasInitialPassword() {
+            return initialPassword != null && !initialPassword.isEmpty();
+        }
+
+        // Không để mật khẩu lọt vào log khi record được in ra
+        @Override
+        public String toString() {
+            return "CreateUserCommand[username=" + username + ", email=" + email + ", role=" + role
+                + ", initialPassword=" + (hasInitialPassword() ? "***" : "none") + "]";
         }
     }
 

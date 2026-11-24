@@ -8,6 +8,7 @@ import com.phonghub.application.port.in.RoomUseCase;
 import com.phonghub.application.port.in.StatisticsUseCase;
 import com.phonghub.application.port.in.StatisticsUseCase.Granularity;
 import com.phonghub.application.port.in.StatisticsUseCase.PeriodStat;
+import com.phonghub.application.port.in.StatisticsUseCase.PropertyStat;
 import com.phonghub.application.port.in.StatisticsUseCase.StatsQuery;
 import com.phonghub.application.port.out.CurrentUser;
 import com.phonghub.application.port.out.CurrentUserPort;
@@ -79,7 +80,7 @@ public class DashboardUiController {
         } else if (currentUser.role() == UserRole.ADMIN) {
             addAdminAttributes(model);
         }
-        List<Property> properties = propertyUseCase.listAccessibleProperties();
+        List<Property> properties = PropertyDisplayOrder.sort(propertyUseCase.listAccessibleProperties());
 
         List<Room> allRooms = new ArrayList<>();
         List<Contract> allContracts = new ArrayList<>();
@@ -168,8 +169,21 @@ public class DashboardUiController {
         model.addAttribute("opsQuery", query);
         model.addAttribute("opsRevenue", revenue);
         model.addAttribute("opsRevenueBars", bars);
-        model.addAttribute("opsProperties", statisticsUseCase.ownerProperties(
-            new StatsQuery(null, query.from(), query.to(), Granularity.MONTH)));
+        List<PropertyStat> propertyStats = statisticsUseCase.ownerProperties(
+            new StatsQuery(null, query.from(), query.to(), Granularity.MONTH));
+        model.addAttribute("opsProperties", propertyStats);
+        // Bảng "Theo nhà trọ" chỉ hiện 5 dòng đầu (#365): nhà còn nợ, nhiều phòng đang thuê, nhiều phòng lên trước
+        model.addAttribute("opsPropertyRows", propertyStats.stream()
+            .sorted(Comparator.comparing((PropertyStat p) -> outstandingOf(p), Comparator.reverseOrder())
+                .thenComparing(p -> p.occupancy() == null ? 0L : p.occupancy().occupied(), Comparator.reverseOrder())
+                .thenComparing(p -> p.occupancy() == null ? 0L : p.occupancy().totalRooms(), Comparator.reverseOrder())
+                .thenComparing(PropertyStat::name, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+            .toList());
+    }
+
+    private static BigDecimal outstandingOf(PropertyStat stat) {
+        return stat.revenue() == null || stat.revenue().outstanding() == null ? BigDecimal.ZERO
+            : stat.revenue().outstanding();
     }
 
     /** Admin vận hành nền tảng: nhà trọ, tài khoản, lấp đầy và nhà chờ duyệt; không có số liệu tiền (#163). */

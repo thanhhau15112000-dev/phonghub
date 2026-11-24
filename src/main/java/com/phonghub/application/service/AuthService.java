@@ -28,6 +28,9 @@ import org.slf4j.LoggerFactory;
 
 public class AuthService implements AuthUseCase {
 
+    private static final int MIN_PASSWORD_LENGTH = 8;
+    private static final String CREATE_PASSWORD_TOO_SHORT = "Mật khẩu phải có ít nhất 8 ký tự.";
+
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     private static final String UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private static final String LOWER = "abcdefghijklmnopqrstuvwxyz";
@@ -329,8 +332,13 @@ public class AuthService implements AuthUseCase {
             }
         }
 
-        String temporaryPassword = generateSecureTemporaryPassword(16);
-        UUID authUserId = identityProviderPort.adminCreateUser(normalizedEmail, temporaryPassword);
+        boolean adminSetPassword = command.hasInitialPassword();
+        if (adminSetPassword && command.initialPassword().length() < MIN_PASSWORD_LENGTH) {
+            throw new IllegalArgumentException(CREATE_PASSWORD_TOO_SHORT);
+        }
+        String temporaryPassword = adminSetPassword ? null : generateSecureTemporaryPassword(16);
+        UUID authUserId = identityProviderPort.adminCreateUser(normalizedEmail,
+            adminSetPassword ? command.initialPassword() : temporaryPassword);
 
         User newUser = new User(
             authUserId,
@@ -340,7 +348,7 @@ public class AuthService implements AuthUseCase {
             cleanPhone,
             command.role(),
             User.UserStatus.ACTIVE,
-            true,
+            !adminSetPassword || command.mustChangePassword(),
             Instant.now()
         );
 
@@ -432,6 +440,9 @@ public class AuthService implements AuthUseCase {
 
         if (command.role() == null) {
             errors.put("role", "Vui lòng chọn vai trò.");
+        }
+        if (command.hasInitialPassword() && command.initialPassword().length() < MIN_PASSWORD_LENGTH) {
+            errors.put("password", CREATE_PASSWORD_TOO_SHORT);
         }
         if (tenant) {
             String card = command.identityCardNumber() == null ? "" : command.identityCardNumber().trim();

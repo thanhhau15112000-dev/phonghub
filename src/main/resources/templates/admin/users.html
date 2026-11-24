@@ -109,7 +109,31 @@
                 <small class="field-error" th:if="${createFieldErrors != null and createFieldErrors['identityCardNumber'] != null}" th:text="${createFieldErrors['identityCardNumber']}">Lỗi</small>
                 <small>Tài khoản người thuê luôn được gắn với một hồ sơ CCCD duy nhất.</small>
             </div>
-            <button type="submit" class="btn btn-primary">Tạo tài khoản và sinh mật khẩu tạm thời</button>
+            <!-- Mật khẩu ban đầu (#364): để trống thì hệ thống sinh mật khẩu tạm như trước -->
+            <div class="form-row">
+                <div class="form-group" style="flex: 1; max-width: 300px;">
+                    <label class="form-label" for="createPassword">Mật khẩu</label>
+                    <input id="createPassword" type="password" name="password" class="form-control" minlength="8" autocomplete="new-password"
+                           placeholder="Để trống để hệ thống tự tạo"
+                           th:classappend="${createFieldErrors != null and createFieldErrors['password'] != null ? 'is-invalid' : ''}">
+                    <small class="field-error" th:if="${createFieldErrors != null and createFieldErrors['password'] != null}" th:text="${createFieldErrors['password']}">Lỗi</small>
+                </div>
+                <div class="form-group" style="flex: 1; max-width: 300px;">
+                    <label class="form-label" for="createConfirmPassword">Nhập lại mật khẩu</label>
+                    <input id="createConfirmPassword" type="password" name="confirmPassword" class="form-control" minlength="8" autocomplete="new-password"
+                           th:classappend="${createFieldErrors != null and createFieldErrors['confirmPassword'] != null ? 'is-invalid' : ''}">
+                    <small class="field-error" th:if="${createFieldErrors != null and createFieldErrors['confirmPassword'] != null}" th:text="${createFieldErrors['confirmPassword']}">Lỗi</small>
+                </div>
+            </div>
+            <div class="form-group">
+                <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px;">
+                    <input type="checkbox" name="mustChangePassword" value="true"
+                           th:checked="${createForm == null or createForm['mustChangePassword'] == 'true'}">
+                    Bắt buộc đổi mật khẩu ở lần đăng nhập đầu
+                </label>
+                <small style="display: block; color: var(--text-secondary);">Ít nhất 8 ký tự, nên có chữ hoa, chữ thường, chữ số và ký tự đặc biệt. Mật khẩu do hệ thống tự tạo thì luôn phải đổi.</small>
+            </div>
+            <button type="submit" class="btn btn-primary">Tạo tài khoản</button>
 
             <!-- Thông báo lỗi khi tạo tài khoản (ngay dưới nút tạo) -->
             <div th:if="${createErrorMessage != null}" class="inline-alert inline-alert-danger" style="margin-top: 14px;">
@@ -122,8 +146,10 @@
                 <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">
                     Đã tạo tài khoản <span th:text="${createdUser.username()}" style="font-weight: 700;">username</span> thành công!
                 </div>
-                <p style="margin: 0 0 8px; font-size: 13px;">Mật khẩu tạm thời chỉ hiển thị một lần. Gửi riêng cho người dùng và yêu cầu đổi ở lần đăng nhập đầu tiên:</p>
-                <div style="display: flex; align-items: center; gap: 8px;">
+                <p th:if="${createdUser.temporaryPassword() == null}" style="margin: 0; font-size: 13px;"
+                   th:text="${createdUser.mustChangePassword() ? 'Người dùng đăng nhập bằng mật khẩu bạn vừa đặt và sẽ phải đổi mật khẩu ở lần đăng nhập đầu.' : 'Người dùng đăng nhập ngay bằng mật khẩu bạn vừa đặt.'}">Người dùng đăng nhập bằng mật khẩu bạn vừa đặt.</p>
+                <p th:if="${createdUser.temporaryPassword() != null}" style="margin: 0 0 8px; font-size: 13px;">Mật khẩu tạm thời chỉ hiển thị một lần. Gửi riêng cho người dùng và yêu cầu đổi ở lần đăng nhập đầu tiên:</p>
+                <div th:if="${createdUser.temporaryPassword() != null}" style="display: flex; align-items: center; gap: 8px;">
                     <code id="createdTempPasswordCode" th:text="${createdUser.temporaryPassword()}" style="font-size: 15px; font-weight: 700; padding: 4px 10px; background: rgba(0,0,0,0.06); border-radius: 4px; display: inline-block;">temporary-password</code>
                     <button type="button" class="btn btn-sm" onclick="if (navigator.clipboard) navigator.clipboard.writeText(document.getElementById('createdTempPasswordCode').innerText); this.innerText='Đã sao chép!';" style="padding: 4px 8px; font-size: 12px;">Sao chép</button>
                 </div>

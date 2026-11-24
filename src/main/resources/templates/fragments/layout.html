@@ -9,6 +9,7 @@
     <link rel="icon" href="data:,">
     <link rel="stylesheet" th:href="@{/css/style.css}">
     <script th:src="@{/js/vendor/htmx.min.js}" defer></script>
+    <script th:src="@{/js/collapse-rows.js}" defer></script>
     <script>
         document.addEventListener('htmx:configRequest', function (evt) {
             var csrfToken = document.querySelector('meta[name="_csrf"]');

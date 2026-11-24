@@ -1209,3 +1209,24 @@ dialog.modal-dialog::backdrop {
   .btn { white-space: normal; }
   .notification-item { flex-direction: column; gap: 8px; }
 }
+
+/* Bảng thu gọn (#362, #363) */
+.collapse-toggle-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
+.data-table tr.is-current td {
+  background: rgba(37, 99, 235, 0.08);
+  font-weight: 600;
+}
+.badge-current {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--accent);
+  color: #fff;
+}

@@ -1,6 +1,7 @@
 package com.phonghub.application.service;
 
 import com.phonghub.application.port.in.UtilityUseCase;
+import com.phonghub.application.port.in.UtilityUseCase.PreviousReading;
 import com.phonghub.application.port.out.AuditPort;
 import com.phonghub.application.port.out.ContractRepositoryPort;
 import com.phonghub.application.port.out.CurrentUser;
@@ -124,7 +125,14 @@ public class UtilityService implements UtilityUseCase {
     public OcrSuggestion readMeterPhoto(UUID roomId, MeterType meterType, String contentType, byte[] content) {
         CurrentUser user = currentUserPort.getCurrentUser();
         Room room = findRoom(roomId);
-        authorizationService.assertCanManageProperty(user, room.getPropertyId());
+        if (user != null && user.isTenant()) {
+            // Người thuê đang ở phòng đọc ảnh để tự điền số trước khi gửi (#366); không lưu gì
+            if (!authorizationService.canTenantViewRoom(user, room.getId())) {
+                throw new UnauthorizedPropertyAccessException("Bạn không ở phòng này");
+            }
+        } else {
+            authorizationService.assertCanManageProperty(user, room.getPropertyId());
+        }
         if (meterType == null) {
             throw new IllegalArgumentException("Cần chọn loại đồng hồ.");
         }
@@ -157,18 +165,8 @@ public class UtilityService implements UtilityUseCase {
     }
 
     private BigDecimal resolvePrevious(RecordReadingCommand command, MeterReading latest, Contract contract) {
-        BigDecimal checkInValue = contract == null ? null
-            : handoverRepository.find(contract.getId(), HandoverType.CHECK_IN)
-                .filter(handover -> handover.status() == HandoverStatus.APPROVED)
-                .map(handover -> initialOf(handover, command.meterType())).orElse(null);
-        BigDecimal derived = null;
-        if (latest != null && (checkInValue == null || contract.getId().equals(latest.contractId()))) {
-            derived = latest.currentValue();
-        } else if (checkInValue != null) {
-            // Kỳ đầu của hợp đồng mới: tính từ chỉ số lúc nhận phòng, không từ lần ghi của khách trước hay lúc phòng
-            // trống (lần ghi đó luôn trước khi hợp đồng này hiệu lực), để khách mới không trả phần của người trước.
-            derived = checkInValue;
-        }
+        PreviousReading previous = derivePrevious(command.meterType(), latest, contract);
+        BigDecimal derived = previous == null ? null : previous.value();
         BigDecimal baseline = command.baselineValue();
         if (derived != null) {
             if (baseline != null && baseline.compareTo(derived) != 0) {
@@ -182,6 +180,40 @@ public class UtilityService implements UtilityUseCase {
                 "Phòng chưa có chỉ số kỳ trước hay biên bản check-in đã duyệt; hãy khai báo chỉ số gốc (baselineValue)");
         }
         return baseline;
+    }
+
+    /** Mốc đầu kỳ tới; dùng chung cho lúc ghi chỉ số và lúc hiển thị (#366). */
+    private PreviousReading derivePrevious(MeterType meterType, MeterReading latest, Contract contract) {
+        BigDecimal checkInValue = contract == null ? null
+            : handoverRepository.find(contract.getId(), HandoverType.CHECK_IN)
+                .filter(handover -> handover.status() == HandoverStatus.APPROVED)
+                .map(handover -> initialOf(handover, meterType)).orElse(null);
+        if (latest != null && (checkInValue == null || contract.getId().equals(latest.contractId()))) {
+            return new PreviousReading(latest.currentValue(), latest.period());
+        }
+        if (checkInValue != null) {
+            // Kỳ đầu của hợp đồng mới: tính từ chỉ số lúc nhận phòng, không từ lần ghi của khách trước hay lúc phòng
+            // trống (lần ghi đó luôn trước khi hợp đồng này hiệu lực), để khách mới không trả phần của người trước.
+            return new PreviousReading(checkInValue, null);
+        }
+        return null;
+    }
+
+    @Override
+    public Map<MeterType, PreviousReading> previousReadings(UUID roomId) {
+        CurrentUser user = currentUserPort.getCurrentUser();
+        Room room = findRoom(roomId);
+        assertCanView(user, room);
+        Contract contract = contractRepository.findActiveByRoomId(room.getId()).orElse(null);
+        Map<MeterType, PreviousReading> result = new java.util.EnumMap<>(MeterType.class);
+        for (MeterType type : MeterType.values()) {
+            PreviousReading previous = derivePrevious(type,
+                meterRepository.findLatest(room.getId(), type).orElse(null), contract);
+            if (previous != null) {
+                result.put(type, previous);
+            }
+        }
+        return result;
     }
 
     private static BigDecimal initialOf(Handover handover, MeterType type) {

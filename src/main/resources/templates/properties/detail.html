@@ -266,6 +266,55 @@
         }
     </script>
 
+    <!-- Đơn giá điện nước và dịch vụ (#366): chủ trọ/quản trị viên sửa, nhân viên chỉ xem -->
+    <div class="card" id="serviceRates" th:if="${serviceRates != null}">
+        <h2>Đơn giá điện nước và dịch vụ</h2>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">
+            Hóa đơn hằng tháng lấy đơn giá ở đây: điện tính theo kWh, nước theo m³ (số mới − chỉ số kỳ trước), các dịch vụ khác theo người hoặc cố định theo phòng.
+        </p>
+        <p th:if="${#lists.isEmpty(serviceRates)}" style="color: var(--text-secondary);">Chưa có đơn giá nào, hóa đơn sẽ chưa có tiền điện nước.</p>
+        <table th:if="${!#lists.isEmpty(serviceRates)}" class="data-table">
+            <thead><tr><th>Dịch vụ</th><th>Cách tính</th><th class="col-number">Đơn giá (đ)</th><th th:if="${canEditRates}" class="col-actions">Sửa</th></tr></thead>
+            <tbody>
+                <tr th:each="rate : ${serviceRates}">
+                    <td th:text="${rate.serviceName()}">Điện</td>
+                    <td th:text="${uiText.chargeType(rate.chargeType())}">Theo số điện (kWh)</td>
+                    <td class="col-number" th:text="${#numbers.formatDecimal(rate.pricePerUnit(), 0, 'POINT', 0, 'COMMA')}">3.500</td>
+                    <td th:if="${canEditRates}" class="col-actions">
+                        <form th:action="@{'/properties/' + ${property.id()} + '/service-rates/' + ${rate.id()}}" method="post"
+                              style="display: flex; gap: 6px; justify-content: flex-end; margin: 0;">
+                            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                            <input type="hidden" name="serviceName" th:value="${rate.serviceName()}">
+                            <input type="hidden" name="chargeType" th:value="${rate.chargeType().name()}">
+                            <input type="number" name="pricePerUnit" class="form-control" min="0" step="1" required style="width: 120px;"
+                                   th:value="${rate.pricePerUnit().stripTrailingZeros().toPlainString()}" aria-label="Đơn giá mới">
+                            <button type="submit" class="btn btn-sm btn-secondary">Lưu</button>
+                        </form>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <form th:if="${canEditRates}" th:action="@{'/properties/' + ${property.id()} + '/service-rates'}" method="post"
+              style="display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-top: 16px;">
+            <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="rateServiceName">Tên dịch vụ *</label>
+                <input id="rateServiceName" type="text" name="serviceName" class="form-control" maxlength="100" required placeholder="Ví dụ: Điện, Nước, Wifi">
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="rateChargeType">Cách tính *</label>
+                <select id="rateChargeType" name="chargeType" class="form-control" required>
+                    <option th:each="type : ${chargeTypes}" th:value="${type.name()}" th:text="${uiText.chargeType(type)}">Theo số điện (kWh)</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="ratePrice">Đơn giá (đ) *</label>
+                <input id="ratePrice" type="number" name="pricePerUnit" class="form-control" min="0" step="1" required style="width: 140px;">
+            </div>
+            <button type="submit" class="btn btn-primary">Thêm đơn giá</button>
+        </form>
+    </div>
+
     <!-- Danh sách phòng -->
     <div class="card">
         <h2>Danh sách phòng thuộc nhà trọ</h2>
