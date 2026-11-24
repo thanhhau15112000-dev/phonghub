@@ -50,6 +50,19 @@ public final class UiText {
         };
     }
 
+    /** Cách tính của đơn giá dịch vụ (#366). */
+    public String chargeType(com.phonghub.domain.model.ChargeType type) {
+        if (type == null) {
+            return "Chưa xác định";
+        }
+        return switch (type) {
+            case PER_KWH -> "Theo số điện (kWh)";
+            case PER_M3 -> "Theo khối nước (m³)";
+            case PER_PERSON -> "Theo người";
+            case PER_ROOM_FLAT -> "Cố định theo phòng";
+        };
+    }
+
     public String approvalStatus(com.phonghub.domain.model.PropertyApprovalStatus status) {
         if (status == null) {
             return "Chưa xác định";

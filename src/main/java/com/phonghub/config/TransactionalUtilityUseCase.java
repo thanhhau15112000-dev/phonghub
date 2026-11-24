@@ -29,6 +29,12 @@ public class TransactionalUtilityUseCase implements UtilityUseCase {
         return delegate.listReadings(roomId);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Map<com.phonghub.domain.model.MeterType, PreviousReading> previousReadings(UUID roomId) {
+        return delegate.previousReadings(roomId);
+    }
+
     /**
      * Không chạy trong transaction: bước này ghi audit METER_OCR_REQUESTED (transaction chỉ đọc làm Postgres từ chối
      * INSERT, endpoint trả 500) và OCR có thể mất vài giây, không nên giữ kết nối DB trong lúc chờ.

@@ -21,7 +21,17 @@ public interface UtilityUseCase {
 
     List<MeterReading> listReadings(UUID roomId);
 
-    /** Đọc chỉ số từ ảnh đồng hồ; chỉ gợi ý, không lưu gì. Độ tin cậy thấp thì không trả giá trị, buộc nhập tay. */
+    /**
+     * Mốc chỉ số đầu kỳ tới của từng đồng hồ, lấy đúng như lúc ghi chỉ số (#366): chỉ số kỳ gần nhất của hợp đồng
+     * đang thuê, hoặc chỉ số lúc nhận phòng. Chưa có mốc thì không có khóa đó. Người thuê của phòng và người quản lý
+     * nhà trọ xem được; kỹ thuật viên thì không.
+     */
+    java.util.Map<MeterType, PreviousReading> previousReadings(UUID roomId);
+
+    /**
+     * Đọc chỉ số từ ảnh đồng hồ; chỉ gợi ý, không lưu gì. Độ tin cậy thấp thì không trả giá trị, buộc nhập tay.
+     * Người quản lý nhà trọ và người thuê đang ở phòng (để tự điền số khi gửi chỉ số, #366) được gọi.
+     */
     OcrSuggestion readMeterPhoto(UUID roomId, MeterType meterType, String contentType, byte[] content);
 
     MeterReading attachPhoto(UUID readingId, String contentType, byte[] content);
@@ -44,6 +54,13 @@ public interface UtilityUseCase {
         BigDecimal ocrValue,
         BigDecimal ocrConfidence
     ) {}
+
+    /** {@code period} là kỳ của lần ghi gần nhất; null khi mốc lấy từ biên bản nhận phòng. */
+    record PreviousReading(BigDecimal value, java.time.YearMonth period) {
+        public boolean fromCheckIn() {
+            return period == null;
+        }
+    }
 
     record OcrSuggestion(BigDecimal value, BigDecimal confidence, boolean requiresManualEntry, String engine) {}
 
